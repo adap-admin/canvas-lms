@@ -26,8 +26,6 @@
 /db/*.sqlite*
 /db/*sql
 /exports/
-Gemfile.lock
-Gemfile.lock.52
 /log/
 mkmf.log
 /node_modules
