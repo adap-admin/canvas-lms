@@ -17,12 +17,14 @@ jobs:
     docker:
       # specify the version you desire here
       - image: circleci/ruby:2.4.1-stretch-node-browsers
-      - image: circleci/postgres:9.5
 
       # Specify service dependencies here if necessary
       # CircleCI maintains a library of pre-built images
       # documented at https://circleci.com/docs/2.0/circleci-images/
-      # - image: circleci/postgres:9.4
+      - image: circleci/postgres:9.5
+        environment: 
+            POSTGRES_USER: circleci
+            POSTGRES_DB: canvas_development
 
     working_directory: ~/repo
 
@@ -42,7 +44,8 @@ jobs:
             sudo apt-get update
             sudo apt-get install zlib1g-dev libxml2-dev \
                 libsqlite3-dev libpq-dev \
-                libxmlsec1-dev curl make g++
+                libxmlsec1-dev curl make g++ \
+                postgresql-client-9.6
             bundle install --jobs=4 --retry=3 --path vendor/bundle
 
       - save_cache:
@@ -51,8 +54,14 @@ jobs:
           key: v1-dependencies-{{ checksum "Gemfile.lock" }}
 
       # Database setup
+      - run:
+          name: Configure database user
+          command: |
+            mv -v ~/repo/config/database.yml.example ~/repo/config/database.yml
+            mv -v ~/repo/config/security.yml.example ~/repo/config/security.yml
+      - run: bundle exec rake canvas:compile_assets
       - run: bundle exec rake db:create
-      - run: bundle exec rake db:schema:load
+      - run: bundle exec rails db:initial_setup
 
 workflows:
   version: 2
