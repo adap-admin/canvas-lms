@@ -9,7 +9,7 @@ jobs:
       enabled: true
     steps:
       - run:
-          name: Deploy over SSH
+          name: deploy over SSH
           command: |
             echo here we would ssh $SSH_USER@$SSH_HOST
 
@@ -55,7 +55,7 @@ jobs:
 
       # Database setup
       - run:
-          name: Configure database user
+          name: set configuration
           command: |
             mv -v ~/repo/config/database.yml.example ~/repo/config/database.yml
             mv -v ~/repo/config/security.yml.example ~/repo/config/security.yml
@@ -63,6 +63,22 @@ jobs:
       - run: bundle exec rake canvas:compile_assets
       - run: bundle exec rake db:create
       - run: bundle exec rails db:initial_setup
+
+      # run tests!
+      - run:
+          name: run tests
+          command: |
+            RAILS_ENV=test bundle install
+            mkdir /tmp/test-results
+            TEST_FILES="$(circleci tests glob "spec/**/*_spec.rb" | \
+              circleci tests split --split-by=timings)"
+
+            bundle exec rspec \
+              --format progress \
+              --format RspecJunitFormatter \
+              --out /tmp/test-results/rspec.xml \
+              --format progress \
+              $TEST_FILES
 
 workflows:
   version: 2
