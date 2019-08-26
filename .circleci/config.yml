@@ -57,12 +57,16 @@ jobs:
           name: run tests
           command: |
             RAILS_ENV=test bundle install
-            RAILS_ENV=test bundle exec rails db:initial_setup
             mkdir /tmp/test-results
-            TEST_FILES="$(circleci tests glob "spec/models/*/*_spec.rb" | \
+            TEST_FILES="$(circleci tests glob "spec/**/*_spec.rb" | \
               circleci tests split --split-by=timings)"
 
-            bundle exec rspec $TEST_FILES
+            bundle exec rspec \
+              --format progress \
+              --format RspecJunitFormatter \
+              --out /tmp/test-results/rspec.xml \
+              --format progress \
+              $TEST_FILES
 
   deploy-dev:
     machine:
