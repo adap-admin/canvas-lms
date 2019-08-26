@@ -4,15 +4,6 @@
 #
 version: 2
 jobs:
-  deploy:
-    machine:
-      enabled: true
-    steps:
-      - run:
-          name: deploy over SSH
-          command: |
-            echo here we would ssh $SSH_USER@$SSH_HOST
-
   build:
     docker:
       # specify the version you desire here
@@ -23,13 +14,10 @@ jobs:
             CANVAS_LMS_ACCOUNT_NAME: ByteLionTest
             CANVAS_LMS_STATS_COLLECTION: opt_out
 
-      # Specify service dependencies here if necessary
-      # CircleCI maintains a library of pre-built images
-      # documented at https://circleci.com/docs/2.0/circleci-images/
-      - image: circleci/postgres:9.5
-        environment: 
-            POSTGRES_USER: circleci
-            POSTGRES_DB: canvas_development
+      - image: circleci/postgres:9.5-alpine
+        environment:
+          POSTGRES_USER: circleci
+          POSTGRES_DB: canvas_development
 
     working_directory: ~/repo
 
@@ -39,9 +27,9 @@ jobs:
       # Download and cache dependencies
       - restore_cache:
           keys:
-            - v1-dependencies-{{ checksum "Gemfile.lock" }}
-            # fallback to using the latest cache if no exact match is found
-            - v1-dependencies-
+          - v1-dependencies-{{ checksum "Gemfile.lock" }}
+          # fallback to using the latest cache if no exact match is found
+          - v1-dependencies-
 
       - run:
           name: install dependencies
@@ -80,12 +68,69 @@ jobs:
               --format progress \
               $TEST_FILES
 
+  deploy-dev:
+    machine:
+      enabled: true
+    working_directory: ~/repo
+    steps:
+      - checkout
+      - add_ssh_keys
+      - run:
+          name: Add AWS EC2 To Known Hosts
+          command: ssh-keyscan -H ec2-18-206-181-139.compute-1.amazonaws.com >> ~/.ssh/known_hosts
+      - run:
+          name: AWS EC2 Deploy
+          command: |
+            SSH_HOST=${SERVER_HOST_DEV}
+            ssh $SSH_NAME@$SSH_HOST "./deploy.sh"
+  deploy-test:
+    machine:
+      enabled: true
+    working_directory: ~/repo
+    steps:
+      - checkout
+      - add_ssh_keys
+      - run:
+          name: Add AWS EC2 To Known Hosts
+          command: ssh-keyscan -H ec2-18-206-181-139.compute-1.amazonaws.com >> ~/.ssh/known_hosts
+      - run:
+          name: AWS EC2 Deploy
+          command: |
+            SSH_HOST=${SERVER_HOST_TEST}
+            ssh $SSH_NAME@$SSH_HOST "./deploy.sh"
+  deploy-prod:
+    machine:
+      enabled: true
+    working_directory: ~/repo
+    steps:
+      - checkout
+      - add_ssh_keys
+      - run:
+          name: Add AWS EC2 To Known Hosts
+          command: ssh-keyscan -H ec2-18-206-181-139.compute-1.amazonaws.com >> ~/.ssh/known_hosts
+      - run:
+          name: AWS EC2 Deploy
+          command: |
+            SSH_HOST=${SERVER_HOST_PROD}
+            ssh $SSH_NAME@$SSH_HOST "./deploy.sh"
 workflows:
   version: 2
   build-and-deploy:
     jobs:
       - build
-      - deploy:
+      - deploy-dev:
+          requires:
+              - build
+          filters:
+            branches:
+              only: development
+      - deploy-test:
+          requires:
+              - build
+          filters:
+            branches:
+              only: test
+      - deploy-prod:
           requires:
             - build
           filters:
