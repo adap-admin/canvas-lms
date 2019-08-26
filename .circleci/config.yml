@@ -52,22 +52,6 @@ jobs:
       - run: bundle exec rake db:create
       - run: bundle exec rails db:initial_setup
 
-      # run tests!
-      - run:
-          name: run tests
-          command: |
-            RAILS_ENV=test bundle install
-            mkdir /tmp/test-results
-            TEST_FILES="$(circleci tests glob "spec/**/*_spec.rb" | \
-              circleci tests split --split-by=timings)"
-
-            bundle exec rspec \
-              --format progress \
-              --format RspecJunitFormatter \
-              --out /tmp/test-results/rspec.xml \
-              --format progress \
-              $TEST_FILES
-
   deploy-dev:
     machine:
       enabled: true
