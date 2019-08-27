@@ -61,7 +61,7 @@ jobs:
       - add_ssh_keys
       - run:
           name: Add AWS EC2 To Known Hosts
-          command: ssh-keyscan -H ec2-18-206-181-139.compute-1.amazonaws.com >> ~/.ssh/known_hosts
+          command: ssh-keyscan -H $SERVER_HOST_DEV >> ~/.ssh/known_hosts
       - run:
           name: AWS EC2 Deploy
           command: |
@@ -76,7 +76,7 @@ jobs:
       - add_ssh_keys
       - run:
           name: Add AWS EC2 To Known Hosts
-          command: ssh-keyscan -H ec2-18-206-181-139.compute-1.amazonaws.com >> ~/.ssh/known_hosts
+          command: ssh-keyscan -H $SERVER_HOST_TEST >> ~/.ssh/known_hosts
       - run:
           name: AWS EC2 Deploy
           command: |
@@ -91,7 +91,7 @@ jobs:
       - add_ssh_keys
       - run:
           name: Add AWS EC2 To Known Hosts
-          command: ssh-keyscan -H ec2-18-206-181-139.compute-1.amazonaws.com >> ~/.ssh/known_hosts
+          command: ssh-keyscan -H $SERVER_HOST_PROD >> ~/.ssh/known_hosts
       - run:
           name: AWS EC2 Deploy
           command: |
