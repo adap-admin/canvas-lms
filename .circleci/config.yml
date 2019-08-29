@@ -66,7 +66,7 @@ jobs:
           name: AWS EC2 Deploy
           command: |
             SSH_HOST=${SERVER_HOST_DEV}
-            ssh $SSH_NAME@$SSH_HOST "./deploy.sh"
+            ssh $SSH_NAME@$SSH_HOST "./deploy.sh development"
   deploy-test:
     machine:
       enabled: true
@@ -81,7 +81,7 @@ jobs:
           name: AWS EC2 Deploy
           command: |
             SSH_HOST=${SERVER_HOST_TEST}
-            ssh $SSH_NAME@$SSH_HOST "./deploy.sh"
+            ssh $SSH_NAME@$SSH_HOST "./deploy.sh test"
   deploy-prod:
     machine:
       enabled: true
@@ -96,7 +96,7 @@ jobs:
           name: AWS EC2 Deploy
           command: |
             SSH_HOST=${SERVER_HOST_PROD}
-            ssh $SSH_NAME@$SSH_HOST "./deploy.sh"
+            ssh $SSH_NAME@$SSH_HOST "./deploy.sh stable"
 workflows:
   version: 2
   build-and-deploy:

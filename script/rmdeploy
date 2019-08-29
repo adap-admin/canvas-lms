@@ -1,0 +1,21 @@
+#!/bin/sh
+
+# Used in the deploy script to remove a
+# non-running instance of canvas.
+
+# copy this file to /opt/canvas/rmdeploy
+
+N=$1
+
+[ -z "$N" ] && exit 1
+
+DIR=canvas.$N
+RUNNING=`readlink /opt/canvas/canvas`
+
+if [ "$DIR" = "$RUNNING" ] ; then
+        echo "ERROR: cannot remove running instance $DIR" >&2
+        exit 1
+fi
+
+echo Removing /opt/canvas/canvas.$N
+exec rm -rf /opt/canvas/canvas.$N

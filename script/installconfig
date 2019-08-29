@@ -1,0 +1,12 @@
+#!/bin/bash
+
+# tarpipe existing install into current wd
+# This is used in the deploy script to copy
+# the existing deployment tree.
+
+# copy this file to /opt/canvas/installconfig
+
+( 
+  cd /opt/canvas/canvas/
+  tar cf - .
+) | tar xvf - | pv > /dev/null
