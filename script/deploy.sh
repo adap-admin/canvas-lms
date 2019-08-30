@@ -71,6 +71,7 @@ resetdir() {
     set -x
     sudo /opt/canvas/installconfig || exit 4
 
+    git fetch
     git checkout $BRANCH
     git merge --ff-only origin/$BRANCH || exit 5
     sudo -u canvasuser RAILS_ENV=production bundle exec rails db:migrate
