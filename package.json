@@ -21,6 +21,7 @@
     ]
   },
   "dependencies": {
+    "@instructure/babel-preset-pretranslated-format-message": "^1.0.0",
     "@instructure/canvas-rce-old": "4.1.4",
     "@instructure/media-capture": "^5",
     "@instructure/react-crop": "^5.0.1",
@@ -54,6 +55,11 @@
     "apollo-link-state": "^0.4.2",
     "axios": "^0.18.0",
     "axios-cache-adapter": "^2.1.1",
+    "babel-plugin-inline-json-import": "^0.3.2",
+    "babel-plugin-minify-constant-folding": "^0.5.0",
+    "babel-plugin-minify-dead-code-elimination": "^0.5.1",
+    "babel-plugin-minify-guarded-expressions": "^0.4.4",
+    "babel-plugin-transform-inline-environment-variables": "^0.4.3",
     "backbone": "1.1.1",
     "big.js": "^5.0.3",
     "brandable_css": "0.1.0",
@@ -270,9 +276,7 @@
   "resolutions": {
     "jquery": "https://github.com/ryankshaw/jquery.git#dadf794ebc4c4dcf94c344dab7d9341d46bc17cc",
     "canvas-quizzes/grunt-contrib-jasmine/jasmine-core": "2.6.4",
-    "graphael": "this is just here so yarn.lock looks the same whether the analytics plugin is checked out or not",
     "graphael": "https://github.com/ryankshaw/graphael.git",
-    "node-sass": "if we let node-sass upgrade to recent versions, it causes: SIS-3125",
     "node-sass": "4.7.2"
   }
 }
