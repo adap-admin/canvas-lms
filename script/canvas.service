@@ -1,0 +1,11 @@
+[Unit]
+Description=Canvas LMS
+After=opt.mount
+
+[Service]
+Type=oneshot
+ExecStart=/opt/canvas/canvas/script/canvas_init start
+RemainAfterExit=true
+
+[Install]
+WantedBy=multi-user.target
