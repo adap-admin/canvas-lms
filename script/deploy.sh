@@ -79,6 +79,10 @@ resetdir() {
     # FINAL STEP: update the symlink
     rm -v $DEPLOYROOT/$DEPLOYNAME
     ln -vs $dir $DEPLOYROOT/$DEPLOYNAME
+
+    # Restart Services:
+    sudo /opt/canvas/restart_services.sh
+
     set +x
 }
 
