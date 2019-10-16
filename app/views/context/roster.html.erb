@@ -26,6 +26,7 @@
   css_bundle :roster, :addpeople
 
   is_teacher = can_do(@context, @current_user, :manage_students)
+  sis_ids = []
 %>
 
 <div class="ic-Action-header">
@@ -44,7 +45,10 @@
     <div class="roster roster-column student_roster">
       <h2><%= @primary_users.keys.first %></h2>
       <ul class="user-list">
-      <% @primary_users[@primary_users.keys.first].each do |student| %>
+      <% @primary_users[@primary_users.keys.first].each do |student|
+        sis_id = student.pseudonym&.sis_user_id
+        sis_ids.push(sis_id) unless sis_id.nil?
+        %>
         <li class="user-list__item" id="user_<%= student.id %>">
           <%= avatar(student, context_code: @context.asset_string, size: 30) %>
           <div class="user-list__item-details">
@@ -52,6 +56,7 @@
             <% if is_teacher %>
               <div class="short_name"><%= student.short_name %></div>
               <div class="email"><%= student.email %></div>
+              <div><%= sis_id %></div>
               <% if @enrollments_hash %>
                 <% @enrollments_hash[student.id].each do |e| %>
                   <div class="course_section"><%= e.try(:course_section).try(:display_name) %></div>
@@ -87,5 +92,9 @@
       </ul>
     </div>
     <% end %>
+  </div>
+  <div>
+    SIS ID list:<br/>
+    <%= sis_ids.join(',') %>
   </div>
 <% end %>
