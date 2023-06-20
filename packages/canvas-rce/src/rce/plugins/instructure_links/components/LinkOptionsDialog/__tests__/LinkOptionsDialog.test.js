@@ -19,7 +19,7 @@
 import React from 'react'
 import {render} from '@testing-library/react'
 
-import LinkOptionsDialog from '../../LinkOptionsDialog'
+import LinkOptionsDialog from '..'
 import LinkOptionsDialogDriver from './LinkOptionsDialogDriver'
 
 describe('RCE "Links" Plugin > LinkOptionsDialog', () => {
@@ -33,7 +33,7 @@ describe('RCE "Links" Plugin > LinkOptionsDialog', () => {
       operation: 'create',
       onRequestClose: jest.fn(),
       onSave: jest.fn(),
-      open: true
+      open: true,
     }
   })
 
@@ -76,6 +76,20 @@ describe('RCE "Links" Plugin > LinkOptionsDialog', () => {
     it('uses the value of .url in the given content', () => {
       renderComponent()
       expect(dialog.link).toEqual(props.url)
+    })
+
+    it('shows an error message if the url is invalid', () => {
+      props.url = 'xxx://example.instructure.com/files/3201/download'
+      renderComponent()
+      expect(dialog.link).toEqual(props.url)
+      expect(dialog.$errorMessage).toBeInTheDocument()
+      expect(dialog.doneButtonIsDisabled).toBe(true)
+
+      // correct the URL
+      dialog.setLink('//example.instructure.com/files/3201/download')
+      expect(dialog.link).toEqual('//example.instructure.com/files/3201/download')
+      expect(dialog.$errorMessage).toBeNull()
+      expect(dialog.doneButtonIsDisabled).toBe(false)
     })
   })
 
@@ -130,8 +144,10 @@ describe('RCE "Links" Plugin > LinkOptionsDialog', () => {
         it('includes the Link', () => {
           dialog.setLink('http://example.instructure.com/files/3299/download')
           dialog.$doneButton.click()
-          const [{href}] = props.onSave.mock.calls[0]
-          expect(href).toEqual('http://example.instructure.com/files/3299/download')
+          const [linkAttrs] = props.onSave.mock.calls[0]
+          expect(linkAttrs.href).toEqual('http://example.instructure.com/files/3299/download')
+          expect(linkAttrs.class).toEqual('inline_disabled')
+          expect(linkAttrs.embed).toBeUndefined()
         })
 
         it('sets the text to the url when missing', () => {

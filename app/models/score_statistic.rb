@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -18,6 +20,6 @@
 class ScoreStatistic < ApplicationRecord
   belongs_to :assignment
 
-  validates :assignment, :maximum, :minimum, :mean, :count, presence: true
-  validates :maximum, :minimum, :mean, :count, numericality: true
+  validates :assignment, :maximum, :minimum, :mean, :count, :lower_q, :median, :upper_q, presence: true
+  validates :maximum, :minimum, :mean, :count, :lower_q, :median, :upper_q, numericality: true
 end

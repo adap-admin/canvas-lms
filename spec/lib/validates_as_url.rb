@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,10 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
-
 shared_examples_for "url validation tests" do
-
   def test_url_validation(model)
     # should add http://
     model.url = "example.com"
@@ -53,7 +52,7 @@ shared_examples_for "url validation tests" do
       saved = model.save
       expect([model.url, saved]).to eq [invalid_url, false]
       expect(model.errors.size).to eq 1
-      expect(model.errors.full_messages.join).to match /not a valid URL/
+      expect(model.errors.full_messages.join).to match(/not a valid URL/)
     end
 
     # should work on valid urls
@@ -63,7 +62,7 @@ shared_examples_for "url validation tests" do
      "http://192.168.24.205:1000",
      "http://user:password@host.tld:5555/path/to/thing",
      "http://user:password@host.tld/path/to/thing",
-     "http://" + ("a"*300) + ".com",
+     "http://" + ("a" * 300) + ".com",
      "http://www.example.com"].each do |valid_url|
       model.url = valid_url
       model.save!
@@ -77,5 +76,4 @@ shared_examples_for "url validation tests" do
     expect(model.errors.size).to eq 0
     expect(model.url).to be_nil
   end
-
 end

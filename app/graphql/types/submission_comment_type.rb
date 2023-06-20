@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -17,14 +19,15 @@
 #
 class SubmissionCommentReadLoader < GraphQL::Batch::Loader
   def initialize(current_user)
+    super()
     @current_user = current_user
   end
 
   def perform(submission_comments)
-    vsc = ViewedSubmissionComment.
-      where(submission_comment_id: submission_comments, user: @current_user).
-      pluck('submission_comment_id').
-      to_set
+    vsc = ViewedSubmissionComment
+          .where(submission_comment_id: submission_comments, user: @current_user)
+          .pluck("submission_comment_id")
+          .to_set
 
     submission_comments.each do |sc|
       fulfill(sc, vsc.include?(sc.id))
@@ -34,11 +37,15 @@ end
 
 module Types
   class SubmissionCommentType < ApplicationObjectType
-    graphql_name 'SubmissionComment'
+    graphql_name "SubmissionComment"
+
+    global_id_field :id
 
     implements Interfaces::TimestampInterface
+    implements Interfaces::LegacyIDInterface
 
-    field :_id, ID, 'legacy canvas id', null: true, method: :id
+    field :submission_id, ID, null: false
+    field :created_at, Types::DateTimeType, null: false
     field :comment, String, null: true
 
     field :author, Types::UserType, null: true
@@ -48,11 +55,11 @@ module Types
       # and submission will already be in the cache, as that's the graphql query
       # path to get to a submission comment, and thus costs us nothing to preload here.
       Promise.all([
-        load_association(:author),
-        load_association(:submission).then do |submission|
-          Loaders::AssociationLoader.for(Submission, :assignment).load(submission)
-        end
-      ]).then { object.author if object.grants_right?(current_user, :read_author) }
+                    load_association(:author),
+                    load_association(:submission).then do |submission|
+                      Loaders::AssociationLoader.for(Submission, :assignment).load(submission)
+                    end
+                  ]).then { object.author if object.grants_right?(current_user, :read_author) }
     end
 
     field :attachments, [Types::FileType], null: true
@@ -72,14 +79,31 @@ module Types
       end
     end
 
+    field :assignment, Types::AssignmentType, null: true
+    def assignment
+      load_association(:submission).then do |submission|
+        Loaders::AssociationLoader.for(Submission, :assignment).load(submission).then do |assignment|
+          assignment
+        end
+      end
+    end
+
+    field :course, Types::CourseType, null: true
+    def course
+      load_association(:context).then do |course|
+        course
+      end
+    end
+
     field :read, Boolean, null: false
     def read
       load_association(:submission).then do |submission|
         Promise.all([
-          Loaders::AssociationLoader.for(Submission, :content_participations).load(submission),
-          Loaders::AssociationLoader.for(Submission, :assignment).load(submission)
-        ]).then do
+                      Loaders::AssociationLoader.for(Submission, :content_participations).load(submission),
+                      Loaders::AssociationLoader.for(Submission, :assignment).load(submission)
+                    ]).then do
           next true if submission.read?(current_user)
+
           SubmissionCommentReadLoader.for(current_user).load(object)
         end
       end

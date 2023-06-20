@@ -23,10 +23,13 @@
 </div>
 <% end %>
 <%# Use the legacy to do list for non-students until it works for those roles %>
-<% if planner_enabled? && !@current_user.non_student_enrollment? %>
+<% render_student_to_do = Account.site_admin.feature_enabled?(:render_both_to_do_lists) ? @user.has_student_enrollment? : !@user.non_student_enrollment? %>
+<% render_teacher_to_do = Account.site_admin.feature_enabled?(:render_both_to_do_lists) ? @user.non_student_enrollment? : !(planner_enabled? && render_student_to_do) %>
+<% if planner_enabled? && render_student_to_do  %>
   <div class="Sidebar__TodoListContainer"></div>
-<% else %>
-  <%= render :partial => 'courses/to_do_list', :locals => {:contexts => nil, :show_legacy_todo_list => true} %>
+<% end %>
+<% if render_teacher_to_do %>
+  <%= render :partial => 'courses/to_do_list', :locals => {:contexts => nil, :show_legacy_todo_list => true, :additional_title_context => @user.has_student_enrollment?} %>
   <% locals = {
       :title => t('coming_up', "Coming Up"),
       :period => :one_week,
@@ -40,12 +43,16 @@
 <%= render :partial => "shared/event_list", :object => @recent_feedback, :locals => {:title => t('recent_feedback', "Recent Feedback"), :period => :two_weeks, :show_context => true, :is_recent_feedback => true} %>
 <% end %>
 <div>
-  <% if show_user_create_course_button(@current_user) %>
+  <% if show_user_create_course_button(@current_user) || (@current_user.alternate_account_for_course_creation && @domain_root_account.feature_enabled?(:create_course_subaccount_picker)) %>
     <button type="button"
             id="start_new_course"
             class="element_toggler btn button-sidebar-wide"
             aria-controls="new_course_form"><%= t('start_new_course', 'Start a New Course') %></button>
-    <%= render :partial => 'shared/new_course_form' %>
+    <% if @domain_root_account.feature_enabled?(:create_course_subaccount_picker) %>
+      <div id="create_course_modal_container"></div>
+    <% else %>
+      <%= render :partial => 'shared/new_course_form' %>
+    <% end %>
   <% end %>
 
   <a href="<%= grades_path %>" class="Button button-sidebar-wide">

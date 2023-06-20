@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -15,38 +17,37 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require File.expand_path(File.dirname(__FILE__) + '/../../lti2_spec_helper.rb')
-
+require_relative "../../lti2_spec_helper"
 
 describe Lti::PermissionChecker do
-  include_context 'lti2_spec_helper'
+  include_context "lti2_spec_helper"
 
   describe ".authorized_lti2_action?" do
     it "is true if the tool is authorized for the context" do
-      expect(Lti::PermissionChecker.authorized_lti2_action?(tool: tool_proxy, context: account)).to eq true
+      expect(Lti::PermissionChecker.authorized_lti2_action?(tool: tool_proxy, context: account)).to be true
     end
 
     it "is false if the tool isn't installed in the context" do
-      expect(Lti::PermissionChecker.authorized_lti2_action?(tool: tool_proxy, context: Account.create!)).to eq false
+      expect(Lti::PermissionChecker.authorized_lti2_action?(tool: tool_proxy, context: Account.create!)).to be false
     end
 
     context "assignment" do
-      before :each do
+      before do
         allow_any_instance_of(AssignmentConfigurationToolLookup).to receive(:create_subscription).and_return true
         allow_any_instance_of(AssignmentConfigurationToolLookup).to receive(:destroy_subscription).and_return true
-        @original_fallback = Canvas::DynamicSettings.fallback_data
-        Canvas::DynamicSettings.fallback_data = {
-          'canvas' => {},
-          'live-events-subscription-service' => {},
+        @original_fallback = DynamicSettings.fallback_data
+        DynamicSettings.fallback_data = {
+          "canvas" => {},
+          "live-events-subscription-service" => {},
         }
       end
 
-      after :each do
-        Canvas::DynamicSettings.fallback_data = @original_fallback
+      after do
+        DynamicSettings.fallback_data = @original_fallback
       end
 
       let(:assignment) do
-        a = course.assignments.new(:title => "some assignment")
+        a = course.assignments.new(title: "some assignment")
         a.workflow_state = "published"
         a.tool_settings_tool = message_handler
         a.save
@@ -55,33 +56,33 @@ describe Lti::PermissionChecker do
 
       let(:other_tp) do
         other_tp = tool_proxy.dup
-        other_tp.update_attributes(guid: SecureRandom.uuid, context: course)
+        other_tp.update(guid: SecureRandom.uuid, context: course)
         allow(other_tp).to receive(:active_in_context?) { true }
-        allow(other_tp).to receive(:resources) { [double(message_handlers: [ message_handler ])] }
+        allow(other_tp).to receive(:resources) { [double(message_handlers: [message_handler])] }
         other_tp
       end
 
       it "is false if the context is an assignment and the tool isn't associated" do
         assignment.tool_settings_tool = []
-        expect(Lti::PermissionChecker.authorized_lti2_action?(tool: tool_proxy, context: assignment)).to eq false
+        expect(Lti::PermissionChecker.authorized_lti2_action?(tool: tool_proxy, context: assignment)).to be false
       end
 
       it "returns true if the requesting tool has the same access as the associated tool" do
         assignment.tool_settings_tool = message_handler
         assignment.save!
-        expect(Lti::PermissionChecker.authorized_lti2_action?(tool: other_tp, context: assignment)).to eq true
+        expect(Lti::PermissionChecker.authorized_lti2_action?(tool: other_tp, context: assignment)).to be true
       end
 
       it "returns false if the requesting tool does not have the same access as the associated tool" do
         allow(other_tp).to receive(:resources).and_call_original
-        other_tp.raw_data['tool_profile']['product_instance']['product_info']['product_family']['code'] = 'different'
-        other_tp.update_attributes(guid: SecureRandom.uuid, context: course)
+        other_tp.raw_data["tool_profile"]["product_instance"]["product_info"]["product_family"]["code"] = "different"
+        other_tp.update(guid: SecureRandom.uuid, context: course)
         allow(other_tp).to receive(:active_in_context?) { true }
-        expect(Lti::PermissionChecker.authorized_lti2_action?(tool: other_tp, context: assignment)).to eq false
+        expect(Lti::PermissionChecker.authorized_lti2_action?(tool: other_tp, context: assignment)).to be false
       end
 
       it "is true if the tool is authorized for an assignment context" do
-        expect(Lti::PermissionChecker.authorized_lti2_action?(tool: tool_proxy, context: assignment)).to eq true
+        expect(Lti::PermissionChecker.authorized_lti2_action?(tool: tool_proxy, context: assignment)).to be true
       end
     end
   end

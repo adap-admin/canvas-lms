@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -18,7 +20,6 @@
 
 module Lti::Errors
   class InvalidToolProxyError < RuntimeError
-
     def initialize(message = nil, json = {})
       super(message)
       @message = message
@@ -26,9 +27,8 @@ module Lti::Errors
     end
 
     def as_json
-      @json['error'] = @message if @message
+      @json["error"] = @message if @message
       @json
     end
-
   end
 end

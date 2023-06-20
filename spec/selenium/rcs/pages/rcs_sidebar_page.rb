@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -14,10 +16,9 @@
 #
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
-require_relative '../../common'
+require_relative "../../common"
 
 module RCSSidebarPage
-
   # ---------------------- Controls ----------------------
 
   def pages_accordion_button
@@ -49,23 +50,23 @@ module RCSSidebarPage
   end
 
   def new_page_link
-    f('#rcs-LinkToNewPage-btn-link')
+    f("#rcs-LinkToNewPage-btn-link")
   end
 
   def new_page_name_input
-    f('#new-page-name-input')
+    f("#new-page-name-input")
   end
 
   def new_page_submit_button
-    f('#rcs-LinkToNewPage-submit')
+    f("#rcs-LinkToNewPage-submit")
   end
 
   def wiki_body_anchor
-    f('#tinymce p a')
+    f("#tinymce p a")
   end
 
   def wiki_body_image
-    f('#tinymce p img')
+    f("#tinymce p img")
   end
 
   def sidebar_link(title)
@@ -73,7 +74,7 @@ module RCSSidebarPage
   end
 
   def files_tab
-    fj('[role="presentation"]:contains("Files")')
+    fj('[role=tablist] [role=presentation]:not([aria-disabled]):contains("Files")')
   end
 
   def upload_new_file
@@ -88,20 +89,16 @@ module RCSSidebarPage
     fj('button:contains("Upload a new image")')
   end
 
-  def image_link(title)
-    fj("aside [role='button']:contains('#{title}')")
-  end
-
   def sidebar
-    f('#right-side')
+    f("#right-side")
   end
 
   def sidebar_tabs
-    f('#editor_tabs')
+    f("#editor_tabs")
   end
 
   def sidebar_files
-    ff('#right-side li')
+    ff("#right-side li")
   end
 
   def sidebar_images
@@ -109,7 +106,11 @@ module RCSSidebarPage
   end
 
   def sidebar_image_tag
-    f('#right-side a img')
+    f("#right-side a img")
+  end
+
+  def close_button
+    f('[data-testid="CloseButton_ContentTray"] > button')
   end
 
   # ---------------------- Actions ----------------------
@@ -156,13 +157,15 @@ module RCSSidebarPage
 
   def click_files_tab
     files_tab.click
+    wait_for_ajaximations
   end
 
   def click_images_tab
     images_tab.click
   end
 
-  def click_image_link(title)
-    image_link(title).click
+  def click_close_button
+    close_button.click
+    wait_for_ajaximations
   end
 end

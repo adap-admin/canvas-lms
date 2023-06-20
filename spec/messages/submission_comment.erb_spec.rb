@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -16,41 +18,40 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/messages_helper')
+require_relative "messages_helper"
 
-describe 'submission_comment' do
+describe "submission_comment" do
   include MessagesCommon
 
   before :once do
     submission_model
-    @comment = @submission.add_comment(:comment => "new comment")
+    @comment = @submission.add_comment(comment: "new comment")
   end
 
   let(:notification_name) { :submission_comment }
   let(:asset) { @comment }
-  let(:anonymous_user) { 'Anonymous User' }
+  let(:anonymous_user) { "Anonymous User" }
 
   context "anonymous peer disabled" do
     context ".email" do
       let(:path_type) { :email }
 
-      it "should render" do
+      it "renders" do
         message = generate_message(notification_name, path_type, asset)
         expect(message.body).not_to include(anonymous_user)
       end
 
-      it "should never render reply to footer" do
+      it "nevers render reply to footer" do
         IncomingMailProcessor::MailboxAccount.reply_to_enabled = true
         msg = generate_message(notification_name, path_type, asset)
-        expect(msg.body.include?("by responding to this message")).to eq false
+        expect(msg.body.include?("by responding to this message")).to be false
       end
     end
 
     context ".sms" do
       let(:path_type) { :sms }
 
-      it "should render" do
+      it "renders" do
         message = generate_message(notification_name, path_type, asset)
         expect(message.body).not_to include(anonymous_user)
       end
@@ -59,7 +60,7 @@ describe 'submission_comment' do
     context ".summary" do
       let(:path_type) { :summary }
 
-      it "should render" do
+      it "renders" do
         message = generate_message(notification_name, path_type, asset)
         expect(message.body).not_to include(anonymous_user)
       end
@@ -68,7 +69,7 @@ describe 'submission_comment' do
     context ".twitter" do
       let(:path_type) { :twitter }
 
-      it "should render" do
+      it "renders" do
         message = generate_message(notification_name, path_type, asset)
         expect(message.body).not_to include(anonymous_user)
       end
@@ -84,7 +85,7 @@ describe 'submission_comment' do
     context ".email" do
       let(:path_type) { :email }
 
-      it 'should show anonymous when anonymous peer review enabled' do
+      it "shows anonymous when anonymous peer review enabled" do
         message = generate_message(notification_name, path_type, asset)
         expect(message.body).to include(anonymous_user)
       end
@@ -93,7 +94,7 @@ describe 'submission_comment' do
     context ".sms" do
       let(:path_type) { :sms }
 
-      it 'should show anonymous when anonymous peer review enabled' do
+      it "shows anonymous when anonymous peer review enabled" do
         message = generate_message(notification_name, path_type, asset)
         expect(message.body).to include(anonymous_user)
       end
@@ -102,7 +103,7 @@ describe 'submission_comment' do
     context ".summary" do
       let(:path_type) { :summary }
 
-      it 'should show anonymous when anonymous peer review enabled' do
+      it "shows anonymous when anonymous peer review enabled" do
         message = generate_message(notification_name, path_type, asset)
         expect(message.body).to include(anonymous_user)
       end
@@ -111,7 +112,7 @@ describe 'submission_comment' do
     context ".twitter" do
       let(:path_type) { :twitter }
 
-      it 'should show anonymous when anonymous peer review enabled' do
+      it "shows anonymous when anonymous peer review enabled" do
         message = generate_message(notification_name, path_type, asset)
         expect(message.body).to include(anonymous_user)
       end

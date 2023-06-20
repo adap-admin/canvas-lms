@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -18,7 +20,6 @@
 module SupportHelpers
   module Tii
     class TiiFixer < Fixer
-
       def initialize(email, after_time = nil)
         @buffer_time = Time.now - 1.hour
         @prefix = "TurnItIn"
@@ -30,7 +31,7 @@ module SupportHelpers
       end
 
       def broken_objects
-        @broken_objects ||= Shackles.activate(:slave) { load_broken_objects }
+        @broken_objects ||= GuardRail.activate(:secondary) { load_broken_objects }
       end
 
       private
@@ -44,7 +45,7 @@ module SupportHelpers
       end
 
       def like_error
-        "turnitin_data LIKE '%error%'".freeze
+        "turnitin_data LIKE '%error%'"
       end
 
       def object_type
@@ -72,7 +73,7 @@ module SupportHelpers
       end
 
       def like_error
-        "turnitin_settings LIKE '%2305%'".freeze
+        "turnitin_settings LIKE '%2305%'"
       end
 
       def object_type
@@ -85,7 +86,6 @@ module SupportHelpers
     end
 
     class MD5Fixer < Error2305Fixer
-
       private
 
       def fix_type_needed
@@ -93,7 +93,7 @@ module SupportHelpers
       end
 
       def like_error
-        "turnitin_settings LIKE '%MD5 not authenticated%'".freeze
+        "turnitin_settings LIKE '%MD5 not authenticated%'"
       end
     end
 
@@ -108,11 +108,11 @@ module SupportHelpers
         # By selecting only the id, we delay the full load until we're
         # ready to actually work on the assignment.  Lots of little
         # loads than one giant one.
-        Assignment.joins(:submissions).
-          where(updated_field.gt(@after_time)).
-          where(updated_field.lt(@buffer_time)).
-          where("submissions.#{like_error}").
-          distinct.pluck(:id)
+        Assignment.joins(:submissions)
+                  .where(updated_field.gt(@after_time))
+                  .where(updated_field.lt(@buffer_time))
+                  .where("submissions.#{like_error}")
+                  .distinct.pluck(:id)
       end
 
       def object_type
@@ -140,7 +140,6 @@ module SupportHelpers
       def load_broken_objects
         [@submission]
       end
-
     end
 
     class AssignmentFixer < TiiFixer
@@ -175,9 +174,9 @@ module SupportHelpers
         # Non-broken sumissions CAN have turnitin_data that has the
         # word error in them that aren't a top level error that we're
         # looking for. There aren't a lot, but we'll select them out here.
-        @assignment.submissions.where(updated_field.gt(@after_time)).
-          where(updated_field.lt(@buffer_time)).
-          where(like_error).select { |s| is_bad_submission?(s) }
+        @assignment.submissions.where(updated_field.gt(@after_time))
+                   .where(updated_field.lt(@buffer_time))
+                   .where(like_error).select { |s| is_bad_submission?(s) }
       end
 
       def is_bad_submission?(s)
@@ -200,7 +199,7 @@ module SupportHelpers
           :assignment_fix
         elsif tii[:assignment_error].try(:[], :error_code) == 419
           :assignment_exists_fix
-        elsif tii.values.any? { |v| v.is_a?(Hash) && v[:error_code] == 206 }
+        elsif tii.values.any? { |v| v.is_a?(Hash) && v[:error_code] == 206 } # rubocop:disable Lint/DuplicateBranch
           :assignment_fix
         else
           :no_fix
@@ -270,27 +269,26 @@ module SupportHelpers
       private
 
       def like_error
-        "turnitin_data LIKE '--- \n:last_processed_attempt: _\n' OR turnitin_data LIKE '--- \n:last_processed_attempt: _\nattachment_________: \n  :status: pending\n'".freeze
+        "turnitin_data LIKE '--- \n:last_processed_attempt: _\n' OR turnitin_data LIKE '--- \n:last_processed_attempt: _\nattachment_________: \n  :status: pending\n'"
       end
 
       def load_broken_objects
-        Submission.where(updated_field.gt(@after_time)).
-          where(updated_field.lt(@buffer_time)).
-          where(like_error).
-          pluck(:id)
+        Submission.where(updated_field.gt(@after_time))
+                  .where(updated_field.lt(@buffer_time))
+                  .where(like_error)
+                  .pluck(:id)
       end
 
       def stuck_with_object_ids
         # These should be able to just have "check status" called on them.
-        Submission.where(updated_field.gt(@after_time)).
-          where(updated_field.lt(@buffer_time)).
-          where("turnitin_data LIKE '--- \n:last_processed_attempt: _\nattachment_________: \n  :status: pending\n  :object_id: \"_________\"\n'").
-          pluck(:id)
+        Submission.where(updated_field.gt(@after_time))
+                  .where(updated_field.lt(@buffer_time))
+                  .where("turnitin_data LIKE '--- \n:last_processed_attempt: _\nattachment_________: \n  :status: pending\n  :object_id: \"_________\"\n'")
+                  .pluck(:id)
       end
     end
 
     class ExpiredAccountFixer < StuckInPendingFixer
-
       private
 
       def stuck_with_object_ids
@@ -298,7 +296,7 @@ module SupportHelpers
       end
 
       def like_error
-        'turnitin_data LIKE E\'%:status: pending\n:status: error\n:assignment_error: !ruby/hash:ActiveSupport::HashWithIndifferentAccess\n  error_code: 217%\''.freeze
+        'turnitin_data LIKE E\'%:status: pending\n:status: error\n:assignment_error: !ruby/hash:ActiveSupport::HashWithIndifferentAccess\n  error_code: 217%\''
       end
     end
   end

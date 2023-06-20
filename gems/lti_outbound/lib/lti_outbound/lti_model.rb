@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -17,23 +19,26 @@
 
 module LtiOutbound
   class LTIModel
-    protected
+    class << self
+      private
 
-    def self.proc_accessor(*methods)
-      attr_writer(*methods)
-      proc_writer(*methods)
-    end
+      def proc_accessor(*methods)
+        attr_writer(*methods)
 
-    def self.proc_writer(*methods)
-      methods.each do |method|
-        define_method(method) do
-          variable_name = "@#{method}"
-          value = self.instance_variable_get(variable_name)
-          if value.is_a?(Proc)
-            value = value.call
-            self.instance_variable_set(variable_name, value)
+        proc_writer(*methods)
+      end
+
+      def proc_writer(*methods)
+        methods.each do |method|
+          define_method(method) do
+            variable_name = "@#{method}"
+            value = instance_variable_get(variable_name)
+            if value.is_a?(Proc)
+              value = value.call
+              instance_variable_set(variable_name, value)
+            end
+            value
           end
-          return value
         end
       end
     end

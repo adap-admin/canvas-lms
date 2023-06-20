@@ -1,5 +1,5 @@
-# encoding: UTF-8
-#
+# frozen_string_literal: true
+
 # Copyright (C) 2011 - present Instructure, Inc.
 #
 # This file is part of Canvas.
@@ -19,34 +19,11 @@
 require "spec_helper"
 
 describe "StringExtensions" do
-  it "to_html" do
-    require "RedCloth"
-    {
-      "h1. A Solution" => "<h1>A Solution</h1>",
-      "I hated wrapping textilize around a string.\n\nIt always felt dirty." =>
-        "<p>I hated wrapping textilize around a string.</p>\n<p>It always felt dirty.</p>",
-      "I think _this_ is awesome" => "<p>I think <em>this</em> is awesome</p>",
-      "Um... _*really*_, man" => "<p>Um&#8230; <em><strong>really</strong></em>, man</p>"
-    }.each do |plain, html|
-      expect(html).to eq plain.to_html
-    end
-  end
-  
-  it "to_html_lite" do
-    require "RedCloth"
-    {
-      "I have no pee on me" => "I have no pee on me",
-      "But I _do_ get Textile!" => "But I <em>do</em> get Textile!"
-    }.each do |plain, html|
-      expect(html).to eq plain.to_html(:lite)
-    end
-  end
-  
   it "to_url" do
     {
       "<p>This has 100% too much    <em>formatting</em></p>" =>
         "this-has-100-percent-too-much-formatting",
-      "Tea   &amp; crumpets &amp; <strong>cr&ecirc;pes</strong> for me!" => 
+      "Tea   &amp; crumpets &amp; <strong>cr&ecirc;pes</strong> for me!" =>
         "tea-and-crumpets-and-crepes-for-me",
       "The Suspense... Is... Killing Me" =>
         "the-suspense-dot-dot-dot-is-dot-dot-dot-killing-me",
@@ -58,18 +35,18 @@ describe "StringExtensions" do
       expect(plain).to eq html.to_url
     end
   end
-  
+
   it "remove_formatting" do
     {
       "<p>This has 100% too much    <em>formatting</em></p>" =>
         "This has 100 percent too much formatting",
-      "Tea   &amp; crumpets &amp; <strong>cr&ecirc;pes</strong> for me!" => 
+      "Tea   &amp; crumpets &amp; <strong>cr&ecirc;pes</strong> for me!" =>
         "Tea and crumpets and crepes for me"
     }.each do |html, plain|
       expect(plain).to eq html.remove_formatting
     end
   end
-  
+
   it "strip_html_tags" do
     {
       "<h1><em>This</em> is good but <strong>that</strong> is better</h1>" =>
@@ -83,21 +60,21 @@ describe "StringExtensions" do
       expect(plain).to eq html.strip_html_tags
     end
   end
-  
+
   it "convert_accented_entities" do
     {
-      "&aring;"  => "a",
+      "&aring;" => "a",
       "&egrave;" => "e",
-      "&icirc;"  => "i",
+      "&icirc;" => "i",
       "&Oslash;" => "O",
-      "&uuml;"   => "u",
+      "&uuml;" => "u",
       "&Ntilde;" => "N",
       "&ccedil;" => "c"
     }.each do |entitied, plain|
       expect(plain).to eq entitied.convert_accented_entities
     end
   end
-  
+
   it "convert_misc_entities" do
     {
       "America&#8482;" => "America(tm)",
@@ -111,7 +88,7 @@ describe "StringExtensions" do
       expect(plain).to eq entitied.convert_misc_entities
     end
   end
-  
+
   it "convert_misc_characters" do
     {
       "Foo & bar make foobar" => "Foo and bar make foobar",
@@ -125,7 +102,7 @@ describe "StringExtensions" do
       expect(plain).to eq misc.convert_misc_characters
     end
   end
-  
+
   it "replace_whitespace" do
     {
       "this has     too much space" => "this has too much space",
@@ -134,10 +111,10 @@ describe "StringExtensions" do
     }.each do |whitespaced, plain|
       expect(plain).to eq whitespaced.replace_whitespace
     end
-    
+
     expect("now-with-more-hyphens").to eq "now with more hyphens".replace_whitespace("-")
   end
-  
+
   it "collapse" do
     {
       "too      much space" => "too much space",
@@ -145,7 +122,7 @@ describe "StringExtensions" do
     }.each do |uncollapsed, plain|
       expect(plain).to eq uncollapsed.collapse
     end
-    
+
     expect("now-with-hyphens").to eq "----now---------with-hyphens--------".collapse("-")
   end
 end

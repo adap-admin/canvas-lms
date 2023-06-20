@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -22,11 +24,13 @@ class BookmarkedCollection::Collection < Array
   FIRST_TOKEN = "first"
 
   def initialize(bookmarker)
+    super()
     @bookmarker = bookmarker
   end
 
   def shift_with_bookmark
     return if empty?
+
     bookmark = bookmark_for(first)
     [shift, bookmark]
   end
@@ -47,19 +51,19 @@ class BookmarkedCollection::Collection < Array
   end
 
   def current_bookmark=(bookmark)
-    if bookmark.nil? || validate(bookmark)
-      @current_bookmark = bookmark
-    else
-      @current_bookmark = nil
-    end
+    @current_bookmark = if bookmark.nil? || validate(bookmark)
+                          bookmark
+                        else
+                          nil
+                        end
   end
 
   def next_bookmark=(bookmark)
-    if bookmark.nil? || validate(bookmark)
-      @next_bookmark = bookmark
-    else
-      @next_bookmark = nil
-    end
+    @next_bookmark = if bookmark.nil? || validate(bookmark)
+                       bookmark
+                     else
+                       nil
+                     end
   end
 
   # typically not set unless part of a merger of many collections
@@ -74,31 +78,28 @@ class BookmarkedCollection::Collection < Array
   attr_accessor :include_bookmark
 
   def bookmark_to_page(bookmark)
-    bookmark && "bookmark:#{::JSONToken.encode(bookmark)}"
+    bookmark && "bookmark:#{::JSONToken.encode(format_dates(bookmark))}"
   end
 
   def page_to_bookmark(page)
     page = first_page if page.nil?
     if page == first_page
       nil
-    else
-      if page =~ /^bookmark:/
-        begin
-          ::JSONToken.decode(page.gsub(/^bookmark:/, ''))
-        rescue
-          # bookmark value could not be decoded
-          nil
-        end
-      else
-        # not tagged as a bookmark
+    elsif page.is_a?(String) && page =~ /^bookmark:/
+      begin
+        ::JSONToken.decode(page.gsub(/^bookmark:/, ""))
+      rescue
+        # bookmark value could not be decoded
         nil
       end
+      # else
+      # not tagged as a bookmark
+      # nil
     end
   end
 
   def current_page=(page)
     self.current_bookmark = page_to_bookmark(page)
-    page
   end
 
   def first_page
@@ -115,5 +116,16 @@ class BookmarkedCollection::Collection < Array
 
   def has_more!
     self.next_bookmark = bookmark_for(last)
+  end
+
+  def format_dates(bookmark)
+    # to_json will record local time + UTC offset with seconds truncated, both of which will screw up pagination
+    if bookmark.respond_to?(:iso8601)
+      bookmark.utc.iso8601(6)
+    elsif bookmark.is_a?(Array)
+      bookmark.map { |e| format_dates(e) }
+    else
+      bookmark
+    end
   end
 end

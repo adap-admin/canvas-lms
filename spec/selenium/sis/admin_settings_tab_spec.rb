@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -15,30 +17,30 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require File.expand_path(File.dirname(__FILE__) + '/../common')
+require_relative "../common"
 
 describe "admin settings tab" do
   include_context "in-process server selenium tests"
   let(:account) { Account.default }
-  let(:sub_account) { account.sub_accounts.create!(:name => 'sub-account') }
+  let(:sub_account) { account.sub_accounts.create!(name: "sub-account") }
 
-  before :each do
-    user_logged_in(:user => site_admin_user(account: account))
+  before do
+    user_logged_in(user: site_admin_user(account:))
   end
 
   def get_settings_page(account)
     get "/accounts/#{account.id}/settings"
   end
 
-  def set_checkbox(id,checked)
+  def set_checkbox(id, checked)
     checkbox = f(id)
     checkbox.click if is_checked(checkbox) != checked
   end
 
-  def set_checkbox_via_label(id,checked)
+  def set_checkbox_via_label(id, checked)
     # Use this method for checkboxes that are hidden by their label (ic-Checkbox)
     checkbox = f(id)
-    label = f("label[for=\"#{id[1..-1]}\"]")
+    label = f("label[for=\"#{id[1..]}\"]")
     label.click if is_checked(checkbox) != checked
   end
 
@@ -54,10 +56,11 @@ describe "admin settings tab" do
   end
 
   context "SIS Agent Token Authentication" do
-    let(:sis_token){ 'too much tuna' }
+    let(:sis_token) { "too much tuna" }
 
-    it "should test SIS Agent Token Authentication with post_grades feature enabled", priority: "2", test_id: 132577 do
-      course_with_admin_logged_in(:account => Account.site_admin)
+    it "tests SIS Agent Token Authentication with post_grades feature enabled", priority: "2" do
+      user = account_admin_user({ active_user: true }.merge(account: Account.site_admin))
+      course_with_admin_logged_in(account: Account.default, user:)
       account.enable_feature!(:post_grades)
 
       get_settings_page(account)
@@ -69,8 +72,9 @@ describe "admin settings tab" do
       expect(token).to have_value(sis_token)
     end
 
-    it "should test SIS Agent Token Authentication with post_grades feature disabled", priority: "2", test_id: 132578 do
-      course_with_admin_logged_in(:account => Account.site_admin)
+    it "tests SIS Agent Token Authentication with post_grades feature disabled", priority: "2" do
+      user = account_admin_user({ active_user: true }.merge(account: Account.site_admin))
+      course_with_admin_logged_in(account: Account.default, user:)
       get_settings_page(account)
       expect(f("#add_sis_app_token")).to be_displayed
       expect(f("#account_settings_sis_app_token")).to be_displayed
@@ -92,20 +96,20 @@ describe "admin settings tab" do
     let(:assignment_name_length_input) { "#account_settings_sis_assignment_name_length_input_value" }
 
     def test_checkbox_on(id)
-      set_checkbox_via_label(id,true)
+      set_checkbox_via_label(id, true)
       click_submit
       expect(get_checkbox(id)).to be_truthy
     end
 
     def test_checkbox_off(id)
-      set_checkbox_via_label(id,false)
+      set_checkbox_via_label(id, false)
       click_submit
       expect(get_checkbox(id)).to be_falsey
     end
 
     context ":new_sis_integrations => false" do
       before do
-        account.set_feature_flag! :new_sis_integrations, 'off'
+        account.set_feature_flag! :new_sis_integrations, "off"
       end
 
       it "persists SIS import settings is on" do
@@ -125,7 +129,7 @@ describe "admin settings tab" do
 
       context "SIS post grades disabled" do
         before do
-          account.set_feature_flag! 'post_grades', 'off'
+          account.set_feature_flag! "post_grades", "off"
           get_settings_page(account)
         end
 
@@ -136,7 +140,7 @@ describe "admin settings tab" do
 
       context "SIS post grades enabled" do
         before do
-          account.set_feature_flag! 'post_grades', 'on'
+          account.set_feature_flag! "post_grades", "on"
           get_settings_page(account)
         end
 
@@ -152,11 +156,11 @@ describe "admin settings tab" do
 
     context ":new_sis_integrations => true (sub account)" do
       before do
-        account.set_feature_flag! :new_sis_integrations, 'on'
+        account.set_feature_flag! :new_sis_integrations, "on"
         get_settings_page(sub_account)
       end
 
-      it "should have SIS name setting disabled for sub accounts" do
+      it "has SIS name setting disabled for sub accounts" do
         name_setting = f(sis_name)
         expect(name_setting.displayed?).to be_truthy
         expect(name_setting.enabled?).to be_falsey
@@ -165,10 +169,10 @@ describe "admin settings tab" do
 
     context ":new_sis_integrations => true (root account)" do
       before do
-        account.set_feature_flag! :new_sis_integrations, 'on'
+        account.set_feature_flag! :new_sis_integrations, "on"
       end
 
-      it "should persist custom SIS name" do
+      it "persists custom SIS name" do
         get_settings_page(account)
         custom_sis_name = "PowerSchool"
         f(sis_name).send_keys(custom_sis_name)
@@ -188,7 +192,7 @@ describe "admin settings tab" do
 
       context "SIS post grades disabled" do
         before do
-          account.set_feature_flag! 'post_grades', 'off'
+          account.set_feature_flag! "post_grades", "off"
           get_settings_page(account)
         end
 
@@ -203,7 +207,7 @@ describe "admin settings tab" do
 
       context "SIS post grades enabled" do
         before do
-          account.set_feature_flag! 'post_grades', 'on'
+          account.set_feature_flag! "post_grades", "on"
         end
 
         it "persists SIS import setting is on" do
@@ -238,29 +242,19 @@ describe "admin settings tab" do
           it { test_checkbox_off(sis_syncing_locked) }
           it { test_checkbox_on(sis_syncing_locked) }
 
-          it "toggles require assignment due date on" do
-            set_checkbox_via_label(default_grade_export,true)
-            test_checkbox_on(require_assignment_due_date)
-          end
-
-          it "toggles require assignment due date off" do
-            set_checkbox_via_label(default_grade_export,true)
-            test_checkbox_off(require_assignment_due_date)
-          end
-
           it "toggles assignment name length on" do
-            set_checkbox_via_label(default_grade_export,true)
+            set_checkbox_via_label(default_grade_export, true)
             test_checkbox_on(assignment_name_length)
           end
 
           it "toggles assignment name length off" do
-            set_checkbox_via_label(default_grade_export,true)
+            set_checkbox_via_label(default_grade_export, true)
             test_checkbox_off(assignment_name_length)
           end
 
-          it "should test sis assignment name length" do
-            set_checkbox_via_label(default_grade_export,true)
-            set_checkbox_via_label(assignment_name_length,true)
+          it "tests sis assignment name length" do
+            set_checkbox_via_label(default_grade_export, true)
+            set_checkbox_via_label(assignment_name_length, true)
             name_length = 123
             f("#account_settings_sis_assignment_name_length_input_value").send_keys(name_length)
             click_submit
@@ -279,7 +273,7 @@ describe "admin settings tab" do
 
       context "root and sub-accounts" do
         before do
-          account.set_feature_flag! 'post_grades', 'on'
+          account.set_feature_flag! "post_grades", "on"
         end
 
         context "unlocked for sub-accounts" do
@@ -313,9 +307,7 @@ describe "admin settings tab" do
             expect(f(default_grade_export)).to be_disabled
           end
         end
-
       end
-
     end
   end
 end

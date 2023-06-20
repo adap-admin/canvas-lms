@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -23,7 +24,7 @@ module Types
 
     description "A list of students that an `AssignmentOverride` applies to"
 
-    alias override object
+    alias_method :override, :object
 
     field :students, [UserType], null: true
 
@@ -34,17 +35,28 @@ module Types
     end
   end
 
+  Noop = Struct.new(:id)
+
+  class NoopType < ApplicationObjectType
+    graphql_name "Noop"
+
+    description "A descriptive tag that doesn't link the assignment to a set"
+
+    field :_id, ID, method: :id, null: false
+  end
+
   class AssignmentOverrideSetUnion < BaseUnion
     graphql_name "AssignmentOverrideSet"
 
     description "Objects that can be assigned overridden dates"
 
-    possible_types SectionType, GroupType, AdhocStudentsType
+    possible_types SectionType, GroupType, AdhocStudentsType, NoopType
 
     def self.resolve_type(obj, _)
       case obj
       when CourseSection then SectionType
       when Group then GroupType
+      when Noop then NoopType
       when AssignmentOverride then AdhocStudentsType
       end
     end
@@ -55,10 +67,9 @@ module Types
 
     implements GraphQL::Types::Relay::Node
     implements Interfaces::TimestampInterface
+    implements Interfaces::LegacyIDInterface
 
-    alias :override :object
-
-    field :_id, ID, "legacy canvas id", method: :id, null: false
+    alias_method :override, :object
 
     field :assignment, AssignmentType, null: true
     def assignment
@@ -67,12 +78,16 @@ module Types
 
     field :title, String, null: true
 
-    field :set, AssignmentOverrideSetUnion,
-      "This object specifies what students this override applies to",
-      null: true
+    field :set,
+          AssignmentOverrideSetUnion,
+          "This object specifies what students this override applies to",
+          null: true
     def set
-      if override.set_type == "ADHOC"
+      case override.set_type
+      when "ADHOC"
         override
+      when "Noop"
+        Noop.new(override.set_id)
       else
         load_association(:set)
       end

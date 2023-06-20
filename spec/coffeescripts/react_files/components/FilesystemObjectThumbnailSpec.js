@@ -19,23 +19,23 @@
 import React from 'react'
 import ReactDOM from 'react-dom'
 import TestUtils from 'react-dom/test-utils'
-import File from 'compiled/models/File'
-import Folder from 'compiled/models/Folder'
-import FilesystemObject from 'compiled/models/FilesystemObject'
-import FilesystemObjectThumbnail from 'jsx/files/FilesystemObjectThumbnail'
+import File from '@canvas/files/backbone/models/File'
+import Folder from '@canvas/files/backbone/models/Folder'
+import FilesystemObject from '@canvas/files/backbone/models/FilesystemObject'
+import FilesystemObjectThumbnail from '@canvas/files/react/components/FilesystemObjectThumbnail'
 
 QUnit.module('Filesystem Object Thumbnail: file', {
   setup() {
     const file = new File({
       id: 65,
-      thumbnail_url: 'sweet_thumbnail_url'
+      thumbnail_url: 'sweet_thumbnail_url',
     })
     this.fOT = React.createFactory(FilesystemObjectThumbnail)
     this.clock = sinon.useFakeTimers()
     this.thumbnail = TestUtils.renderIntoDocument(
       this.fOT({
         model: file,
-        className: 'customClassname'
+        className: 'customClassname',
       })
     )
     return this.clock.tick(20000)
@@ -43,19 +43,22 @@ QUnit.module('Filesystem Object Thumbnail: file', {
   teardown() {
     this.clock.restore()
     ReactDOM.unmountComponentAtNode(ReactDOM.findDOMNode(this.thumbnail).parentNode)
-  }
+  },
 })
 
-test('displays the thumbnail image', function() {
+test('displays the thumbnail image', function () {
   equal(
     $(ReactDOM.findDOMNode(this.thumbnail)).attr('style'),
-    "background-image: url(\"sweet_thumbnail_url\");",
+    'background-image: url("sweet_thumbnail_url");',
     'set background image to correct url'
   )
 })
 
-test('adds class name from props to the span', function() {
-  ok($(ReactDOM.findDOMNode(this.thumbnail)).hasClass('customClassname'), 'finds the custom className')
+test('adds class name from props to the span', function () {
+  ok(
+    $(ReactDOM.findDOMNode(this.thumbnail)).hasClass('customClassname'),
+    'finds the custom className'
+  )
 })
 
 QUnit.module('Filesystem Object Thumbnail: folder', {
@@ -66,7 +69,7 @@ QUnit.module('Filesystem Object Thumbnail: folder', {
     this.thumbnail = TestUtils.renderIntoDocument(
       this.fOT({
         model: folder,
-        className: 'customClassname'
+        className: 'customClassname',
       })
     )
     return this.clock.tick(20000)
@@ -74,20 +77,26 @@ QUnit.module('Filesystem Object Thumbnail: folder', {
   teardown() {
     this.clock.restore()
     ReactDOM.unmountComponentAtNode(ReactDOM.findDOMNode(this.thumbnail).parentNode)
-  }
+  },
 })
 
-test("adds mimeClass-Folder if it's a folder", function() {
-  ok($(ReactDOM.findDOMNode(this.thumbnail)).hasClass('mimeClass-folder'), 'adds mimeClass for folder')
+test("adds mimeClass-Folder if it's a folder", function () {
+  ok(
+    $(ReactDOM.findDOMNode(this.thumbnail)).hasClass('mimeClass-folder'),
+    'adds mimeClass for folder'
+  )
 })
 
-test('adds on className to i tag if set in props', function() {
-  ok($(ReactDOM.findDOMNode(this.thumbnail)).hasClass('customClassname'), 'finds the custom className')
+test('adds on className to i tag if set in props', function () {
+  ok(
+    $(ReactDOM.findDOMNode(this.thumbnail)).hasClass('customClassname'),
+    'finds the custom className'
+  )
 })
 
 QUnit.module('Filesystem Object Thumbnail: other')
 
-test('adds on className to i tag if set in props', function() {
+test('adds on className to i tag if set in props', function () {
   const fso = new FilesystemObject({id: 65})
   fso.url = () => 'foo'
   this.fOT = React.createFactory(FilesystemObjectThumbnail)
@@ -95,7 +104,7 @@ test('adds on className to i tag if set in props', function() {
   const thumbnail = TestUtils.renderIntoDocument(
     this.fOT({
       model: fso,
-      className: 'customClassname'
+      className: 'customClassname',
     })
   )
   clock.tick(20000)
@@ -111,7 +120,7 @@ QUnit.module('Filesystem Object Thumbnail: checkForThumbnail', {
     this.server.respondWith(url, [
       200,
       {'Content-Type': 'application/json'},
-      JSON.stringify({thumbnail_url: 'sweet_thumbnail_url'})
+      JSON.stringify({thumbnail_url: 'sweet_thumbnail_url'}),
     ])
     const file = new File({id: 65})
     this.fOT = React.createFactory(FilesystemObjectThumbnail)
@@ -124,10 +133,10 @@ QUnit.module('Filesystem Object Thumbnail: checkForThumbnail', {
     this.server.restore()
     this.clock.restore()
     ReactDOM.unmountComponentAtNode(ReactDOM.findDOMNode(this.thumbnail).parentNode)
-  }
+  },
 })
 
-test('fetches thumbnail_url and puts it into state', function() {
+test('fetches thumbnail_url and puts it into state', function () {
   this.clock.tick(1000)
   ok(
     this.thumbnail.state.thumbnail_url === 'sweet_thumbnail_url',

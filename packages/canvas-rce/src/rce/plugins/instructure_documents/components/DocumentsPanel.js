@@ -16,60 +16,50 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React, {useRef} from 'react';
-import {arrayOf, bool, func, shape, string} from 'prop-types';
-import {fileShape} from './propTypes'
-import formatMessage from '../../../../format-message';
+import React, {useRef} from 'react'
+import {arrayOf, bool, func, shape, string, objectOf, oneOf} from 'prop-types'
+import {fileShape} from '../../shared/fileShape'
+import formatMessage from '../../../../format-message'
 
-import {Text} from '@instructure/ui-elements'
-import {View} from '@instructure/ui-layout'
+import {Text} from '@instructure/ui-text'
+import {View} from '@instructure/ui-view'
 import Link from './Link'
 import {
   LoadMoreButton,
   LoadingIndicator,
   LoadingStatus,
-  useIncrementalLoading
+  useIncrementalLoading,
 } from '../../../../common/incremental-loading'
 
-function hasFiles(props) {
-  return props.documents.files.length > 0
+function hasFiles(documents) {
+  return documents.files.length > 0
 }
 
-function isEmpty(props) {
-  return (
-    !hasFiles(props) &&
-    !props.documents.hasMore &&
-    !props.documents.isLoading
-  );
+function isEmpty(documents) {
+  return !hasFiles(documents) && !documents.hasMore && !documents.isLoading
 }
 
 function renderLinks(files, handleClick, lastItemRef) {
   return files.map((f, index) => {
     let focusRef = null
-    if (index === files.length -1) {
+    if (index === files.length - 1) {
       focusRef = lastItemRef
     }
-    return (
-      <Link
-        key={f.id}
-        {...f}
-        onClick={handleClick}
-        focusRef={focusRef}
-      />
-    )
+    return <Link key={f.id} {...f} onClick={handleClick} focusRef={focusRef} />
   })
 }
 
 function renderLoadingError(_error) {
   return (
     <View as="div" role="alert" margin="medium">
-      <Text color="error">{formatMessage("Loading failed.")}</Text>
+      <Text color="danger">{formatMessage('Loading failed.')}</Text>
     </View>
-  );
+  )
 }
 
 export default function DocumentsPanel(props) {
-  const {fetchInitialDocs, fetchNextDocs, documents} = props
+  const {fetchInitialDocs, fetchNextDocs, contextType, sortBy, searchString} = props
+  const documents = props.documents[contextType]
   const {hasMore, isLoading, error, files} = documents
   const lastItemRef = useRef(null)
 
@@ -77,16 +67,12 @@ export default function DocumentsPanel(props) {
     hasMore,
     isLoading,
     lastItemRef,
-
-    onLoadInitial() {
-      fetchInitialDocs()
-    },
-
-    onLoadMore() {
-      fetchNextDocs()
-    },
-
-    records: files
+    onLoadInitial: fetchInitialDocs,
+    onLoadMore: fetchNextDocs,
+    records: files,
+    contextType,
+    sortBy,
+    searchString,
   })
 
   const handleDocClick = file => {
@@ -94,11 +80,7 @@ export default function DocumentsPanel(props) {
   }
 
   return (
-    <View
-      as="div"
-      data-testid="instructure_links-DocumentsPanel"
-    >
-
+    <View as="div" data-testid="instructure_links-DocumentsPanel">
       {renderLinks(files, handleDocClick, lastItemRef)}
 
       {loader.isLoading && <LoadingIndicator loader={loader} />}
@@ -109,27 +91,32 @@ export default function DocumentsPanel(props) {
 
       {error && renderLoadingError(error)}
 
-      {isEmpty(props) && (
-        <View as="div" padding="medium">
-          {formatMessage("No results.")}
+      {isEmpty(documents) && (
+        <View as="div" role="alert" padding="medium">
+          {formatMessage('No results.')}
         </View>
       )}
-
     </View>
-  );
+  )
 }
 
 DocumentsPanel.propTypes = {
   contextType: string.isRequired,
-  contextId: string.isRequired,
   fetchInitialDocs: func.isRequired,
   fetchNextDocs: func.isRequired,
   onLinkClick: func.isRequired,
-  documents: shape({
-    files: arrayOf(shape(fileShape)).isRequired,
-    bookmark: string,
-    hasMore: bool,
-    isLoading: bool,
-    error: string
-  }).isRequired
+  documents: objectOf(
+    shape({
+      files: arrayOf(shape(fileShape)).isRequired,
+      bookmark: string,
+      hasMore: bool,
+      isLoading: bool,
+      error: string,
+    })
+  ).isRequired,
+  sortBy: shape({
+    sort: oneOf(['date_added', 'alphabetical']).isRequired,
+    order: oneOf(['asc', 'desc']).isRequired,
+  }).isRequired,
+  searchString: string,
 }

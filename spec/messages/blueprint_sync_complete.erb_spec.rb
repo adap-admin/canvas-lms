@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -16,14 +18,13 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/messages_helper')
+require_relative "messages_helper"
 
-describe 'blueprint_sync_complete' do
+describe "blueprint_sync_complete" do
   before :once do
-    course_model(:reusable => true)
+    course_model(reusable: true)
     @template = MasterCourses::MasterTemplate.set_as_master_course(@course)
-    @mm = @template.master_migrations.create!(:imports_completed_at => 1.day.ago, :workflow_state => 'completed', :comment => 'ohai')
+    @mm = @template.master_migrations.create!(imports_completed_at: 1.day.ago, workflow_state: "completed", comment: "ohai")
   end
 
   let(:asset) { @mm }

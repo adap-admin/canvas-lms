@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -33,7 +35,7 @@ class GradebookUploadsController < ApplicationController
         else
           # let them continue on with their old upload
           redirect_to course_gradebook_upload_path(@context)
-          return
+          nil
         end
       end
     end
@@ -59,8 +61,8 @@ class GradebookUploadsController < ApplicationController
         js_env gradebook_env(@progress)
         render :show
       else
-        flash[:error] = t(:no_file_attached, "We did not detect a CSV to "\
-          "upload. Please select a CSV to upload and submit again.")
+        flash[:error] = t(:no_file_attached, "We did not detect a CSV to " \
+                                             "upload. Please select a CSV to upload and submit again.")
         redirect_to action: :new
       end
     end
@@ -86,8 +88,9 @@ class GradebookUploadsController < ApplicationController
       gradebook_path: course_gradebook_path(@context),
       bulk_update_path: "/api/v1/courses/#{@context.id}/submissions/update_grades",
       bulk_update_custom_columns_path: api_v1_course_custom_gradebook_column_bulk_data_path(@context),
+      bulk_update_override_scores_path: "/api/v1/courses/#{@context.id}/update_final_grade_overrides",
       create_assignment_path: api_v1_course_assignments_path(@context),
-      new_gradebook_upload_path: new_course_gradebook_upload_path(@context),
+      new_gradebook_upload_path: new_course_gradebook_upload_path(@context)
     }
   end
 

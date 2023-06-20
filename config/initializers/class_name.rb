@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -17,6 +19,6 @@
 
 class Module
   def class_name
-    name.split('::').last
+    name.split("::").last
   end
 end

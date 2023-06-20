@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -62,8 +64,7 @@ class AdminsController < ApplicationController
   #   created with the given role. Defaults to 'AccountAdmin'.
   #
   # @argument role_id [Integer]
-  #   The user's admin relationship with the account will be created with the
-  #   given role. Defaults to the built-in role for 'AccountAdmin'.
+  #   The user's admin relationship with the account will be created with the given role. Defaults to the built-in role for 'AccountAdmin'.
   #
   # @argument send_confirmation [Boolean]
   #   Send a notification email to
@@ -76,7 +77,7 @@ class AdminsController < ApplicationController
 
     require_role
     admin = @context.account_users.where(user_id: user.id, role_id: @role.id).first_or_initialize
-    admin.workflow_state = 'active'
+    admin.workflow_state = "active"
 
     return unless authorized_action(admin, @current_user, :create)
 
@@ -84,7 +85,7 @@ class AdminsController < ApplicationController
       if admin.save
         # if they don't provide it, or they explicitly want it
         if params[:send_confirmation].nil? ||
-          Canvas::Plugin.value_to_boolean(params[:send_confirmation])
+           Canvas::Plugin.value_to_boolean(params[:send_confirmation])
           if user.registered?
             admin.account_user_notification!
           else
@@ -92,10 +93,10 @@ class AdminsController < ApplicationController
           end
         end
       else
-        return render :json => admin.errors, :status => :bad_request
+        return render json: admin.errors, status: :bad_request
       end
     end
-    render :json => admin_json(admin, @current_user, session)
+    render json: admin_json(admin, @current_user, session)
   end
 
   # @API Remove account admin
@@ -103,12 +104,10 @@ class AdminsController < ApplicationController
   # Remove the rights associated with an account admin role from a user.
   #
   # @argument role [String]
-  #   [DEPRECATED] Account role to remove from the user. Defaults to
-  #   'AccountAdmin'. Any other account role must be specified explicitly.
+  #   [DEPRECATED] Account role to remove from the user.
   #
-  # @argument role_id [Integer]
-  #   The user's admin relationship with the account will be created with the
-  #   given role. Defaults to the built-in role for 'AccountAdmin'.
+  # @argument role_id [Required, Integer]
+  #   The id of the role representing the user's admin relationship with the account.
   #
   # @returns Admin
   def destroy
@@ -117,7 +116,7 @@ class AdminsController < ApplicationController
     admin = @context.account_users.where(user_id: user, role_id: @role.id).first!
     if authorized_action(admin, @current_user, :destroy)
       admin.destroy
-      render :json => admin_json(admin, @current_user, session)
+      render json: admin_json(admin, @current_user, session)
     end
   end
 
@@ -136,7 +135,7 @@ class AdminsController < ApplicationController
       scope = scope.where(user_id: user_ids) if user_ids
       route = polymorphic_url([:api_v1, @context, :admins])
       admins = Api.paginate(scope.order(:id), self, route)
-      render :json => admins.collect{ |admin| admin_json(admin, @current_user, session) }
+      render json: admins.collect { |admin| admin_json(admin, @current_user, session) }
     end
   end
 
@@ -146,7 +145,7 @@ class AdminsController < ApplicationController
     @role = Role.get_role_by_id(params[:role_id]) if params[:role_id]
     @context.shard.activate do
       @role ||= @context.get_account_role_by_name(params[:role]) if params[:role]
-      @role ||= Role.get_built_in_role("AccountAdmin")
+      @role ||= Role.get_built_in_role("AccountAdmin", root_account_id: @context.resolved_root_account_id)
     end
   end
 end

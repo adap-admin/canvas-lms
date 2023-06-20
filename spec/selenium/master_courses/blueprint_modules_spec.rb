@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -15,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_relative '../helpers/context_modules_common'
+require_relative "../helpers/context_modules_common"
 
 describe "master courses - child courses - module item locking" do
   include_context "in-process server selenium tests"
@@ -26,7 +28,7 @@ describe "master courses - child courses - module item locking" do
       @copy_from = course_factory(active_all: true)
       @template = MasterCourses::MasterTemplate.set_as_master_course(@copy_from)
       @original_page = @copy_from.wiki_pages.create!(title: "blah", body: "bloo")
-      @page_mc_tag = @template.create_content_tag_for!(@original_page, restrictions: {content: true})
+      @page_mc_tag = @template.create_content_tag_for!(@original_page, restrictions: { content: true })
 
       @original_topic = @copy_from.discussion_topics.create!(title: "blah", message: "bloo")
       @topic_mc_tag = @template.create_content_tag_for!(@original_topic)
@@ -37,7 +39,7 @@ describe "master courses - child courses - module item locking" do
 
       @page_copy = @copy_to.wiki_pages.create!(title: "locked page", migration_id: @page_mc_tag.migration_id)
       @topic_copy = @copy_to.discussion_topics.create!(title: "unlocked topic", migration_id: @topic_mc_tag.migration_id)
-      [@page_copy, @topic_copy].each{|obj| @sub.create_content_tag_for!(obj)}
+      [@page_copy, @topic_copy].each { |obj| @sub.create_content_tag_for!(obj) }
       @assmt = @copy_to.assignments.create!(title: "normal assignment")
 
       @mod = @copy_to.context_modules.create!(name: "modle")
@@ -46,22 +48,22 @@ describe "master courses - child courses - module item locking" do
       @normal_tag = @mod.add_item(id: @assmt.id, type: "assignment")
     end
 
-    before :each do
+    before do
       user_session(@teacher)
     end
 
-    it "should show all the icons on the modules index" do
+    it "shows all the icons on the modules index" do
       get "/courses/#{@copy_to.id}/modules"
 
       # objects inherited from master show the lock
-      expect(f("#context_module_item_#{@locked_tag.id} .lock-icon")).to contain_css('.icon-blueprint-lock')
-      expect(f("#context_module_item_#{@unlocked_tag.id} .lock-icon")).to contain_css('.icon-blueprint')
+      expect(f("#context_module_item_#{@locked_tag.id} .lock-icon")).to contain_css(".icon-blueprint-lock")
+      expect(f("#context_module_item_#{@unlocked_tag.id} .lock-icon")).to contain_css(".icon-blueprint")
       # objects aded to the child do not
-      expect(f("#context_module_item_#{@normal_tag.id} .lock-icon")).not_to contain_css('.icon-blueprint-lock')
-      expect(f("#context_module_item_#{@normal_tag.id} .lock-icon")).not_to contain_css('.icon-blueprint')
+      expect(f("#context_module_item_#{@normal_tag.id} .lock-icon")).not_to contain_css(".icon-blueprint-lock")
+      expect(f("#context_module_item_#{@normal_tag.id} .lock-icon")).not_to contain_css(".icon-blueprint")
     end
 
-    it "should disable the title edit input for locked items" do
+    it "disables the title edit input for locked items" do
       get "/courses/#{@copy_to.id}/modules"
 
       f("#context_module_item_#{@locked_tag.id} .al-trigger").click
@@ -69,7 +71,7 @@ describe "master courses - child courses - module item locking" do
       expect(f("#content_tag_title")).to be_disabled
     end
 
-    it "should not disable the title edit input for unlocked items" do
+    it "does not disable the title edit input for unlocked items" do
       get "/courses/#{@copy_to.id}/modules"
 
       f("#context_module_item_#{@unlocked_tag.id} .al-trigger").click
@@ -79,26 +81,26 @@ describe "master courses - child courses - module item locking" do
 
     it "loads new restriction info as needed when adding an item" do
       title = "new quiz"
-      original_quiz = @copy_from.quizzes.create!(title: title)
-      quiz_mc_tag = @template.create_content_tag_for!(original_quiz, restrictions: {content: true})
+      original_quiz = @copy_from.quizzes.create!(title:)
+      quiz_mc_tag = @template.create_content_tag_for!(original_quiz, restrictions: { content: true })
 
-      quiz_copy = @copy_to.quizzes.create!(title: title, migration_id: quiz_mc_tag.migration_id)
+      quiz_copy = @copy_to.quizzes.create!(title:, migration_id: quiz_mc_tag.migration_id)
       @sub.create_content_tag_for!(quiz_copy)
 
       get "/courses/#{@copy_to.id}/modules"
 
       f("#context_module_#{@mod.id} .add_module_item_link").click
       wait_for_ajaximations
-      click_option('#add_module_item_select', "Quiz")
-      click_option('#quizs_select .module_item_select', title)
-      f('.add_item_button.ui-button').click
+      click_option("#add_module_item_select", "Quiz")
+      click_option("#quizs_select .module_item_select", title)
+      f(".add_item_button.ui-button").click
 
       wait_for_ajaximations
       new_tag = ContentTag.last
       expect(new_tag.content).to eq quiz_copy
 
       # does another fetch to get restrictions for the new tag
-      expect(f("#context_module_item_#{new_tag.id} .lock-icon")).to contain_css('.icon-blueprint-lock')
+      expect(f("#context_module_item_#{new_tag.id} .lock-icon")).to contain_css(".icon-blueprint-lock")
     end
   end
 
@@ -111,30 +113,30 @@ describe "master courses - child courses - module item locking" do
       @assmt_tag = @template.create_content_tag_for!(@assmt)
 
       @page = @course.wiki_pages.create!(title: "page blah", body: "bloo")
-      @page_tag = @template.create_content_tag_for!(@page, restrictions: {all: true})
+      @page_tag = @template.create_content_tag_for!(@page, restrictions: { all: true })
 
       @topic = @course.discussion_topics.create!(title: "topic blah", message: "bloo")
-      # note the lack of a content tag
+      # NOTE: the lack of a content tag
 
       @mod = @course.context_modules.create!(name: "modle")
       @assmt_mod_tag = @mod.add_item(id: @assmt.id, type: "assignment")
       @page_mod_tag  = @mod.add_item(id: @page.id, type: "wiki_page")
       @topic_mod_tag = @mod.add_item(id: @topic.id, type: "discussion_topic")
-      @header_tag = @mod.add_item(:type => 'context_module_sub_header', :title => 'header')
+      @header_tag = @mod.add_item(type: "context_module_sub_header", title: "header")
     end
 
-    before :each do
+    before do
       user_session(@teacher)
     end
 
-    it "should show all the icons on the modules index" do
+    it "shows all the icons on the modules index" do
       get "/courses/#{@course.id}/modules"
 
-      expect(f("#context_module_item_#{@assmt_mod_tag.id} .lock-icon")).to contain_css('.icon-blueprint')
-      expect(f("#context_module_item_#{@page_mod_tag.id} .lock-icon")).to contain_css('.icon-blueprint-lock')
+      expect(f("#context_module_item_#{@assmt_mod_tag.id} .lock-icon")).to contain_css(".icon-blueprint")
+      expect(f("#context_module_item_#{@page_mod_tag.id} .lock-icon")).to contain_css(".icon-blueprint-lock")
       # should still have icon even without tag
-      expect(f("#context_module_item_#{@topic_mod_tag.id} .lock-icon")).to contain_css('.icon-blueprint')
-      expect(f("#context_module_item_#{@header_tag.id}")).to_not contain_css('.icon-blueprint')
+      expect(f("#context_module_item_#{@topic_mod_tag.id} .lock-icon")).to contain_css(".icon-blueprint")
+      expect(f("#context_module_item_#{@header_tag.id}")).to_not contain_css(".icon-blueprint")
     end
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -17,6 +19,6 @@
 
 module CC::Exporter
   module Epub
-    FILE_PATH = 'media'
+    FILE_PATH = "media"
   end
 end

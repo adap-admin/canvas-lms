@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -16,7 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 module Lti
-  module Ims
+  module IMS
     # @API Line Items
     #
     # Line Item API for IMS Assignment and Grade Services
@@ -60,13 +62,19 @@ module Lti
     #            "description": "The extension that defines the submission_type of the line_item. Only returns if set through the line_item create endpoint.",
     #            "example": "{\n\t\"type\":\"external_tool\",\n\t\"external_tool_url\":\"https://my.launch.url\",\n}",
     #            "type": "string"
+    #          },
+    #          "https://canvas.instructure.com/lti/launch_url": {
+    #            "description": "The launch url of the Line Item. Only returned if `include=launch_url` query parameter is passed, and only for Show and List actions.",
+    #            "example": "https://my.tool.url/launch",
+    #            "type": "string"
     #          }
     #       }
     #     }
     class LineItemsController < ApplicationController
       include Concerns::GradebookServices
 
-      before_action :verify_line_item_in_context, only: %i(show update destroy)
+      before_action :prepare_line_item_for_ags!, only: :create
+      before_action :verify_line_item_in_context, only: %i[show update destroy]
       before_action :verify_valid_resource_link, only: :create
 
       ACTION_SCOPE_MATCHERS = {
@@ -77,15 +85,15 @@ module Lti
         index: any_of(TokenScopes::LTI_AGS_LINE_ITEM_SCOPE, TokenScopes::LTI_AGS_LINE_ITEM_READ_ONLY_SCOPE)
       }.with_indifferent_access.freeze
 
-      MIME_TYPE = 'application/vnd.ims.lis.v2.lineitem+json'.freeze
-      CONTAINER_MIME_TYPE = 'application/vnd.ims.lis.v2.lineitemcontainer+json'.freeze
+      MIME_TYPE = "application/vnd.ims.lis.v2.lineitem+json"
+      CONTAINER_MIME_TYPE = "application/vnd.ims.lis.v2.lineitemcontainer+json"
 
       rescue_from ActionController::BadRequest do |e|
         unless Rails.env.production?
           logger.error(e.message)
           Lti::Errors::ErrorLogger.log_error(e)
         end
-        render json: {error: e.message}, status: :bad_request
+        render json: { error: e.message }, status: :bad_request
       end
 
       # @API Create a Line Item
@@ -111,6 +119,10 @@ module Lti
       #   The resource link id the Line Item should be attached to. This value should
       #   match the LTI id of the Canvas assignment associated with the tool.
       #
+      # @argument endDateTime [String]
+      #   The ISO8601 date and time when the line item stops receiving submissions. Corresponds
+      #   to the assignment's due_at date.
+      #
       # @argument https://canvas.instructure.com/lti/submission_type [Optional, object]
       #   (EXTENSION) - Optional block to set Assignment Submission Type when creating a new assignment is created.
       #   type - 'none' or 'external_tool'::
@@ -122,6 +134,7 @@ module Lti
       #     "resourceId": 1,
       #     "tag": "MyTag",
       #     "resourceLinkId": "1",
+      #     "endDateTime": "2022-02-07T22:23:11+0000",
       #     "https://canvas.instructure.com/lti/submission_type": {
       #       "type": "external_tool",
       #       "external_tool_url": "https://my.launch.url"
@@ -134,7 +147,7 @@ module Lti
           assignment,
           context,
           tool,
-          line_item_params.merge(resource_link: resource_link)
+          line_item_params.merge(resource_link:)
         )
 
         render json: LineItemsSerializer.new(new_line_item, line_item_id(new_line_item)),
@@ -161,10 +174,14 @@ module Lti
       #    by this value in the List endpoint. Multiple line items can share the same tag
       #    within a given context.
       #
+      # @argument endDateTime [String]
+      #   The ISO8601 date and time when the line item stops receiving submissions. Corresponds
+      #   to the assignment's due_at date.
+      #
       # @returns LineItem
       def update
-        line_item.update_attributes!(line_item_params)
-        update_assignment_title if line_item.assignment_line_item?
+        line_item.update!(line_item_params)
+        update_assignment! if line_item.assignment_line_item?
         render json: LineItemsSerializer.new(line_item, line_item_id(line_item)),
                content_type: MIME_TYPE
       end
@@ -172,13 +189,22 @@ module Lti
       # @API Show a Line Item
       # Show existing Line Item
       #
+      # @argument include[] [String, "launch_url"]
+      #   Array of additional information to include.
+      #
+      #   "launch_url":: includes the launch URL for this line item using the "https\://canvas.instructure.com/lti/launch_url" extension
+      #
       # @returns LineItem
       def show
-        render json: LineItemsSerializer.new(line_item, line_item_id(line_item)),
+        # the LineItem workflow_state still "active" even if the assignment is deleted
+        head :not_found and return if line_item.assignment.deleted?
+
+        render json: LineItemsSerializer.new(line_item, line_item_id(line_item), include_launch_url?),
                content_type: MIME_TYPE
       end
 
       # @API List line Items
+      # List all Line Items for a course
       #
       # @argument tag [String]
       #   If specified only Line Items with this tag will be included.
@@ -191,6 +217,11 @@ module Lti
       #
       # @argument limit [String]
       #   May be used to limit the number of Line Items returned in a page
+      #
+      # @argument include[] [String, "launch_url"]
+      #   Array of additional information to include.
+      #
+      #   "launch_url":: includes the launch URL for each line item using the "https\://canvas.instructure.com/lti/launch_url" extension
       #
       # @returns LineItem
       def index
@@ -209,20 +240,23 @@ module Lti
       #
       # @returns LineItem
       def destroy
-        head :unauthorized and return if line_item.assignment_line_item? && line_item.resource_link.present?
+        head :unauthorized and return if line_item.coupled
+
         line_item.destroy!
         head :no_content
       end
 
       private
 
+      def include_launch_url?
+        params[:include]&.include? "launch_url"
+      end
+
       def line_item_params
-        @_line_item_params ||= begin
-          params.permit(%i(resourceId resourceLinkId scoreMaximum label tag),
-                        Lti::LineItem::AGS_EXT_SUBMISSION_TYPE => [:type, :external_tool_url]).transform_keys do |k|
-            k.to_s.underscore
-          end.except(:resource_link_id)
-        end
+        @_line_item_params ||= params.permit(%i[resourceId resourceLinkId scoreMaximum label tag endDateTime],
+                                             Lti::LineItem::AGS_EXT_SUBMISSION_TYPE => [:type, :external_tool_url]).transform_keys do |k|
+          k.to_s.underscore
+        end.except(:resource_link_id)
       end
 
       def assignment
@@ -230,35 +264,56 @@ module Lti
       end
 
       def line_item_id(line_item)
-        lti_line_item_show_url(
-          course_id: params[:course_id],
-          id: line_item.id
-        )
+        if line_item.root_account.feature_enabled?(:consistent_ags_ids_based_on_account_principal_domain)
+          lti_line_item_show_url(
+            host: line_item.root_account.domain,
+            course_id: params[:course_id],
+            id: line_item.id
+          )
+        else
+          lti_line_item_show_url(
+            course_id: params[:course_id],
+            id: line_item.id
+          )
+        end
       end
 
-      def update_assignment_title
-        return if line_item_params[:label].blank?
-        line_item.assignment.update_attributes!(name: line_item_params[:label])
+      def update_assignment!
+        # map line item attributes to assignment attributes
+        attr_mapping = {
+          label: :name,
+          score_maximum: :points_possible,
+          end_date_time: :due_at
+        }
+
+        # avoid unnecessary DB hit if there are no updates to be made
+        return if line_item_params.values_at(*attr_mapping.keys).all?(&:blank?)
+
+        a = line_item.assignment
+        attr_mapping.each do |param_name, assigment_attr_name|
+          a.send("#{assigment_attr_name}=", line_item_params[param_name]) if line_item_params.key?(param_name)
+        end
+        a.save!
       end
 
       def resource_link
         @_resource_link ||= ResourceLink.find_by(
-          resource_link_id: params[:resourceLinkId],
+          resource_link_uuid: params[:resourceLinkId],
           context_external_tool: tool
         )
       end
 
       def index_query
         rlid = params[:resource_link_id]
-        assignments = Assignment.
-          active.
-          joins(rlid.present? ? { line_items: :resource_link } : :line_items).
-          where(
-            {
-              context: context,
-              lti_line_items: { client_id: developer_key.global_id }
-            }.merge!(rlid.present? ? { lti_resource_links: { resource_link_id: rlid } } : {})
-          )
+        assignments = Assignment
+                      .active
+                      .joins(rlid.present? ? { line_items: :resource_link } : :line_items)
+                      .where(
+                        {
+                          context:,
+                          lti_line_items: { client_id: developer_key.global_id }
+                        }.merge!(rlid.present? ? { lti_resource_links: { resource_link_uuid: rlid } } : {})
+                      )
 
         {
           assignment: assignments,
@@ -268,19 +323,20 @@ module Lti
       end
 
       def line_item_collection(line_items)
-        line_items.map { |li| LineItemsSerializer.new(li, line_item_id(li)) }
+        line_items.map { |li| LineItemsSerializer.new(li, line_item_id(li), include_launch_url?) }
       end
 
       def verify_valid_resource_link
         return unless params[:resourceLinkId]
         raise ActiveRecord::RecordNotFound if resource_link.blank?
+
         head :precondition_failed if check_for_bad_resource_link
       end
 
       def check_for_bad_resource_link
         resource_link.line_items.active.blank? ||
-        assignment&.context != context ||
-        !assignment&.active?
+          assignment&.context != context ||
+          !assignment&.active?
       end
 
       def scopes_matcher

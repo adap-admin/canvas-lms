@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -16,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'spec_helper'
-
 describe GoogleDocsCollaboration do
   def stub_service
     google_drive_connection = double(retrieve_access_token: "asdf123", acl_add: nil, acl_remove: nil)
@@ -28,6 +28,7 @@ describe GoogleDocsCollaboration do
 
   describe "#initialize_document" do
     let(:user) { User.new }
+
     it "creates a google doc" do
       google_docs_collaboration = GoogleDocsCollaboration.new
       google_docs_collaboration.title = "title"
@@ -40,25 +41,34 @@ describe GoogleDocsCollaboration do
     end
   end
 
-  describe 'collaborators' do
+  describe "collaborators" do
     before :once do
-      PluginSetting.create!(:name => "google_drive", :settings => {})
-      @other_user = user_with_pseudonym(:active_all => true)
-      @student = user_with_pseudonym(:active_all => true)
-      course_factory(:active_all => true)
+      PluginSetting.create!(name: "google_drive", settings: {})
+      @other_user = user_with_pseudonym(active_all: true)
+      @student = user_with_pseudonym(active_all: true)
+      course_factory(active_all: true)
       @course.enroll_student(@student)
 
-      @teacher.user_services.create! service: 'google_drive', service_domain: 'drive.google.com',
-                                     service_user_id: 'teh_teacher@gmail.com', token: 'blah', secret: 'bleh'
-      @student.user_services.create! service: 'google_drive', service_domain: 'drive.google.com',
-                                     service_user_id: 'teh_student@gmail.com', token: 'bleh', secret: 'blah'
-      @other_user.user_services.create! service: 'google_drive', service_domain: 'drive.google.com',
-                                        service_user_id: 'distractor@gmail.com', token: 'bleh', secret: 'bleh'
+      @teacher.user_services.create! service: "google_drive",
+                                     service_domain: "drive.google.com",
+                                     service_user_id: "teh_teacher@gmail.com",
+                                     token: "blah",
+                                     secret: "bleh"
+      @student.user_services.create! service: "google_drive",
+                                     service_domain: "drive.google.com",
+                                     service_user_id: "teh_student@gmail.com",
+                                     token: "bleh",
+                                     secret: "blah"
+      @other_user.user_services.create! service: "google_drive",
+                                        service_domain: "drive.google.com",
+                                        service_user_id: "distractor@gmail.com",
+                                        token: "bleh",
+                                        secret: "bleh"
     end
 
     before do
       stub_service
-      @collaboration = GoogleDocsCollaboration.new(:title => 'title', :user => @teacher)
+      @collaboration = GoogleDocsCollaboration.new(title: "title", user: @teacher)
       @collaboration.context = @course
       @collaboration.save!
     end
@@ -68,7 +78,7 @@ describe GoogleDocsCollaboration do
       @collaboration.update_members([@teacher, @student])
       collaborators = @collaboration.reload.collaborators.to_a
       expect(collaborators.map(&:user_id)).to match_array([@student.id, @teacher.id])
-      expect(collaborators.map(&:authorized_service_user_id)).to match_array(['teh_teacher@gmail.com', 'teh_student@gmail.com'])
+      expect(collaborators.map(&:authorized_service_user_id)).to match_array(["teh_teacher@gmail.com", "teh_student@gmail.com"])
     end
 
     it "doesn't add users outside the course" do

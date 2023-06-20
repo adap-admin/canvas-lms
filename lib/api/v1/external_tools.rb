@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -19,37 +21,45 @@
 module Api::V1::ExternalTools
   include Api::V1::Json
 
-  def external_tools_json(tools, context, user, session, extension_types = Lti::ResourcePlacement::PLACEMENTS)
+  def external_tools_json(tools, context, user, session, extension_types = Lti::ResourcePlacement.valid_placements(@domain_root_account))
     tools.map do |topic|
       external_tool_json(topic, context, user, session, extension_types)
     end
   end
 
-  def external_tool_json(tool, context, user, session, extension_types = Lti::ResourcePlacement::PLACEMENTS)
+  def external_tool_json(tool, context, user, session, extension_types = Lti::ResourcePlacement.valid_placements(@domain_root_account))
     methods = %w[privacy_level custom_fields workflow_state vendor_help_link]
     methods += extension_types
-    only = %w(id name description url domain consumer_key created_at updated_at description)
-    only << 'allow_membership_service_access' if tool.context.root_account.feature_enabled?(:membership_service_for_lti_tools)
-    json = api_json(tool, user, session,
-                  :only => only,
-                  :methods => methods
-    )
-
-    json['selection_width'] = tool.settings[:selection_width] if tool.settings.key? :selection_width
-    json['selection_height'] = tool.settings[:selection_height] if tool.settings.key? :selection_height
-    json['icon_url'] = tool.settings[:icon_url] if tool.settings.key? :icon_url
-    json['not_selectable'] = tool.not_selectable
-    json['version'] = tool.use_1_3? ? '1.3' : '1.1'
+    only = %w[id name description url domain consumer_key created_at updated_at description]
+    only << "allow_membership_service_access" if tool.context.root_account.feature_enabled?(:membership_service_for_lti_tools)
+    json = api_json(tool,
+                    user,
+                    session,
+                    only:,
+                    methods:)
+    json["url"] = tool.url_with_environment_overrides(tool.url, include_launch_url: true)
+    json["domain"] = tool.domain_with_environment_overrides
+    json["is_rce_favorite"] = tool.is_rce_favorite_in_context?(context) if tool.can_be_rce_favorite?
+    json.merge!(tool.settings.with_indifferent_access.slice("selection_width", "selection_height", "prefer_sis_email"))
+    json["icon_url"] = tool.icon_url if tool.icon_url
+    json["not_selectable"] = tool.not_selectable
+    json["version"] = tool.use_1_3? ? "1.3" : "1.1"
+    json["developer_key_id"] = tool.developer_key_id if tool.developer_key_id
+    json["deployment_id"] = tool.deployment_id if tool.deployment_id
     extension_types.each do |type|
-      if json[type]
-        json[type]['label'] = tool.label_for(type, I18n.locale)
-        json[type].delete 'labels'
-        json.delete 'labels'
+      next unless json[type]
 
-        [:selection_width, :selection_height, :icon_url].each do |key|
-          value = tool.extension_setting type, key
-          json[type][key] = value if value
-        end
+      json[type]["label"] = tool.label_for(type, I18n.locale)
+      json[type].delete "labels"
+      json.delete "labels"
+
+      if json[type]["url"]
+        json[type]["url"] = tool.url_with_environment_overrides(json[type]["url"])
+      end
+
+      %i[selection_width selection_height icon_url].each do |key|
+        value = tool.extension_setting type, key
+        json[type][key] = value if value
       end
     end
 
@@ -57,9 +67,10 @@ module Api::V1::ExternalTools
   end
 
   def tool_pagination_url
-    if @context.is_a? Course
+    case @context
+    when Course
       api_v1_course_external_tools_url(@context)
-    elsif @context.is_a? Group
+    when Group
       api_v1_group_external_tools_url(@context)
     else
       api_v1_account_external_tools_url(@context)
@@ -67,7 +78,7 @@ module Api::V1::ExternalTools
   end
 
   module UrlHelpers
-    def sessionless_launch_url(context, opts={})
+    def sessionless_launch_url(context, opts = {})
       uri = URI(api_v1_account_external_tool_sessionless_launch_url(context)) if context.is_a?(Account)
       uri = URI(api_v1_course_external_tool_sessionless_launch_url(context)) if context.is_a?(Course)
       return nil unless uri

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -26,11 +28,11 @@ class ObserverEnrollment < Enrollment
     observed_students = []
     Shard.partition_by_shard(contexts) do |sharded_contexts|
       observer_enrollment_data = user.observer_enrollments.where(course_id: sharded_contexts)
-        .where('associated_user_id IS NOT NULL').pluck(:course_id, :associated_user_id)
+                                     .where.not(associated_user_id: nil).pluck(:course_id, :associated_user_id)
 
       observer_enrollment_data.group_by(&:first).each do |course_id, course_enroll_data|
         associated_user_ids = course_enroll_data.map(&:last)
-        students = StudentEnrollment.active.where(user_id: associated_user_ids, course_id: course_id)
+        students = StudentEnrollment.active.where(user_id: associated_user_ids, course_id:)
         observed_students.concat(students)
       end
     end
@@ -44,7 +46,7 @@ class ObserverEnrollment < Enrollment
     Shard.partition_by_shard(observer_enrollments) do |sharded_observer_enrollments|
       sharded_observer_enrollments.group_by(&:course_id).each do |course_id, enrollments|
         associated_user_ids = enrollments.map(&:associated_user_id)
-        student_enrolls = StudentEnrollment.active.where(user_id: associated_user_ids, course_id: course_id)
+        student_enrolls = StudentEnrollment.active.where(user_id: associated_user_ids, course_id:)
         student_enrolls = student_enrolls.active_by_date if active_by_date
         observed_student_enrollments.concat(student_enrolls.to_a)
       end
@@ -53,18 +55,22 @@ class ObserverEnrollment < Enrollment
   end
 
   # returns a hash mapping students to arrays of enrollments
-  def self.observed_students(context, current_user)
+  def self.observed_students(context, current_user, include_restricted_access: true)
     RequestCache.cache(:observed_students, context, current_user) do
       context.shard.activate do
-        associated_user_ids = context.observer_enrollments.where(user_id: current_user).
-          where("associated_user_id IS NOT NULL").select(:associated_user_id)
-        context.student_enrollments.
-          where(user_id: associated_user_ids).group_by(&:user)
+        associated_user_ids = context.observer_enrollments.where(user_id: current_user)
+                                     .where.not(associated_user_id: nil).select(:associated_user_id)
+        students = context.student_enrollments
+                          .where(user_id: associated_user_ids)
+        unless include_restricted_access
+          students = students.joins(:enrollment_state).where(enrollment_states: { restricted_access: false })
+        end
+        students.group_by(&:user)
       end
     end
   end
 
-  # note: naively finding users by these ID's may not work due to sharding
+  # NOTE: naively finding users by these ID's may not work due to sharding
   def self.observed_student_ids(context, current_user)
     context.shard.activate do
       context.observer_enrollments.where("user_id=? AND associated_user_id IS NOT NULL", current_user).pluck(:associated_user_id)
@@ -75,9 +81,8 @@ class ObserverEnrollment < Enrollment
     # select_all allows plucking multiplecolumns without instantiating AR objects
     obs_hash = {}
 
-    ObserverEnrollment.where(course_id: course, user_id: observers).
-      pluck(:user_id, :associated_user_id).each do |user_id, associated_user_id|
-
+    ObserverEnrollment.where(course_id: course, user_id: observers)
+                      .pluck(:user_id, :associated_user_id).each do |user_id, associated_user_id|
       obs_hash[user_id] ||= []
       obs_hash[user_id] << associated_user_id if associated_user_id
     end

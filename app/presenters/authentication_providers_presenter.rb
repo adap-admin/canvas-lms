@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -30,22 +32,23 @@ class AuthenticationProvidersPresenter
   end
 
   def new_auth_types
-    AuthenticationProvider.valid_auth_types.map do |auth_type|
+    AuthenticationProvider.valid_auth_types.filter_map do |auth_type|
       klass = AuthenticationProvider.find_sti_class(auth_type)
       next unless klass.enabled?(account)
-      next if klass.singleton? && configs.any? { |aac| aac.is_a?(klass) }
+      next if klass.singleton? && configs.any?(klass)
+
       klass
-    end.compact
+    end
   end
 
   def needs_unknown_user_url?
-    configs.any? { |c| c.is_a?(AuthenticationProvider::Delegated) }
+    configs.any?(AuthenticationProvider::Delegated)
   end
 
   def login_url_options(aac)
     options = { controller: "login/#{aac.auth_type}", action: :new }
     if !aac.is_a?(AuthenticationProvider::LDAP) &&
-      configs.many? { |other| other.auth_type == aac.auth_type }
+       configs.many? { |other| other.auth_type == aac.auth_type }
       options[:id] = aac
     end
     options
@@ -56,7 +59,7 @@ class AuthenticationProvidersPresenter
   end
 
   def ldap_config?
-    ldap_configs.size > 0
+    !ldap_configs.empty?
   end
 
   def ldap_ips
@@ -64,15 +67,15 @@ class AuthenticationProvidersPresenter
   end
 
   def ldap_configs
-    configs.select{|c| c.is_a?(AuthenticationProvider::LDAP) }
+    configs.select { |c| c.is_a?(AuthenticationProvider::LDAP) }
   end
 
   def saml_configs
-    configs.select{|c| c.is_a?(AuthenticationProvider::SAML) }
+    configs.select { |c| c.is_a?(AuthenticationProvider::SAML) }
   end
 
   def cas_configs
-    configs.select{|c| c.is_a?(AuthenticationProvider::CAS) }
+    configs.select { |c| c.is_a?(AuthenticationProvider::CAS) }
   end
 
   def sso_options
@@ -85,7 +88,7 @@ class AuthenticationProvidersPresenter
   end
 
   def position_options(config)
-    position_options = (1..configs.length).map{|i| [i, i] }
+    position_options = (1..configs.length).map { |i| [i, i] }
     config.new_record? ? [["Last", nil]] + position_options : position_options
   end
 
@@ -95,11 +98,13 @@ class AuthenticationProvidersPresenter
 
   def ip_list
     return "" unless ips_configured?
+
     ip_addresses_setting.split(",").map(&:strip).join("\n")
   end
 
   def saml_identifiers
     return [] unless saml_enabled?
+
     AuthenticationProvider::SAML.name_id_formats
   end
 
@@ -109,6 +114,7 @@ class AuthenticationProvidersPresenter
 
   def saml_authn_contexts(base = SAML2::AuthnStatement::Classes.constants.map { |const| SAML2::AuthnStatement::Classes.const_get(const, false) })
     return [] unless saml_enabled?
+
     [["No Value", nil]] + base.sort
   end
 
@@ -125,7 +131,7 @@ class AuthenticationProvidersPresenter
   end
 
   def new_config(auth_type)
-    AuthenticationProvider.new(auth_type: auth_type, account: account)
+    AuthenticationProvider.new(auth_type:, account:)
   end
 
   def parent_reg_selected
@@ -141,12 +147,12 @@ class AuthenticationProvidersPresenter
     id = "aacfa_#{canvas_attribute}_attribute_#{id_suffix(aac)}"
     if aac.class.recognized_federated_attributes.nil?
       if selected
-        text_field_tag(name, selected, id: id)
+        text_field_tag(name, selected, id:)
       else
         text_field_tag(nil)
       end
     else
-      select_tag(name, options_for_select(aac.class.recognized_federated_attributes, selected), class: 'ic-Input', id: id)
+      select_tag(name, options_for_select(aac.class.recognized_federated_attributes, selected), class: "ic-Input", id:)
     end
   end
 
@@ -157,8 +163,8 @@ class AuthenticationProvidersPresenter
   end
 
   private
-  def ip_addresses_setting
-    Setting.get('account_authorization_config_ip_addresses', nil)
-  end
 
+  def ip_addresses_setting
+    Setting.get("account_authorization_config_ip_addresses", nil)
+  end
 end

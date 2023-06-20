@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,18 +18,31 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'logger'
-require 'syslog'
+require "syslog"
 
 class SyslogWrapper
-
   attr_accessor :level, :datetime_format
 
+  def formatter
+    nil
+  end
+
   @@silencer = true
-  def self.silencer; @@silencer; end
-  def silencer; @@silencer; end
-  def self.silencer=(obj); @@silencer = obj; end
-  def silencer=(obj); @@silencer = obj; end
+  def self.silencer
+    @@silencer
+  end
+
+  def silencer
+    @@silencer
+  end
+
+  def self.silencer=(obj)
+    @@silencer = obj
+  end
+
+  def silencer=(obj)
+    @@silencer = obj
+  end
 
   def silence(temporary_level = Logger::ERROR)
     if silencer
@@ -41,7 +56,7 @@ class SyslogWrapper
       yield self
     end
   end
-  alias :quietly :silence
+  alias_method :quietly, :silence
 
   # facility is a logical-or-ed collection of the following constants in Syslog
   #   LOG_AUTHPRIV - security or authorization messages which should be kept private
@@ -59,7 +74,7 @@ class SyslogWrapper
   #   LOG_UUCP - uucp subsystem
   #   LOG_LOCAL0 through LOG_LOCAL7 - locally defined facilities
   # example: SyslogWrapper.new("canvas", Syslog::LOG_USER, :include_pid => true)
-  def initialize(ident, facility=0, options={})
+  def initialize(ident, facility = 0, options = {})
     unless $syslog
       flags = 0
       flags |= Syslog::LOG_CONS if options[:bail_to_console]
@@ -72,7 +87,7 @@ class SyslogWrapper
     @skip_thread_context = options[:skip_thread_context]
     @datetime_format = nil # ignored completely
   end
-  
+
   def close; end
 
   SEVERITY_MAP = {
@@ -81,19 +96,21 @@ class SyslogWrapper
     Logger::WARN => :warning,
     Logger::ERROR => :err,
     Logger::FATAL => :crit,
-    Logger::UNKNOWN => :notice }
+    Logger::UNKNOWN => :notice
+  }.freeze
 
-  def add(severity, message=nil, progname=nil)
+  def add(severity, message = nil, progname = nil)
     severity ||= Logger::UNKNOWN
     return if @level > severity
+
     if message.nil?
-      if block_given?
-        message = yield
-      else
-        message = progname
-      end
+      message = if block_given?
+                  yield
+                else
+                  progname
+                end
     end
-    message = message.to_s.strip.gsub(/\e\[([0-9]+(;|))+m/, '')
+    message = message.to_s.strip.gsub(/\e\[([0-9]+(;|))+m/, "")
     unless @skip_thread_context
       context = Thread.current[:context] || {}
       message = "[#{context[:session_id] || "-"} #{context[:request_id] || "-"}] #{message}"
@@ -101,29 +118,52 @@ class SyslogWrapper
     $syslog.send(SEVERITY_MAP[severity], "%s", message)
   end
   alias_method :log, :add
-  
-  def <<(msg); add(@level, msg); end
-  
-  def debug(progname=nil, &block); add(Logger::DEBUG, nil, progname, &block); end
 
-  def info(progname=nil, &block); add(Logger::INFO, nil, progname, &block); end
+  def <<(msg)
+    add(@level, msg)
+  end
 
-  def warn(progname=nil, &block); add(Logger::WARN, nil, progname, &block); end
+  def debug(progname = nil, &)
+    add(Logger::DEBUG, nil, progname, &)
+  end
 
-  def error(progname=nil, &block); add(Logger::ERROR, nil, progname, &block); end
+  def info(progname = nil, &)
+    add(Logger::INFO, nil, progname, &)
+  end
 
-  def fatal(progname=nil, &block); add(Logger::FATAL, nil, progname, &block); end
+  def warn(progname = nil, &)
+    add(Logger::WARN, nil, progname, &)
+  end
 
-  def unknown(progname=nil, &block); add(Logger::UNKNOWN, nil, progname, &block); end
+  def error(progname = nil, &)
+    add(Logger::ERROR, nil, progname, &)
+  end
 
-  def debug?; @level <= Logger::DEBUG; end
+  def fatal(progname = nil, &)
+    add(Logger::FATAL, nil, progname, &)
+  end
 
-  def info?; @level <= Logger::INFO; end
+  def unknown(progname = nil, &)
+    add(Logger::UNKNOWN, nil, progname, &)
+  end
 
-  def warn?; @level <= Logger::WARN; end
+  def debug?
+    @level <= Logger::DEBUG
+  end
 
-  def error?; @level <= Logger::ERROR; end
+  def info?
+    @level <= Logger::INFO
+  end
 
-  def fatal?; @level <= Logger::FATAL; end
-  
+  def warn?
+    @level <= Logger::WARN
+  end
+
+  def error?
+    @level <= Logger::ERROR
+  end
+
+  def fatal?
+    @level <= Logger::FATAL
+  end
 end

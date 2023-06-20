@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,26 +18,23 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/../../views_helper')
+require_relative "../../views_helper"
 
-describe "/quizzes/quizzes/_multi_answer" do
-
-  it "should render" do
+describe "quizzes/quizzes/_multi_answer" do
+  it "renders" do
     course_with_student
     view_context
     assign(:quiz, @course.quizzes.create!)
     answer = {
       id: 5,
       weight: 100,
-      text: 'answer_text'
+      text: "answer_text"
     }
     question = {
-      question_text: 'question text'
+      question_text: "question text"
     }
     question_type = OpenObject.new
-    render :partial => "quizzes/quizzes/multi_answer", :object => answer, :locals => {:question => question, :question_type => question_type, :user_answer => nil}
+    render partial: "quizzes/quizzes/multi_answer", object: answer, locals: { question:, question_type:, user_answer: nil }
     expect(response).not_to be_nil
   end
 end
-

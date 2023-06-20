@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -22,10 +24,15 @@ environment_configuration(defined?(config) && config) do |config|
   # test suite.  You never need to work with it otherwise.  Remember that
   # your test database is "scratch space" for the test suite and is wiped
   # and recreated between test runs.  Don't rely on the data there!
-  config.cache_classes = true
+  # In local development we usually want this unset or set to '0' because
+  # we want spring to be able to reload classes between
+  # spec runs, but this is expensive when running all the
+  # specs for the build, so this ENV var can be provided by
+  # any harness to turn class caching on for performance.
+  config.cache_classes = (ENV.fetch("TEST_CACHE_CLASSES", "0") == "1")
 
-  # Show full error reports and disable caching
-  config.consider_all_requests_local = true
+  # Show formatted error reports and disable caching
+  config.consider_all_requests_local = false
   config.action_controller.perform_caching = false
 
   # run rake js:build to build the optimized JS if set to true
@@ -39,8 +46,9 @@ environment_configuration(defined?(config) && config) do |config|
   # ActionMailer::Base.deliveries array.
   config.action_mailer.delivery_method = :test
 
-  #hairtrigger parallelized runtime race conditions
+  # hairtrigger parallelized runtime race conditions
   config.active_record.schema_format = :sql
+  config.active_record.dump_schema_after_migration = false
 
   config.cache_store = :null_store
 
@@ -52,10 +60,6 @@ environment_configuration(defined?(config) && config) do |config|
 
   config.eager_load = false
 
-  config.after_initialize do
-    require_relative 'bullet'
-  end
-
   # eval <env>-local.rb if it exists
-  Dir[File.dirname(__FILE__) + "/" + File.basename(__FILE__, ".rb") + "-*.rb"].each { |localfile| eval(File.new(localfile).read, nil, localfile, 1) }
+  Dir[File.dirname(__FILE__) + "/" + File.basename(__FILE__, ".rb") + "-*.rb"].each { |localfile| eval(File.new(localfile).read, nil, localfile, 1) } # rubocop:disable Security/Eval
 end

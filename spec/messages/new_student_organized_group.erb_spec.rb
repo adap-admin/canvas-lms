@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,14 +18,13 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/messages_helper')
+require_relative "messages_helper"
 
-describe 'new_student_organized_group' do
+describe "new_student_organized_group" do
   before :once do
-    course_model(:reusable => true)
+    course_model(reusable: true)
     user_model
-    @group = @course.groups.create!(:name => "student group")
+    @group = @course.groups.create!(name: "student group")
     @object = @group.add_user(@user)
   end
 

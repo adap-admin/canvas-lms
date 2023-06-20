@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -17,13 +19,15 @@
 #
 
 class Mutations::CreateSubmissionComment < Mutations::BaseMutation
-  graphql_name 'CreateSubmissionComment'
+  graphql_name "CreateSubmissionComment"
 
-  argument :submission_id, ID, required: true, prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func('Submission')
+  argument :submission_id, ID, required: true, prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func("Submission")
   argument :attempt, Integer, required: false
   argument :comment, String, required: true
-  argument :file_ids, [ID], required: false, prepare: GraphQLHelpers.relay_or_legacy_ids_prepare_func('Attachment')
+  argument :file_ids, [ID], required: false, prepare: GraphQLHelpers.relay_or_legacy_ids_prepare_func("Attachment")
   argument :media_object_id, ID, required: false
+  argument :media_object_type, String, required: false
+  argument :reviewer_submission_id, ID, required: false, prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func("Submission")
 
   field :submission_comment, Types::SubmissionCommentType, null: true
 
@@ -39,14 +43,20 @@ class Mutations::CreateSubmissionComment < Mutations::BaseMutation
 
     if input[:media_object_id].present?
       media_objects = MediaObject.by_media_id(input[:media_object_id])
-      raise GraphQL::ExecutionError, 'not found' if media_objects.empty?
+      raise GraphQL::ExecutionError, "not found" if media_objects.empty?
+
       opts[:media_comment_id] = input[:media_object_id]
+
+      if input[:media_object_type].present?
+        opts[:media_comment_type] = input[:media_object_type]
+      end
     end
 
     file_ids = (input[:file_ids] || []).uniq
     unless file_ids.empty?
       attachments = Attachment.where(id: file_ids).to_a
-      raise GraphQL::ExecutionError, 'not found' unless attachments.length == file_ids.length
+      raise GraphQL::ExecutionError, "not found" unless attachments.length == file_ids.length
+
       attachments.each do |a|
         verify_authorized_action!(a, :attach_to_submission_comment)
         a.ok_for_submission_comment = true
@@ -54,13 +64,26 @@ class Mutations::CreateSubmissionComment < Mutations::BaseMutation
       opts[:attachments] = attachments
     end
 
+    if input[:reviewer_submission_id].present?
+      reviewer_submission = Submission.find input[:reviewer_submission_id]
+      assessment_request = reviewer_submission
+                           .assigned_assessments
+                           .find_by(asset: submission)
+
+      raise GraphQL::ExecutionError, "not found" if assessment_request.nil?
+
+      opts[:assessment_request] = assessment_request
+    end
+
     assignment = submission.assignment
+    opts[:group_comment] = assignment.grade_as_group?
+
     comment = assignment.add_submission_comment(submission.user, opts).first
     comment.mark_read!(current_user)
-    {submission_comment: comment}
-  rescue ActiveRecord::RecordInvalid => invalid
-    errors_for(invalid.record)
+    { submission_comment: comment }
+  rescue ActiveRecord::RecordInvalid => e
+    errors_for(e.record)
   rescue ActiveRecord::RecordNotFound
-    raise GraphQL::ExecutionError, 'not found'
+    raise GraphQL::ExecutionError, "not found"
   end
 end

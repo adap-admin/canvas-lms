@@ -18,11 +18,11 @@
 
 import React from 'react'
 import ReactDOM from 'react-dom'
-import {waitForElement, wait} from '@testing-library/react'
+import {waitFor} from '@testing-library/react'
 
-import PostAssignmentGradesTray from 'jsx/grading/PostAssignmentGradesTray'
-import * as Api from 'jsx/grading/PostAssignmentGradesTray/Api'
-import * as FlashAlert from 'jsx/shared/FlashAlert'
+import PostAssignmentGradesTray from '@canvas/post-assignment-grades-tray'
+import * as Api from '@canvas/post-assignment-grades-tray/react/Api'
+import * as FlashAlert from '@canvas/alerts/react/FlashAlert'
 
 QUnit.module('PostAssignmentGradesTray', suiteHooks => {
   let $container
@@ -38,11 +38,14 @@ QUnit.module('PostAssignmentGradesTray', suiteHooks => {
         gradesPublished: true,
         id: '2301',
         name: 'Math 1.1',
-        postManually: false
+        postManually: false,
       },
       onExited: sinon.spy(),
       onPosted: sinon.spy(),
-      sections: [{id: '2001', name: 'Freshmen'}, {id: '2002', name: 'Sophomores'}]
+      sections: [
+        {id: '2001', name: 'Freshmen'},
+        {id: '2002', name: 'Sophomores'},
+      ],
     }
 
     const bindRef = ref => {
@@ -51,14 +54,16 @@ QUnit.module('PostAssignmentGradesTray', suiteHooks => {
     ReactDOM.render(<PostAssignmentGradesTray ref={bindRef} />, $container)
   })
 
-  suiteHooks.afterEach(async () => {
+  suiteHooks.afterEach(() => {
+    let thingToWaitOn
     if (getTrayElement()) {
       getCloseButton().click()
-      await waitForTrayClosed()
+      thingToWaitOn = waitForTrayClosed()
     }
-
-    ReactDOM.unmountComponentAtNode($container)
-    $container.remove()
+    return Promise.resolve(thingToWaitOn).then(() => {
+      ReactDOM.unmountComponentAtNode($container)
+      $container.remove()
+    })
   })
 
   function getTrayElement() {
@@ -115,7 +120,7 @@ QUnit.module('PostAssignmentGradesTray', suiteHooks => {
 
   function show() {
     tray.show(context)
-    return waitForElement(getTrayElement)
+    return waitFor(getTrayElement)
   }
 
   function getUnpostedCount() {
@@ -127,7 +132,7 @@ QUnit.module('PostAssignmentGradesTray', suiteHooks => {
   }
 
   function waitForTrayClosed() {
-    return wait(() => {
+    return waitFor(() => {
       if (context.onExited.callCount > 0) {
         return
       }
@@ -155,14 +160,17 @@ QUnit.module('PostAssignmentGradesTray', suiteHooks => {
 
     test('resets the selected sections', async () => {
       const postAssignmentGradesForSectionsStub = sinon.stub(Api, 'postAssignmentGradesForSections')
-      getSectionToggleInput().click()
-      getInputByLabel('Sophomores').click()
-      await show()
-      getSectionToggleInput().click()
-      getInputByLabel('Freshmen').click()
-      getPostButton().click()
-      deepEqual(postAssignmentGradesForSectionsStub.firstCall.args[1], ['2001'])
-      postAssignmentGradesForSectionsStub.restore()
+      try {
+        getSectionToggleInput().click()
+        getInputByLabel('Sophomores').click()
+        await show()
+        getSectionToggleInput().click()
+        getInputByLabel('Freshmen').click()
+        getPostButton().click()
+        deepEqual(postAssignmentGradesForSectionsStub.firstCall.args[1], ['2001'])
+      } finally {
+        postAssignmentGradesForSectionsStub.restore()
+      }
     })
   })
 
@@ -177,7 +185,7 @@ QUnit.module('PostAssignmentGradesTray', suiteHooks => {
 
     test('calls optional onExited', async () => {
       await show()
-      await waitForElement(getTrayElement)
+      await waitFor(getTrayElement)
       getCloseIconButton().click()
       await waitForTrayClosed()
       const {callCount} = context.onExited
@@ -219,7 +227,7 @@ QUnit.module('PostAssignmentGradesTray', suiteHooks => {
 
     test('calls optional onExited', async () => {
       await show()
-      await waitForElement(getTrayElement)
+      await waitFor(getTrayElement)
       getCloseIconButton().click()
       await waitForTrayClosed()
       const {callCount} = context.onExited
@@ -233,7 +241,17 @@ QUnit.module('PostAssignmentGradesTray', suiteHooks => {
         context.submissions = [
           {postedAt: new Date().toISOString(), score: 1, workflowState: 'graded'},
           {postedAt: null, score: 1, workflowState: 'graded'},
-          {postedAt: null, score: null, workflowState: 'unsubmitted'}
+          {postedAt: null, score: null, workflowState: 'unsubmitted'},
+        ]
+        await show()
+        strictEqual(getUnpostedCount().textContent, '1')
+      })
+
+      test('submissions with postable comments and without a postedAt are counted', async () => {
+        context.submissions = [
+          {postedAt: new Date().toISOString(), hasPostableComments: true},
+          {postedAt: null, score: 1, workflowState: 'graded'},
+          {postedAt: null, score: null, workflowState: 'unsubmitted'},
         ]
         await show()
         strictEqual(getUnpostedCount().textContent, '1')
@@ -244,7 +262,7 @@ QUnit.module('PostAssignmentGradesTray', suiteHooks => {
       unpostedSubmissionsHooks.beforeEach(() => {
         context.submissions = [
           {postedAt: new Date().toISOString(), score: 1, workflowState: 'graded'},
-          {postedAt: new Date().toISOString(), score: 1, workflowState: 'graded'}
+          {postedAt: new Date().toISOString(), score: 1, workflowState: 'graded'},
         ]
 
         return show()
@@ -271,7 +289,7 @@ QUnit.module('PostAssignmentGradesTray', suiteHooks => {
     })
 
     async function waitForPosting() {
-      await wait(() => resolvePostAssignmentGradesStatusStub.callCount > 0)
+      await waitFor(() => resolvePostAssignmentGradesStatusStub.callCount > 0)
     }
 
     async function clickPost() {

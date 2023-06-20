@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -21,6 +23,7 @@ module DataFixup::PopulateRootAccountIdForAssignments
     loop do
       batch = Assignment.where(root_account_id: nil).limit(1000).pluck(:id)
       break if batch.empty?
+
       Assignment.joins(:course).where(id: batch).update_all("root_account_id=courses.root_account_id")
     end
   end

@@ -16,6 +16,12 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+import {fromImageEmbed, fromVideoEmbed} from '../instructure_image/ImageEmbedOptions'
+import {isOnlyTextSelected} from '../../contentInsertionUtils'
+import * as url from 'url'
+import formatMessage from '../../../format-message'
+import {isStudioEmbeddedMedia} from './StudioLtiSupportUtils'
+
 const FILE_DOWNLOAD_PATH_REGEX = /^\/(courses\/\d+\/)?files\/\d+\/download$/
 
 export const LINK_TYPE = 'link'
@@ -27,80 +33,123 @@ export const NONE_TYPE = 'none'
 export const DISPLAY_AS_LINK = 'link'
 export const DISPLAY_AS_EMBED = 'embed'
 export const DISPLAY_AS_EMBED_DISABLED = 'embed-disabled'
+export const DISPLAY_AS_DOWNLOAD_LINK = 'download-link'
 
-
-function asImageEmbed($element) {
+export function asImageEmbed($element) {
   const nodeName = $element.nodeName.toLowerCase()
   if (nodeName !== 'img') {
     return null
   }
 
-  const altText = $element.alt || ''
-
   return {
+    ...fromImageEmbed($element),
     $element,
-    altText,
-    isDecorativeImage: altText === '' && $element.getAttribute('data-is-decorative') === 'true',
     type: IMAGE_EMBED_TYPE,
-    url: $element.src
   }
 }
 
-function asLink($element, editor) {
+export function asLink($element, editor) {
+  let $link = $element
+  if ($link.tagName !== 'A') {
+    // the user may have selected some text that is w/in a link
+    // but didn't include the <a>. Let's see if that's true
+    $link = editor.dom.getParent($link, 'a[href]')
+  }
+
+  if (!$link || $link.tagName !== 'A' || !$link.href) {
+    return null
+  }
+
+  const {pathname} = url.parse($link.href)
+  const type = FILE_DOWNLOAD_PATH_REGEX.test(pathname) ? FILE_LINK_TYPE : LINK_TYPE
+  let displayAs = DISPLAY_AS_LINK
+  if ($link.classList.contains('no_preview')) {
+    displayAs = DISPLAY_AS_DOWNLOAD_LINK
+  } else if ($link.classList.contains('auto_open')) {
+    displayAs = DISPLAY_AS_EMBED
+  } else if ($link.classList.contains('inline_disabled')) {
+    displayAs = DISPLAY_AS_EMBED_DISABLED
+  }
+  const contentType = $link.getAttribute('data-course-type')
+  const fileName = $link.getAttribute('title')
+  const published = $link.getAttribute('data-published') === 'true'
+  const isPreviewable =
+    $link.hasAttribute('data-canvas-previewable') ||
+    $link.classList.contains('instructure_scribd_file') // needed to cover docs linked while there was a bug didn't add the data attr.
+
+  return {
+    $element: $link,
+    displayAs,
+    text: $link.textContent,
+    onlyTextSelected: isOnlyTextSelected(editor.selection.getContent()),
+    type,
+    isPreviewable,
+    url: $link.href,
+    contentType,
+    fileName,
+    published,
+  }
+}
+
+// the video element is a bit tricky.
+// tinymce won't let me add many attributes to the iframe,
+// even though I've listed them in tinymce.config.js
+// extended_valid_elements.
+// we have to rely on the span tinymce wraps around the iframe
+// and it's attributes, even though this could change with future
+// tinymce releases.
+// see https://github.com/tinymce/tinymce/issues/5181
+export function asVideoElement($element) {
+  const $videoElem = findMediaPlayerIframe($element)
+
+  if (!isVideoElement($videoElem) && !isStudioEmbeddedMedia($videoElem)) {
+    return null
+  }
+
+  return {
+    ...fromVideoEmbed($videoElem),
+    $element,
+    type: VIDEO_EMBED_TYPE,
+    id:
+      $videoElem.parentElement?.getAttribute('data-mce-p-data-media-id') ||
+      $videoElem.getAttribute('data-mce-p-data-media-id'),
+  }
+}
+
+export function asAudioElement($element) {
   if (!$element) {
     return null
   }
+  const $audioIframe = $element.tagName === 'IFRAME' ? $element : $element.firstElementChild
+  const $tinymceIframeShim = $audioIframe.parentElement
 
-  if ($element.nodeName.toLowerCase() !== 'a' && editor) {
-    // the user may have selected some text that is w/in a link
-    // but didn't include the <a>. Let's see if that's true
-    $element = editor.dom.getParent($element, 'a[href]')
-  }
-  if (!$element || $element.nodeName.toLowerCase() !== 'a' || !$element.href) {
-    return null
-  }
-
-  const path = new URL($element.href).pathname
-  const type = FILE_DOWNLOAD_PATH_REGEX.test(path) ? FILE_LINK_TYPE : LINK_TYPE
-  let displayAs = DISPLAY_AS_LINK
-  if ($element.classList.contains('auto_open')) {
-    displayAs = DISPLAY_AS_EMBED
-  } else if ($element.classList.contains('inline_disabled')) {
-    displayAs = DISPLAY_AS_EMBED_DISABLED
+  const title = (
+    $audioIframe.getAttribute('title') ||
+    $tinymceIframeShim.getAttribute('data-mce-p-title') ||
+    ''
+  ).replace(formatMessage('Video player for '), '')
+  const audioOptions = {
+    titleText: title,
+    id:
+      $element.parentElement?.getAttribute('data-mce-p-data-media-id') ||
+      $element.getAttribute('data-mce-p-data-media-id'),
   }
 
-  return {
-    $element,
-    displayAs,
-    text: $element.textContent,
-    type,
-    isPreviewable: $element.hasAttribute('data-canvas-previewable'),
-    url: $element.href
+  if ($audioIframe.tagName === 'IFRAME') {
+    const audioDoc = $audioIframe.contentDocument
+    try {
+      const trackSJson = audioDoc.querySelector('[data-tracks]')?.getAttribute('data-tracks')
+      if (trackSJson) {
+        audioOptions.tracks = JSON.parse(trackSJson)
+      }
+      // eslint-disable-next-line no-empty
+    } catch (e) {}
   }
-}
-
-function asVideoElement($element) {
-  if (!$element.id) {
-    return null
-  }
-
-  if ($element.childElementCount !== 1) {
-    return null
-  }
-
-  if (!$element.id.includes("media_object") ||  $element.children[0].tagName !== "IFRAME") {
-    return null
-  }
-
-  return {
-    $element,
-    type: VIDEO_EMBED_TYPE,
-    id: $element.id.split("_")[2]
-  }
+  return audioOptions
 }
 
 function asText($element, editor) {
-  const text = editor && editor.selection.getNode().textContent
+  const text = editor && editor.selection.getContent({format: 'text'})
   if (!text) {
     return null
   }
@@ -108,14 +157,14 @@ function asText($element, editor) {
   return {
     $element,
     text,
-    type: TEXT_TYPE
+    type: TEXT_TYPE,
   }
 }
 
 function asNone($element) {
   return {
     $element: $element || null,
-    type: NONE_TYPE
+    type: NONE_TYPE,
   }
 }
 
@@ -124,7 +173,12 @@ export function getContentFromElement($element, editor) {
     return asNone()
   }
 
-  const content = asLink($element, editor) || asImageEmbed($element) || asVideoElement($element) || asText($element, editor) || asNone($element)
+  const content =
+    asLink($element, editor) ||
+    asImageEmbed($element) ||
+    asVideoElement($element) ||
+    asText($element, editor) ||
+    asNone($element)
   return content
 }
 
@@ -145,4 +199,67 @@ export function getContentFromEditor(editor, expandSelection = false) {
   }
 
   return getContentFromElement($element, editor)
+}
+
+// if the selection is somewhere w/in a <a>,
+// find the <a> and return it's info
+export function getLinkContentFromEditor(editor) {
+  const $element = editor.selection.getNode()
+  return $element ? asLink($element, editor) : null
+}
+
+export function isFileLink($element, editor) {
+  return !!asLink($element, editor)
+}
+
+export function isImageEmbed($element) {
+  return !!asImageEmbed($element) && !$element.getAttribute('data-placeholder-for')
+}
+
+function isMediaElement($element, mediaType) {
+  // the video is hosted in an iframe, but tinymce
+  // wraps it in a span with swizzled attribute names
+  if (!$element?.getAttribute) {
+    return false
+  }
+
+  const tinymceIframeShim = $element.tagName === 'IFRAME' ? $element.parentElement : $element
+
+  if (tinymceIframeShim.firstElementChild?.tagName !== 'IFRAME') {
+    return false
+  }
+
+  const media_obj_id = tinymceIframeShim.getAttribute('data-mce-p-data-media-id')
+  if (!media_obj_id) {
+    return false
+  }
+
+  const media_type = tinymceIframeShim.getAttribute('data-mce-p-data-media-type')
+  return media_type === mediaType
+}
+
+export function isVideoElement($element) {
+  return isMediaElement($element, 'video')
+}
+
+export function isAudioElement($element) {
+  return isMediaElement($element, 'audio')
+}
+
+export function findMediaPlayerIframe(elem) {
+  if (elem.tagName === 'IFRAME') {
+    // we have the iframe
+    return elem
+  }
+  if (elem.firstElementChild?.tagName === 'IFRAME') {
+    // we have the shim tinymce puts around the iframe
+    return elem.firstElementChild
+  }
+  if (elem.classList.contains('mce-shim')) {
+    // tinymce puts a <span class='mce-shin'> after the iframe (since v5, I think)
+    if (elem.previousSibling?.tagName === 'IFRAME') {
+      return elem.previousSibling
+    }
+  }
+  return null
 }

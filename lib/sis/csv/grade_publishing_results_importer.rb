@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -19,24 +21,20 @@
 module SIS
   module CSV
     class GradePublishingResultsImporter < CSVBaseImporter
-
       def self.grade_publishing_results_csv?(row)
-        row.include?('enrollment_id') && row.include?('grade_publishing_status')
+        row.include?("enrollment_id") && row.include?("grade_publishing_status")
       end
 
       # expected columns
       # enrollment_id,grade_publishing_status
-      def process(csv, index=nil, count=nil)
-        count = SIS::GradePublishingResultsImporter.new(@root_account, importer_opts).process do |importer|
+      def process(csv, index = nil, count = nil)
+        SIS::GradePublishingResultsImporter.new(@root_account, importer_opts).process do |importer|
           csv_rows(csv, index, count) do |row|
-            begin
-              importer.add_grade_publishing_result(row['enrollment_id'], row['grade_publishing_status'], row['message'])
-            rescue ImportError => e
-              SisBatch.add_error(csv, e.to_s, sis_batch: @batch, row: row['lineno'], row_info: row)
-            end
+            importer.add_grade_publishing_result(row["enrollment_id"], row["grade_publishing_status"], row["message"])
+          rescue ImportError => e
+            SisBatch.add_error(csv, e.to_s, sis_batch: @batch, row: row["lineno"], row_info: row)
           end
         end
-        count
       end
     end
   end

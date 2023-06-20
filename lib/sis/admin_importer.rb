@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -18,9 +20,7 @@
 
 module SIS
   class AdminImporter < BaseImporter
-
     def process
-      start = Time.zone.now
       importer = Work.new(@batch, @root_account, @logger)
 
       AccountUser.suspend_callbacks(:clear_user_cache) do
@@ -32,17 +32,18 @@ module SIS
       User.update_account_associations(importer.account_users_to_update_associations.to_a)
       user_ids = []
       importer.account_users_to_set_batch_id.to_a.in_groups_of(1000, false) do |admins|
-        user_ids += AccountUser.where(:id => admins).distinct.pluck(:user_id)
+        user_ids += AccountUser.where(id: admins).distinct.pluck(:user_id)
         AccountUser.where(id: admins).update_all(sis_batch_id: @batch.id, updated_at: Time.now.utc)
       end
       User.clear_cache_keys(user_ids, :account_users)
       SisBatchRollBackData.bulk_insert_roll_back_data(importer.roll_back_data)
-      @logger.debug("admin imported in #{Time.zone.now - start} seconds")
+
       importer.success_count
     end
 
     class Work
-      attr_accessor :success_count, :roll_back_data,
+      attr_accessor :success_count,
+                    :roll_back_data,
                     :account_users_to_update_associations,
                     :account_users_to_set_batch_id
 
@@ -59,15 +60,13 @@ module SIS
       end
 
       def process_admin(user_id: nil, account_id: nil, role_id: nil, role: nil, status: nil, root_account: nil)
-        @logger.debug("Processing admin #{[user_id, account_id, role_id, role, status, root_account].inspect}")
-
         raise ImportError, "No user_id given for admin" if user_id.blank?
         raise ImportError, "No status given for admin" if status.blank?
         raise ImportError, "No role_id or role given for admin" if role.blank? && role_id.blank?
 
         state = status.downcase.strip
-        raise ImportError, "Invalid status #{status} for admin" unless %w(active deleted).include? state
-        return if @batch.skip_deletes? && state == 'deleted'
+        raise ImportError, "Invalid status #{status} for admin" unless %w[active deleted].include? state
+        return if @batch.skip_deletes? && state == "deleted"
 
         get_account(account_id)
         raise ImportError, "Invalid account_id given for admin" unless @account
@@ -78,27 +77,30 @@ module SIS
 
         the_root_account = root_account_from_id(root_account) if root_account
         raise ImportError, "Invalid or unknown user_id '#{user_id}' for admin" if root_account && !the_root_account
+
         the_root_account ||= @root_account
 
         user = get_user(user_id, the_root_account)
         raise ImportError, "Invalid or unknown user_id '#{user_id}' for admin" unless user
 
-        if state == 'deleted' && user.id == @batch&.user_id && @account == @root_account
+        if state == "deleted" && user.id == @batch&.user_id && @account == @root_account
           raise ImportError, "Can't remove yourself user_id '#{user_id}'"
         end
 
         create_or_find_admin(user, state)
+        user.clear_adminable_accounts_cache!
         @success_count += 1
       end
 
       def create_or_find_admin(user, state)
-
-        if state == 'active'
-          admin = @account.account_users.where(user: user, role: @role).first_or_initialize
+        case state
+        when "active"
+          admin = @account.account_users.where(user:, role: @role).first_or_initialize
           admin.workflow_state = state
-        elsif state == 'deleted'
-          admin = @account.account_users.where(user: user, role: @role).where.not(sis_batch_id: nil).take
+        when "deleted"
+          admin = @account.account_users.where(user:, role: @role).where.not(sis_batch_id: nil).take
           return unless admin
+
           admin.workflow_state = state
         end
 
@@ -123,7 +125,7 @@ module SIS
         user
       end
 
-      def root_account_from_id(root_account_sis_id)
+      def root_account_from_id(_root_account_sis_id)
         nil
       end
 
@@ -132,8 +134,8 @@ module SIS
         @account_roles_by_account_id[@account.id] ||= @account.available_account_roles
 
         @role = nil
-        @role = @account_roles_by_account_id[@account.id].detect {|r| r.id.to_s == role_id} if role_id
-        @role ||= @account_roles_by_account_id[@account.id].detect {|r| r.name == role}
+        @role = @account_roles_by_account_id[@account.id].detect { |r| r.id.to_s == role_id } if role_id
+        @role ||= @account_roles_by_account_id[@account.id].detect { |r| r.name == role }
       end
     end
   end

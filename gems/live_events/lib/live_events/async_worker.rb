@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -16,25 +18,17 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'thread'
-
 module LiveEvents
-
   # TODO: Consider refactoring out common functionality from this and
   # CanvasPandaPub::AsyncWorker. Their semantics are a bit different so
   # it may not make sense.
 
-  # TODO: Consider adding batched requests. Kinesis has a put_records call
-  # that is more efficient. (Would also require using aws-sdk-v2 instead of v1.)
-  #
-  # If we do that, we'll want to add an at_exit handler that flushes out the
-  # queue for cases when the process is shutting down.
-
   class AsyncWorker
-    attr_reader :logger
+    attr_accessor :logger, :stream_client, :stream_name
 
     MAX_BYTE_THRESHOLD = 5_000_000
     KINESIS_RECORD_SIZE_LIMIT = 1_000_000
+    RETRY_LIMIT = 3
 
     def initialize(start_thread = true, stream_client:, stream_name:)
       @queue = Queue.new
@@ -42,13 +36,14 @@ module LiveEvents
       @stream_client = stream_client
       @stream_name = stream_name
 
-      self.start! if start_thread
+      start! if start_thread
     end
 
     def push(event, partition_key = SecureRandom.uuid)
       if @queue.length >= LiveEvents.max_queue_size
         return false
       end
+
       event_json = event.to_json
       total_bytes = event_json.bytesize + partition_key.bytesize
       if total_bytes > KINESIS_RECORD_SIZE_LIMIT
@@ -56,12 +51,13 @@ module LiveEvents
         return false
       end
 
-      @queue << {
+      @queue << ({
         data: event_json,
-        partition_key: partition_key,
-        statsd_prefix: "live_events.events.#{event[:attributes][:event_name]}",
-        total_bytes: total_bytes
-      }
+        partition_key:,
+        statsd_prefix: "live_events.events",
+        tags: { event: event.dig(:attributes, :event_name) || "event_name_not_found" },
+        total_bytes:
+      })
       true
     end
 
@@ -79,24 +75,27 @@ module LiveEvents
     end
 
     def start!
-      @thread = Thread.new { self.run_thread }
+      return if @running
+
+      @thread = Thread.new { run_thread }
       @running = true
-      at_exit { stop! }
+      at_exit { stop! unless stopped? }
     end
 
     def run_thread
       loop do
-        return unless @running || @queue.size > 0
+        return unless @running || !@queue.empty?
+
         # pause thread so it will allow main thread to run
-        r = @queue.pop if @queue.size == 0
+        r = @queue.pop if @queue.empty?
 
         begin
           # r will be nil on first pass
           records = [r].compact
-          total_bytes = r&.fetch(:total_bytes) || 0
-          while @queue.size > 0 && total_bytes < MAX_BYTE_THRESHOLD
+          total_bytes = (r.is_a?(Hash) && r[:total_bytes]) || 0
+          while !@queue.empty? && total_bytes < MAX_BYTE_THRESHOLD
             r = @queue.pop
-            break if r == :stop
+            break if r == :stop || (records.size == 1 && records.first == :stop)
 
             if r[:total_bytes] + total_bytes > MAX_BYTE_THRESHOLD
               # put back on queue, will overflow kinesis put byte limit
@@ -107,9 +106,10 @@ module LiveEvents
             total_bytes += r[:total_bytes]
           end
           send_events(records)
-        rescue Exception => e
-          logger.error("Exception making LiveEvents async call: #{e}")
+        rescue => e
+          logger.error("Exception making LiveEvents async call: #{e}\n#{e.backtrace.first}")
         end
+        LiveEvents.on_work_unit_end&.call
       end
     end
 
@@ -117,17 +117,19 @@ module LiveEvents
 
     def time_block
       res = nil
-      unless LiveEvents&.statsd.nil?
+      if LiveEvents&.statsd.nil?
+        res = yield
+      else
         LiveEvents.statsd.time("live_events.put_records") do
           res = yield
         end
-      else
-        res = yield
+
       end
     end
 
     def send_events(records)
       return if records.empty?
+      return if records.include? :stop
 
       res = time_block do
         @stream_client.put_records(
@@ -145,18 +147,39 @@ module LiveEvents
 
     def process_results(res, records)
       res.records.each_with_index do |r, i|
-        if r.error_code.present?
-          log_unprocessed(records[i])
+        record = records[i]
+        if r.error_code == "InternalFailure"
+          record[:retries_count] ||= 0
+          record[:retries_count] += 1
+
+          if record[:retries_count] <= RETRY_LIMIT
+            @queue.push(record)
+            LiveEvents&.statsd&.increment("#{record[:statsd_prefix]}.retry", tags: record[:tags])
+          else
+            internal_error_message = "This record has failed too many times an will no longer be retried. #{r.error_message}"
+            log_unprocessed(record, r.error_code, internal_error_message)
+            LiveEvents&.statsd&.increment("#{record[:statsd_prefix]}.final_retry", tags: record[:tags])
+          end
+
+        elsif r.error_code.present?
+          log_unprocessed(record, r.error_code, r.error_message)
         else
-          LiveEvents&.statsd&.increment("#{records[i][:statsd_prefix]}.sends")
-          nil
+          LiveEvents&.statsd&.increment("#{record[:statsd_prefix]}.sends", tags: record[:tags])
         end
-      end.compact
+      end
     end
 
-    def log_unprocessed(record)
-      logger.error("Error posting event #{record[:statsd_prefix]} with partition key #{record[:partition_key]}: #{record[:data]}")
-      LiveEvents&.statsd&.increment("#{record[:statsd_prefix]}.send_errors")
+    def log_unprocessed(record, error_code, error_message)
+      logger.error(
+        "Error posting event #{record.dig(:tags, :event)} with partition key #{record[:partition_key]}. Error Code: #{error_code} | Error Message: #{error_message}"
+      )
+      logger.debug(
+        "Failed event data: #{record[:data]}"
+      )
+      LiveEvents&.statsd&.increment(
+        "#{record[:statsd_prefix]}.send_errors",
+        tags: record[:tags].merge(error_code:)
+      )
     end
   end
 end

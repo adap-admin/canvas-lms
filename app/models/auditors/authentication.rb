@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -23,14 +25,14 @@ class Auditors::Authentication
                :user_id
 
     def self.generate(pseudonym, event_type)
-      new('pseudonym' => pseudonym, 'event_type' => event_type)
+      new("pseudonym" => pseudonym, "event_type" => event_type)
     end
 
     def initialize(*args)
       super(*args)
 
-      if attributes['pseudonym']
-        self.pseudonym = attributes.delete('pseudonym')
+      if attributes["pseudonym"]
+        self.pseudonym = attributes.delete("pseudonym")
       end
     end
 
@@ -40,66 +42,65 @@ class Auditors::Authentication
 
     def pseudonym=(pseudonym)
       @pseudonym = pseudonym
-      attributes['pseudonym_id'] = @pseudonym.global_id
-      attributes['account_id'] = Shard.global_id_for(@pseudonym.account_id)
-      attributes['user_id'] = Shard.global_id_for(@pseudonym.user_id)
+      attributes["pseudonym_id"] = @pseudonym.global_id
+      attributes["account_id"] = Shard.global_id_for(@pseudonym.account_id)
+      attributes["user_id"] = Shard.global_id_for(@pseudonym.user_id)
     end
 
-    def user
-      pseudonym.user
-    end
-
-    def account
-      pseudonym.account
-    end
+    delegate :user, :account, to: :pseudonym
   end
 
   Stream = Auditors.stream do
-    database -> { Canvas::Cassandra::DatabaseBuilder.from_config(:auditors) }
-    table :authentications
+    auth_ar_type = Auditors::ActiveRecord::AuthenticationRecord
+    active_record_type auth_ar_type
     record_type Auditors::Authentication::Record
-    read_consistency_level -> { Canvas::Cassandra::DatabaseBuilder.read_consistency_setting(:auditors) }
 
     add_index :pseudonym do
       table :authentications_by_pseudonym
-      entry_proc lambda{ |record| record.pseudonym }
-      key_proc lambda{ |pseudonym| pseudonym.global_id }
+      entry_proc ->(record) { record.pseudonym }
+      key_proc ->(pseudonym) { pseudonym.global_id }
+      ar_scope_proc ->(pseudonym) { auth_ar_type.where(pseudonym_id: pseudonym.id) }
     end
 
     add_index :user do
       table :authentications_by_user
-      entry_proc lambda{ |record| record.user }
-      key_proc lambda{ |user| user.global_id }
+      entry_proc ->(record) { record.user }
+      key_proc ->(user) { user.global_id }
+      ar_scope_proc ->(user) { auth_ar_type.where(user_id: user.id) }
     end
 
     add_index :account do
       table :authentications_by_account
-      entry_proc lambda{ |record| record.account }
-      key_proc lambda{ |account| account.global_id }
+      entry_proc ->(record) { record.account }
+      key_proc ->(account) { account.global_id }
+      ar_scope_proc ->(account) { auth_ar_type.where(account_id: account.id) }
     end
   end
 
   def self.record(pseudonym, event_type)
     return unless pseudonym
+
+    event_record = nil
     pseudonym.shard.activate do
-      record = Auditors::Authentication::Record.generate(pseudonym, event_type)
-      Auditors::Authentication::Stream.insert(record)
+      event_record = Auditors::Authentication::Record.generate(pseudonym, event_type)
+      Auditors::Authentication::Stream.insert(event_record)
     end
+    event_record
   end
 
-  def self.for_account(account, options={})
+  def self.for_account(account, options = {})
     account.shard.activate do
       Auditors::Authentication::Stream.for_account(account, options)
     end
   end
 
-  def self.for_pseudonym(pseudonym, options={})
+  def self.for_pseudonym(pseudonym, options = {})
     pseudonym.shard.activate do
       Auditors::Authentication::Stream.for_pseudonym(pseudonym, options)
     end
   end
 
-  def self.for_pseudonyms(pseudonyms, options={})
+  def self.for_pseudonyms(pseudonyms, options = {})
     # each for_pseudonym does a shard.activate, so this partition_by_shard is
     # not necessary for correctness. but it improves performance (prevents
     # shard-thrashing)
@@ -111,20 +112,21 @@ class Auditors::Authentication
     BookmarkedCollection.merge(*collections)
   end
 
-  def self.for_user(user, options={})
+  def self.for_user(user, options = {})
     collections = []
     dbs_seen = Set.new
     Shard.with_each_shard(user.associated_shards) do
       # EventStream is shard-sensitive, but multiple shards may share
       # a database. if so, we only need to query from it once
-      db = Auditors::Authentication::Stream.database
-      next if dbs_seen.include?(db)
-      dbs_seen << db
+      db_fingerprint = Auditors::Authentication::Stream.database_fingerprint
+      next if dbs_seen.include?(db_fingerprint)
+
+      dbs_seen << db_fingerprint
 
       # query from that database, and label it with the database server's id
       # for merge
       collections << [
-        db.fingerprint,
+        db_fingerprint,
         Auditors::Authentication::Stream.for_user(user, options)
       ]
     end

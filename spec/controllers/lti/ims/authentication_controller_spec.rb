@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -15,171 +17,190 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require File.expand_path(File.dirname(__FILE__) + '/../../../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/../../../lti_1_3_spec_helper')
+require_relative "../../../lti_1_3_spec_helper"
+require_relative "../concerns/parent_frame_shared_examples"
 
-describe Lti::Ims::AuthenticationController do
+describe Lti::IMS::AuthenticationController do
   include Lti::RedisMessageClient
 
-  let(:developer_key) {
+  let(:developer_key) do
     key = DeveloperKey.create!(
-      redirect_uris: redirect_uris,
-      account: context
+      redirect_uris:,
+      account: context.root_account
     )
     enable_developer_key_account_binding!(key)
     key
-  }
-  let(:redirect_uris) { ['https://redirect.tool.com'] }
+  end
+  let(:redirect_uris) { ["https://redirect.tool.com"] }
   let(:user) { user_model }
-  let(:redirect_domain) { 'redirect.instructure.com' }
+  let(:redirect_domain) { "redirect.instructure.com" }
   let(:verifier) { SecureRandom.hex 64 }
   let(:client_id) { developer_key.global_id }
   let(:context) { account_model }
-  let(:login_hint) { Lti::Asset.opaque_identifier_for(user, context: context) }
+  let(:login_hint) { Lti::Asset.opaque_identifier_for(user, context:) }
   let(:nonce) { SecureRandom.uuid }
-  let(:prompt) { 'none' }
-  let(:redirect_uri) { 'https://redirect.tool.com?foo=bar' }
-  let(:response_mode) { 'form_post' }
-  let(:response_type) { 'id_token' }
-  let(:scope) { 'openid' }
+  let(:prompt) { "none" }
+  let(:redirect_uri) { "https://redirect.tool.com?foo=bar" }
+  let(:response_mode) { "form_post" }
+  let(:response_type) { "id_token" }
+  let(:scope) { "openid" }
   let(:state) { SecureRandom.uuid }
+  let(:include_storage_target) { true }
   let(:lti_message_hint) do
     Canvas::Security.create_jwt(
       {
-        verifier: verifier,
+        verifier:,
         canvas_domain: redirect_domain,
         context_id: context.global_id,
-        context_type: context.class.to_s
+        context_type: context.class.to_s,
+        include_storage_target:
       },
       1.year.from_now
     )
   end
   let(:params) do
     {
-      'client_id' => client_id.to_s,
-      'login_hint' => login_hint,
-      'nonce' => nonce,
-      'prompt' => prompt,
-      'redirect_uri' => redirect_uri,
-      'response_mode' => response_mode,
-      'response_type' => response_type,
-      'scope' => scope,
-      'state' => state,
-      'lti_message_hint' => lti_message_hint
+      "client_id" => client_id.to_s,
+      "login_hint" => login_hint,
+      "nonce" => nonce,
+      "prompt" => prompt,
+      "redirect_uri" => redirect_uri,
+      "response_mode" => response_mode,
+      "response_type" => response_type,
+      "scope" => scope,
+      "state" => state,
+      "lti_message_hint" => lti_message_hint
     }
   end
 
   before { user_session(user) }
 
-  describe 'authorize_redirect' do
-    before { post :authorize_redirect, params: params }
+  describe "authorize_redirect" do
+    before { post :authorize_redirect, params: }
 
-    context 'when authorization request has no errors' do
-      subject { URI.parse(response.headers['Location']) }
+    context "when authorization request has no errors" do
+      subject { URI.parse(response.headers["Location"]) }
 
-      it 'redirects to the domain in the lti_message_hint' do
-        expect(subject.host).to eq 'redirect.instructure.com'
+      it "redirects to the domain in the lti_message_hint" do
+        expect(subject.host).to eq "redirect.instructure.com"
       end
 
-      it 'redirects the the authorization endpoint' do
-        expect(subject.path).to eq '/api/lti/authorize'
+      it "redirects the the authorization endpoint" do
+        expect(subject.path).to eq "/api/lti/authorize"
       end
 
-      it 'forwards all oidc params' do
+      it "forwards all oidc params" do
         sent_params = Rack::Utils.parse_nested_query(subject.query)
         expect(sent_params).to eq params
       end
     end
 
-    shared_examples_for 'lti_message_hint error' do
+    shared_examples_for "lti_message_hint error" do
       it { is_expected.to be_bad_request }
 
-      it 'has a descriptive error message' do
-        expect(JSON.parse(subject.body)['message']).to eq 'Invalid lti_message_hint'
+      it "has a descriptive error message" do
+        expect(JSON.parse(subject.body)["message"]).to eq "Invalid lti_message_hint"
       end
     end
 
-    context 'when the authorization request has errors' do
+    context "when the authorization request has errors" do
       subject { response }
 
-      context 'when the lti_message_hint is not a JWT' do
-        let(:lti_message_hint) { 'Not a JWT' }
+      context "when the lti_message_hint is not a JWT" do
+        let(:lti_message_hint) { "Not a JWT" }
 
-        it_behaves_like 'lti_message_hint error'
+        it_behaves_like "lti_message_hint error"
       end
 
-      context 'when the lti_message_hint is expired' do
+      context "when the lti_message_hint is expired" do
         let(:lti_message_hint) do
           Canvas::Security.create_jwt(
             {
-              verifier: verifier,
+              verifier:,
               canvas_domain: redirect_domain
             },
             1.year.ago
           )
         end
 
-        it_behaves_like 'lti_message_hint error'
+        it_behaves_like "lti_message_hint error"
       end
 
-      context 'when the lti_message_hint sig is invalid' do
+      context "when the lti_message_hint sig is invalid" do
         let(:lti_message_hint) do
           jws = Canvas::Security.create_jwt(
             {
-              verifier: verifier,
+              verifier:,
               canvas_domain: redirect_domain
             },
-            (1.year.from_now)
+            1.year.from_now
           )
-          jws.first(-1)
+          jws[0...-1]
         end
 
-        it_behaves_like 'lti_message_hint error'
+        it_behaves_like "lti_message_hint error"
       end
     end
   end
 
-  describe 'authorize' do
-    subject { get :authorize, params: params }
+  describe "authorize" do
+    subject { get :authorize, params: }
 
-    shared_examples_for 'redirect_uri errors' do
+    shared_examples_for "redirect_uri errors" do
       let(:expected_status) { 400 }
 
       it { is_expected.to have_http_status(expected_status) }
+
+      it "avoids rendering the redirect_uri form" do
+        expect(subject).not_to render_template("lti/ims/authentication/authorize")
+      end
     end
 
-    shared_examples_for 'non redirect_uri errors' do
-      let(:expected_message) { raise 'set in example' }
-      let(:expected_error) { raise 'set in example' }
+    shared_examples_for "non redirect_uri errors" do
+      let(:expected_message) { raise "set in example" }
+      let(:expected_error) { raise "set in example" }
+
       let(:error_object) do
         subject
         assigns[:oidc_error]
       end
 
-      it { is_expected.to be_success }
+      it { is_expected.to be_successful }
 
-      it 'has a descriptive error message' do
+      it "has a descriptive error message" do
         expect(error_object[:error_description]).to eq expected_message
       end
 
-      it 'sends the state' do
+      it "sends the state" do
         expect(error_object[:state]).to eq state
       end
 
-      it 'has the correct error code' do
+      it "has the correct error code" do
         expect(error_object[:error]).to eq expected_error
+      end
+
+      it "renders the redirect_uri_form" do
+        expect(subject).to render_template("lti/ims/authentication/authorize")
       end
     end
 
-    context 'when there is a cached LTI 1.3 launch' do
-      include_context 'lti_1_3_spec_helper'
-
+    context "when there is a cached LTI 1.3 launch" do
       subject do
-        get :authorize, params: params
-        JSON::JWT.decode(assigns.dig(:id_token, :id_token), :skip_verification)
+        get :authorize, params:
       end
 
-      let(:account) { context }
+      include_context "lti_1_3_spec_helper"
+
+      let(:id_token) do
+        token = assigns.dig(:id_token, :id_token)
+        if token.present?
+          JSON::JWT.decode(token, :skip_verification)
+        else
+          token
+        end
+      end
+
+      let(:account) { context.root_account }
       let(:lti_launch) do
         {
           "aud" => developer_key.global_id,
@@ -196,117 +217,203 @@ describe Lti::Ims::AuthenticationController do
       let(:verifier) { cache_launch(lti_launch, context) }
 
       before do
-        developer_key.update!(redirect_uris: ['https://redirect.tool.com'])
+        developer_key.update!(redirect_uris: ["https://redirect.tool.com"])
         enable_developer_key_account_binding!(developer_key)
       end
 
-      it 'correctly sets the nonce of the launch' do
-        expect(subject['nonce']).to eq nonce
-      end
-
-      it 'generates an id token' do
-        expect(subject.except('nonce')).to eq lti_launch.except('nonce')
-      end
-
-      it 'sends the state' do
+      it "correctly sets the nonce of the launch" do
         subject
-        expect(assigns.dig(:id_token, :state)).to eq state
+        expect(id_token["nonce"]).to eq nonce
       end
 
-      context 'when there are additional query params on the redirect_uri' do
-        let(:redirect_uris) { ['https://redirect.tool.com?must_be_present=true'] }
-        let(:redirect_uri) { 'https://redirect.tool.com?must_be_present=true&foo=bar' }
+      it "generates an id token" do
+        subject
+        expect(id_token.except("nonce")).to eq lti_launch.except("nonce")
+      end
 
+      it "sends the state" do
+        subject
+        expect(assigns.dig(:launch_parameters, :state)).to eq state
+      end
+
+      it "sends the default lti_storage_target" do
+        subject
+        expect(assigns.dig(:launch_parameters, :lti_storage_target)).to eq Lti::PlatformStorage::DEFAULT_TARGET
+      end
+
+      context "when platform storage flag is enabled" do
         before do
-          developer_key.update!(redirect_uris: redirect_uris)
+          Account.site_admin.enable_feature! :lti_platform_storage
         end
 
-        it 'launches succesfully' do
-          expect(subject['nonce']).to eq nonce
+        it "sends the actual lti_storage_target" do
+          subject
+          expect(assigns.dig(:launch_parameters, :lti_storage_target)).to eq Lti::PlatformStorage::FORWARDING_TARGET
+        end
+      end
+
+      context "when include_storage_target is false" do
+        let(:include_storage_target) { false }
+
+        it "does not send the lti_storage_target" do
+          subject
+          expect(assigns[:launch_parameters].keys).not_to include(:lti_storage_target)
+        end
+      end
+
+      context "when there are additional query params on the redirect_uri" do
+        let(:redirect_uris) { ["https://redirect.tool.com?must_be_present=true"] }
+        let(:redirect_uri) { "https://redirect.tool.com?must_be_present=true&foo=bar" }
+
+        before do
+          developer_key.update!(redirect_uris:)
+        end
+
+        it "launches succesfully" do
+          subject
+          expect(id_token["nonce"]).to eq nonce
+        end
+      end
+
+      context "when cached launch has expired" do
+        before do
+          fetch_and_delete_launch(context, verifier)
+        end
+
+        it_behaves_like "non redirect_uri errors" do
+          let(:expected_message) { "The launch has either expired or already been consumed" }
+          let(:expected_error) { "launch_no_longer_valid" }
+        end
+      end
+
+      context "when there there is no current user" do
+        before { remove_user_session }
+
+        it_behaves_like "non redirect_uri errors" do
+          subject { get :authorize, params: }
+
+          let(:expected_message) { "Must have an active user session" }
+          let(:expected_error) { "login_required" }
+        end
+
+        context "and the context is public" do
+          let(:context) do
+            course = course_model
+            course.update!(is_public: true)
+            course.offer
+            course
+          end
+
+          it "generates an id token" do
+            subject
+            expect(id_token.except("nonce")).to eq lti_launch.except("nonce")
+          end
+        end
+      end
+
+      it_behaves_like "an endpoint which uses parent_frame_context to set the CSP header" do
+        # The shared examples require `subject` to make the request -- this is
+        # already set up above in the parent rspec context
+
+        # Make sure user has access in the PFC tool (enrollment in tool's course)
+        let(:enrollment) { course_with_teacher(user:, active_all: true) }
+        let(:pfc_tool_context) { enrollment.course }
+
+        let(:lti_message_hint) do
+          Canvas::Security.create_jwt(
+            {
+              verifier:,
+              canvas_domain: redirect_domain,
+              context_id: context.global_id,
+              context_type: context.class.to_s,
+              parent_frame_context: pfc_tool.id.to_s
+            },
+            1.year.from_now
+          )
         end
       end
     end
 
-    context 'when there are non redirect_uri errors' do
-      context 'when there are missing oidc params' do
+    context "when there are non redirect_uri errors" do
+      context "when there are missing oidc params" do
         let(:params) do
           {
-            'client_id' => client_id.to_s,
-            'login_hint' => login_hint,
-            'redirect_uri' => redirect_uri,
-            'response_mode' => response_mode,
-            'response_type' => response_type,
-            'scope' => scope,
-            'state' => state,
-            'lti_message_hint' => lti_message_hint
+            "client_id" => client_id.to_s,
+            "login_hint" => login_hint,
+            "redirect_uri" => redirect_uri,
+            "response_mode" => response_mode,
+            "response_type" => response_type,
+            "scope" => scope,
+            "state" => state,
+            "lti_message_hint" => lti_message_hint
           }
         end
 
-        it_behaves_like 'non redirect_uri errors' do
+        it_behaves_like "non redirect_uri errors" do
           let(:expected_message) { "The following parameters are missing: nonce,prompt" }
           let(:expected_error) { "invalid_request_object" }
         end
       end
 
-      context 'when the scope is invalid' do
-        let(:scope) { 'banana' }
+      context "when the scope is invalid" do
+        let(:scope) { "banana" }
 
-        it_behaves_like 'non redirect_uri errors' do
+        it_behaves_like "non redirect_uri errors" do
           let(:expected_message) { "The 'scope' must be 'openid'" }
           let(:expected_error) { "invalid_request_object" }
         end
       end
 
-      context 'when the current user is not in the login_hint' do
-        let(:login_hint) { 'not_the_correct_lti_id' }
+      context "when the current user is not in the login_hint" do
+        let(:login_hint) { "not_the_correct_lti_id" }
 
-        it_behaves_like 'non redirect_uri errors' do
+        it_behaves_like "non redirect_uri errors" do
           let(:expected_message) { "Must have an active user session" }
           let(:expected_error) { "login_required" }
         end
       end
 
-      context 'when the devloper key is not active' do
-        before { developer_key.update!(workflow_state: 'inactive') }
+      context "when the devloper key is not active" do
+        before { developer_key.update!(workflow_state: "inactive") }
 
-        it_behaves_like 'non redirect_uri errors' do
+        it_behaves_like "non redirect_uri errors" do
           let(:expected_message) { "Client not authorized in requested context" }
           let(:expected_error) { "unauthorized_client" }
         end
       end
 
-      context 'when key has no bindings to the context' do
+      context "when key has no bindings to the context" do
         before do
           developer_key.developer_key_account_bindings.destroy_all
         end
 
-        it_behaves_like 'non redirect_uri errors' do
+        it_behaves_like "non redirect_uri errors" do
           let(:expected_message) { "Client not authorized in requested context" }
           let(:expected_error) { "unauthorized_client" }
         end
       end
     end
 
-    context 'when the developer key redirect uri does not match' do
-      before { developer_key.update!(redirect_uris: ['https://www.not-matching.com']) }
+    context "when the developer key redirect uri does not match" do
+      before { developer_key.update!(redirect_uris: ["https://www.not-matching.com"]) }
 
-      it_behaves_like 'redirect_uri errors' do
-        let(:expected_message) { 'Invalid redirect_uri' }
+      it_behaves_like "redirect_uri errors" do
+        let(:expected_message) { "Invalid redirect_uri" }
       end
     end
 
-    context 'when the developer key reidrect uri contains a query string' do
-      let(:redirect_uris) { ['https://redirect.tool.com?must_be_present=true'] }
+    context "when the developer key redirect uri contains a query string" do
+      let(:redirect_uris) { ["https://redirect.tool.com?must_be_present=true"] }
 
-      it_behaves_like 'redirect_uri errors' do
-        let(:expected_message) { 'Invalid redirect_uri' }
+      it_behaves_like "redirect_uri errors" do
+        let(:expected_message) { "Invalid redirect_uri" }
       end
     end
 
-    context 'when the developer key does not exist' do
+    context "when the developer key does not exist" do
       let(:client_id) { developer_key.global_id + 100 }
 
-      it_behaves_like 'redirect_uri errors' do
+      it_behaves_like "redirect_uri errors" do
         let(:expected_message) { nil }
         let(:expected_status) { 404 }
       end

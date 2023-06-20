@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -16,86 +18,98 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper.rb')
-
+# rubocop:disable Security/YAMLLoad
 describe "safe_yaml" do
-  let(:test_yaml) {
-    yaml = <<-YAML
----
-hwia: !map:HashWithIndifferentAccess
-  a: 1
-  b: 2
-float: !float
-  5.1
-float_with_exp: -1.7763568394002505e-15
-float_inf: .inf
-os: !ruby/object:OpenStruct
-  modifiable: true
-  table:
-    :a: 1
-    :b: 2
-    :sub: !ruby/object:OpenStruct
-      modifiable: true
-      table:
-        :c: 3
-str: !str
-  hai
-mime: !ruby/object:Mime::Type
-  string: png
-  symbol:
-  synonyms: []
-http: !ruby/object:URI::HTTP
-  fragment:
-  host: example.com
-  opaque:
-  parser:
-  password:
-  path: /
-  port: 80
-  query:
-  registry:
-  scheme: http
-  user:
-https: !ruby/object:URI::HTTPS
-  fragment:
-  host: example.com
-  opaque:
-  parser:
-  password:
-  path: /
-  port: 443
-  query:
-  registry:
-  scheme: https
-  user:
-ab: !ruby/object:Class AcademicBenchmark::Converter
-qt: !ruby/object:Class Qti::Converter
-verbose_symbol: !ruby/symbol blah
-oo: !ruby/object:OpenObject
-  table:
-    :a: 1
+  let(:test_yaml) do
+    <<~YAML
+      ---
+      hwia: !map:HashWithIndifferentAccess
+        a: 1
+        b: 2
+      float: !float
+        5.1
+      float_with_exp: -1.7763568394002505e-15
+      float_inf: .inf
+      os: !ruby/object:OpenStruct
+        modifiable: true
+        table:
+          :a: 1
+          :b: 2
+          :sub: !ruby/object:OpenStruct
+            modifiable: true
+            table:
+              :c: 3
+      str: !str
+        hai
+      mime: !ruby/object:Mime::Type
+        string: png
+        symbol:
+        synonyms: []
+      http: !ruby/object:URI::HTTP
+        fragment:
+        host: example.com
+        opaque:
+        parser:
+        password:
+        path: /
+        port: 80
+        query:
+        registry:
+        scheme: http
+        user:
+      https: !ruby/object:URI::HTTPS
+        fragment:
+        host: example.com
+        opaque:
+        parser:
+        password:
+        path: /
+        port: 443
+        query:
+        registry:
+        scheme: https
+        user:
+      ab: !ruby/object:Class AcademicBenchmark::Converter
+      qt: !ruby/object:Class Qti::Converter
+      verbose_symbol: !ruby/symbol blah
+      oo: !ruby/object:OpenObject
+        table:
+          :a: 1
     YAML
-  }
+  end
 
-  it "should be used by default" do
-    yaml = <<-YAML
---- !ruby/object:ActionController::Base
-real_format:
-YAML
-    expect { YAML.load yaml }.to raise_error("Unknown YAML tag '!ruby/object:ActionController::Base'")
+  it "is used by default" do
+    yaml = <<~YAML
+      --- !ruby/regexp /regex/
+    YAML
+    expect { YAML.load yaml }.to raise_error(Psych::DisallowedClass)
     result = YAML.unsafe_load yaml
-    expect(result.class).to eq ActionController::Base
+    expect(result.class).to eq Regexp
+  end
+
+  it "supports a unique case of key / value pairs" do
+    skip("newer ruby versions only") unless RUBY_VERSION >= "3.0.0"
+
+    os = OpenStruct.new
+    os.table = { a: "b" }
+    os.modifiable = true
+
+    res = os.dup
+    res["legacy_support!"] = true
+
+    expect(YAML.load(YAML.dump(os))).to eq res
   end
 
   it "doesn't allow deserialization of arbitrary classes" do
-    expect { YAML.load(YAML.dump(ActionController::Base)) }.to raise_error("YAML deserialization of constant not allowed: ActionController::Base")
+    expect { YAML.load(YAML.dump(/regex/)) }.to raise_error(Psych::DisallowedClass)
   end
 
   it "allows deserialization of arbitrary classes when unsafe_loading" do
-    expect(YAML.unsafe_load(YAML.dump(ActionController::Base))).to eq ActionController::Base
+    regex = /regex/
+    expect(YAML.unsafe_load(YAML.dump(regex))).to eq regex
   end
 
-  it "should allow some whitelisted classes" do
+  it "allows some whitelisted classes" do
     result = YAML.load(test_yaml)
 
     def verify(result, key, klass)
@@ -104,101 +118,101 @@ YAML
       obj
     end
 
-    hwia = verify(result, 'hwia', HashWithIndifferentAccess)
+    hwia = verify(result, "hwia", ActiveSupport::HashWithIndifferentAccess)
     expect(hwia.values_at(:a, :b)).to eq [1, 2]
 
-    float = verify(result, 'float', Float)
+    float = verify(result, "float", Float)
     expect(float).to eq 5.1
 
-    float_with_exp = verify(result, 'float_with_exp', Float)
+    float_with_exp = verify(result, "float_with_exp", Float)
     expect(float_with_exp).to eq(-1.7763568394002505e-15)
 
-    float_inf = verify(result, 'float_inf', Float)
+    float_inf = verify(result, "float_inf", Float)
     expect(float_inf).to eq(Float::INFINITY)
 
-    os = verify(result, 'os', OpenStruct)
+    os = verify(result, "os", OpenStruct)
     expect(os.a).to eq 1
     expect(os.b).to eq 2
     expect(os.sub.class).to eq OpenStruct
     expect(os.sub.c).to eq 3
 
-    str = verify(result, 'str', String)
+    str = verify(result, "str", String)
     expect(str).to eq "hai"
 
-    mime = verify(result, 'mime', Mime::Type)
-    expect(mime.to_s).to eq 'png'
+    mime = verify(result, "mime", Mime::Type)
+    expect(mime.to_s).to eq "png"
 
-    http = verify(result, 'http', URI::HTTP)
-    expect(http.host).to eq 'example.com'
+    http = verify(result, "http", URI::HTTP)
+    expect(http.host).to eq "example.com"
 
-    https = verify(result, 'https', URI::HTTPS)
-    expect(https.host).to eq 'example.com'
+    https = verify(result, "https", URI::HTTPS)
+    expect(https.host).to eq "example.com"
 
-    expect(result['ab']).to eq AcademicBenchmark::Converter
-    expect(result['qt']).to eq Qti::Converter
+    expect(result["ab"]).to eq AcademicBenchmark::Converter
+    expect(result["qt"]).to eq Qti::Converter
 
-    expect(result['verbose_symbol']).to eq :blah
+    expect(result["verbose_symbol"]).to eq :blah
 
-    oo = verify(result, 'oo', OpenObject)
+    oo = verify(result, "oo", OpenObject)
     expect(oo.a).to eq 1
   end
 
-  it "should allow some whitelisted classes through psych" do
+  it "allows some whitelisted classes through psych" do
     old_result = YAML.load(test_yaml)
     psych_yaml = YAML.dump(old_result)
     expect(Psych.load(psych_yaml)).to eq old_result
     expect(YAML.load(psych_yaml)).to eq old_result
   end
 
-  it "should work with aliases" do
-    hash = {:a => 1}.with_indifferent_access
-    obj = {:blah => hash, :bloop => hash}.with_indifferent_access
+  it "works with aliases" do
+    hash = { a: 1 }.with_indifferent_access
+    obj = { blah: hash, bloop: hash }.with_indifferent_access
     yaml = Psych.dump(obj)
     expect(YAML.load(yaml)).to eq obj
   end
 
-  it "should dump whole floats correctly" do
+  it "dumps whole floats correctly" do
     expect(YAML.dump(1.0)).to include("1.0")
   end
 
-  it "should dump freaky floaty-looking strings" do
+  it "dumps freaky floaty-looking strings" do
     str = "1.E+01"
     expect(YAML.load(YAML.dump(str))).to eq str
   end
 
-  it "should dump html-safe strings correctly" do
-    hash = {:blah => "42".html_safe}
+  it "dumps html-safe strings correctly" do
+    hash = { blah: "42".html_safe }
     expect(YAML.load(YAML.dump(hash))).to eq hash
   end
 
-  it "should dump strings with underscores followed by an integer" do
+  it "dumps strings with underscores followed by an integer" do
     # the ride never ends -_-
-    hash = {:blah => "_42"}
+    hash = { blah: "_42" }
     expect(YAML.load(YAML.dump(hash))).to eq hash
   end
 
-  it "should also dump floaat looking strings followed by an underscore" do
-    hash = {:blah => "42._"}
+  it "alsoes dump floaat looking strings followed by an underscore" do
+    hash = { blah: "42._" }
     expect(YAML.load(YAML.dump(hash))).to eq hash
   end
 
-  it "should dump whatever this is too" do
-    hash = {:blah => "4,2:0."}
+  it "dumps whatever this is too" do
+    hash = { blah: "4,2:0." }
     expect(YAML.load(YAML.dump(hash))).to eq hash
   end
 
-  it "should be able to dump and load Canvas:Plugin classes" do
-    plugin = Canvas::Plugin.find('canvas_cartridge_importer')
+  it "is able to dump and load Canvas:Plugin classes" do
+    plugin = Canvas::Plugin.find("canvas_cartridge_importer")
     expect(YAML.unsafe_load(YAML.dump(plugin))).to eq plugin
   end
 
-  it "should be able to dump and load BigDecimals" do
-    hash = {blah: BigDecimal("1.2")}
+  it "is able to dump and load BigDecimals" do
+    hash = { blah: BigDecimal("1.2") }
     expect(YAML.load(YAML.dump(hash))).to eq hash
   end
 
-  it "should be able to dump and load these strings in stuff" do
-    hash = {:blah => "<<"}
+  it "is able to dump and load these strings in stuff" do
+    hash = { blah: "<<" }
     expect(YAML.load(YAML.dump(hash))).to eq hash
   end
 
@@ -207,6 +221,7 @@ YAML
   end
 
   it "restores default value on sets on load" do
-    expect(YAML.unsafe_load(YAML.dump(Set.new)).include?("test")).to eq false
+    expect(YAML.unsafe_load(YAML.dump(Set.new)).include?("test")).to be false
   end
 end
+# rubocop:enable Security/YAMLLoad

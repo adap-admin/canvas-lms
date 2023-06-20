@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -15,14 +17,11 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'spec_helper'
-require_dependency "users/creation_notify_policy"
-
 module Users
   describe CreationNotifyPolicy do
     describe "#is_self_registration?" do
       it "is true when forced" do
-        policy = CreationNotifyPolicy.new(false, {force_self_registration: '1'})
+        policy = CreationNotifyPolicy.new(false, { force_self_registration: "1" })
         expect(policy.is_self_registration?).to be(true)
       end
 
@@ -35,13 +34,14 @@ module Users
     end
 
     describe "#dispatch!" do
-      let(:user){ double() }
-      let(:pseudonym) { double() }
-      let(:channel){ double() }
+      let(:user) { double }
+      let(:pseudonym) { double(account: Account.default) }
+      let(:channel) { double }
 
       context "for self_registration" do
-        let(:policy){ CreationNotifyPolicy.new(true, {force_self_registration: true}) }
-        before{ allow(channel).to receive_messages(has_merge_candidates?: false) }
+        let(:policy) { CreationNotifyPolicy.new(true, { force_self_registration: true }) }
+
+        before { allow(channel).to receive_messages(has_merge_candidates?: false) }
 
         it "sends confirmation notification" do
           expect(pseudonym).to receive(:send_confirmation!)
@@ -57,23 +57,24 @@ module Users
         end
 
         it "sends the registration notification if should notify" do
-          policy = CreationNotifyPolicy.new(true, {send_confirmation: '1'})
+          policy = CreationNotifyPolicy.new(true, { send_confirmation: "1" })
           expect(pseudonym).to receive(:send_registration_notification!)
           result = policy.dispatch!(user, pseudonym, channel)
           expect(result).to be(true)
         end
 
         it "doesnt send the registration notification if shouldnt notify" do
-          policy = CreationNotifyPolicy.new(true, {send_confirmation: '0'})
-          expect(pseudonym).to receive(:send_registration_notification!).never
+          policy = CreationNotifyPolicy.new(true, { send_confirmation: "0" })
+          expect(pseudonym).not_to receive(:send_registration_notification!)
           result = policy.dispatch!(user, pseudonym, channel)
           expect(result).to be(false)
         end
       end
 
       context "when the user is registered" do
-        before{ allow(user).to receive_messages(registered?: true) }
-        let(:policy){ CreationNotifyPolicy.new(true, {}) }
+        before { allow(user).to receive_messages(registered?: true) }
+
+        let(:policy) { CreationNotifyPolicy.new(true, {}) }
 
         it "sends the merge notification if there are merge candidates" do
           allow(channel).to receive_messages(has_merge_candidates?: true)
@@ -84,12 +85,19 @@ module Users
 
         it "does nothing without merge candidates" do
           allow(channel).to receive_messages(has_merge_candidates?: false)
-          expect(channel).to receive(:send_merge_notification!).never
+          expect(channel).not_to receive(:send_merge_notification!)
+          result = policy.dispatch!(user, pseudonym, channel)
+          expect(result).to be(false)
+        end
+
+        it "does nothing when self service merge is disabled" do
+          pseudonym.account.disable_feature!(:self_service_user_merge)
+          expect(channel).not_to receive(:has_merge_candidates?)
+          expect(channel).not_to receive(:send_merge_notification!)
           result = policy.dispatch!(user, pseudonym, channel)
           expect(result).to be(false)
         end
       end
-
     end
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -16,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper.rb')
-
 describe EpubExports::CreateService do
   before :once do
     course_with_teacher(active_all: true)
@@ -29,8 +29,8 @@ describe EpubExports::CreateService do
       EpubExports::CreateService.new(@course, @student, :epub_export)
     end
 
-    it "should send save & export to epub_export" do
-      expect(create_service.offline_export.new_record?).to be_truthy, 'precondition'
+    it "sends save & export to epub_export" do
+      expect(create_service.offline_export.new_record?).to be_truthy, "precondition"
       expect(create_service.offline_export).to receive(:export).once.and_return(nil)
       expect(create_service.save).to be_truthy
       expect(create_service.offline_export.new_record?).to be_falsey
@@ -41,17 +41,17 @@ describe EpubExports::CreateService do
     context "when user has an active epub_export" do
       before(:once) do
         @epub_export = @course.epub_exports.create(user: @student)
-        @epub_export.export_without_send_later
+        @epub_export.export(synchronous: true)
         @service = EpubExports::CreateService.new(@course, @student, :epub_export)
       end
 
-      it "should return said epub_export" do
+      it "returns said epub_export" do
         expect(@service.offline_export).to eq @epub_export
       end
     end
 
     context "when user has no active epub_exports" do
-      it "should return a new epub_export instance" do
+      it "returns a new epub_export instance" do
         service = EpubExports::CreateService.new(@course, @student, :epub_export)
         expect(service.offline_export).to be_new_record
       end
@@ -61,17 +61,17 @@ describe EpubExports::CreateService do
   describe "#already_running?" do
     context "when user has an active epub_export" do
       before(:once) do
-        @course.epub_exports.create(user: @student).export_without_send_later
+        @course.epub_exports.create(user: @student).export(synchronous: true)
         @service = EpubExports::CreateService.new(@course, @student, :epub_export)
       end
 
-      it "should return true" do
+      it "returns true" do
         expect(@service.already_running?).to be_truthy
       end
     end
 
     context "when user doesn't have an active epub_export" do
-      it "should return true" do
+      it "returns true" do
         service = EpubExports::CreateService.new(@course, @student, :epub_export)
         expect(service.already_running?).to be_falsey
       end
@@ -80,11 +80,11 @@ describe EpubExports::CreateService do
     context "when user has an active epub_export and starts a web_zip_export" do
       before(:once) do
         @epub_export = @course.epub_exports.create(user: @student)
-        @epub_export.export_without_send_later
+        @epub_export.export(synchronous: true)
         @service = EpubExports::CreateService.new(@course, @student, :web_zip_export)
       end
 
-      it "should return false" do
+      it "returns false" do
         expect(@service.already_running?).to be_falsey
       end
     end

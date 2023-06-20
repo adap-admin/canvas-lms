@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -39,7 +41,6 @@ class Mutations::PostAssignmentGrades < Mutations::BaseMutation
     end
 
     verify_authorized_action!(assignment, :grade)
-    raise GraphQL::ExecutionError, "Post Policies feature not enabled" unless course.post_policies_enabled?
 
     unless assignment.grades_published?
       raise GraphQL::ExecutionError, "Assignments under moderation cannot be posted before grades are published"
@@ -51,28 +52,34 @@ class Mutations::PostAssignmentGrades < Mutations::BaseMutation
     end
 
     if input[:only_student_ids] && input[:skip_student_ids]
-      raise GraphQL::ExecutionError, I18n.t("{a} and {b} cannot be used together", a: 'only_student_ids', b: 'skip_student_ids')
+      raise GraphQL::ExecutionError, I18n.t("{a} and {b} cannot be used together", a: "only_student_ids", b: "skip_student_ids")
     end
 
     visible_enrollments = course.apply_enrollment_visibility(course.student_enrollments, current_user, sections)
     visible_enrollments = visible_enrollments.where(user_id: input[:only_student_ids]) if input[:only_student_ids]
     visible_enrollments = visible_enrollments.where.not(user_id: input[:skip_student_ids]) if input[:skip_student_ids]
 
-    submissions_scope = input[:graded_only] ? assignment.submissions.graded : assignment.submissions
+    submissions_scope = input[:graded_only] ? assignment.submissions.postable : assignment.submissions
     submissions_scope = submissions_scope.joins(user: :enrollments).merge(visible_enrollments)
-
     submission_ids = submissions_scope.pluck(:id)
     progress = course.progresses.new(tag: "post_assignment_grades")
+
+    posting_params = {
+      graded_only: !!input[:graded_only],
+      section_names: sections&.pluck(:name)
+    }
 
     if progress.save
       progress.process_job(
         assignment,
         :post_submissions,
-        {preserve_method_args: true},
-        progress: progress,
-        submission_ids: submission_ids
+        { preserve_method_args: true },
+        progress:,
+        submission_ids:,
+        posting_params:,
+        skip_content_participation_refresh: false
       )
-      return {assignment: assignment, progress: progress, sections: sections}
+      { assignment:, progress:, sections: }
     else
       raise GraphQL::ExecutionError, "Error posting assignment grades"
     end

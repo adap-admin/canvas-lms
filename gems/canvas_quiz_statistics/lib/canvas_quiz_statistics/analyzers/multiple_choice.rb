@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -16,7 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 module CanvasQuizStatistics::Analyzers
-  require 'canvas_quiz_statistics/analyzers/essay'
+  require "canvas_quiz_statistics/analyzers/essay"
 
   # Generates statistics for a set of student responses to a multiple-choice
   # question.
@@ -66,13 +68,10 @@ module CanvasQuizStatistics::Analyzers
       answers = parse_answers do |answer, answer_stats|
         stats = {
           responses: 0,
+          user_ids: [],
           user_names: []
         }
-
-        if answer[:text].blank? && answer[:html].present?
-          stats[:text] = CanvasQuizStatistics::Util.strip_tags(answer[:html])
-        end
-
+        stats[:text] = answer[:html] if answer[:text].blank? && answer[:html].present?
         answer_stats.merge!(stats)
       end
 
@@ -83,12 +82,12 @@ module CanvasQuizStatistics::Analyzers
 
     # Can't have the UnknownAnswer for this question type since students only
     # get to pick one of the pre-defined choices.
-    def answer_present_but_unknown?(*args)
+    def answer_present_but_unknown?(*)
       false
     end
 
-    def locate_answer(response, answers, *args)
-      answers.detect { |a| "#{a[:id]}" == "#{response[:answer_id]}" }
+    def locate_answer(response, answers, *)
+      answers.detect { |a| a[:id].to_s == response[:answer_id].to_s }
     end
 
     def answer_present?(response)

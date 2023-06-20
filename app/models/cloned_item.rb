@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -18,9 +20,17 @@
 
 class ClonedItem < ActiveRecord::Base
   belongs_to :original_item, polymorphic:
-      [:attachment, :content_tag, :folder, :assignment, :wiki_page,
-       :discussion_topic, :context_module, :calendar_event, :assignment_group,
-       :context_external_tool, { quiz: 'Quizzes::Quiz' }]
+      [:attachment,
+       :content_tag,
+       :folder,
+       :assignment,
+       :wiki_page,
+       :discussion_topic,
+       :context_module,
+       :calendar_event,
+       :assignment_group,
+       :context_external_tool,
+       { quiz: "Quizzes::Quiz" }]
   has_many :attachments, -> { order(:id) }
   has_many :discussion_topics, -> { order(:id) }
   has_many :wiki_pages, -> { order(:id) }

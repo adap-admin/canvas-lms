@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,57 +18,72 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/../../views_helper')
+require_relative "../../views_helper"
 
-describe '/quizzes/quizzes/take_quiz' do
-  it 'should render' do
+describe "quizzes/quizzes/take_quiz" do
+  it "renders" do
     course_with_student
     view_context
-    quiz = assign(:quiz, @course.quizzes.create!(description: 'Hello'))
+    quiz = assign(:quiz, @course.quizzes.create!(description: "Hello"))
     sub = assign(:submission, quiz.generate_submission(@user))
     assign(:quiz_presenter, Quizzes::TakeQuizPresenter.new(
-      quiz,
-      sub,
-      params
-    ))
-    render 'quizzes/quizzes/take_quiz'
-    doc = Nokogiri::HTML(response.body)
-    expect(doc.css('#quiz-instructions').first.content.strip).to eq 'Hello'
+                              quiz,
+                              sub,
+                              params
+                            ))
+    render "quizzes/quizzes/take_quiz"
+    doc = Nokogiri::HTML5(response.body)
+    expect(doc.css("#quiz-instructions").first.content.strip).to eq "Hello"
     expect(response).not_to be_nil
   end
 
-  it 'should render preview alert for unpublished quiz' do
+  it "renders preview alert for unpublished quiz" do
     course_with_student
     view_context
     quiz = assign(:quiz, @course.quizzes.create!)
     sub = assign(:submission, quiz.generate_submission(@user))
-    sub.update_attribute(:workflow_state, 'preview')
+    sub.update_attribute(:workflow_state, "preview")
     assign(:quiz_presenter, Quizzes::TakeQuizPresenter.new(
-      quiz,
-      sub,
-      params
-    ))
-    render 'quizzes/quizzes/take_quiz'
+                              quiz,
+                              sub,
+                              params
+                            ))
+    render "quizzes/quizzes/take_quiz"
 
-    expect(response).to include 'preview of the draft version'
+    expect(response).to include "preview of the draft version"
   end
 
-  it 'should render preview alert for published quiz' do
+  it "renders preview alert for published quiz" do
     course_with_student
     view_context
     quiz = @course.quizzes.create!
     quiz.publish!
     assign(:quiz, quiz)
     sub = assign(:submission, quiz.generate_submission(@user))
-    sub.update_attribute(:workflow_state, 'preview')
+    sub.update_attribute(:workflow_state, "preview")
     assign(:quiz_presenter, Quizzes::TakeQuizPresenter.new(
-      quiz,
-      sub,
-      params
-    ))
-    render 'quizzes/quizzes/take_quiz'
+                              quiz,
+                              sub,
+                              params
+                            ))
+    render "quizzes/quizzes/take_quiz"
 
-    expect(response).to include 'preview of the published version'
+    expect(response).to include "preview of the published version"
+  end
+
+  it "renders timer_autosubmit_disabled value in template" do
+    course_with_student
+    view_context
+    quiz = assign(:quiz, @course.quizzes.create!(description: "Hello"))
+    sub = assign(:submission, quiz.generate_submission(@user))
+    assign(:quiz_presenter, Quizzes::TakeQuizPresenter.new(
+                              quiz,
+                              sub,
+                              params
+                            ))
+    render "quizzes/quizzes/take_quiz"
+    doc = Nokogiri::HTML5(response.body)
+    expect(doc.css(".timer_autosubmit_disabled").first.content.strip).not_to be_nil
+    expect(response).not_to be_nil
   end
 end

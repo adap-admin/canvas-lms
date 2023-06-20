@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,8 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-shared_examples_for 'Mailbox' do
-
+shared_examples_for "Mailbox" do
   describe "Mailbox interface" do
     it { is_expected.to respond_to :connect }
     it { is_expected.to respond_to :each_message }

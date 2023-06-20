@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,12 +18,11 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/messages_helper')
+require_relative "messages_helper"
 
-describe 'new_account_user' do
+describe "new_account_user" do
   before :once do
-    account = Account.create!(:name => "some account", :settings => {:outgoing_email_default_name => "Custom From"})
+    account = Account.create!(name: "some account", settings: { outgoing_email_default_name: "Custom From" })
     user_model
     @account_user = account.account_users.create!(user: @user)
   end
@@ -34,7 +35,7 @@ describe 'new_account_user' do
   context ".email" do
     let(:path_type) { :email }
 
-    it "should use the custom From: setting" do
+    it "uses the custom From: setting" do
       msg = generate_message(notification_name, path_type, asset)
       msg.save
       expect(msg.from_name).to eq "Custom From"

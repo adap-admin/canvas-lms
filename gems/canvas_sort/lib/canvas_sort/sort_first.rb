@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -36,7 +38,7 @@ module CanvasSort
     end
 
     def inspect
-      'CanvasSort::First'
+      "CanvasSort::First"
     end
 
     # when coercing, we're inverting the operation, so invert the result
@@ -47,4 +49,3 @@ module CanvasSort
 
   First = FirstClass.new
 end
-

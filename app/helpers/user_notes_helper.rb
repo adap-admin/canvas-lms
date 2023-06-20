@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -17,14 +19,14 @@
 #
 
 module UserNotesHelper
-  def pageless(total_pages, url=nil)
-    js_env :user_note_list_pageless_options => {
-      :totalPages => total_pages,
-      :url        => url,
-      :loaderHtml => '
+  def pageless(total_pages, url = nil)
+    js_env user_note_list_pageless_options: {
+      totalPages: total_pages,
+      url:,
+      loaderHtml: '
 <div id="pageless-loader" style="display:none;text-align:center;width:100%;">
-  <div class="msg" style="color: #666;font-size:2em">' + t('#user_notes.messages.loading_more', "Loading more entries") + '</div>
-  <img src="/images/load.gif" title="load" alt="' + t('#user_notes.tooltips.loading_more', "loading more results") + '" style="margin: 10px auto" />
+  <div class="msg" style="color: #666;font-size:2em">' + t("#user_notes.messages.loading_more", "Loading more entries") + '</div>
+  <img src="/images/load.gif" title="load" alt="' + t("#user_notes.tooltips.loading_more", "loading more results") + '" style="margin: 10px auto" />
 </div>'
     }
   end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -16,25 +18,16 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../sharding_spec_helper.rb')
-require_dependency 'lti/tool_consumer_profile'
-
-
 module Lti
   describe ToolConsumerProfile do
-
-
     describe ".cached_find_by_developer_key" do
-
       context "unsharded" do
-
         it "finds the tool_consumer_profile" do
           account = Account.create!
           dev_key = account.developer_keys.create!
           tcp = dev_key.create_tool_consumer_profile!
           expect(ToolConsumerProfile.cached_find_by_developer_key(dev_key.id)).to eq tcp
         end
-
       end
 
       context "sharded" do
@@ -54,7 +47,6 @@ module Lti
           end
         end
 
-
         it "caches the tool consumer profile" do
           enable_cache do
             @shard2.activate do
@@ -67,8 +59,7 @@ module Lti
     end
 
     describe "clear_cache" do
-
-      it 'clears the cache after update' do
+      it "clears the cache after update" do
         enable_cache do
           account = Account.create!
           dev_key = account.developer_keys.create!
@@ -76,17 +67,15 @@ module Lti
           tcp = ToolConsumerProfile.cached_find_by_developer_key(dev_key.id)
           tcp.services = ToolConsumerProfile::RESTRICTED_SERVICES
           tcp.save!
-          expect(MultiCache.fetch(ToolConsumerProfile.cache_key(dev_key.id))).to eq nil
+          expect(MultiCache.fetch(ToolConsumerProfile.cache_key(dev_key.id))).to be_nil
         end
       end
-
-
     end
 
-    describe 'restricted services' do
+    describe "restricted services" do
       it "includes 'vnd.Canvas.OriginalityReport'" do
         service = Lti::ToolConsumerProfile::RESTRICTED_SERVICES.find do |s|
-          s[:id].include? 'vnd.Canvas.submission'
+          s[:id].include? "vnd.Canvas.submission"
         end
 
         expect(service).not_to be_nil
@@ -95,11 +84,10 @@ module Lti
       it "includes 'vnd.Canvas.User'" do
         expect(
           Lti::ToolConsumerProfile::RESTRICTED_SERVICES.any? do |s|
-            s[:id].include? 'vnd.Canvas.User'
+            s[:id].include? "vnd.Canvas.User"
           end
         ).to be_truthy
       end
     end
-
   end
 end

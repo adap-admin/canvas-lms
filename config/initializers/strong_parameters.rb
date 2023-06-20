@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -22,7 +24,7 @@ end
 module ArbitraryStrongishParams
   ANYTHING = Object.new.freeze
 
-  def initialize(attributes = {})
+  def initialize(...)
     @anythings = {}.with_indifferent_access
     super
   end
@@ -39,23 +41,21 @@ module ArbitraryStrongishParams
     slice(*filter.keys).each do |key, value|
       next unless value
 
-      if filter[key] == ActionController::Parameters::EMPTY_ARRAY
+      case filter[key]
+      when ActionController::Parameters::EMPTY_ARRAY
         # Declaration { comment_ids: [] }.
         array_of_permitted_scalars?(self[key]) do |val|
           params[key] = val
         end
-      elsif filter[key] == ANYTHING
-        if filtered = recursive_arbitrary_filter(value)
+      when ANYTHING
+        if (filtered = recursive_arbitrary_filter(value))
           params[key] = filtered
           params.instance_variable_get(:@anythings)[key] = true
         end
       else
         # Declaration { user: :name } or { user: [:name, :age, { address: ... }] }.
-        params[key] = each_element(value) do |element|
-          if element.is_a?(Hash) || element.is_a?(ActionController::Parameters)
-            element = self.class.new(element) unless element.respond_to?(:permit)
-            element.permit(*Array.wrap(filter[key]))
-          end
+        params[key] = each_element(value, filter[key]) do |element|
+          element.permit(*Array.wrap(filter[key]))
         end
       end
     end
@@ -73,7 +73,7 @@ module ArbitraryStrongishParams
       value.each do |v|
         if permitted_scalar?(v)
           arr << v
-        elsif filtered = recursive_arbitrary_filter(v)
+        elsif (filtered = recursive_arbitrary_filter(v))
           arr << filtered
         end
       end
@@ -85,6 +85,7 @@ module ArbitraryStrongishParams
 
   def convert_hashes_to_parameters(key, value, *args)
     return value if @anythings.key?(key)
+
     super
   end
 
@@ -100,8 +101,4 @@ ActionController::Base.class_eval do
   def strong_anything
     ArbitraryStrongishParams::ANYTHING
   end
-end
-
-ActionController::ParameterMissing.class_eval do
-  def skip_error_report?; true; end
 end

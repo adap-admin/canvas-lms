@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -20,16 +22,15 @@
 
 PactConfig::Consumers::ALL.each do |consumer|
   Pact.provider_states_for consumer do
-
-    provider_state 'content migration data' do
+    provider_state "content migration data" do
       set_up do
         course = Pact::Canvas.base_state.course
         content_migration_item = ContentMigration.create(
           context: course,
-          workflow_state: 'imported',
+          workflow_state: "imported",
           migration_settings: {
             imported_assets: {
-              lti_assignment_quiz_set: [[ 11, 111]]
+              lti_assignment_quiz_set: [[11, 111]]
             },
             import_quizzes_next: true,
             import_immediately: true,
@@ -43,15 +44,15 @@ PactConfig::Consumers::ALL.each do |consumer|
               }
             }
           },
-          migration_type: 'common_cartridge_importer',
+          migration_type: "common_cartridge_importer",
           progress: 100
         )
         content_migration_item.save!
         content_migration_item.attachment = Attachment.create!(
           context: content_migration_item,
-          filename: 'text.txt',
+          filename: "text.txt",
           uploaded_data: StringIO.new("test file"),
-          content_type: 'binary/octet-stream'
+          content_type: "binary/octet-stream"
         )
         content_migration_item.save!
       end

@@ -16,45 +16,48 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React, {useState} from 'react'
-import {bool, func, shape, string} from 'prop-types'
-import {PresentationContent, ScreenReaderContent} from '@instructure/ui-a11y'
-import {Button,CloseButton} from '@instructure/ui-buttons'
+import React, {useState, useEffect} from 'react'
+import {bool, func, number, shape, string} from 'prop-types'
+import {Button, CloseButton} from '@instructure/ui-buttons'
 
-import {Heading} from '@instructure/ui-elements'
-import {Checkbox, RadioInput, RadioInputGroup, Select, TextArea} from '@instructure/ui-forms'
-import {IconQuestionLine} from '@instructure/ui-icons'
-import {Flex, View} from '@instructure/ui-layout'
-import {Tooltip, Tray} from '@instructure/ui-overlays'
+import {Heading} from '@instructure/ui-heading'
+import {Flex} from '@instructure/ui-flex'
+import {Tray} from '@instructure/ui-tray'
 
+import {CUSTOM, MIN_HEIGHT, MIN_WIDTH, MIN_PERCENTAGE, scaleToSize} from '../ImageEmbedOptions'
 import formatMessage from '../../../../format-message'
-
-function labelForImageSize(imageSize) {
-  switch (imageSize) {
-    case 'small': {
-      return formatMessage('Small')
-    }
-    case 'medium': {
-      return formatMessage('Medium')
-    }
-    case 'large': {
-      return formatMessage('Large')
-    }
-    default: {
-      return formatMessage('Custom')
-    }
-  }
-}
+import {useDimensionsState} from '../../shared/DimensionsInput'
+import ImageOptionsForm from '../../shared/ImageOptionsForm'
+import {getTrayHeight, isExternalUrl} from '../../shared/trayUtils'
+import validateURL from '../../instructure_links/validateURL'
+import UrlPanel from '../../shared/Upload/UrlPanel'
+import {instuiPopupMountNode} from '../../../../util/fullscreenHelpers'
 
 export default function ImageOptionsTray(props) {
-  const {imageOptions, onRequestClose, open} = props
+  const {imageOptions, onEntered, onExited, onRequestClose, onSave, open, isIconMaker} = props
 
+  const {naturalHeight, naturalWidth, isLinked} = imageOptions
+  const currentHeight = imageOptions.appliedHeight || naturalHeight
+  const currentWidth = imageOptions.appliedWidth || naturalWidth
+
+  const [url, setUrl] = useState(imageOptions.url)
+  const [showUrlField, setShowUrlField] = useState(false)
   const [altText, setAltText] = useState(imageOptions.altText)
   const [isDecorativeImage, setIsDecorativeImage] = useState(imageOptions.isDecorativeImage)
   const [displayAs, setDisplayAs] = useState('embed')
-  const [imageSize, setImageSize] = useState('medium')
+  const [imageSize, setImageSize] = useState(imageOptions.imageSize)
+  const [imageHeight, setImageHeight] = useState(currentHeight)
+  const [imageWidth, setImageWidth] = useState(currentWidth)
 
-  const imageSizeOption = {label: labelForImageSize(imageSize), value: imageSize}
+  const dimensionsState = useDimensionsState(imageOptions, {
+    minHeight: MIN_HEIGHT,
+    minWidth: MIN_WIDTH,
+    minPercentage: MIN_PERCENTAGE,
+  })
+
+  function handleUrlChange(newUrl) {
+    setUrl(newUrl)
+  }
 
   function handleAltTextChange(event) {
     setAltText(event.target.value)
@@ -70,134 +73,142 @@ export default function ImageOptionsTray(props) {
 
   function handleImageSizeChange(event, selectedOption) {
     setImageSize(selectedOption.value)
+    if (selectedOption.value === CUSTOM) {
+      setImageHeight(currentHeight)
+      setImageWidth(currentWidth)
+    } else {
+      const {height, width} = scaleToSize(selectedOption.value, naturalWidth, naturalHeight)
+      setImageHeight(height)
+      setImageWidth(width)
+    }
   }
 
   function handleSave(event) {
     event.preventDefault()
     const savedAltText = isDecorativeImage ? '' : altText
-    props.onSave({altText: savedAltText, displayAs, imageSize, isDecorativeImage})
+
+    let appliedHeight = imageHeight
+    let appliedWidth = imageWidth
+    if (imageSize === CUSTOM) {
+      if (dimensionsState.usePercentageUnits) {
+        appliedHeight = `${dimensionsState.percentage}%`
+        appliedWidth = `${dimensionsState.percentage}%`
+      } else {
+        appliedHeight = dimensionsState.height
+        appliedWidth = dimensionsState.width
+      }
+    }
+
+    onSave({
+      url,
+      altText: savedAltText,
+      appliedHeight,
+      appliedWidth,
+      displayAs,
+      isDecorativeImage,
+    })
   }
 
-  const tooltipText = formatMessage('Used by screen readers to describe the content of an image')
-  const textAreaLabel = (
-    <Flex alignItems="center">
-      <Flex.Item>{formatMessage('Alt Text')}</Flex.Item>
+  useEffect(() => {
+    if (isIconMaker) {
+      setShowUrlField(false)
+      return
+    }
 
-      <Flex.Item margin="0 0 0 xx-small">
-          <Tooltip
-            on={['hover', 'focus']}
-            placement="top"
-            tip={
-              <View display="block" id="alt-text-label-tooltip" maxWidth="14rem">
-                {tooltipText}
-              </View>
-            }
-          >
-            <Button icon={IconQuestionLine} size="small" variant="icon">
-              <ScreenReaderContent>{tooltipText}</ScreenReaderContent>
-            </Button>
-          </Tooltip>
-      </Flex.Item>
-    </Flex>
-  )
+    let isValidURL
+    try {
+      isValidURL = validateURL(url)
+    } catch (error) {
+      isValidURL = false
+    } finally {
+      setShowUrlField(isValidURL ? isExternalUrl(url) : true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [url])
+
+  const messagesForSize = []
+  if (imageSize !== CUSTOM) {
+    messagesForSize.push({
+      text: formatMessage('{width} x {height}px', {height: imageHeight, width: imageWidth}),
+      type: 'hint',
+    })
+  }
+
+  const disableForIcons = isIconMaker && !isDecorativeImage && altText === ''
+  const disableForImages =
+    url === '' ||
+    (displayAs === 'embed' &&
+      ((!isDecorativeImage && altText === '') ||
+        (imageSize === CUSTOM && !dimensionsState?.isValid)))
+  const saveDisabled = isIconMaker ? disableForIcons : disableForImages
+
+  const trayLabel = isIconMaker
+    ? formatMessage('Icon Options Tray')
+    : formatMessage('Image Options Tray')
+  const trayHeading = isIconMaker ? formatMessage('Icon Options') : formatMessage('Image Options')
 
   return (
     <Tray
-      data-mce-component
-      label={formatMessage('Image Options Tray')}
+      data-mce-component={true}
+      label={trayLabel}
+      mountNode={instuiPopupMountNode}
       onDismiss={onRequestClose}
-      onEntered={props.onEntered}
-      onExited={props.onExited}
+      onEntered={onEntered}
+      onExited={onExited}
       open={open}
       placement="end"
-      shouldCloseOnDocumentClick
-      shouldContainFocus
-      shouldReturnFocus
+      shouldCloseOnDocumentClick={true}
+      shouldContainFocus={true}
+      shouldReturnFocus={true}
     >
-      <Flex direction="column" height="100vh">
+      <Flex direction="column" height={getTrayHeight()}>
         <Flex.Item as="header" padding="medium">
           <Flex direction="row">
-            <Flex.Item grow shrink>
-              <Heading as="h2">{formatMessage('Image Options')}</Heading>
+            <Flex.Item shouldGrow={true} shouldShrink={true}>
+              <Heading as="h2">{trayHeading}</Heading>
             </Flex.Item>
 
             <Flex.Item>
-              <CloseButton onClick={onRequestClose}>{formatMessage('Close')}</CloseButton>
+              <CloseButton
+                color="primary"
+                onClick={onRequestClose}
+                screenReaderLabel={formatMessage('Close')}
+              />
             </Flex.Item>
           </Flex>
         </Flex.Item>
 
-        <Flex.Item as="form" grow margin="none" shrink>
+        <Flex.Item as="form" shouldGrow={true} margin="none" shouldShrink={true}>
           <Flex justifyItems="space-between" direction="column" height="100%">
-            <Flex.Item grow padding="small" shrink>
-              <Flex direction="column">
+            <Flex direction="column">
+              {showUrlField && (
                 <Flex.Item padding="small">
-                  <TextArea
-                    aria-describedby="alt-text-label-tooltip"
-                    disabled={isDecorativeImage || displayAs === 'link'}
-                    height="4rem"
-                    label={textAreaLabel}
-                    onChange={handleAltTextChange}
-                    placeholder={formatMessage('(Describe the image)')}
-                    resize="vertical"
-                    value={altText}
-                  />
+                  <UrlPanel fileUrl={url} setFileUrl={handleUrlChange} />
                 </Flex.Item>
-
-                <Flex.Item padding="small">
-                  <Checkbox
-                    checked={isDecorativeImage}
-                    disabled={displayAs === 'link'}
-                    label={formatMessage('No Alt Text (Decorative Image)')}
-                    onChange={handleIsDecorativeChange}
-                  />
-                </Flex.Item>
-
-                <Flex.Item margin="small none none none" padding="small">
-                  <RadioInputGroup
-                    description={formatMessage('Display Options')}
-                    name="display-image-as"
-                    onChange={handleDisplayAsChange}
-                    value={displayAs}
-                  >
-                    <RadioInput label={formatMessage('Embed Image')} value="embed" />
-
-                    <RadioInput
-                      label={formatMessage('Display Text Link (Opens in a new tab)')}
-                      value="link"
-                    />
-                  </RadioInputGroup>
-                </Flex.Item>
-
-                <Flex.Item margin="small none none none" padding="small">
-                  <Select
-                    label={formatMessage('Size')}
-                    onChange={handleImageSizeChange}
-                    selectedOption={imageSizeOption}
-                  >
-                    <option value="small">{labelForImageSize('small')}</option>
-
-                    <option value="medium">{labelForImageSize('medium')}</option>
-
-                    <option value="large">{labelForImageSize('large')}</option>
-
-                    <option value="custom">{labelForImageSize('custom')}</option>
-                  </Select>
-                </Flex.Item>
-              </Flex>
-            </Flex.Item>
-
+              )}
+              <ImageOptionsForm
+                id="image-options-form"
+                imageSize={imageSize}
+                displayAs={displayAs}
+                isDecorativeImage={isDecorativeImage}
+                altText={altText}
+                isLinked={isLinked}
+                dimensionsState={dimensionsState}
+                handleAltTextChange={handleAltTextChange}
+                handleIsDecorativeChange={handleIsDecorativeChange}
+                handleDisplayAsChange={handleDisplayAsChange}
+                handleImageSizeChange={handleImageSizeChange}
+                messagesForSize={messagesForSize}
+                isIconMaker={isIconMaker}
+              />
+            </Flex>
             <Flex.Item
-              background="light"
+              background="secondary"
               borderWidth="small none none none"
               padding="small medium"
               textAlign="end"
             >
-              <Button
-                disabled={!isDecorativeImage && altText === '' && displayAs === 'embed'}
-                onClick={handleSave}
-                variant="primary"
-              >
+              <Button disabled={saveDisabled} onClick={handleSave} color="primary">
                 {formatMessage('Done')}
               </Button>
             </Flex.Item>
@@ -211,16 +222,23 @@ export default function ImageOptionsTray(props) {
 ImageOptionsTray.propTypes = {
   imageOptions: shape({
     altText: string.isRequired,
-    isDecorativeImage: bool.isRequired
+    appliedHeight: number,
+    appliedWidth: number,
+    isDecorativeImage: bool.isRequired,
+    isLinked: bool,
+    naturalHeight: number.isRequired,
+    naturalWidth: number.isRequired,
   }).isRequired,
   onEntered: func,
   onExited: func,
   onRequestClose: func.isRequired,
   onSave: func.isRequired,
-  open: bool.isRequired
+  open: bool.isRequired,
+  isIconMaker: bool,
 }
 
 ImageOptionsTray.defaultProps = {
   onEntered: null,
-  onExited: null
+  onExited: null,
+  isIconMaker: false,
 }

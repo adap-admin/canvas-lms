@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -15,13 +17,13 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require File.expand_path(File.dirname(__FILE__) + '/../common')
-require File.expand_path(File.dirname(__FILE__) + '/groups_common')
+require_relative "../common"
+require_relative "groups_common"
 
 module AssignmentsCommon
   include GroupsCommon
 
-  def build_assignment_with_type(type, opts={})
+  def build_assignment_with_type(type, opts = {})
     if opts[:assignment_group_id]
       assignment_group_id = opts[:assignment_group_id]
     else
@@ -49,12 +51,12 @@ module AssignmentsCommon
       wait_for_ajaximations
     end
     if opts[:more_options]
-      fj('.more_options:visible').click
+      fj(".more_options:visible").click
       wait_for_ajaximations
     end
   end
 
-  def edit_assignment(assignment_id, opts={})
+  def edit_assignment(assignment_id, opts = {})
     f("#assignment_#{assignment_id} .al-trigger").click
     f("#assignment_#{assignment_id} .edit_assignment").click
 
@@ -75,7 +77,7 @@ module AssignmentsCommon
       wait_for_ajaximations
     end
     if opts[:more_options]
-      fj('.more_options:visible').click
+      fj(".more_options:visible").click
       wait_for_ajaximations
     end
   end
@@ -86,7 +88,7 @@ module AssignmentsCommon
     wait_for_ajaximations
   end
 
-  def delete_assignment_group(assignment_group_id, opts={})
+  def delete_assignment_group(assignment_group_id, opts = {})
     f("#assignment_group_#{assignment_group_id} .al-trigger").click
     f("#assignment_group_#{assignment_group_id} .delete_group").click
     unless opts[:no_accept]
@@ -96,12 +98,12 @@ module AssignmentsCommon
   end
 
   def submit_assignment_form
-    wait_for_new_page_load { f('#edit_assignment_form .btn-primary[type=submit]').click }
+    wait_for_new_page_load { f("#edit_assignment_form .btn-primary[type=submit]").click }
   end
 
   def stub_freezer_plugin(frozen_atts = nil)
     frozen_atts ||= {
-        "assignment_group_id" => "true"
+      "assignment_group_id" => "true"
     }
     allow(PluginSetting).to receive(:settings_for_plugin).and_return(frozen_atts)
   end
@@ -109,10 +111,10 @@ module AssignmentsCommon
   def frozen_assignment(group)
     group ||= @course.assignment_groups.first
     assign = @course.assignments.create!(
-      :name => "frozen",
-      :due_at => Time.zone.now.utc + 2.days,
-      :assignment_group => group,
-      :freeze_on_copy => true
+      name: "frozen",
+      due_at: Time.zone.now.utc + 2.days,
+      assignment_group: group,
+      freeze_on_copy: true
     )
     assign.copied = true
     assign.save!
@@ -127,14 +129,14 @@ module AssignmentsCommon
     submit_assignment_form
   end
 
-  def manually_create_assignment(assignment_title = 'new assignment')
+  def manually_create_assignment(assignment_title = "new assignment")
     # directly navigate via url
     get "/courses/#{@course.id}/assignments/new"
-    replace_content(f('#assignment_name'), assignment_title)
+    replace_content(f("#assignment_name"), assignment_title)
   end
 
   def click_away_accept_alert
-    f('#section-tabs .home').click
+    f("#section-tabs .home").click
     driver.switch_to.alert.accept
   end
 
@@ -149,32 +151,32 @@ module AssignmentsCommon
     @assignment.lock_at   = @lock_at
     @assignment.save!
     # 2 course sections, student in second section.
-    @section1 = @course.course_sections.create!(:name => 'Section A')
-    @section2 = @course.course_sections.create!(:name => 'Section B')
+    @section1 = @course.course_sections.create!(name: "Section A")
+    @section2 = @course.course_sections.create!(name: "Section B")
     @course.student_enrollments.each do |enrollment|
       Score.where(enrollment_id: enrollment).each(&:destroy_permanently!)
       enrollment.destroy_permanently! # get rid of existing student enrollments, mess up section enrollment
     end
     # Overridden lock dates for 2nd section - different dates, but still in future
     @override = assignment_override_model(
-      :assignment => @assignment,
-      :set => @section2,
-      :lock_at => @lock_at + 12.days,
-      :unlock_at => Time.zone.now.utc + 3.days
+      assignment: @assignment,
+      set: @section2,
+      lock_at: @lock_at + 12.days,
+      unlock_at: Time.zone.now.utc + 3.days
     )
   end
 
   def create_assignment_for_group(submission_type, grade_group_students_individually = false)
-    group_test_setup(2,1,2)
-    add_user_to_group(@students.first,@testgroup[0])
+    group_test_setup(2, 1, 2)
+    add_user_to_group(@students.first, @testgroup[0])
     @assignment = @course.assignments.create!(
-      title: 'assignment 1',
-      name: 'assignment 1',
+      title: "assignment 1",
+      name: "assignment 1",
       due_at: Time.zone.now.utc + 2.days,
       points_possible: 50,
       submission_types: submission_type,
       group_category: @group_category[0],
-      grade_group_students_individually: grade_group_students_individually
+      grade_group_students_individually:
     )
   end
 
@@ -185,64 +187,63 @@ module AssignmentsCommon
 
   def create_assignment_preparation
     get "/courses/#{@course.id}/assignments/new"
-    f('#assignment_name').send_keys('my title')
-    type_in_tiny('textarea[name=description]', 'text')
-    f('#assignment_text_entry').click
+    f("#assignment_name").send_keys("my title")
+    type_in_tiny("textarea[name=description]", "text")
+    f("#assignment_text_entry").click
   end
 
   def select_assignment_group_category(id)
-    f('#has_group_category').click
-    options = ff('#assignment_group_category_id option')
+    f("#has_group_category").click
+    options = ff("#assignment_group_category_id option")
     option_element = id.blank? ? options.first : options[id]
     option_element.click
   end
 
   def create_file_list
     {
-      name: '/',
+      name: "/",
       folders: [
         {
-          name: 'TestFolder',
+          name: "TestFolder",
           files: [
             {
-              name: 'nested.mydoc'
+              name: "nested.mydoc"
             }
           ]
         }
       ],
       files: [
         {
-          name: 'test.mydoc'
+          name: "test.mydoc"
         }
       ]
     }
   end
 
   def create_post_grades_tool(opts = {})
-    post_grades_tool = @course.context_external_tools.create!(
-      name: opts[:name] || 'test tool',
-      domain: 'example.com',
-      url: 'http://example.com/lti',
-      consumer_key: 'key',
-      shared_secret: 'secret',
+    @course.context_external_tools.create!(
+      name: opts[:name] || "test tool",
+      domain: "example.com",
+      url: "http://example.com/lti",
+      consumer_key: "key",
+      shared_secret: "secret",
       settings: {
         post_grades: {
-          url: 'http://example.com/lti/post_grades'
+          url: "http://example.com/lti/post_grades"
         }
       }
     )
-    post_grades_tool
   end
 
   def click_cog_to_edit
-    ff('.al-trigger')[2].click
+    ff(".al-trigger")[2].click
     wait_for_ajaximations
-    f('.edit_assignment').click
+    f(".edit_assignment").click
     wait_for_ajaximations
   end
 
-  def create_assignment_with_type(type, title = 'My Title')
-    @assignment = @course.assignments.create!(title: title, grading_type: type, points_possible: 20)
+  def create_assignment_with_type(type, title = "My Title")
+    @assignment = @course.assignments.create!(title:, grading_type: type, points_possible: 20)
     @assignment
   end
 end

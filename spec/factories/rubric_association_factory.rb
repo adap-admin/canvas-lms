@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -17,18 +19,17 @@
 #
 
 module Factories
-  def rubric_association_model(opts={})
+  def rubric_association_model(opts = {})
     course = (opts[:context] if opts[:context].is_a? Course) || @course || course_model(reusable: true)
     context = opts[:context] || course
-    @rubric = opts[:rubric] || rubric_model(context: context)
+    @rubric = opts[:rubric] || rubric_model(context:)
     @rubric_association_object = opts[:association_object] ||
-      course.assignments.first ||
-      course.assignments.create!(assignment_valid_attributes)
-    @rubric_association = @rubric.rubric_associations.create!(valid_rubric_assessment_attributes.merge(:association_object =>  @rubric_association_object, context: context, :purpose => opts[:purpose] || "none"))
+                                 course.assignments.first ||
+                                 course.assignments.create!(assignment_valid_attributes)
+    @rubric_association = @rubric.rubric_associations.create!(valid_rubric_assessment_attributes.merge(association_object: @rubric_association_object, context:, purpose: opts[:purpose] || "none"))
   end
 
   def valid_rubric_assessment_attributes
-    {
-    }
+    {}
   end
 end

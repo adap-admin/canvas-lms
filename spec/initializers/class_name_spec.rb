@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -15,13 +17,11 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require File.expand_path('../spec_helper', File.dirname( __FILE__ ))
-
 describe Module do
-  describe '#class_name' do
-    it 'returns the name of the class or module' do
-      expect(subject).to receive(:name).and_return('Deeply::Nested::ClassName')
-      expect(subject.class_name).to eq('ClassName')
+  describe "#class_name" do
+    it "returns the name of the class or module" do
+      expect(subject).to receive(:name).and_return("Deeply::Nested::ClassName")
+      expect(subject.class_name).to eq("ClassName")
     end
   end
 end

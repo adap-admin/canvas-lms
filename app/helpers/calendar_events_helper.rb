@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -17,7 +19,6 @@
 #
 
 module CalendarEventsHelper
-
   # Return the user to a "return_to" path or to the calendar with specific dates used.
   #
   # ==== Options
@@ -30,13 +31,13 @@ module CalendarEventsHelper
     cal_options = {}
     event = options.delete(:event)
     if event
-      cal_options[:anchor] = {:month => (event.try_rescue(:start_at).try_rescue(:month)),
-                              :year => (event.try_rescue(:start_at).try_rescue(:year))}.to_json
+      cal_options[:anchor] = { month: event.try_rescue(:start_at).try_rescue(:month),
+                               year: event.try_rescue(:start_at).try_rescue(:year) }.to_json
     end
     # Use a explicit "return_to" option first, absent that, use calendar_url_for
     clean_return_to(
-        params[:return_to] && params[:return_to].match(/calendar/) && params[:return_to]) ||
-        calendar_url_for(options[:context], cal_options)
+      params[:return_to]&.include?("calendar") && params[:return_to]
+    ) ||
+      calendar_url_for(options[:context], cal_options)
   end
-
 end

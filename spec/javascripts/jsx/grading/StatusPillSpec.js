@@ -18,8 +18,8 @@
 
 import 'react'
 import ReactDOM from 'react-dom'
-import Pill from '@instructure/ui-elements/lib/components/Pill'
-import StatusPill from 'jsx/grading/StatusPill'
+import {Pill} from '@instructure/ui-pill'
+import StatusPill from '@canvas/grading-status-pill'
 
 const wrapper = document.getElementById('fixtures')
 
@@ -35,10 +35,10 @@ QUnit.module('StatusPill', {
   },
   tearDown() {
     wrapper.innerHTML = ''
-  }
+  },
 })
 
-test('renderPills mounts a <Pill /> with correct text to each .submission-missing-pill', function() {
+test('renderPills mounts a <Pill /> with correct text to each .submission-missing-pill', () => {
   const stubbedRender = sandbox.stub(ReactDOM, 'render')
   const spans = [1, 2, 3].map(() => addSpan('submission-missing-pill'))
   StatusPill.renderPills()
@@ -47,12 +47,12 @@ test('renderPills mounts a <Pill /> with correct text to each .submission-missin
 
   calls.forEach((call, idx) => {
     equal(call.args[0].type, Pill)
-    equal(call.args[0].props.text, 'missing')
+    equal(call.args[0].props.children, 'missing')
     equal(call.args[1], spans[idx])
   })
 })
 
-test('renderPills mounts a <Pill /> with correct text to each .submission-late-pill', function() {
+test('renderPills mounts a <Pill /> with correct text to each .submission-late-pill', () => {
   const stubbedRender = sandbox.stub(ReactDOM, 'render')
   const spans = [1, 2, 3].map(() => addSpan('submission-late-pill'))
   StatusPill.renderPills()
@@ -61,7 +61,21 @@ test('renderPills mounts a <Pill /> with correct text to each .submission-late-p
 
   calls.forEach((call, idx) => {
     equal(call.args[0].type, Pill)
-    equal(call.args[0].props.text, 'late')
+    equal(call.args[0].props.children, 'late')
+    equal(call.args[1], spans[idx])
+  })
+})
+
+test('renderPills mounts a <Pill /> with correct text to each .submission-excused-pill', () => {
+  const stubbedRender = sandbox.stub(ReactDOM, 'render')
+  const spans = [1, 2, 3].map(() => addSpan('submission-excused-pill'))
+  StatusPill.renderPills()
+
+  const calls = spans.map((_span, idx) => stubbedRender.getCall(idx))
+
+  calls.forEach((call, idx) => {
+    equal(call.args[0].type, Pill)
+    equal(call.args[0].props.children, 'excused')
     equal(call.args[1], spans[idx])
   })
 })

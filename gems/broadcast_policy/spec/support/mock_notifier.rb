@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -17,18 +19,18 @@
 
 class MockNotifier
   attr_reader :messages
-  
+
   def initialize
     @messages = []
   end
 
   def send_notification(record, dispatch, notification, recipients, data = nil)
     @messages << {
-      record: record,
-      dispatch: dispatch,
-      notification: notification,
-      recipients: recipients,
-      data: data
+      record:,
+      dispatch:,
+      notification:,
+      recipients:,
+      data:
     }
   end
 end

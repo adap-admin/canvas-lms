@@ -1,5 +1,5 @@
-# encoding: UTF-8
-#
+# frozen_string_literal: true
+
 # Copyright (C) 2013 - present Instructure, Inc.
 #
 # This file is part of Canvas.
@@ -17,39 +17,36 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper.rb')
-
-shared_examples_for 'Takeable Quiz Services' do
-
-  it 'should deny access to locked quizzes' do
+shared_examples_for "Takeable Quiz Services" do
+  it "denies access to locked quizzes" do
     allow(quiz).to receive(:locked_for?).and_return(true)
-    allow(quiz).to receive(:grants_right?).
-      with(anything, anything, :manage).and_return(false)
+    allow(quiz).to receive(:grants_right?)
+      .with(anything, anything, :manage).and_return(false)
 
     expect { service_action.call }.to raise_error(RequestError, /is locked/i)
   end
 
-  it 'should validate the access code' do
-    quiz.access_code = 'adooken'
+  it "validates the access code" do
+    quiz.access_code = "adooken"
 
     expect { service_action.call }.to raise_error(RequestError, /access code/i)
   end
 
-  it 'should accept a valid access code' do
-    participant.access_code = quiz.access_code = 'adooken'
+  it "accepts a valid access code" do
+    participant.access_code = quiz.access_code = "adooken"
 
     expect { service_action.call }.to_not raise_error
   end
 
-  it 'should validate the IP address of the participant' do
-    quiz.ip_filter = '10.0.0.1/24'
-    participant.ip_address = '192.168.0.1'
+  it "validates the IP address of the participant" do
+    quiz.ip_filter = "10.0.0.1/24"
+    participant.ip_address = "192.168.0.1"
 
     expect { service_action.call }.to raise_error(RequestError, /ip address/i)
   end
 
-  it 'should accept a covered IP' do
-    participant.ip_address = quiz.ip_filter = '10.0.0.1'
+  it "accepts a covered IP" do
+    participant.ip_address = quiz.ip_filter = "10.0.0.1"
 
     expect { service_action.call }.to_not raise_error
   end
@@ -60,36 +57,36 @@ describe Quizzes::QuizSubmissionService do
 
   let :quiz do
     quiz = Quizzes::Quiz.new
-    quiz.workflow_state = 'available'
+    quiz.workflow_state = "available"
     quiz
   end
 
   let :participant do
-    Quizzes::QuizParticipant.new(User.new, 'some temporary user code')
+    Quizzes::QuizParticipant.new(User.new, "some temporary user code")
   end
 
-  describe '#create' do
-    before :each do
+  describe "#create" do
+    before do
       # consume all calls to actual QS generation, no need to test this
       allow(quiz).to receive(:generate_submission)
     end
 
-    context 'as an authentic user' do
-      before :each do
+    context "as an authentic user" do
+      before do
         allow(quiz).to receive(:grants_right?).and_return true
       end
 
       let :service_action do
-        lambda { |*_| subject.create quiz }
+        ->(*_) { subject.create quiz }
       end
 
-      include_examples 'Takeable Quiz Services'
+      include_examples "Takeable Quiz Services"
 
-      it 'should create a QS' do
+      it "creates a QS" do
         expect { subject.create quiz }.to_not raise_error
       end
 
-      context 'retrying a quiz' do
+      context "retrying a quiz" do
         let :retriable_qs do
           qs = Quizzes::QuizSubmission.new
           allow(qs).to receive(:retriable?).and_return true
@@ -102,7 +99,7 @@ describe Quizzes::QuizSubmissionService do
           qs
         end
 
-        it 'should regenerate when possible' do
+        it "regenerates when possible" do
           expect(Quizzes::QuizSubmission).to receive(:for_participant).with(participant) { double(first: retriable_qs) }
 
           expect do
@@ -110,7 +107,7 @@ describe Quizzes::QuizSubmissionService do
           end.to_not raise_error
         end
 
-        it 'should not regenerate if the QS is not retriable' do
+        it "does not regenerate if the QS is not retriable" do
           expect(Quizzes::QuizSubmission).to receive(:for_participant).with(participant) { double(first: unretriable_qs) }
 
           expect do
@@ -118,9 +115,9 @@ describe Quizzes::QuizSubmissionService do
           end.to raise_error(RequestError, /already exists/i)
         end
 
-        it 'should work with multiple sections' do
-          active_course_section   = CourseSection.new(start_at:Time.zone.now - 3.days, end_at:Time.zone.now + 3.days, restrict_enrollments_to_section_dates:true)
-          inactive_course_section = CourseSection.new(start_at:Time.zone.now - 6.days, end_at:Time.zone.now - 3.days, restrict_enrollments_to_section_dates:true)
+        it "works with multiple sections" do
+          active_course_section   = CourseSection.new(start_at: 3.days.ago, end_at: 3.days.from_now, restrict_enrollments_to_section_dates: true)
+          inactive_course_section = CourseSection.new(start_at: 6.days.ago, end_at: 3.days.ago, restrict_enrollments_to_section_dates: true)
 
           quiz.context = Account.default.courses.new
 
@@ -141,20 +138,20 @@ describe Quizzes::QuizSubmissionService do
       end
     end
 
-    context 'as an anonymous participant' do
-      before :each do
+    context "as an anonymous participant" do
+      before do
         participant.user = nil
-        quiz.context = Account.default.courses.new
+        quiz.context = Account.default.courses.new.tap { |c| c.root_account = Account.default }
       end
 
-      it 'should allow taking a quiz in a public course' do
+      it "allows taking a quiz in a public course" do
         allow(quiz).to receive(:grants_right?).and_return true
         quiz.context.is_public = true
 
         expect { subject.create quiz }.to_not raise_error
       end
 
-      it 'should deny access otherwise' do
+      it "denies access otherwise" do
         expect do
           subject.create quiz
         end.to raise_error(RequestError, /not allowed to participate/i)
@@ -162,8 +159,8 @@ describe Quizzes::QuizSubmissionService do
     end
   end
 
-  describe '#create_preview' do
-    it 'should utilize the user code instead of the user' do
+  describe "#create_preview" do
+    it "utilizes the user code instead of the user" do
       expect(quiz).to receive(:generate_submission).with(participant.user_code, true)
       allow(quiz).to receive(:grants_right?).and_return true
 
@@ -171,7 +168,7 @@ describe Quizzes::QuizSubmissionService do
     end
   end
 
-  describe '#complete' do
+  describe "#complete" do
     let :qs do
       qs = Quizzes::QuizSubmission.new
       qs.attempt = 1
@@ -179,46 +176,46 @@ describe Quizzes::QuizSubmissionService do
       qs
     end
 
-    context 'as the participant' do
-      before :each do
+    context "as the participant" do
+      before do
         allow(quiz).to receive(:grants_right?).and_return true
       end
 
       let :service_action do
-        lambda { |*_| subject.complete qs, qs.attempt }
+        ->(*_) { subject.complete qs, qs.attempt }
       end
 
-      include_examples 'Takeable Quiz Services'
+      include_examples "Takeable Quiz Services"
 
-      it 'should complete the QS' do
+      it "completes the QS" do
         expect do
           subject.complete qs, qs.attempt
         end.to_not raise_error
       end
 
-      it 'should reject an invalid attempt' do
+      it "rejects an invalid attempt" do
         expect do
-          subject.complete qs, 'hi'
+          subject.complete qs, "hi"
         end.to raise_error(RequestError, /invalid attempt/)
       end
 
-      it 'should reject completing an old attempt' do
+      it "rejects completing an old attempt" do
         expect do
           subject.complete qs, 0
         end.to raise_error(RequestError, /attempt 0 can not be modified/)
       end
 
-      it 'should reject an invalid validation_token' do
-        qs.validation_token = 'yep'
-        participant.validation_token = 'nope'
+      it "rejects an invalid validation_token" do
+        qs.validation_token = "yep"
+        participant.validation_token = "nope"
 
         expect do
           subject.complete qs, qs.attempt
         end.to raise_error(RequestError, /invalid token/)
       end
 
-      it 'should require the QS to be untaken' do
-        qs.workflow_state = 'complete'
+      it "requires the QS to be untaken" do
+        qs.workflow_state = "complete"
 
         expect do
           subject.complete qs, qs.attempt
@@ -227,7 +224,7 @@ describe Quizzes::QuizSubmissionService do
     end
   end
 
-  describe '#update_question' do
+  describe "#update_question" do
     let :qs do
       qs = Quizzes::QuizSubmission.new
       qs.attempt = 1
@@ -237,24 +234,24 @@ describe Quizzes::QuizSubmissionService do
       qs
     end
 
-    context 'as the participant' do
-      before :each do
+    context "as the participant" do
+      before do
         allow(quiz).to receive(:grants_right?).and_return true
       end
 
       let :service_action do
-        lambda { |*_| subject.update_question({}, qs, qs.attempt) }
+        ->(*_) { subject.update_question({}, qs, qs.attempt) }
       end
 
-      include_examples 'Takeable Quiz Services'
+      include_examples "Takeable Quiz Services"
 
-      it 'should update a question' do
+      it "updates a question" do
         expect do
           subject.update_question({ question_5_marked: true }, qs, qs.attempt)
         end.to_not raise_error
       end
 
-      it 'should reject when the QS is complete' do
+      it "rejects when the QS is complete" do
         allow(qs).to receive(:completed?).and_return true
 
         expect do
@@ -263,10 +260,10 @@ describe Quizzes::QuizSubmissionService do
       end
     end
 
-    context 'as someone else' do
-      it 'should deny access' do
-        quiz.context = Course.new
+    context "as someone else" do
+      it "denies access" do
         participant.user = nil
+        quiz.context = Account.default.courses.new.tap { |c| c.root_account = Account.default }
 
         expect do
           subject.complete qs, qs.attempt
@@ -275,7 +272,7 @@ describe Quizzes::QuizSubmissionService do
     end
   end
 
-  describe '#update_scores' do
+  describe "#update_scores" do
     let :qs do
       qs = Quizzes::QuizSubmission.new
       qs.attempt = 1
@@ -283,8 +280,8 @@ describe Quizzes::QuizSubmissionService do
       qs
     end
 
-    context 'as a teacher' do
-      before :each do
+    context "as a teacher" do
+      before do
         allow(qs).to receive(:grants_right?).with(participant.user, :update_scores).and_return true
       end
 
@@ -296,9 +293,9 @@ describe Quizzes::QuizSubmissionService do
         end
       end
 
-      it 'should update the scores' do
+      it "updates the scores" do
         expect_version_object
-        qs.workflow_state = 'complete'
+        qs.workflow_state = "complete"
         expect(qs).to receive(:update_scores)
 
         expect do
@@ -308,9 +305,9 @@ describe Quizzes::QuizSubmissionService do
         end.to_not raise_error
       end
 
-      it 'should generate the correct "legacy" format' do
+      it 'generates the correct "legacy" format' do
         expect_version_object
-        qs.workflow_state = 'complete'
+        qs.workflow_state = "complete"
         expect(qs).to receive(:update_scores).with({
           "submission_version_number" => qs.attempt,
           "fudge_points" => 2.0,
@@ -334,7 +331,7 @@ describe Quizzes::QuizSubmissionService do
         }
       end
 
-      it 'should require a valid attempt' do
+      it "requires a valid attempt" do
         allow(qs.versions).to receive(:get).and_return nil
 
         expect do
@@ -342,41 +339,41 @@ describe Quizzes::QuizSubmissionService do
         end.to raise_error(RequestError, /invalid attempt/i)
       end
 
-      it 'should require a complete attempt' do
+      it "requires a complete attempt" do
         expect_version_object
         expect do
           subject.update_scores qs, qs.attempt, {}
         end.to raise_error(RequestError, /attempt must be complete/i)
       end
 
-      it 'should reject a bad score' do
+      it "rejects a bad score" do
         expect_version_object
-        qs.workflow_state = 'complete'
+        qs.workflow_state = "complete"
 
         expect do
           subject.update_scores qs, qs.attempt, {
             questions: {
-              "1" => { score: [ 'adooken' ] }
+              "1" => { score: ["adooken"] }
             }
           }
         end.to raise_error(RequestError, /must be an unsigned decimal/i)
       end
 
-      it 'should be a no-op if no changes are requested' do
+      it "is a no-op if no changes are requested" do
         expect_version_object
-        qs.workflow_state = 'complete'
-        expect(qs).to receive(:update_scores).never
+        qs.workflow_state = "complete"
+        expect(qs).not_to receive(:update_scores)
 
         subject.update_scores qs, qs.attempt, {}
       end
     end
 
-    context 'as someone else' do
-      before :each do
+    context "as someone else" do
+      before do
         allow(qs).to receive(:grants_right?).with(participant.user, :update_scores).and_return false
       end
 
-      it 'should deny access' do
+      it "denies access" do
         expect do
           subject.update_scores qs, qs.attempt, {}
         end.to raise_error(RequestError, /not allowed/i)

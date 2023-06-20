@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -15,38 +17,39 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'active_support/all'
+require "active_support/all"
 
 module CanvasTime
   module ClassMethods
-    def _load args
+    def _load(args)
       return super unless args.starts_with?("pre1900:")
+
       # 8 puts us after the colon in "pre1900:"
-      iso8601(args[8..-1])
+      iso8601(args[8..])
     end
   end
 
   # set to 11:59pm if it's 12:00am
   def self.fancy_midnight(time)
     return time if time.nil? || time.hour != 0 || time.min != 0
+
     time.end_of_day
   end
 
   def self.is_fancy_midnight?(time)
     return false unless time
+
     time.hour == 23 && time.min == 59
   end
 
-  def self.try_parse(maybe_time, default=nil)
-    begin
-      Time.zone.parse(maybe_time) || default
-    rescue
-      default
-    end
+  def self.try_parse(maybe_time, default = nil)
+    Time.zone.parse(maybe_time) || default
+  rescue
+    default
   end
 
   def utc_datetime
-    timestamp = self.getutc
+    timestamp = getutc
     DateTime.civil(timestamp.year,
                    timestamp.month,
                    timestamp.day,
@@ -70,6 +73,7 @@ module CanvasTime
   # This applies to TimeWithZone as well, since that object just stores a (Time, Zone) tuple.
   def _dump(_level)
     return super if year >= 1900
+
     "pre1900:#{iso8601}"
   end
 end

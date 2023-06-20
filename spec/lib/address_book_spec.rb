@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -15,25 +17,9 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper.rb')
-
 describe AddressBook do
   describe "for" do
     it "returns an instance of AddressBook::MessageableUser for 'messageable_user' strategy" do
-      plugin = double(settings: {strategy: 'messageable_user'})
-      allow(Canvas::Plugin).to receive(:find).and_return(plugin)
-      expect(AddressBook.for(user_model)).to be_a(AddressBook::MessageableUser)
-    end
-
-    it "returns an instance of AddressBook::Empty for 'empty' strategy" do
-      plugin = double(settings: {strategy: 'empty'})
-      allow(Canvas::Plugin).to receive(:find).and_return(plugin)
-      expect(AddressBook.for(user_model)).to be_a(AddressBook::Empty)
-    end
-
-    it "defaults to an instance of AddressBook::MessageableUser for invalid strategy" do
-      plugin = double(settings: {strategy: 'invalid'})
-      allow(Canvas::Plugin).to receive(:find).and_return(plugin)
       expect(AddressBook.for(user_model)).to be_a(AddressBook::MessageableUser)
     end
 
@@ -62,10 +48,10 @@ describe AddressBook do
 
   describe "partition_recipients" do
     it "splits individuals from contexts" do
-      recipients = ['123', 'course_456']
+      recipients = ["123", "course_456"]
       individuals, contexts = AddressBook.partition_recipients(recipients)
       expect(individuals).to eql([123])
-      expect(contexts).to eql(['course_456'])
+      expect(contexts).to eql(["course_456"])
     end
   end
 
@@ -78,8 +64,8 @@ describe AddressBook do
     end
 
     it "restricts to available users" do
-      recipient = user_model(workflow_state: 'available') # available
-      other = user_model(workflow_state: 'deleted') # unavailable
+      recipient = user_model(workflow_state: "available") # available
+      other = user_model(workflow_state: "deleted") # unavailable
       available = AddressBook.available([recipient, other])
       expect(available.map(&:id)).to eql([recipient.id])
     end

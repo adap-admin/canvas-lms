@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -17,13 +19,11 @@
 
 module Lti
   class ReRegConstraint
-
-    RE_REG_HEADER = 'VND-IMS-CONFIRM-URL'.freeze
+    RE_REG_HEADER = "VND-IMS-CONFIRM-URL"
 
     def matches?(request)
       request.headers[RE_REG_HEADER].present? &&
-          request.format == 'json'
+        request.format == "json"
     end
-
   end
 end

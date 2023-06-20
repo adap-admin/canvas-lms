@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -46,14 +48,14 @@ module LtiOutbound
       if resource_type && settings[resource_type.to_sym]
         fields << (settings[resource_type.to_sym][:custom_fields] || {})
       end
-      fields.each { |field_set| hash.merge!(format_lti_params('custom', field_set)) }
+      fields.each { |field_set| hash.merge!(format_lti_params("custom", field_set)) }
       nil
     end
 
     def format_lti_params(prefix, params)
       params.each_with_object({}) do |(k, v), hash|
-        key = k.to_s.gsub(/[^\w]/, '_').downcase
-        if key.match(/^#{prefix}_/)
+        key = k.to_s.gsub(/[^\w]/, "_").downcase
+        if key.match?(/^#{prefix}_/)
           hash[key] = v
         else
           hash["#{prefix}_#{key}"] = v
@@ -71,24 +73,25 @@ module LtiOutbound
 
     private
 
-    #Duplicated in ContextExternalTool
+    # Duplicated in ContextExternalTool
     def extension_setting(type, property = nil)
       type = type.to_sym
       return settings[type] unless property
+
       (settings[type] && settings[type][property]) || settings[property] || extension_default_value(property)
     end
 
-    #Duplicated in ContextExternalTool
+    # Duplicated in ContextExternalTool
     def extension_default_value(property)
       case property
-        when :url
-          url
-        when :selection_width
-          800
-        when :selection_height
-          400
-        else
-          nil
+      when :url
+        url
+      when :selection_width
+        800
+      when :selection_height
+        400
+      else
+        nil
       end
     end
   end

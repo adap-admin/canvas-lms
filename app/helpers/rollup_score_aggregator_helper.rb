@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -19,24 +21,24 @@ module RollupScoreAggregatorHelper
   def aggregate_score
     scores = present_scores
     agg_score = scores.empty? ? nil : (scores.sum.to_f / scores.size).round(2)
-    {score: agg_score, results: score_sets.pluck(:result)}
+    { score: agg_score, results: score_sets.pluck(:result) }
   end
 
   def median_aggregate_score
     scores = present_scores
     sorted = scores.sort
-    median = scores.empty? ? nil : (sorted[(sorted.size - 1)/2] + sorted[sorted.size/2]) / 2.0
-    {score: median, results: score_sets.pluck(:result)}
+    median = scores.empty? ? nil : (sorted[(sorted.size - 1) / 2] + sorted[sorted.size / 2]) / 2.0
+    { score: median, results: score_sets.pluck(:result) }
   end
 
   private
 
   def present_scores
-    score_sets.pluck(:score).reject(&:nil?)
+    score_sets.pluck(:score).compact
   end
 
   def latest_result
-    latest_result = @outcome_results.max_by{|result| result_time(result) }
+    latest_result = @outcome_results.max_by { |result| result_time(result) }
     @submitted_at = latest_result.submitted_at || latest_result.assessed_at
     @title = @submitted_at ? latest_result.title.split(", ")[1] : nil
   end
@@ -46,7 +48,7 @@ module RollupScoreAggregatorHelper
   end
 
   def scaled_score_from_result(result)
-    if ['decaying_average', 'latest'].include?(@calculation_method)
+    if %w[decaying_average latest average].include?(@calculation_method)
       result_aggregates = get_aggregates(result)
       alignment_aggregate_score(result_aggregates)
     else
@@ -57,7 +59,7 @@ module RollupScoreAggregatorHelper
   def retrieve_scores(results)
     results.map do |result|
       score = quiz_score?(result) ? scaled_score_from_result(result) : result_score(result)
-      {score: score, result: result}
+      { score:, result: }
     end
   end
 
@@ -66,38 +68,39 @@ module RollupScoreAggregatorHelper
   end
 
   def sorted_results
-    @sorted_results ||= @outcome_results.sort_by {|result| result_time(result)}
+    @sorted_results ||= @outcome_results.sort_by { |result| result_time(result) }
   end
 
   def get_aggregates(result)
-    @outcome_results.reduce({total: 0.0, weighted: 0.0}) do |aggregate, lor|
-      if is_match?(result, lor) && lor.possible
-        aggregate[:total] += lor.possible
-        begin
-          aggregate[:weighted] += lor.possible * lor.percent
-        rescue NoMethodError, TypeError => e
-          Canvas::Errors.capture_exception(:missing_percent_or_points_possible, e)
-          raise e
-        end
+    @outcome_results.each_with_object({ total: 0.0, weighted: 0.0 }) do |lor, aggregate|
+      next unless is_match?(result, lor) && lor.possible
+
+      aggregate[:total] += lor.possible
+      begin
+        aggregate[:weighted] += lor.possible * lor.percent
+      rescue NoMethodError, TypeError => e
+        Canvas::Errors.capture_exception(:missing_percent_or_points_possible, e)
+        raise e
       end
-      aggregate
     end
   end
 
   def alignment_aggregate_score(result_aggregates)
     return if result_aggregates[:total] == 0
-    possible = @points_possible > 0 ? @points_possible : @mastery_points
+
+    possible = (@points_possible > 0) ? @points_possible : @mastery_points
     (result_aggregates[:weighted] / result_aggregates[:total]) * possible
   end
 
   def is_match?(current_result, compared_result)
     (current_result.association_id == compared_result.association_id) &&
-    (current_result.learning_outcome_id == compared_result.learning_outcome_id) &&
-    (current_result.association_type == compared_result.association_type)
+      (current_result.learning_outcome_id == compared_result.learning_outcome_id) &&
+      (current_result.association_type == compared_result.association_type)
   end
 
   def result_score(result)
     return result.score unless result.try(:percent)
+
     if @points_possible > 0
       result.percent * @points_possible
     else
@@ -108,11 +111,11 @@ module RollupScoreAggregatorHelper
   def score_sets
     @score_sets || begin
       case @calculation_method
-      when 'decaying_average'
+      when "decaying_average"
         @score_sets = retrieve_scores(@aggregate ? @outcome_results : sorted_results)
-      when 'n_mastery', 'highest'
+      when "n_mastery", "highest", "average"
         @score_sets = retrieve_scores(@outcome_results)
-      when 'latest'
+      when "latest"
         @score_sets = retrieve_scores(@aggregate ? @outcome_results : [sorted_results.last])
       end
     end

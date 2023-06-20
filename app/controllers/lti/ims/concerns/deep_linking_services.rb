@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -15,11 +17,23 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-module Lti::Ims::Concerns
+module Lti::IMS::Concerns
   module DeepLinkingServices
     extend ActiveSupport::Concern
 
-    CLAIM_PREFIX = 'https://purl.imsglobal.org/spec/lti-dl/claim/'.freeze
+    CLAIM_PREFIX = "https://purl.imsglobal.org/spec/lti-dl/claim/"
+
+    def return_url_parameters
+      @return_url_parameters ||= return_url_data.data
+    end
+
+    def return_url_data
+      @return_url_data ||= Lti::DeepLinkingData.from_jwt(params[:data])
+    end
+
+    def validate_return_url_data
+      return render_error({ errors: return_url_data.errors }) unless return_url_data.valid?
+    end
 
     def validate_jwt
       render_error(deep_linking_jwt.errors) and return unless deep_linking_jwt.valid?
@@ -30,12 +44,32 @@ module Lti::Ims::Concerns
     end
 
     def render_error(errors)
+      InstStatsd::Statsd.increment("canvas.deep_linking_controller.request_error", tags: { code: 400 })
       render json: errors, status: :bad_request
     end
 
     def messaging_value(type)
-      value = deep_linking_jwt["#{CLAIM_PREFIX}#{type}"]
-      value.presence
+      deep_linking_jwt["#{CLAIM_PREFIX}#{type}"].presence&.to_s
+    end
+
+    def content_items
+      @content_items ||= deep_linking_jwt["#{CLAIM_PREFIX}content_items"] || []
+    end
+
+    def client_id
+      deep_linking_jwt.developer_key
+    end
+
+    def tool
+      @tool ||= ContextExternalTool.find_active_external_tool_by_client_id(client_id, @context)
+    end
+
+    def lti_resource_links
+      content_items.filter { |item| item[:type] == "ltiResourceLink" }
+    end
+
+    def for_placement?(placement)
+      return_url_parameters[:placement]&.to_sym == placement
     end
 
     class DeepLinkingJwt
@@ -48,33 +82,36 @@ module Lti::Ims::Concerns
         @context = context
       end
 
-      def [](key)
-        verified_jwt[key]
+      delegate :[], to: :verified_jwt
+
+      def developer_key
+        @developer_key ||= DeveloperKey.find_cached(client_id)
       end
 
       private
 
       def verified_jwt
         @verified_jwt ||= begin
-          if developer_key&.public_jwk_url.present?
-            jwt_hash = get_jwk_from_url
-          else
-            jwt_hash = JSON::JWT.decode(@raw_jwt_str, public_key)
-          end
+          jwt_hash = if developer_key&.public_jwk_url.present?
+                       get_jwk_from_url
+                     else
+                       JSON::JWT.decode(@raw_jwt_str, public_key)
+                     end
           standard_claim_errors(jwt_hash)
           developer_key_errors
-          return if @errors.present?
+          return if @errors.present? # rubocop:disable Lint/NoReturnInBeginEndBlocks
+
           jwt_hash
         rescue JSON::JWT::InvalidFormat
-          errors.add(:jwt, 'JWT format is invalid')
+          errors.add(:jwt, "JWT format is invalid")
         rescue JSON::JWS::UnexpectedAlgorithm
-          errors.add(:jwt, 'JWT has unexpected alg')
+          errors.add(:jwt, "JWT has unexpected alg")
         rescue JSON::JWS::VerificationFailed
-          errors.add(:jwt, 'JWT verification failure')
+          errors.add(:jwt, "JWT verification failure")
         rescue JSON::JWT::Exception
-          errors.add(:jwt, 'JWT exception')
+          errors.add(:jwt, "JWT exception")
         rescue ActiveRecord::RecordNotFound
-          errors.add(:jwt, 'Client not found')
+          errors.add(:jwt, "Client not found")
         end
       end
 
@@ -90,14 +127,14 @@ module Lti::Ims::Concerns
         hash = jwt_hash.dup
 
         # The nonce and jti share the same purpose here
-        hash['jti'] = hash['nonce']
+        hash["jti"] = hash["nonce"]
 
         # Temporarily make the client ID the sub
-        hash['sub'] = hash['iss']
+        hash["sub"] = hash["iss"]
 
         validator = Canvas::Security::JwtValidator.new(
           jwt: hash,
-          expected_aud: Canvas::Security.config['lti_iss'],
+          expected_aud: Canvas::Security.config["lti_iss"],
           require_iss: true,
           skip_jti_check: true
         )
@@ -109,21 +146,17 @@ module Lti::Ims::Concerns
 
       def developer_key_errors
         account = @context.respond_to?(:account) ? @context.account : @context
-        errors.add(:developer_key, 'Developer key inactive in context') unless developer_key.binding_on_in_account?(account)
-        errors.add(:developer_key, 'Developer key inactive') unless developer_key.workflow_state == 'active'
-      end
-
-      def developer_key
-        @developer_key ||= DeveloperKey.find_cached(client_id)
+        errors.add(:developer_key, "Developer key inactive in context") unless developer_key.binding_on_in_account?(account)
+        errors.add(:developer_key, "Developer key inactive") unless developer_key.workflow_state == "active"
       end
 
       def client_id
-        @client_id ||= JSON::JWT.decode(@raw_jwt_str, :skip_verification)['iss']
+        @client_id ||= JSON::JWT.decode(@raw_jwt_str, :skip_verification)["iss"]
       end
 
       def public_key
         @public_key ||= begin
-            public_jwk = developer_key&.public_jwk
+          public_jwk = developer_key&.public_jwk
           JSON::JWK.new(public_jwk) if public_jwk.present?
         end
       end

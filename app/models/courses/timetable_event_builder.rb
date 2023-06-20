@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -20,11 +22,13 @@ module Courses
     # builds calendar events for a course (or course sections) according to a timetable
 
     attr_reader :course, :course_section, :event_context, :errors
+
     def initialize(course: nil, course_section: nil)
       raise "require course" unless course
+
       @course = course
       @course_section = course_section
-      @event_context = course_section ? course_section : course
+      @event_context = course_section || course
     end
 
     # generates individual events from a simplified "timetable" between the course/section start and end dates
@@ -54,7 +58,7 @@ module Courses
             event_end_at = time_zone.parse("#{current_date} #{timetable_hash[:end_time]}")
 
             if event_start_at > course_start_at && event_end_at < course_end_at
-              event_hash = {:start_at => event_start_at, :end_at => event_end_at}
+              event_hash = { start_at: event_start_at, end_at: event_end_at }
               event_hash[:location_name] = location_name if location_name
               event_hashes << event_hash
             end
@@ -69,64 +73,77 @@ module Courses
     # with :start_at, :end_at required
     # and optionally :location_name (other attributes could be added here if so desired)
     # :code can be used to give it a unique identifier for syncing (otherwise will be generated based on the times)
+    # :title can be used to give a title to the event (otherwise a the name of the associated course will be used)
     def create_or_update_events(event_hashes)
-      timetable_codes = event_hashes.map{|h| h[:code]}
+      timetable_codes = event_hashes.pluck(:code)
       raise "timetable codes can't be blank" if timetable_codes.any?(&:blank?)
 
       # destroy unused events
-      event_context.calendar_events.active.for_timetable.where.not(:timetable_code => timetable_codes).
-        update_all(:workflow_state => 'deleted', :deleted_at => Time.now.utc)
+      event_context.calendar_events.active.for_timetable.where.not(timetable_code: timetable_codes)
+                   .update_all(workflow_state: "deleted", deleted_at: Time.now.utc)
 
-      existing_events = event_context.calendar_events.where(:timetable_code => timetable_codes).to_a.index_by(&:timetable_code)
+      existing_events = event_context.calendar_events.where(timetable_code: timetable_codes).to_a.index_by(&:timetable_code)
       event_hashes.each do |event_hash|
         CalendarEvent.unique_constraint_retry do |retry_count|
           code = event_hash[:code]
-          event = event_context.calendar_events.where(:timetable_code => code).first if retry_count > 0
+          event = event_context.calendar_events.where(timetable_code: code).first if retry_count > 0
           event ||= existing_events[code] || create_new_event(event_hash)
           sync_event(event, event_hash)
         end
       end
     end
 
-    ALLOWED_TIMETABLE_KEYS = [:weekdays, :course_start_at, :course_end_at, :start_time, :end_time, :location_name]
+    ALLOWED_TIMETABLE_KEYS = %i[weekdays course_start_at course_end_at start_time end_time location_name].freeze
     def process_and_validate_timetables(timetable_hashes)
       timetable_hashes.each do |hash|
         hash.slice!(*ALLOWED_TIMETABLE_KEYS)
       end
-      unless timetable_hashes.all?{|hash|  Time.parse(hash[:start_time]) rescue nil}
+      unless timetable_hashes.all? { |hash| Time.parse(hash[:start_time]) rescue nil }
         add_error("invalid start time(s)") # i'm too lazy to be more specific
       end
-      unless timetable_hashes.all?{|hash| Time.parse(hash[:end_time]) rescue nil}
+      unless timetable_hashes.all? { |hash| Time.parse(hash[:end_time]) rescue nil }
         add_error("invalid end time(s)")
       end
 
-      default_start_at = (course_section && course_section.start_at) || course.start_at || course.enrollment_term.start_at
-      default_end_at = (course_section && course_section.end_at) || course.conclude_at || course.enrollment_term.end_at
+      default_start_at = course_section&.start_at || course.start_at || course.enrollment_term.start_at
+      default_end_at = course_section&.end_at || course.conclude_at || course.enrollment_term.end_at
 
       timetable_hashes.each do |hash|
         hash[:course_start_at] ||= default_start_at
         hash[:course_end_at] ||= default_end_at
         hash[:weekdays] = standardize_weekdays_string(hash[:weekdays])
       end
-      add_error("no start date found") unless timetable_hashes.all?{|hash| hash[:course_start_at]}
-      add_error("no end date found") unless timetable_hashes.all?{|hash| hash[:course_end_at]}
+      add_error("no start date found") unless timetable_hashes.all? { |hash| hash[:course_start_at] }
+      add_error("no end date found") unless timetable_hashes.all? { |hash| hash[:course_end_at] }
     end
 
     def process_and_validate_event_hashes(event_hashes)
-      add_error("start_at and end_at are required") unless event_hashes.all?{|h| h[:start_at] && h[:end_at]}
+      add_error("start_at and end_at are required") unless event_hashes.all? { |h| h[:start_at] && h[:end_at] }
 
       event_hashes.each do |event_hash|
         event_hash[:code] ||= generate_timetable_code_for(event_hash) # ensure timetable codes
       end
-      timetable_codes = event_hashes.map{|h| h[:code]}
+      timetable_codes = event_hashes.pluck(:code)
       add_error("events (or codes) are not unique") unless timetable_codes.uniq.count == timetable_codes.count # too lazy to be specific here too
     end
 
     protected
 
     WEEKDAY_STR_MAP = {
-      'sunday' => 'Sun', 'monday' => 'Mon', 'tuesday' => 'Tue', 'wednesday' => 'Wed', 'thursday' => 'Thu', 'friday' => 'Fri', 'saturday' => 'Sat',
-      'su' => 'Sun', 'm' => 'Mon', 't' => 'Tue', 'w' => 'Wed', 'th' => 'Thu', 'f' => 'Fri', 's' => 'Sat'
+      "sunday" => "Sun",
+      "monday" => "Mon",
+      "tuesday" => "Tue",
+      "wednesday" => "Wed",
+      "thursday" => "Thu",
+      "friday" => "Fri",
+      "saturday" => "Sat",
+      "su" => "Sun",
+      "m" => "Mon",
+      "t" => "Tue",
+      "w" => "Wed",
+      "th" => "Thu",
+      "f" => "Fri",
+      "s" => "Sat"
     }.freeze
     def standardize_weekdays_string(weekdays_string)
       # turn strings like "M,W" into a standard string "Mon,Wed" (for sending back to the client)
@@ -134,7 +151,7 @@ module Courses
         str = str.strip.downcase
         WEEKDAY_STR_MAP[str] || str.capitalize
       end
-      if weekday_strs.any?{|s| !WEEKDAY_TO_INT_MAP[s]}
+      if weekday_strs.any? { |s| !WEEKDAY_TO_INT_MAP[s] }
         add_error("weekdays are not valid")
         nil
       else
@@ -143,11 +160,11 @@ module Courses
     end
 
     WEEKDAY_TO_INT_MAP = {
-      'Sun' => 0, 'Mon' => 1, 'Tue' => 2, 'Wed' => 3, 'Thu' => 4, 'Fri' => 5, 'Sat' => 6
+      "Sun" => 0, "Mon" => 1, "Tue" => 2, "Wed" => 3, "Thu" => 4, "Fri" => 5, "Sat" => 6
     }.freeze
     def parse_weekdays_string(weekdays_string)
       # turn our standard string (e.g. "Tue,Thu") into an array of our special numbers
-      weekdays_string.split(",").map{|s| WEEKDAY_TO_INT_MAP[s]}
+      weekdays_string.split(",").map { |s| WEEKDAY_TO_INT_MAP[s] }
     end
 
     def create_new_event(event_hash)
@@ -160,7 +177,7 @@ module Courses
     end
 
     def sync_event(event, event_hash)
-      event.workflow_state = 'active'
+      event.workflow_state = "active"
       event.title = event_hash[:title] || course.name
       event.start_at = event_hash[:start_at]
       event.end_at = event_hash[:end_at]

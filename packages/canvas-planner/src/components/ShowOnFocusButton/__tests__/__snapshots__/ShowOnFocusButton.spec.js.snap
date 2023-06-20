@@ -4,19 +4,16 @@ exports[`renders a ScreenReaderContent by default 1`] = `
 <ScreenReaderContent
   as="span"
 >
-  <Button
+  <Link
     as="button"
-    buttonRef={[Function]}
-    cursor="pointer"
-    fluidWidth={false}
-    margin="0"
+    color="link"
+    elementRef={[Function]}
+    iconPlacement="start"
+    isWithinText={false}
     onBlur={[Function]}
     onFocus={[Function]}
-    size="medium"
-    type="button"
-    variant="link"
   >
     Button
-  </Button>
+  </Link>
 </ScreenReaderContent>
 `;

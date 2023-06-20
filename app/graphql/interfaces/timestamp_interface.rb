@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -18,7 +20,7 @@
 
 module Interfaces
   module TimestampInterface
-    include GraphQL::Schema::Interface
+    include Interfaces::BaseInterface
 
     graphql_name "Timestamped"
 

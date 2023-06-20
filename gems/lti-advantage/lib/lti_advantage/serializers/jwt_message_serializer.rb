@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -17,12 +19,12 @@
 
 module LtiAdvantage::Serializers
   class JwtMessageSerializer
-    IMS_CLAIM_PREFIX = 'https://purl.imsglobal.org/spec/lti/claim/'.freeze
-    DL_CLAIM_PREFIX = 'https://purl.imsglobal.org/spec/lti-dl/claim/'.freeze
-    NRPS_CLAIM_URL = 'https://purl.imsglobal.org/spec/lti-nrps/claim/namesroleservice'.freeze
-    AGS_CLAIM_URL = 'https://purl.imsglobal.org/spec/lti-ags/claim/endpoint'.freeze
+    IMS_CLAIM_PREFIX = "https://purl.imsglobal.org/spec/lti/claim/"
+    DL_CLAIM_PREFIX = "https://purl.imsglobal.org/spec/lti-dl/claim/"
+    NRPS_CLAIM_URL = "https://purl.imsglobal.org/spec/lti-nrps/claim/namesroleservice"
+    AGS_CLAIM_URL = "https://purl.imsglobal.org/spec/lti-ags/claim/endpoint"
 
-    STANDARD_IMS_CLAIMS = %w(
+    STANDARD_IMS_CLAIMS = %w[
       context
       custom
       deployment_id
@@ -35,15 +37,17 @@ module LtiAdvantage::Serializers
       tool_platform
       version
       target_link_uri
-    ).freeze
+      lti11_legacy_user_id
+      lti1p1
+    ].freeze
 
-    DEEP_LINKING_CLAIMS = %w(
+    DEEP_LINKING_CLAIMS = %w[
       deep_linking_settings
       content_items
-    ).freeze
+    ].freeze
 
-    NAMES_AND_ROLES_SERVICE_CLAIM = 'names_and_roles_service'.freeze
-    ASSIGNMENT_AND_GRADE_SERVICE_CLAIM = 'assignment_and_grade_service'.freeze
+    NAMES_AND_ROLES_SERVICE_CLAIM = "names_and_roles_service"
+    ASSIGNMENT_AND_GRADE_SERVICE_CLAIM = "assignment_and_grade_service"
 
     def initialize(object)
       @object = object
@@ -57,7 +61,7 @@ module LtiAdvantage::Serializers
     private
 
     def promote_extensions(hash)
-      extensions = hash.delete('extensions')
+      extensions = hash.delete("extensions")
       extensions.present? ? hash.merge(extensions) : hash
     end
 
@@ -67,9 +71,9 @@ module LtiAdvantage::Serializers
           "#{IMS_CLAIM_PREFIX}#{key}"
         elsif DEEP_LINKING_CLAIMS.include?(key)
           "#{DL_CLAIM_PREFIX}#{key}"
-        elsif NAMES_AND_ROLES_SERVICE_CLAIM == key
+        elsif key == NAMES_AND_ROLES_SERVICE_CLAIM
           NRPS_CLAIM_URL
-        elsif ASSIGNMENT_AND_GRADE_SERVICE_CLAIM == key
+        elsif key == ASSIGNMENT_AND_GRADE_SERVICE_CLAIM
           AGS_CLAIM_URL
         else
           key

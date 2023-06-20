@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -17,20 +19,19 @@
 #
 
 require_relative "../graphql_spec_helper"
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper')
 
 describe Types::MediaSourceType do
   before(:once) do
     teacher_in_course(active_all: true)
 
     @media_object = media_object(
-      user: @teacher,
+      user: @teacher
     )
   end
 
   let(:media_object_type) { GraphQLTypeTester.new(@media_object, current_user: @teacher) }
 
-  context 'with a valid media source' do
+  context "with a valid media source" do
     def resolve_media_object_field(field)
       media_object_type.resolve(
         "mediaSources {
@@ -45,14 +46,14 @@ describe Types::MediaSourceType do
           CanvasKaltura::ClientV3,
           media_sources: [
             {
-              bitrate: '644580',
-              content_type: 'video/mp4',
-              fileExt: 'mp4',
-              height: '360',
-              isOriginal: '0',
-              size: '8974',
-              url: 'https://some-cool-url.com/',
-              width: '632',
+              bitrate: "644580",
+              content_type: "video/mp4",
+              fileExt: "mp4",
+              height: "360",
+              isOriginal: "0",
+              size: "8974",
+              url: "https://some-cool-url.com/",
+              width: "632",
             },
           ]
         )
@@ -60,14 +61,14 @@ describe Types::MediaSourceType do
     end
 
     [
-      ['bitrate', '644580'],
-      ['contentType', 'video/mp4'],
-      ['fileExt', 'mp4'],
-      ['height', '360'],
-      ['isOriginal', '0'],
-      ['size', '8974'],
-      ['url', 'https://some-cool-url.com/'],
-      ['width', '632'],
+      ["bitrate", "644580"],
+      ["contentType", "video/mp4"],
+      ["fileExt", "mp4"],
+      ["height", "360"],
+      ["isOriginal", "0"],
+      ["size", "8974"],
+      ["url", "https://some-cool-url.com/"],
+      ["width", "632"],
     ].each do |key, value|
       it "returns the correct #{key} for the media source" do
         expect(resolve_media_object_field(key)).to eq([value])

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -14,8 +16,6 @@
 #
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
-
-require 'spec_helper'
 
 describe DataFixup::MoveSubAccountGradingPeriodsToCourses do
   let(:group_helper)   { Factories::GradingPeriodGroupHelper.new }
@@ -36,21 +36,21 @@ describe DataFixup::MoveSubAccountGradingPeriodsToCourses do
   end
 
   let(:legacy_group_for_sub_account) do
-    -> (sub_account) {
+    lambda do |sub_account|
       group = sub_account.grading_period_groups.build(group_helper.valid_attributes)
       group.save(validate: false)
       group
-    }
+    end
   end
 
-  before(:each) do
-    @root_account = Account.create(name: 'new account')
+  before do
+    @root_account = Account.create(name: "new account")
     @sub_account = @root_account.sub_accounts.create!
   end
 
   describe "accounts" do
     context "root accounts" do
-      before(:each) do
+      before do
         group = group_helper.create_for_account(@root_account)
         period_helper.create_with_weeks_for_group(group, 4, -4)
         run_data_fixup
@@ -68,7 +68,7 @@ describe DataFixup::MoveSubAccountGradingPeriodsToCourses do
     end
 
     context "sub accounts" do
-      before(:each) do
+      before do
         group = legacy_group_for_sub_account.call(@sub_account)
         period_helper.create_with_weeks_for_group(group, 4, -4)
         run_data_fixup
@@ -87,13 +87,13 @@ describe DataFixup::MoveSubAccountGradingPeriodsToCourses do
   end
 
   describe "sub-account courses" do
-    before(:each) do
+    before do
       @sub_account_of_sub_account = @sub_account.sub_accounts.create!
       @course = @sub_account_of_sub_account.courses.create!
     end
 
-    context " with grading periods" do
-      before(:each) do
+    context "with grading periods" do
+      before do
         group = group_helper.legacy_create_for_course(@course)
         period_helper.create_presets_for_group(group, :past, :current, :future)
         @periods_before_fixup = @course.grading_periods.to_a
@@ -210,14 +210,14 @@ describe DataFixup::MoveSubAccountGradingPeriodsToCourses do
       end
 
       context "nearest sub-account does not have grading periods, next sub-account " \
-      "does, and root account does not have grading periods" do
-        before(:each) do
+              "does, and root account does not have grading periods" do
+        before do
           sub_group = legacy_group_for_sub_account.call(@sub_account)
           period_helper.create_presets_for_group(sub_group, :current)
           run_data_fixup
         end
 
-        it "receives copies of the next 'nearest' sub-account's grading periods " do
+        it "receives copies of the next 'nearest' sub-account's grading periods" do
           expect(course_periods_attrs).to eq(sub_account_periods_attrs)
         end
 

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -16,7 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 module CanvasQuizStatistics::Analyzers
-  require 'canvas_quiz_statistics/analyzers/fill_in_multiple_blanks'
+  require "canvas_quiz_statistics/analyzers/fill_in_multiple_blanks"
 
   # Generates statistics for a set of student responses to a multiple-answers
   # question.
@@ -86,9 +88,10 @@ module CanvasQuizStatistics::Analyzers
     metric :answers do |responses|
       answers = parse_answers do |_answer, answer_stats|
         answer_stats.merge!({
-          responses: 0,
-          user_names: []
-        })
+                              responses: 0,
+                              user_ids: [],
+                              user_names: []
+                            })
       end
 
       answers.tap { calculate_responses(responses, answers) }
@@ -107,7 +110,7 @@ module CanvasQuizStatistics::Analyzers
     end
 
     def answer_ids
-      @answer_ids ||= question_data[:answers].map { |a| "#{a[:id]}" }
+      @answer_ids ||= question_data[:answers].map { |a| (a[:id]).to_s }
     end
 
     def answer_key(id)
@@ -115,7 +118,7 @@ module CanvasQuizStatistics::Analyzers
     end
 
     def chosen?(value)
-      value.to_s == '1'
+      value.to_s == "1"
     end
 
     def extract_chosen_choices(response, answers)
@@ -129,10 +132,11 @@ module CanvasQuizStatistics::Analyzers
         choices = extract_chosen_choices(response, answers, *args)
 
         if choices.empty?
-          choices = [ generate_missing_answer(answers) ]
+          choices = [generate_missing_answer(answers)]
         end
         choices.each do |answer|
           answer[:responses] += 1
+          answer[:user_ids] << response[:user_id]
           answer[:user_names] << response[:user_name]
         end
       end

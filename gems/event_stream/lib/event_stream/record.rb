@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,9 +18,9 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'securerandom'
+require "securerandom"
 
-class EventStream::Record < Struct.new(:attributes)
+EventStream::Record = Struct.new(:attributes) do
   def self.attributes(*attribute_names)
     attribute_names.each do |attribute_name|
       define_method attribute_name do
@@ -34,24 +36,29 @@ class EventStream::Record < Struct.new(:attributes)
   def initialize(*args)
     super(*args)
 
-    if request_id = attributes['request_id']
-      attributes['request_id'] = request_id.to_s
+    if (request_id = attributes["request_id"])
+      attributes["request_id"] = request_id.to_s
     end
 
-    attributes['id'] ||= SecureRandom.uuid
-    attributes['created_at'] ||= Time.zone.now
-    attributes['created_at'] = Time.zone.at(attributes['created_at'].to_i)
-    attributes['event_type'] ||= self.class.name.gsub("::#{self.class.name.demodulize}", '').demodulize.underscore
+    attributes["id"] ||= SecureRandom.uuid
+    attributes["created_at"] ||= Time.zone.now
+    attributes["created_at"] = Time.zone.at(attributes["created_at"].to_i)
+    attributes["event_type"] ||= self.class.name.gsub("::#{self.class.name.demodulize}", "").demodulize.underscore
+  end
+
+  # For cross-compatibility between cassandra and activerecord values
+  def uuid
+    id
   end
 
   def request_id
-    attributes['request_id']
+    attributes["request_id"]
   end
 
   def request_id=(value)
     # Since request_id is stored as text in cassandra we need to force it
     # to be a string.
-    attributes['request_id'] = value && value.to_s
+    attributes["request_id"] = value && value.to_s
   end
 
   def changes

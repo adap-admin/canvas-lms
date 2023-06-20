@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -15,6 +17,6 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-Diigo::Connection.config = Proc.new do
-  Canvas::Plugin.find(:diigo).try(:settings) || ConfigFile.load('diigo')
+Diigo::Connection.config = proc do
+  Canvas::Plugin.find(:diigo).try(:settings) || ConfigFile.load("diigo").dup
 end

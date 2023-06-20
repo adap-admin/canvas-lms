@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -15,24 +17,10 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require "fileutils"
-require 'chromedriver-helper'
+require "webdrivers/chromedriver"
 require_relative "common_helper_methods/custom_alert_actions"
-require_relative 'common_helper_methods/custom_screen_actions'
-
-# WebDriver uses port 7054 (the "locking port") as a mutex to ensure
-# that we don't launch two Firefox instances at the same time. Each
-# new instance you create will wait for the mutex before starting
-# the browser, then release it as soon as the browser is open.
-#
-# The default port mutex wait timeout is 45 seconds.
-# Bump it to 90 seconds as a stopgap for the recent flood of:
-# `unable to bind to locking port 7054 within 45 seconds`
-#
-# TODO: Investigate why it's taking so long to launch Firefox, or
-#       what process is hogging port 7054.
-Selenium::WebDriver::Firefox::Launcher.send :remove_const, :SOCKET_LOCK_TIMEOUT
-Selenium::WebDriver::Firefox::Launcher::SOCKET_LOCK_TIMEOUT = 90
+require_relative "common_helper_methods/custom_screen_actions"
+require_relative "patches/selenium/webdriver/remote/w3c/bridge"
 
 module SeleniumDriverSetup
   CONFIG = ConfigFile.load("selenium") || {}.freeze
@@ -44,7 +32,7 @@ module SeleniumDriverSetup
     implicit_wait: 0,
     # except finding elements
     finder: CONFIG[:finder_timeout_seconds] || 5,
-    script: CONFIG[:script_timeout_seconds] || 5
+    script: CONFIG[:script_timeout_seconds] || 5,
   }.freeze
 
   # If you have some really slow UI, you can temporarily override
@@ -69,11 +57,6 @@ module SeleniumDriverSetup
     "http://#{app_host_and_port}"
   end
 
-  # prevents subsequent specs from failing because tooltips are showing etc.
-  def move_mouse_to_known_position
-    driver.action.move_to(f("body"), 0, 0) if driver.ready_for_interaction
-  end
-
   class ServerStartupError < RuntimeError; end
 
   class << self
@@ -83,7 +66,6 @@ module SeleniumDriverSetup
 
     attr_accessor :browser_log,
                   :browser_process,
-                  :headless,
                   :server,
                   :server_ip,
                   :server_port
@@ -102,11 +84,11 @@ module SeleniumDriverSetup
       begin
         [
           Thread.new { start_webserver },
-          Thread.new { start_driver }
+          Thread.new { start_driver },
         ].each(&:join)
       rescue Selenium::WebDriver::Error::WebDriverError
         driver.quit if saucelabs_test_run?
-      rescue StandardError
+      rescue
         puts "selenium startup failed: #{$ERROR_INFO}"
         puts "exiting :'("
         # if either one fails, it's before any specs run, so we can bail
@@ -114,9 +96,6 @@ module SeleniumDriverSetup
         # examples in this group, meaning other workers won't pick them
         # up).
         #
-        # the custom exit code is so that test-queue can detect and allow
-        # a certain percentage of bad workers, while the build as a whole
-        # can still succeed
         exit! 98
       end
 
@@ -124,12 +103,12 @@ module SeleniumDriverSetup
     end
 
     def shutdown
-      server.shutdown if server
+      server&.shutdown
       if driver
         driver.close
         driver.quit
       end
-    rescue StandardError
+    rescue
       nil
     end
 
@@ -147,11 +126,7 @@ module SeleniumDriverSetup
         Selenium::WebDriver.const_get(browser.to_s.capitalize).path = path
       end
 
-      set_up_display_buffer if run_headless?
-
       @driver = create_driver
-
-      focus_viewport if run_headless?
 
       set_timeouts(TIMEOUTS)
 
@@ -179,7 +154,7 @@ module SeleniumDriverSetup
     end
 
     def webdriver_failure_proc
-      -> do
+      lambda do
         # ensure we quit frd, cuz it's not going to work (otherwise rspec
         # would keep retrying on subsequent groups/examples)
         RSpec.world.wants_to_quit = true
@@ -222,60 +197,6 @@ module SeleniumDriverSetup
       puts browser_log.read
     end
 
-    def run_headless?
-      ENV.key?("TEST_ENV_NUMBER") && !saucelabs_test_run?
-    end
-
-    HEADLESS_DEFAULTS = {
-      dimensions: "1920x1080x24",
-      reuse: true,
-      destroy_at_exit: true,
-      video: {
-        provider: :ffmpeg,
-        # yay interframe compression
-        codec: 'libx264',
-        # use less CPU. doesn't actually shrink the resulting file much.
-        frame_rate: 4,
-        extra: [
-          # quicktime doesn't understand the default yuv422p
-          '-pix_fmt', 'yuv420p',
-          # limit videos to 1 minute 20 seconds in case something bad happens and we forget to stop recording
-          '-t', '80',
-          # use less CPU
-          '-preset', 'superfast'
-        ]
-      }.freeze
-    }.freeze
-
-    def set_up_display_buffer
-      # start_driver can get called again if firefox dies, but
-      # self.headless should already be good to go
-      return if headless
-
-      require "headless"
-
-      test_number = ENV["TEST_ENV_NUMBER"]
-      # it'll be '', '2', '3', '4'...
-      test_number = test_number.blank? ? 1 : test_number.to_i
-      # start at 21 to avoid conflicts with other test runner Xvfb stuff
-      display = 20 + test_number
-
-      self.headless = Headless.new(HEADLESS_DEFAULTS.merge({
-                                                             display: display
-                                                           }))
-      headless.start
-      puts "Setting up DISPLAY=#{ENV['DISPLAY']}"
-    end
-
-    def focus_viewport
-      # force the viewport to have focus right away; otherwise certain specs
-      # will fail unless they follow another dialog accepting/dismissing spec,
-      # since they rely on focus/blur events, which don't fire if the window
-      # doesn't have focus
-      driver.execute_script "alert('yolo')"
-      driver.switch_to.alert.accept
-    end
-
     def ie_driver
       puts "using IE driver"
       selenium_remote_driver
@@ -283,7 +204,7 @@ module SeleniumDriverSetup
 
     def edge_driver
       puts "using Edge driver"
-      selenium_remote_driver
+      selenium_url ? selenium_remote_driver : ruby_edge_driver
     end
 
     def safari_driver
@@ -303,7 +224,7 @@ module SeleniumDriverSetup
     # see https://github.com/SeleniumHQ/selenium/issues/2435#issuecomment-245458210
     def with_vanilla_json
       orig_options = Oj.default_options
-      Oj.default_options = {:escape_mode => :json}
+      Oj.default_options = { escape_mode: :json }
       yield
     ensure
       Oj.default_options = orig_options
@@ -320,7 +241,7 @@ module SeleniumDriverSetup
     rescue error_class => e
       puts "Attempt #{tries += 1} got error: #{e}"
       if tries >= how_many
-        $stderr.puts "Giving up"
+        warn "Giving up"
         failure_proc ? failure_proc.call : raise
       else
         sleep delay
@@ -330,17 +251,12 @@ module SeleniumDriverSetup
 
     def ruby_chrome_driver
       puts "Thread: provisioning local chrome driver"
-      Chromedriver.set_version "74.0.3729.6"
-      chrome_options = Selenium::WebDriver::Chrome::Options.new
-      chrome_options.add_argument('--disable-impl-side-painting')
+      # in your selenium.yml you can define a different chromedriver version
+      # by modifying 'chromedriver_version: <version>' for the version you want.
+      # otherwise this will use the default version matching what is used in docker.
+      Webdrivers::Chromedriver.required_version = CONFIG[:chromedriver_version]
 
-      # put `auto_open_devtools: true` in your selenium.yml if you want to have
-      # the chrome dev tools open by default by selenium
-      if CONFIG[:auto_open_devtools]
-        chrome_options.add_argument('--auto-open-devtools-for-tabs')
-      end
-
-      Selenium::WebDriver.for :chrome, options: chrome_options
+      Selenium::WebDriver.for :chrome, capabilities: desired_capabilities
     end
 
     def ruby_safari_driver
@@ -348,12 +264,18 @@ module SeleniumDriverSetup
       Selenium::WebDriver.for :safari
     end
 
+    def ruby_edge_driver
+      puts "Thread: provisioning local edge driver"
+      Selenium::WebDriver.for :edge, capabilities: desired_capabilities
+    end
+
     def selenium_remote_driver
       puts "Thread: provisioning remote #{browser} driver"
+      puts "Selenium_Url: #{selenium_url}"
       driver = Selenium::WebDriver.for(
         :remote,
-        :url => selenium_url,
-        :desired_capabilities => desired_capabilities
+        url: selenium_url,
+        capabilities: desired_capabilities
       )
 
       driver.file_detector = lambda do |args|
@@ -366,16 +288,41 @@ module SeleniumDriverSetup
     end
 
     def desired_capabilities
-      caps = Selenium::WebDriver::Remote::Capabilities.send(browser)
-      caps.version = CONFIG[:version] unless CONFIG[:version].nil?
-      caps.platform = CONFIG[:platform] unless CONFIG[:platform].nil?
-      caps['name'] = "#{CONFIG[:platform]} - #{CONFIG[:browser]}-#{CONFIG[:version]}" unless CONFIG[:platform].nil?
-      caps["tunnel-identifier"] = CONFIG[:tunnel_id] unless CONFIG[:tunnel_id].nil?
-      caps['selenium-version'] = "3.4.0"
-      caps[:unexpectedAlertBehaviour] = 'ignore'
-      caps[:elementScrollBehavior] = 1
-      caps['screen-resolution'] = "1280x1024"
-      caps
+      case browser
+      when :firefox
+        options = Selenium::WebDriver::Options.firefox
+        options.log_level = :debug
+      when :chrome
+        options = Selenium::WebDriver::Options.chrome
+        options.add_argument("no-sandbox")
+        options.add_argument("start-maximized")
+        options.add_argument("disable-dev-shm-usage")
+        if ENV["DISABLE_CORS"]
+          options.add_argument("disable-web-security")
+        end
+        options.logging_prefs = {
+          browser: "ALL",
+        }
+        # put `auto_open_devtools: true` in your selenium.yml if you want to have
+        # the chrome dev tools open by default by selenium
+        if CONFIG[:auto_open_devtools]
+          options.add_argument("auto-open-devtools-for-tabs")
+        end
+        # put `headless: true` and `window_size: "<x>,<y>"` in your selenium.yml
+        # if you want to run against headless chrome
+        if CONFIG[:headless]
+          options.add_argument("headless")
+        end
+      when :edge
+        options = Selenium::WebDriver::Options.edge
+        options.add_argument("disable-dev-shm-usage")
+      when :safari
+        # TODO: options for safari driver
+      else
+        raise "unsupported browser #{browser}"
+      end
+      options.unhandled_prompt_behavior = "ignore"
+      options
     end
 
     def selenium_url
@@ -384,7 +331,9 @@ module SeleniumDriverSetup
         CONFIG[:remote_url_firefox] || CONFIG[:remote_url]
       when :chrome
         CONFIG[:remote_url_chrome] || CONFIG[:remote_url]
-      when :internet_explorer, :safari, :edge
+      when :edge
+        CONFIG[:remote_url_edge] || CONFIG[:remote_url]
+      when :internet_explorer, :safari
         CONFIG[:remote_url]
       else
         raise "unsupported browser #{browser}"
@@ -394,24 +343,7 @@ module SeleniumDriverSetup
     def ruby_firefox_driver
       puts "Thread: provisioning local firefox driver"
       Selenium::WebDriver.for(:firefox,
-                              profile: firefox_profile,
-                              desired_capabilities: desired_capabilities)
-    end
-
-    def firefox_profile
-      if CONFIG[:firefox_path].present?
-        Selenium::WebDriver::Firefox::Binary.path = "#{CONFIG[:firefox_path]}"
-      end
-      profile = Selenium::WebDriver::Firefox::Profile.new
-      profile.add_extension Rails.root.join("spec/selenium/test_setup/JSErrorCollector.xpi")
-      profile.log_file = "/dev/stdout"
-      # firefox randomly reloads if/when it decides to download the OpenH264 codec, so don't let it
-      profile["media.gmp-manager.url"] = ""
-
-      if CONFIG[:firefox_profile].present?
-        profile = Selenium::WebDriver::Firefox::Profile.from_name(CONFIG[:firefox_profile])
-      end
-      profile
+                              capabilities: desired_capabilities)
     end
 
     def_delegator :driver_capabilities, :browser_name
@@ -436,26 +368,25 @@ module SeleniumDriverSetup
     end
 
     def set_up_host_and_port
-      server_ip = UDPSocket.open { |s| s.connect('8.8.8.8', 1) && s.addr.last }
+      server_ip = UDPSocket.open { |s| s.connect("8.8.8.8", 1) && s.addr.last }
       s = Socket.new(:INET, :STREAM)
       s.setsockopt(:SOCKET, :REUSEADDR, true)
       s.bind(Addrinfo.tcp(server_ip, 0))
 
       self.server_port = s.local_address.ip_port
       self.server_ip = s.local_address.ip_address
-      if CONFIG[:browser] == 'ie'
+      if CONFIG[:browser] == "ie"
         # makes default URL for selenium the external IP of the box for standalone sel servers
         self.server_ip = `curl http://instance-data/latest/meta-data/public-ipv4`
       end
 
       puts "found available port: #{app_host_and_port}"
-
     ensure
-      s.close() if s
+      s&.close()
     end
 
     def start_webserver
-      ENV['CANVAS_CDN_HOST'] = "canvas.instructure.com"
+      ENV["CANVAS_CDN_HOST"] = "canvas.instructure.com"
 
       with_retries(error_class: ServerStartupError) do
         set_up_host_and_port
@@ -471,6 +402,7 @@ module SeleniumDriverSetup
     end
 
     ASSET_PATH = %r{\A/(dist|fonts|images|javascripts)/.*\.[a-z0-9]+\z}
+
     def asset_request?(url)
       url =~ ASSET_PATH
     end
@@ -512,7 +444,7 @@ module SeleniumDriverSetup
         asset_request = asset_request?(env["REQUEST_URI"])
         return [404, {}, [""]] if asset_request && !File.exist?("public/#{env["REQUEST_URI"]}")
 
-        req = "#{env['REQUEST_METHOD']} #{env['REQUEST_URI']}"
+        req = "#{env["REQUEST_METHOD"]} #{env["REQUEST_URI"]}"
         Rails.logger.info "STARTING REQUEST #{req}" unless asset_request
         result = app.call(env)
         Rails.logger.info "FINISHED REQUEST #{req}: #{result[0]}" unless asset_request
@@ -527,7 +459,7 @@ module SeleniumDriverSetup
       # with our shared conn and transactional fixtures (e.g. special
       # accounts and their caching)
       @allow_requests = false
-      request_mutex.synchronize { }
+      request_mutex.synchronize { nil }
     end
 
     def allow_requests!
@@ -549,19 +481,6 @@ module SeleniumDriverSetup
     end
   end
 end
-
-# get some extra verbose logging from firefox for when things go wrong
-Selenium::WebDriver::Firefox::Binary.class_eval do
-  def execute(*extra_args)
-    args = [self.class.path, '-no-remote'] + extra_args
-    SeleniumDriverSetup.browser_process = @process = ChildProcess.build(*args)
-    SeleniumDriverSetup.browser_log = @process.io.stdout = @process.io.stderr = Tempfile.new("firefox")
-    $DEBUG = true
-    @process.start
-    $DEBUG = nil
-  end
-end
-
 
 # make Wait play nicely with Timecop
 module Selenium::WebDriver::Wait::Time

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -20,31 +22,52 @@ class UserListsController < ApplicationController
   skip_before_action :verify_authenticity_token
   before_action :require_context
 
+  rescue_from UserListV2::ParameterError, with: :rescue_expected_error_type
+
   # POST /courses/:course_id/user_lists.json
   # POST /accounts/:account_id/user_lists.json
   def create
-    return unless authorized_action(@context, @current_user, @context.is_a?(Course) ? [:manage_students, :manage_admin_users] : :manage_account_memberships)
+    perms = @context.is_a?(Course) ? add_enrollment_permissions : :manage_account_memberships
+    return unless authorized_action(@context, @current_user, perms)
+
     respond_to do |format|
       format.json do
         if value_to_boolean(params[:v2])
           search_type = params[:search_type]
           can_read_sis = @context.grants_right?(@current_user, :read_sis) || @context.root_account.grants_right?(@current_user, :manage_sis)
           return render_unauthorized_action if search_type == "sis_user_id" && !can_read_sis
+
           # in theory i could make this a whole new api thingy and document it
           # but honestly I'd rather keep it hidden so nobody knows my shame
-          render :json => UserListV2.new(params[:user_list],
-            root_account: @context.root_account,
-            search_type: search_type,
-            current_user: @current_user,
-            can_read_sis: can_read_sis
-          )
+          render json: UserListV2.new(params[:user_list],
+                                      root_account: @context.root_account,
+                                      search_type:,
+                                      current_user: @current_user,
+                                      can_read_sis:)
         else
-          render :json => UserList.new(params[:user_list],
-            root_account: @context.root_account,
-            search_method: @context.user_list_search_mode_for(@current_user),
-            current_user: @current_user)
+          render json: UserList.new(params[:user_list],
+                                    root_account: @context.root_account,
+                                    search_method: @context.user_list_search_mode_for(@current_user),
+                                    current_user: @current_user)
         end
       end
+    end
+  end
+
+  def add_enrollment_permissions
+    if @domain_root_account.feature_enabled?(:granular_permissions_manage_users)
+      %i[
+        add_teacher_to_course
+        add_ta_to_course
+        add_designer_to_course
+        add_student_to_course
+        add_observer_to_course
+      ]
+    else
+      [
+        :manage_students,
+        :manage_admin_users
+      ]
     end
   end
 end

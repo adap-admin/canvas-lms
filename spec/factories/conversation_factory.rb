@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -21,13 +23,13 @@ module Factories
     @conversation = (options.delete(:sender) || @me || users.shift).initiate_conversation(users, options.delete(:private), options)
 
     # if the "body" hash is passed in, use that for the message body
-    if !options[:body].nil?
-      @message = @conversation.add_message(options[:body].to_s)
-    else
-      @message = @conversation.add_message('test')
-    end
+    @message = if options[:body].nil?
+                 @conversation.add_message("test")
+               else
+                 @conversation.add_message(options[:body].to_s)
+               end
 
-    @conversation.update_attributes(options.slice(:subscribed, :starred, :workflow_state, :user))
+    @conversation.update(options.slice(:subscribed, :starred, :workflow_state, :user))
     @conversation.reload
   end
 end

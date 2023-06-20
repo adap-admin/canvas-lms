@@ -38,7 +38,7 @@ export default class ContextTracker {
     this._contextCallbacks = {
       beforeContextEnd: [],
       onContextEnd: [],
-      onContextStart: []
+      onContextStart: [],
     }
   }
 
@@ -81,12 +81,16 @@ export default class ContextTracker {
         maybeAddFailure(message, tracker.sourceStack, () => {
           logTrackers([tracker], () => ({
             logType: 'error',
-            message
+            message,
           }))
         })
       },
 
-      stack
+      getTimeElapsed() {
+        return stack.length ? new Date() - stack[0].startTime : 0
+      },
+
+      stack,
     }
   }
 
@@ -101,13 +105,13 @@ export default class ContextTracker {
 
           const {beforeEach, afterEach} = testEnvironment
 
-          testEnvironment.beforeEach = function() {
+          testEnvironment.beforeEach = function () {
             return runAllOneAtATime(onContextStart).then(() => {
               if (beforeEach) return beforeEach.call(this)
             })
           }
 
-          testEnvironment.afterEach = function() {
+          testEnvironment.afterEach = function () {
             return runAllOneAtATime(beforeContextEnd)
               .then(() => {
                 if (afterEach) return afterEach.call(this)
@@ -119,11 +123,21 @@ export default class ContextTracker {
     })
 
     this._qunit.moduleStart(moduleInfo => {
-      this._stack.push({description: moduleInfo.name, failures: [], type: 'module'})
+      this._stack.push({
+        description: moduleInfo.name,
+        failures: [],
+        startTime: new Date(),
+        type: 'module',
+      })
     })
 
     this._qunit.testStart(testInfo => {
-      this._stack.push({description: testInfo.name, failures: [], type: 'test'})
+      this._stack.push({
+        description: testInfo.name,
+        failures: [],
+        startTime: new Date(),
+        type: 'test',
+      })
     })
 
     this._qunit.testDone(() => {

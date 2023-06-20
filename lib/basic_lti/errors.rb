@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -19,6 +21,12 @@
 module BasicLTI
   module Errors
     class InvalidSourceId < StandardError
+      attr_reader :code
+
+      def initialize(message, code = nil)
+        super(message)
+        @code = code
+      end
     end
   end
 end

@@ -20,7 +20,10 @@
   <% css_bundle :user_logins %>
   <% js_bundle :user_logins %>
   <% js_env :PASSWORD_POLICY => (@domain_root_account.try(:password_policy) || {}) %>
-  <fieldset id="login_information">
+  <fieldset
+    id="login_information"
+    class="responsive"
+  >
     <legend>
       <h4 class="profileHeader">
         <%= t('titles.logins', 'Login Information') %>
@@ -29,16 +32,17 @@
     <table class="ic-Table">
       <% pseudonyms = @user.all_active_pseudonyms + [nil] %>
       <% pseudonyms.each do |pseudonym| %>
-        <tr class='login <%= 'blank' unless pseudonym %>' style="<%= hidden unless pseudonym %>">
-          <td class='sso-icon'>
-            <% if lookup_context.template_exists?("shared/svg/_svg_icon_#{pseudonym.try(:authentication_provider).try(:auth_type)}.svg") %>
-              <%= render(partial: "shared/svg/svg_icon_#{pseudonym.authentication_provider.auth_type}.svg") %>
+        <tr class="login<%= ' blank' unless pseudonym %>" <%= raw %Q(style="display: none") unless pseudonym %>>
+          <td class="sso-icon" <%= raw %Q(data-pseudonym-id="#{pseudonym.id}") if pseudonym %>>
+            <% icon_file_path = Rails.root.join("app/views/shared/svg/_svg_icon_#{pseudonym.try(:authentication_provider).try(:auth_type)}.svg") %>
+            <% if File.exists?(icon_file_path) %>
+              <%= render(partial: "shared/svg/svg_icon_#{pseudonym.authentication_provider.auth_type}", formats: [:svg]) %>
               <span class="screenreader-only">
                 <%= t("This login is for %{provider}", provider: pseudonym.authentication_provider.class.display_name) %>
               </span>
             <% end %>
           </td>
-          <th scope='row'>
+          <th class='overview' scope='row'>
             <b class='unique_id'><%= pseudonym && pseudonym.unique_id %></b>
             <% if pseudonym && ((pseudonym.sis_user_id && can_do(pseudonym.account, @current_user, :read_sis)) || can_do(pseudonym, @current_user, :manage_sis)) %>
               <div>
@@ -50,33 +54,46 @@
                 <div>
                   <%= before_label('integration_id', 'Integration ID') %> <span id="integration_id_<%= pseudonym.id %>" class="integration_id"><%= pseudonym.integration_id %></span>
                 </div>
-            <% end %>          </th>
+            <% end %>
+          </th>
           <td class='account'>
-            <%= link_to(pseudonym ? pseudonym.account.name : nbsp, account_url(pseudonym ? pseudonym.account : "{{ account_id }}"), :class => 'account_name') %>
+            <% if pseudonym&.account == @domain_root_account %>
+              <%= link_to(pseudonym.account.name, account_url(pseudonym.account), class: 'account_name') %>
+            <% elsif pseudonym %>
+              <% pseudonym.shard.activate do %>
+                <%= link_to(pseudonym.account.name, account_user_url(pseudonym.account,
+                                                                     pseudonym.user,
+                                                                     host: HostUrl.context_host(pseudonym.account)), class: 'account_name') %>
+              <% end %>
+            <% else %>
+              <%= link_to(nbsp, account_url("{{ account_id }}"), class: 'account_name') %>
+            <% end %>
           </td>
           <td class='details'>
-            <table class="ic-Table--condensed">
-              <tr class='login_details'>
-                <td scope="row"><%= before_label('last_request', 'Last request') %></td>
-                <td><%= datetime_string(pseudonym.try(:last_request_at)) || t('never', "never") %></td>
-              </tr>
-              <tr class='login_details' style="<%= hidden if pseudonyms.length > 1 || !pseudonym %>">
-                <td scope="row"><%= before_label('current_login', 'Current login') %></td>
-                <td><%= datetime_string(pseudonym.try(:current_login_at)) || t('never', "never") %></td>
-              </tr>
-              <tr class='login_details' style="<%= hidden if pseudonyms.length > 1 || !pseudonym %>">
-                <td scope="row"><%= before_label('current_ip', 'Current login IP') %></td>
-                <td><%= pseudonym.try(:current_login_ip) || t('none', "none") %></td>
-              </tr>
-              <tr class='login_details' style="<%= hidden if pseudonyms.length > 1 || !pseudonym %>">
-                <td scope="row"><%= before_label('last_login', 'Last login') %></td>
-                <td><%= datetime_string(pseudonym.try(:last_login_at)) || t('never', "never") %></td>
-              </tr>
-              <tr class='login_details' style="<%= hidden if pseudonyms.length > 1 || !pseudonym %>">
-                <td scope="row"><%= before_label('last_ip', 'Last login IP') %></td>
-                <td><%= pseudonym.try(:last_login_ip) || t('none', "none") %></td>
-              </tr>
-            </table>
+
+            <ul class="login_details_list">
+              <li class='login_details'>
+                <span class="login_details_label"><%= before_label('last_request', 'Last request') %></span>
+                <span class="login_details_value"><%= datetime_string(pseudonym.try(:last_request_at)) || t('never', "never") %></span>
+              </li>
+              <li class='login_details' style="<%= hidden if pseudonyms.length > 1 || !pseudonym %>">
+                <span class="login_details_label"><%= before_label('current_login', 'Current login') %></span>
+                <span class="login_details_value"><%= datetime_string(pseudonym.try(:current_login_at)) || t('never', "never") %></span>
+              </li>
+              <li class='login_details' style="<%= hidden if pseudonyms.length > 1 || !pseudonym %>">
+                <span class="login_details_label"><%= before_label('current_ip', 'Current login IP') %></span>
+                <span class="login_details_value"><%= pseudonym.try(:current_login_ip) || t('none', "none") %></span>
+              </li>
+              <li class='login_details' style="<%= hidden if pseudonyms.length > 1 || !pseudonym %>">
+                <span class="login_details_label"><%= before_label('last_login', 'Last login') %></span>
+                <span class="login_details_value"><%= datetime_string(pseudonym.try(:last_login_at)) || t('never', "never") %></span>
+              </li>
+              <li class='login_details' style="<%= hidden if pseudonyms.length > 1 || !pseudonym %>">
+                <span class="login_details_label"><%= before_label('last_ip', 'Last login IP') %></span>
+                <span class="login_details_value"><%= pseudonym.try(:last_login_ip) || t('none', "none") %></span>
+              </li>
+            </ul>
+
             <% if pseudonyms.length > 1 || !pseudonym %>
               <a href="#" class="login_details_link"><%= t('more', 'more...') %></a>
             <% end %>
@@ -116,24 +133,20 @@
         <td><%= f.blabel :unique_id, :en => "Login" %></td>
         <td><%= f.text_field :unique_id %></td>
       </tr>
-      <tr style="display:none;" class="sis_user_id">
-        <td><%= f.blabel :sis_user_id, :en => "SIS ID" %></td>
-        <td><%= f.text_field :sis_user_id %></td>
-      </tr>
-      <tr style="display:none;" class="integration_id">
-        <td><%= f.blabel :integration_id, :en => "Integration ID" %></td>
-        <td><%= f.text_field :integration_id %></td>
-      </tr>
+      <tr data-react-component="external-ids" />
+      <tr class="sis_user_id" data-external-placeholder="sis-user-id" data-label="<%= before_label('sis_id', 'SIS ID') %>" />
+      <tr class="integration_id" data-external-placeholder="integration-id" data-label="<%= before_label('integration_id', 'Integration ID') %>" />
       <% if can_do(Account.site_admin, @current_user, :manage_user_logins) %>
         <% js_env :PASSWORD_POLICIES => Hash[Account.root_accounts.active.non_shadow.map{ |a| [a.id, a.password_policy]}] %>
         <tr class="account_id">
           <td><%= f.blabel :account_id, :en => "Account" %></td>
           <td>
             <%
-              accounts = Account.root_accounts.
-                active.
-                map { |a| [(a.name || t("Unnamed Account (%{id})", id: a.id)), a.id] }.
-                sort_by(&:first)
+              accounts = Account.root_accounts
+                .active
+                .non_shadow
+                .map { |a| [(a.name || t("Unnamed Account (%{id})", id: a.id)), a.id] }
+                .sort_by(&:first)
             %>
             <%= f.select :account_id, accounts, {:selected => @domain_root_account.id}, :class => "account_id_select" %>
           </td>

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -17,7 +19,6 @@
 
 # @API Brand Configs
 class BrandConfigsApiController < ApplicationController
-
   # @API Get the brand config variables that should be used for this domain
   #
   # Will redirect to a static json file that has all of the brand
@@ -29,7 +30,7 @@ class BrandConfigsApiController < ApplicationController
   #
   #   curl 'https://<canvas>/api/v1/brand_variables'
   def show
-    headers['Access-Control-Allow-Origin'] = '*'
-    redirect_to active_brand_config_url('json')
+    headers["Access-Control-Allow-Origin"] = "*"
+    redirect_to active_brand_config_url("json")
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -40,12 +42,13 @@ module Types
       Loaders::IDLoader.for(User).load(object["current_user_id"])
     end
 
-    field :real_user, UserType, <<~DOC, null: true
+    field :real_user, UserType, <<~MD, null: true
       If the mutation was performed by a user masquerading as another user,
       this field returns the "real" (logged-in) user.
-    DOC
+    MD
     def real_user
       return nil unless object["real_current_user_id"]
+
       Loaders::IDLoader.for(User).load(object["real_current_user_id"])
     end
 

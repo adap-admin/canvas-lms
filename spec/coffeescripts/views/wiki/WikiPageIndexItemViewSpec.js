@@ -16,8 +16,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import WikiPage from 'compiled/models/WikiPage'
-import WikiPageIndexItemView from 'compiled/views/wiki/WikiPageIndexItemView'
+import WikiPage from '@canvas/wiki/backbone/models/WikiPage'
+import WikiPageIndexItemView from 'ui/features/wiki_page_index/backbone/views/WikiPageIndexItemView'
 import fakeENV from 'helpers/fakeENV'
 
 QUnit.module('WikiPageIndexItemView', {
@@ -26,12 +26,16 @@ QUnit.module('WikiPageIndexItemView', {
   },
   teardown() {
     fakeENV.teardown()
-  }
+  },
 })
 
 test('model.view maintained by item view', () => {
   const model = new WikiPage()
-  const view = new WikiPageIndexItemView({model, collectionHasTodoDate: () => {}})
+  const view = new WikiPageIndexItemView({
+    model,
+    collectionHasTodoDate: () => {},
+    selectedPages: {},
+  })
   strictEqual(model.view, view, 'model.view is set to the item view')
   view.render()
   strictEqual(model.view, view, 'model.view is set to the item view')
@@ -39,7 +43,11 @@ test('model.view maintained by item view', () => {
 
 test('detach/reattach the publish icon view', () => {
   const model = new WikiPage()
-  const view = new WikiPageIndexItemView({model, collectionHasTodoDate: () => {}})
+  const view = new WikiPageIndexItemView({
+    model,
+    collectionHasTodoDate: () => {},
+    selectedPages: {},
+  })
   view.render()
   const $previousEl = view.$el.find('> *:first-child')
   view.publishIconView.$el.data('test-data', 'test-is-good')
@@ -52,12 +60,16 @@ test('detach/reattach the publish icon view', () => {
   )
 })
 
-test('delegate useAsFrontPage to the model', function() {
+test('delegate useAsFrontPage to the model', () => {
   const model = new WikiPage({
     front_page: false,
-    published: true
+    published: true,
   })
-  const view = new WikiPageIndexItemView({model, collectionHasTodoDate: () => {}})
+  const view = new WikiPageIndexItemView({
+    model,
+    collectionHasTodoDate: () => {},
+    selectedPages: {},
+  })
   const stub = sandbox.stub(model, 'setFrontPage')
   view.useAsFrontPage()
   ok(stub.calledOnce)
@@ -67,8 +79,9 @@ test('only shows direct share menu items if enabled', () => {
   const view = new WikiPageIndexItemView({
     model: new WikiPage(),
     collectionHasTodoDate: () => {},
-    WIKI_RIGHTS: {read: true, manage: true},
-    CAN: {MANAGE: true}
+    selectedPages: {},
+    WIKI_RIGHTS: {read: true, manage: true, update: true},
+    CAN: {MANAGE: true},
   })
   view.render()
   strictEqual(view.$('.send-wiki-page-to').length, 0)
@@ -89,7 +102,8 @@ const testRights = (subject, options) =>
       model,
       contextName: options.contextName,
       WIKI_RIGHTS: options.WIKI_RIGHTS,
-      collectionHasTodoDate: () => {}
+      collectionHasTodoDate: () => {},
+      selectedPages: {},
     })
     const json = view.toJSON()
     for (const key in options.CAN) {
@@ -101,26 +115,30 @@ testRights('CAN (manage course)', {
   contextName: 'courses',
   WIKI_RIGHTS: {
     read: true,
-    manage: true
+    manage: true,
+    publish_page: true,
+    create_page: true,
   },
   CAN: {
     MANAGE: true,
     PUBLISH: true,
-    DUPLICATE: true
-  }
+    DUPLICATE: true,
+  },
 })
 
 testRights('CAN (manage group)', {
   contextName: 'groups',
   WIKI_RIGHTS: {
     read: true,
-    manage: true
+    manage: true,
+    publish_page: false,
+    create_page: true,
   },
   CAN: {
     MANAGE: true,
     PUBLISH: false,
-    DUPLICATE: false
-  }
+    DUPLICATE: false,
+  },
 })
 
 testRights('CAN (read)', {
@@ -128,13 +146,75 @@ testRights('CAN (read)', {
   WIKI_RIGHTS: {read: true},
   CAN: {
     MANAGE: false,
-    PUBLISH: false
-  }
+    PUBLISH: false,
+  },
 })
 
 testRights('CAN (null)', {
   CAN: {
     MANAGE: false,
-    PUBLISH: false
-  }
+    PUBLISH: false,
+  },
+})
+
+// Tests for granular permissions, with manage permission removed
+
+testRights('CAN (create page - course)', {
+  contextName: 'courses',
+  WIKI_RIGHTS: {create_page: true},
+  CAN: {
+    MANAGE: true,
+    PUBLISH: false,
+    DUPLICATE: true,
+    UPDATE: false,
+    DELETE: false,
+  },
+})
+
+testRights('CAN (create page - group)', {
+  contextName: 'groups',
+  WIKI_RIGHTS: {create_page: true},
+  CAN: {
+    MANAGE: true,
+    PUBLISH: false,
+    DUPLICATE: false,
+    UPDATE: false,
+    DELETE: false,
+  },
+})
+
+testRights('CAN (delete page)', {
+  contextName: 'courses',
+  WIKI_RIGHTS: {delete_page: true},
+  CAN: {
+    MANAGE: true,
+    PUBLISH: false,
+    DUPLICATE: false,
+    UPDATE: false,
+    DELETE: true,
+  },
+})
+
+testRights('CAN (update page)', {
+  contextName: 'courses',
+  WIKI_RIGHTS: {update: true, publish_page: true},
+  CAN: {
+    MANAGE: true,
+    PUBLISH: true,
+    DUPLICATE: false,
+    UPDATE: true,
+    DELETE: false,
+  },
+})
+
+test('includes is_checked', () => {
+  const model = new WikiPage({
+    page_id: '42',
+  })
+  const view = new WikiPageIndexItemView({
+    model,
+    collectionHasTodoDate: () => {},
+    selectedPages: {42: model},
+  })
+  strictEqual(view.toJSON().isChecked, true)
 })

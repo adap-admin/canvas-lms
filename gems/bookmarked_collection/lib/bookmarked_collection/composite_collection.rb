@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -43,8 +45,9 @@ class BookmarkedCollection::CompositeCollection < BookmarkedCollection::Collecti
     [label, *bookmark]
   end
 
-  def decompose_bookmark(bookmark=current_bookmark)
+  def decompose_bookmark(bookmark = current_bookmark)
     return unless bookmark
+
     label, *bookmark = bookmark
     index = @labels.index(label)
     bookmark = bookmark.first if @depth == 1
@@ -62,8 +65,10 @@ class BookmarkedCollection::CompositeCollection < BookmarkedCollection::Collecti
   def validate(bookmark)
     return false unless bookmark
     return false unless bookmark.is_a?(Array) && bookmark.size == @depth + 1
+
     bookmark, _ = decompose_bookmark(bookmark)
     return false if bookmark.nil?
-    return true
+
+    true
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -47,6 +49,7 @@ module DataFixup::MoveSubAccountGradingPeriodsToCourses
   def self.copy_periods_to_courses_under_account(account, current_grading_period_group)
     account.courses.find_each do |course|
       next if course.grading_periods.active.exists?
+
       copy_periods_to_course(course, current_grading_period_group)
     end
   end
@@ -59,7 +62,7 @@ module DataFixup::MoveSubAccountGradingPeriodsToCourses
   end
 
   def self.destroy_sub_account_grading_period_groups_and_grading_periods
-    account_subquery = Account.where.not(root_account_id: nil)
+    account_subquery = Account.non_root_accounts
     groups = GradingPeriodGroup.active.where(account_id: account_subquery)
     groups.find_ids_in_batches do |group_ids_chunk|
       GradingPeriodGroup.where(id: group_ids_chunk).update_all(workflow_state: "deleted")

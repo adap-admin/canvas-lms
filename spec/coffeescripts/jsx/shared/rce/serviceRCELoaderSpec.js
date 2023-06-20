@@ -17,8 +17,7 @@
  */
 
 import $ from 'jquery'
-import RCELoader from 'jsx/shared/rce/serviceRCELoader'
-import * as jwt from 'jsx/shared/jwt'
+import RCELoader from '@canvas/rce/serviceRCELoader'
 import editorUtils from 'helpers/editorUtils'
 import fakeENV from 'helpers/fakeENV'
 import fixtures from 'helpers/fixtures'
@@ -38,7 +37,7 @@ QUnit.module('loadRCE', {
     window.tinyMCE = this.originalTinyMCE
     fakeENV.teardown()
     return editorUtils.resetRCE()
-  }
+  },
 })
 
 // loading RCE
@@ -71,13 +70,16 @@ QUnit.module('loadOnTarget', {
     this.$div = fixtures.create('<div><textarea id="theTarget" name="elementName" /></div>')
     this.$textarea = fixtures.find('#theTarget')
     this.editor = {
-      mceInstance () {
+      mceInstance() {
         return {
-          on (eventType, callback) {
+          on(eventType, callback) {
             callback()
-          }
+          },
         }
-      }
+      },
+      tinymceOn(eventType, callback) {
+        callback()
+      },
     }
     this.rce = {renderIntoDiv: sinon.stub().callsArgWith(2, this.editor)}
     sinon.stub(RCELoader, 'loadRCE').callsArgWith(0, this.rce)
@@ -89,43 +91,43 @@ QUnit.module('loadOnTarget', {
     fixtures.teardown()
     RCELoader.loadRCE.restore()
     fakeENV.teardown()
-  }
+  },
 })
 
 // target finding
 
-test('finds a target textarea if a textarea is passed in', function() {
+test('finds a target textarea if a textarea is passed in', function () {
   equal(RCELoader.getTargetTextarea(this.$textarea), this.$textarea.get(0))
 })
 
-test('finds a target textarea if a normal div is passed in', function() {
+test('finds a target textarea if a normal div is passed in', function () {
   equal(RCELoader.getTargetTextarea(this.$div), this.$textarea.get(0))
 })
 
-test('returns the textareas parent as the renderingTarget when no custom function given', function() {
+test('returns the textareas parent as the renderingTarget when no custom function given', function () {
   equal(RCELoader.getRenderingTarget(this.$textarea.get(0)), this.$div.get(0))
 })
 
-test('returned parent has class `ic-RichContentEditor`', function() {
+test('returned parent has class `ic-RichContentEditor`', function () {
   const target = RCELoader.getRenderingTarget(this.$textarea.get(0))
   ok($(target).hasClass('ic-RichContentEditor'))
 })
 
-test('uses a custom get target function if given', function() {
+test('uses a custom get target function if given', function () {
   const customFn = () => 'someCustomTarget'
   RCELoader.loadOnTarget(this.$textarea, {getRenderingTarget: customFn}, () => {})
   ok(this.rce.renderIntoDiv.calledWith('someCustomTarget'))
 })
 // propsForRCE construction
 
-test('extracts content from the target', function() {
+test('extracts content from the target', function () {
   this.$textarea.val('some text here')
   const opts = {defaultContent: 'default text'}
   const props = RCELoader.createRCEProps(this.$textarea.get(0), opts)
   equal(props.defaultContent, 'some text here')
 })
 
-test('falls back to defaultContent if target has no content', function() {
+test('falls back to defaultContent if target has no content', function () {
   const opts = {defaultContent: 'default text'}
   const props = RCELoader.createRCEProps(this.$textarea.get(0), opts)
   equal(props.defaultContent, 'default text')
@@ -135,98 +137,84 @@ test('passes the textarea height into tinyOptions', () => {
   const taHeight = '123'
   const textarea = {offsetHeight: taHeight}
   const opts = {defaultContent: 'default text'}
-  const props = RCELoader.createRCEProps(textarea, opts)
+  RCELoader.createRCEProps(textarea, opts)
   equal(opts.tinyOptions.height, taHeight)
 })
 
-test('adds the elements name attribute to mirroredAttrs', function() {
+test('adds the elements name attribute to mirroredAttrs', function () {
   const opts = {defaultContent: 'default text'}
   const props = RCELoader.createRCEProps(this.$textarea.get(0), opts)
   equal(props.mirroredAttrs.name, 'elementName')
 })
 
-test('adds onFocus to props', function() {
+test('adds onFocus to props', function () {
   const opts = {
-    onFocus() {}
+    onFocus() {},
   }
   const props = RCELoader.createRCEProps(this.$textarea.get(0), opts)
   equal(props.onFocus, opts.onFocus)
 })
 
-test('renders with rce', function() {
+test('renders with rce', function () {
   RCELoader.loadOnTarget(this.$div, {}, () => {})
   ok(this.rce.renderIntoDiv.calledWith(this.$div.get(0)))
 })
 
-test('yields editor to callback', function() {
-  const cb = sinon.spy()
-  RCELoader.loadOnTarget(this.$div, {}, cb)
-  ok(cb.calledWith(this.$textarea.get(0), this.editor))
-})
-
-test('ensures yielded editor has call and focus methods', function() {
-  const cb = sinon.spy()
-  RCELoader.loadOnTarget(this.$div, {}, cb)
-  equal(typeof this.editor.call, 'function')
-  equal(typeof this.editor.focus, 'function')
-})
-
-QUnit.module('loadSidebarOnTarget', {
-  setup() {
-    fakeENV.setup()
-    ENV.RICH_CONTENT_APP_HOST = 'http://rce.host'
-    ENV.RICH_CONTENT_CAN_UPLOAD_FILES = true
-    ENV.context_asset_string = 'courses_1'
-    fixtures.setup()
-    this.$div = fixtures.create('<div />')
-    this.sidebar = {}
-    this.rce = {renderSidebarIntoDiv: sinon.stub().callsArgWith(2, this.sidebar)}
-    sinon.stub(RCELoader, 'loadRCE').callsArgWith(0, this.rce)
-    this.refreshToken = sinon.spy()
-    sandbox.stub(jwt, 'refreshFn').returns(this.refreshToken)
-  },
-  teardown() {
-    fakeENV.teardown()
-    fixtures.teardown()
-    RCELoader.loadRCE.restore()
+test('yields editor to callback,', function (assert) {
+  const done = assert.async()
+  const cb = (textarea, rce) => {
+    equal(textarea, this.$textarea.get(0))
+    equal(rce, this.editor)
+    done()
   }
+  RCELoader.loadOnTarget(this.$div, {}, cb)
 })
 
-test('passes host and context from ENV as props to sidebar', function() {
-  const cb = sinon.spy()
-  RCELoader.loadSidebarOnTarget(this.$div, cb)
-  ok(this.rce.renderSidebarIntoDiv.called)
-  const props = this.rce.renderSidebarIntoDiv.args[0][1]
-  equal(props.host, 'http://rce.host')
-  equal(props.contextType, 'courses')
-  equal(props.contextId, '1')
+test('ensures yielded editor has call and focus methods', function (assert) {
+  const done = assert.async()
+  const cb = (textarea, rce) => {
+    equal(typeof rce.call, 'function')
+    equal(typeof rce.focus, 'function')
+    done()
+  }
+  RCELoader.loadOnTarget(this.$div, {}, cb)
 })
 
-test('yields sidebar to callback', function() {
-  const cb = sinon.spy()
-  RCELoader.loadSidebarOnTarget(this.$div, cb)
-  ok(cb.calledWith(this.sidebar))
+test('populates externalToolsConfig without context_external_tool_resource_selection_url', () => {
+  window.ENV = {
+    LTI_LAUNCH_FRAME_ALLOWANCES: ['test allow'],
+    a2_student_view: true,
+    MAX_MRU_LTI_TOOLS: 892,
+  }
+
+  deepEqual(RCELoader.createRCEProps({}, {}).externalToolsConfig, {
+    ltiIframeAllowances: ['test allow'],
+    isA2StudentView: true,
+    maxMruTools: 892,
+    resourceSelectionUrlOverride: null,
+  })
 })
 
-test('ensures yielded sidebar has show and hide methods', function() {
-  const cb = sinon.spy()
-  RCELoader.loadSidebarOnTarget(this.$div, cb)
-  equal(typeof this.sidebar.show, 'function')
-  equal(typeof this.sidebar.hide, 'function')
-})
+test('populates externalToolsConfig with context_external_tool_resource_selection_url', () => {
+  window.ENV = {
+    LTI_LAUNCH_FRAME_ALLOWANCES: ['test allow'],
+    a2_student_view: true,
+    MAX_MRU_LTI_TOOLS: 892,
+  }
 
-test('provides a callback for loading a new jwt', function() {
-  const cb = sinon.spy()
-  RCELoader.loadSidebarOnTarget(this.$div, cb)
-  ok(this.rce.renderSidebarIntoDiv.called)
-  const props = this.rce.renderSidebarIntoDiv.args[0][1]
-  ok(jwt.refreshFn.calledWith(props.jwt))
-  equal(props.refreshToken, this.refreshToken)
-})
+  const a = document.createElement('a')
+  try {
+    a.id = 'context_external_tool_resource_selection_url'
+    a.href = 'http://www.example.com'
+    document.body.appendChild(a)
 
-test('passes brand config json url', function() {
-  ENV.active_brand_config_json_url = {}
-  RCELoader.loadSidebarOnTarget(this.$div, () => {})
-  const props = this.rce.renderSidebarIntoDiv.args[0][1]
-  equal(props.themeUrl, ENV.active_brand_config_json_url)
+    deepEqual(RCELoader.createRCEProps({}, {}).externalToolsConfig, {
+      ltiIframeAllowances: ['test allow'],
+      isA2StudentView: true,
+      maxMruTools: 892,
+      resourceSelectionUrlOverride: 'http://www.example.com',
+    })
+  } finally {
+    a.remove()
+  }
 })

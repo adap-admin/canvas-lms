@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -47,8 +49,8 @@ module BasicLTI
       # can be reverted if submission has versions
       return false if @submission.versions.blank?
 
-       # earlier attempt(version) cannot be reopened
-       target_attempt_version[:url] == @launch_url
+      # earlier attempt(version) cannot be reopened
+      target_attempt_version[:url] == @launch_url
     end
 
     def revert_to_last_attempt
@@ -60,7 +62,7 @@ module BasicLTI
       #   version, created in #update_submission)
       # the acive/open version is sync'ed with submission.
       # In this scenario, the open version is the version to be reverted.
-      @submission.with_versioning(:explicit => true) { @submission.save! }
+      @submission.with_versioning(explicit: true) { @submission.save! }
       @submission.revert_to_version(
         version_to_be_reverted[:number],
         # grade is a derived field, will be calculated automatically on saving
@@ -80,6 +82,7 @@ module BasicLTI
 
     def fetch_versions
       return @_fetch_versions if @_fetch_versions.present?
+
       # the latest version of the previous attempt (we want to revert to)
       prev_attempt_version = nil
       # the latest version of current attempt (identified by @launch_url)
@@ -126,7 +129,7 @@ module BasicLTI
           { url: h[:url], submitted_at: h[:submitted_at], number: v.number, updated_at: h[:updated_at], score: h[:score] }
         end
         # we want versions in this order to be used in #fetch_versions
-        vs.sort_by{ |x| [x[:submitted_at] || x[:updated_at], x[:number]] }
+        vs.sort_by { |x| [x[:submitted_at] || x[:updated_at], x[:number]] }
       end
     end
 
@@ -141,8 +144,9 @@ module BasicLTI
       @submission.submission_type = nil
       # don't add a new version if the open version is from the same attempt
       return @submission.save! if @submission.url == @launch_url
+
       @submission.url = @launch_url
-      @submission.with_versioning(:explicit => true) { @submission.save! }
+      @submission.with_versioning(explicit: true) { @submission.save! }
     end
   end
 end

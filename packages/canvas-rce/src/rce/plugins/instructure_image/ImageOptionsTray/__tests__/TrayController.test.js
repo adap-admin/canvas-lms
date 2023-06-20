@@ -19,7 +19,7 @@
 import ReactDOM from 'react-dom'
 
 import TrayController, {CONTAINER_ID} from '../TrayController'
-import FakeEditor from '../../../shared/__tests__/FakeEditor'
+import FakeEditor from '../../../../__tests__/FakeEditor'
 import ImageOptionsTrayDriver from './ImageOptionsTrayDriver'
 
 describe('RCE "Images" Plugin > ImageOptionsTray > TrayController', () => {
@@ -53,6 +53,8 @@ describe('RCE "Images" Plugin > ImageOptionsTray > TrayController', () => {
     const $el = document.createElement('img')
     $el.src = `https://www.fillmurray.com/${height}/${width}`
     $el.alt = `Bill Murray, ${width} by ${height}`
+    $el.setAttribute('height', height)
+    $el.setAttribute('width', width)
     return $el
   }
 
@@ -66,7 +68,7 @@ describe('RCE "Images" Plugin > ImageOptionsTray > TrayController', () => {
       altText: driver.altText,
       displayAs: driver.displayAs,
       isDecorativeImage: driver.isDecorativeImage,
-      size: driver.size
+      size: driver.size,
     }
   }
 
@@ -143,13 +145,27 @@ describe('RCE "Images" Plugin > ImageOptionsTray > TrayController', () => {
   describe('when saving image options', () => {
     let tray
 
+    describe('when the image url text is changing', () => {
+      it('updates the image element url', () => {
+        trayController.showTrayForEditor(editors[0])
+        tray = getTray()
+        tray.setUrl('https://www.fillmurray.com/140/100')
+        tray.$doneButton.click()
+        expect(editors[0].$container.querySelector('img').getAttribute('src')).toEqual(
+          'https://www.fillmurray.com/140/100'
+        )
+      })
+    })
+
     describe('when the image alt text is changing', () => {
       it('updates the image element alt text', () => {
         trayController.showTrayForEditor(editors[0])
         tray = getTray()
         tray.setAltText('Bill Murray, always amazing')
         tray.$doneButton.click()
-        expect($images[0].alt).toEqual('Bill Murray, always amazing')
+        expect(editors[0].$container.querySelector('img').getAttribute('alt')).toEqual(
+          'Bill Murray, always amazing'
+        )
       })
     })
 
@@ -157,25 +173,21 @@ describe('RCE "Images" Plugin > ImageOptionsTray > TrayController', () => {
       beforeEach(() => {
         trayController.showTrayForEditor(editors[0])
         tray = getTray()
-      })
-
-      it('clears the image element alt text', () => {
         tray.setIsDecorativeImage(true)
         tray.$doneButton.click()
-        expect($images[0].alt).toEqual('')
       })
 
-      it('sets a data attribute to persist the option', () => {
-        tray.setIsDecorativeImage(true)
-        tray.$doneButton.click()
-        expect($images[0].getAttribute('data-is-decorative')).toEqual('true')
+      it('sets a role to persist the option', () => {
+        expect(editors[0].$container.querySelector('img').getAttribute('role')).toEqual(
+          'presentation'
+        )
       })
     })
 
     describe('when the image is unset as decorative', () => {
       beforeEach(() => {
         $images[0].alt = ''
-        $images[0].setAttribute('data-is-decorative', 'true')
+        $images[0].setAttribute('role', 'presentation')
         trayController.showTrayForEditor(editors[0])
         tray = getTray()
         tray.setIsDecorativeImage(false)
@@ -184,11 +196,13 @@ describe('RCE "Images" Plugin > ImageOptionsTray > TrayController', () => {
       })
 
       it('updates the image element alt text', () => {
-        expect($images[0].alt).toEqual('Bill Murray, always amazing')
+        expect(editors[0].$container.querySelector('img').getAttribute('alt')).toEqual(
+          'Bill Murray, always amazing'
+        )
       })
 
-      it('sets a data attribute to persist the option', () => {
-        expect($images[0].getAttribute('data-is-decorative')).toEqual('false')
+      it('sets a role attribute to persist the option', () => {
+        expect(editors[0].$container.querySelector('img').getAttribute('role')).toBeNull()
       })
     })
 
@@ -201,7 +215,7 @@ describe('RCE "Images" Plugin > ImageOptionsTray > TrayController', () => {
       })
 
       it('removes the image', () => {
-        expect($images[0]).not.toBeInTheDocument()
+        expect(editors[0].$container.querySelector('img')).toBeNull()
       })
 
       it('replaces the image with a link', () => {
@@ -214,14 +228,14 @@ describe('RCE "Images" Plugin > ImageOptionsTray > TrayController', () => {
         expect($link.href).toEqual($images[0].src)
       })
 
-      it('uses the image src for the link label', () => {
+      it('uses the image alt text for the link label', () => {
         const $link = editors[0].selection.getNode()
-        expect($link.textContent.trim()).toEqual($images[0].src)
+        expect($link.textContent.trim()).toEqual($images[0].alt)
       })
 
       it('sets focus on the editor', () => {
         // Focus otherwise goes to the document body at this time.
-        expect(document.activeElement).toEqual(editors[0].$container)
+        expect(document.activeElement).toBe(editors[0].$iframe)
       })
     })
   })

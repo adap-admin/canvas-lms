@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -16,13 +18,13 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require_relative '../../spec_helper'
+require_relative "../../spec_helper"
 require_relative "../graphql_spec_helper"
 
 describe Types::GradesType do
   let!(:account) { Account.create! }
   let!(:course) { account.courses.create!(grading_standard_enabled: true) }
-  let!(:student_enrollment) { course.enroll_student(User.create!, enrollment_state: 'active') }
+  let!(:student_enrollment) { course.enroll_student(User.create!, enrollment_state: "active") }
   let!(:score) { student_enrollment.find_score(grading_period_id: grading_period.id) }
   let!(:grading_period) do
     group = account.grading_period_groups.create!(title: "a test group")
@@ -35,11 +37,11 @@ describe Types::GradesType do
       close_date: 2.weeks.from_now
     )
   end
-  let!(:teacher) { course.enroll_teacher(User.create!, enrollment_state: 'active').user }
+  let!(:teacher) { course.enroll_teacher(User.create!, enrollment_state: "active").user }
 
   let(:enrollment_type) { GraphQLTypeTester.new(student_enrollment, current_user: teacher) }
 
-  before(:each) do
+  before do
     score.update!(
       current_score: 68.0,
       final_score: 78.1,
@@ -72,12 +74,12 @@ describe Types::GradesType do
 
     it "resolves the overrideGrade field to nil when grading standards are not enabled" do
       course.update!(grading_standard_id: nil)
-      expect(resolve_grades_field("overrideGrade")).to be nil
+      expect(resolve_grades_field("overrideGrade")).to be_nil
     end
 
     it "resolves the overrideGrade field to nil when an override score is not present" do
       score.update!(override_score: nil)
-      expect(resolve_grades_field("overrideGrade")).to be nil
+      expect(resolve_grades_field("overrideGrade")).to be_nil
     end
 
     it "resolves the unpostedCurrentScore field to the corresponding Score's unposted_current_score" do
@@ -89,27 +91,27 @@ describe Types::GradesType do
     end
 
     it "resolves the currentGrade field to the corresponding Score's current_grade" do
-      expect(resolve_grades_field("currentGrade")).to eq 'D+'
+      expect(resolve_grades_field("currentGrade")).to eq "D+"
     end
 
     it "resolves the finalGrade field to the corresponding Score's final_grade" do
-      expect(resolve_grades_field("finalGrade")).to eq 'C+'
+      expect(resolve_grades_field("finalGrade")).to eq "C+"
     end
 
     it "resolves the unpostedCurrentGrade field to the corresponding Score's unposted_current_grade" do
-      expect(resolve_grades_field("unpostedCurrentGrade")).to eq 'C-'
+      expect(resolve_grades_field("unpostedCurrentGrade")).to eq "C-"
     end
 
     it "resolves the unpostedFinalGrade field to the corresponding Score's unposted_final_grade" do
-      expect(resolve_grades_field("unpostedFinalGrade")).to eq 'B-'
+      expect(resolve_grades_field("unpostedFinalGrade")).to eq "B-"
     end
 
     it "resolves the gradingPeriod field to the score's associated grading period" do
-      expect(resolve_grades_field("gradingPeriod { title }")).to eq 'Pleistocene'
+      expect(resolve_grades_field("gradingPeriod { title }")).to eq "Pleistocene"
     end
 
     it "resolves the state field to the Score's workflow_state" do
-      expect(resolve_grades_field("state")).to eq 'active'
+      expect(resolve_grades_field("state")).to eq "active"
     end
   end
 end

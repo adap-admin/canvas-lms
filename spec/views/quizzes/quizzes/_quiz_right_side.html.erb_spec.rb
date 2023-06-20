@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,24 +18,21 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/../../views_helper')
+require_relative "../../views_helper"
 
-describe "/quizzes/quizzes/_quiz_right_side" do
-  it "should render" do
+describe "quizzes/quizzes/_quiz_right_side" do
+  it "renders" do
     course_with_student
     view_context
     assign(:quiz, @course.quizzes.create!)
-    render :partial => "quizzes/quizzes/quiz_right_side"
+    render partial: "quizzes/quizzes/quiz_right_side"
     expect(response).not_to be_nil
   end
 
   context "when post policies is enabled" do
-    before(:each) do
+    before do
       course_with_student
       view_context
-      @course.enable_feature!(:new_gradebook)
-      PostPolicy.enable_feature!
 
       quiz_with_graded_submission([], user: @student, course: @course)
     end
@@ -59,4 +58,3 @@ describe "/quizzes/quizzes/_quiz_right_side" do
     end
   end
 end
-

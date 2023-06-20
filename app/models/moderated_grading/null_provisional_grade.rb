@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -24,14 +26,14 @@ class ModeratedGrading::NullProvisionalGrade
 
   def grade_attributes
     {
-      'provisional_grade_id' => nil,
-      'grade' => nil,
-      'score' => nil,
-      'graded_at' => nil,
-      'scorer_id' => @scorer_id,
-      'graded_anonymously' => nil,
-      'final' => @final,
-      'grade_matches_current_submission' => true
+      "provisional_grade_id" => nil,
+      "grade" => nil,
+      "score" => nil,
+      "graded_at" => nil,
+      "scorer_id" => @scorer_id,
+      "graded_anonymously" => nil,
+      "final" => @final,
+      "grade_matches_current_submission" => true
     }
   end
 
@@ -41,6 +43,7 @@ class ModeratedGrading::NullProvisionalGrade
 
   def scorer
     return nil if @scorer_id.nil?
+
     @scorer ||= User.find(@scorer_id)
   end
 end

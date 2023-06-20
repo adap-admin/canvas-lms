@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -17,35 +19,21 @@
 #
 
 module AuthenticationMethods
-  def load_pseudonym_from_policy
-    if (policy_encoded = params['Policy']) &&
-        (signature = params['Signature']) &&
-        signature == Base64.encode64(OpenSSL::HMAC.digest(OpenSSL::Digest.new('sha1'), Attachment.shared_secret, policy_encoded)).gsub(/\n/, '') &&
-        (policy = JSON.parse(Base64.decode64(policy_encoded)) rescue nil) &&
-        policy['conditions'] &&
-        (credential = policy['conditions'].detect{ |cond| cond.is_a?(Hash) && cond.has_key?("pseudonym_id") })
-      @policy_pseudonym_id = credential['pseudonym_id']
-      # so that we don't have to explicitly skip verify_authenticity_token
-      params[self.class.request_forgery_protection_token] ||= form_authenticity_token
-    end
-    yield if block_given?
+  class AccessTokenError < RuntimeError
   end
 
-  class AccessTokenError < Exception
+  class AccessTokenScopeError < RuntimeError
   end
 
-  class AccessTokenScopeError < StandardError
-  end
-
-  class LoggedOutError < Exception
+  class LoggedOutError < RuntimeError
   end
 
   def self.access_token(request, params_method = :params)
     auth_header = request.authorization
-    if auth_header.present? && (header_parts = auth_header.split(' ', 2)) && header_parts[0] == 'Bearer'
+    if auth_header.present? && (header_parts = auth_header.split(" ", 2)) && header_parts[0] == "Bearer"
       header_parts[1]
     else
-      request.send(params_method)['access_token'].presence
+      request.send(params_method)["access_token"].presence
     end
   end
 
@@ -53,90 +41,120 @@ module AuthenticationMethods
     request.session[:user_id]
   end
 
+  def load_pseudonym_from_inst_access_token(token_string)
+    token = ::AuthenticationMethods::InstAccessToken.parse(token_string)
+    return false unless token
+
+    auth_context = ::AuthenticationMethods::InstAccessToken.load_user_and_pseudonym_context(token, @domain_root_account)
+
+    @current_user = auth_context[:current_user]
+    @current_pseudonym = auth_context[:current_pseudonym]
+    raise AccessTokenError unless @current_user && @current_pseudonym
+
+    if auth_context[:real_current_user]
+      @real_current_user = auth_context[:real_current_user]
+      @real_current_pseudonym = auth_context[:real_current_pseudonym]
+      logger.warn "[AUTH] #{@real_current_user.name}(#{@real_current_user.id}) impersonating #{@current_user.name} on page #{request.url}"
+    end
+    @authenticated_with_jwt = @authenticated_with_inst_access_token = true
+  end
+
   def load_pseudonym_from_jwt
     return unless api_request?
+
     token_string = AuthenticationMethods.access_token(request)
     return unless token_string.present?
+    return if load_pseudonym_from_inst_access_token(token_string)
+
     begin
-      services_jwt = Canvas::Security::ServicesJwt.new(token_string)
+      services_jwt = CanvasSecurity::ServicesJwt.new(token_string)
       @current_user = User.find(services_jwt.user_global_id)
       @current_pseudonym = SisPseudonym.for(@current_user, @domain_root_account, type: :implicit, require_sis: false)
       unless @current_user && @current_pseudonym
         raise AccessTokenError
       end
+
       if services_jwt.masquerading_user_global_id
         @real_current_user = User.find(services_jwt.masquerading_user_global_id)
         @real_current_pseudonym = SisPseudonym.for(@real_current_user, @domain_root_account, type: :implicit, require_sis: false)
-        logger.warn "#{@real_current_user.name}(#{@real_current_user.id}) impersonating #{@current_user.name} on page #{request.url}"
+        logger.warn "[AUTH] #{@real_current_user.name}(#{@real_current_user.id}) impersonating #{@current_user.name} on page #{request.url}"
       end
       @authenticated_with_jwt = true
-    rescue JSON::JWT::InvalidFormat,             # definitely not a JWT
-           Canvas::Security::TokenExpired,       # it could be a JWT, but it's expired if so
-           Canvas::Security::InvalidToken       # Looks like garbage
+    rescue JSON::JWT::InvalidFormat,       # definitely not a JWT
+           Canvas::Security::TokenExpired, # it could be a JWT, but it's expired if so
+           Canvas::Security::InvalidToken  # not formatted like a JWT
       # these will happen for some configurations (no consul)
       # and for some normal use cases (old token, access token),
       # so we can return and move on
-      return
-    rescue Imperium::TimeoutError => exception # Something went wrong in the Network
-      # these are indications of infrastructure of data problems
-      # so we should log them for resolution, but recover gracefully
-      Canvas::Errors.capture_exception(:jwt_check, exception)
+      nil
     end
   end
 
-  ALLOWED_SCOPE_INCLUDES = %w{uuid}
+  ALLOWED_SCOPE_INCLUDES = %w[uuid].freeze
 
   def filter_includes(key)
     # no funny business
-    params.delete(key) unless params[key].class == Array
+    params.delete(key) unless params[key].instance_of?(Array)
     return unless params.key?(key)
+
     params[key] &= ALLOWED_SCOPE_INCLUDES
   end
 
   def validate_scopes
-    if @access_token
-      developer_key = @access_token.developer_key
-      request_method = request.method.casecmp('HEAD') == 0 ? 'GET' : request.method.upcase
+    return unless @access_token
 
-      if developer_key.try(:require_scopes)
-        scope_patterns = @access_token.url_scopes_for_method(request_method).concat(AccessToken.always_allowed_scopes)
-        if scope_patterns.any? { |scope| scope =~ request.path }
+    developer_key = @access_token.developer_key
+    request_method = (request.method.casecmp("HEAD") == 0) ? "GET" : request.method.upcase
+
+    if developer_key.try(:require_scopes)
+      scope_patterns = @access_token.url_scopes_for_method(request_method).concat(AccessToken.always_allowed_scopes)
+      if scope_patterns.any? { |scope| scope =~ request.path }
+        unless developer_key.try(:allow_includes)
           filter_includes(:include)
           filter_includes(:includes)
-        else
-          raise AccessTokenScopeError
         end
+      else
+        raise AccessTokenScopeError
       end
+    end
+  end
+
+  def self.graphql_type_authorized?(access_token, type)
+    if access_token&.developer_key&.require_scopes
+      # allowing the root query type for now, but any other type is forbidden
+      type == "Query"
+    else
+      true
     end
   end
 
   def load_pseudonym_from_access_token
     return unless api_request? ||
-      (params[:controller] == 'oauth2_provider' && params[:action] == 'destroy') ||
-      (params[:controller] == 'login' && params[:action] == 'session_token')
+                  (params[:controller] == "oauth2_provider" && params[:action] == "destroy") ||
+                  (params[:controller] == "login" && params[:action] == "session_token")
 
     token_string = AuthenticationMethods.access_token(request)
 
     if token_string
       @access_token = AccessToken.authenticate(token_string)
-      if !@access_token
-        raise AccessTokenError
-      end
+      raise AccessTokenError unless @access_token
 
       account = access_token_account(@domain_root_account, @access_token)
       raise AccessTokenError unless @access_token.authorized_for_account?(account)
 
       @current_user = @access_token.user
+      @real_current_user = @access_token.real_user
+      @real_current_pseudonym = SisPseudonym.for(@real_current_user, @domain_root_account, type: :implicit, require_sis: false) if @real_current_user
       @current_pseudonym = SisPseudonym.for(@current_user, @domain_root_account, type: :implicit, require_sis: false)
+      @current_pseudonym = nil if (@current_pseudonym&.suspended? && !@real_current_pseudonym) || @real_current_pseudonym&.suspended?
 
-      unless @current_user && @current_pseudonym
-        raise AccessTokenError
-      end
+      raise AccessTokenError unless @current_user && @current_pseudonym
+
       validate_scopes
       @access_token.used!
 
-      RequestContextGenerator.add_meta_header('at', @access_token.global_id)
-      RequestContextGenerator.add_meta_header('dk', @access_token.global_developer_key_id) if @access_token.developer_key_id
+      RequestContext::Generator.add_meta_header("at", @access_token.global_id)
+      RequestContext::Generator.add_meta_header("dk", @access_token.global_developer_key_id) if @access_token.developer_key_id
     end
   end
 
@@ -156,60 +174,62 @@ module AuthenticationMethods
     masked_authenticity_token # ensure that the cookie is set
 
     load_pseudonym_from_jwt
+    load_pseudonym_from_access_token unless @current_pseudonym.present?
 
-    unless @current_pseudonym.present?
-      load_pseudonym_from_access_token
-    end
-
-    if !@current_pseudonym
+    unless @current_pseudonym
       if @policy_pseudonym_id
         @current_pseudonym = Pseudonym.where(id: @policy_pseudonym_id).first
-      elsif (@pseudonym_session = PseudonymSession.with_scope(find_options: Pseudonym.eager_load(:user)) { PseudonymSession.find })
-        @current_pseudonym = @pseudonym_session.record
-        @current_pseudonym.user.reload if @current_pseudonym.shard != @current_pseudonym.user.shard
+      else
+        @pseudonym_session = PseudonymSession.find_with_validation
+        if @pseudonym_session
+          @current_pseudonym = @pseudonym_session.record
+          @current_pseudonym.user.reload if @current_pseudonym.shard != @current_pseudonym.user.shard
 
-        # if the session was created before the last time the user explicitly
-        # logged out (of any session for any of their pseudonyms), invalidate
-        # this session
-        invalid_before = @current_pseudonym.user.last_logged_out
-        # they logged out in the future?!? something's busted; just ignore it -
-        # either my clock is off or whoever set this value's clock is off
-        invalid_before = nil if invalid_before && invalid_before > Time.now.utc
-        if invalid_before &&
-          (session_refreshed_at = request.env['encrypted_cookie_store.session_refreshed_at']) &&
-          session_refreshed_at < invalid_before
+          # if the session was created before the last time the user explicitly
+          # logged out (of any session for any of their pseudonyms), invalidate
+          # this session
+          invalid_before = @current_pseudonym.user.last_logged_out
+          # they logged out in the future?!? something's busted; just ignore it -
+          # either my clock is off or whoever set this value's clock is off
+          invalid_before = nil if invalid_before && invalid_before > Time.now.utc
+          if invalid_before &&
+             (session_refreshed_at = request.env["encrypted_cookie_store.session_refreshed_at"]) &&
+             session_refreshed_at < invalid_before
 
-          logger.info "Invalidating session: Session created before user logged out."
-          destroy_session
-          @current_pseudonym = nil
-          if api_request? || request.format.json?
-            raise LoggedOutError
+            logger.info "[AUTH] Invalidating session: Session created before user logged out."
+            invalidate_session
+            return
+          end
+
+          if @current_pseudonym &&
+             session[:cas_session] &&
+             @current_pseudonym.cas_ticket_expired?(session[:cas_session])
+
+            logger.info "[AUTH] Invalidating session: CAS ticket expired - #{session[:cas_session]}."
+            invalidate_session
+            return
+          end
+
+          if @current_pseudonym.suspended?
+            logger.info "[AUTH] Invalidating session: Pseudonym is suspended."
+            invalidate_session
+            return
           end
         end
-
-        if @current_pseudonym &&
-           session[:cas_session] &&
-           @current_pseudonym.cas_ticket_expired?(session[:cas_session])
-
-          logger.info "Invalidating session: CAS ticket expired - #{session[:cas_session]}."
-          destroy_session
-          @current_pseudonym = nil
-
-          raise LoggedOutError if api_request? || request.format.json?
-
-          redirect_to_login
-        end
       end
 
-      if params[:login_success] == '1' && !@current_pseudonym
+      if params[:login_success] == "1" && !@current_pseudonym
         # they just logged in successfully, but we can't find the pseudonym now?
         # sounds like somebody hates cookies.
-        return redirect_to(login_url(:needs_cookies => '1'))
+        return redirect_to(login_url(needs_cookies: "1"))
       end
-      @current_user = @current_pseudonym && @current_pseudonym.user
+
+      @current_user = @current_pseudonym&.user
     end
 
-    if @current_user && @current_user.unavailable?
+    logger.info "[AUTH] inital load: pseud -> #{@current_pseudonym&.id}, user -> #{@current_user&.id}"
+    if @current_user&.unavailable?
+      logger.info "[AUTH] Invalid request: User is currently UNAVAILABLE"
       @current_pseudonym = nil
       @current_user = nil
     end
@@ -217,33 +237,32 @@ module AuthenticationMethods
     # required by the user throttling middleware
     session[:user_id] = @current_user.global_id if @current_user
 
-    if @current_user && %w(become_user_id me become_teacher become_student).any? { |k| params.key?(k) }
+    if @current_user && %w[become_user_id me become_teacher become_student].any? { |k| params.key?(k) }
       request_become_user = nil
       if params[:become_user_id]
         request_become_user = User.where(id: params[:become_user_id]).first
-      elsif params.keys.include?('me')
+      elsif params.key?("me")
         request_become_user = @current_user
-      elsif params.keys.include?('become_teacher')
+      elsif params.key?("become_teacher")
         course = Course.find(params[:course_id] || params[:id]) rescue nil
         teacher = course.teachers.first if course
         if teacher
           request_become_user = teacher
         else
-          flash[:error] = I18n.t('lib.auth.errors.teacher_not_found', "No teacher found")
+          flash[:error] = I18n.t("lib.auth.errors.teacher_not_found", "No teacher found")
         end
-      elsif params.keys.include?('become_student')
+      elsif params.key?("become_student")
         course = Course.find(params[:course_id] || params[:id]) rescue nil
         student = course.students.first if course
         if student
           request_become_user = student
         else
-          flash[:error] = I18n.t('lib.auth.errors.student_not_found', "No student found")
+          flash[:error] = I18n.t("lib.auth.errors.student_not_found", "No student found")
         end
       end
 
       if request_become_user && request_become_user.id != session[:become_user_id].to_i && request_become_user.can_masquerade?(@current_user, @domain_root_account)
-        params_without_become = params.dup
-        params_without_become.delete_if {|k,v| [ 'become_user_id', 'become_teacher', 'become_student', 'me' ].include? k }
+        params_without_become = params.except("become_user_id", "become_teacher", "become_student", "me")
         params_without_become[:only_path] = true
         session[:masquerade_return_to] = url_for(params_without_become.to_unsafe_h)
         return redirect_to user_masquerade_url(request_become_user.id)
@@ -256,20 +275,38 @@ module AuthenticationMethods
       begin
         user = api_find(User, as_user_id)
       rescue ActiveRecord::RecordNotFound
+        nil
       end
-      if user && user.can_masquerade?(@current_user, @domain_root_account)
+      if user && @real_current_user
+        if @current_user != user
+          # if we're already masquerading from an access token, and now try to
+          # masquerade as someone else
+          render json: { errors: "Cannot change masquerade" }, status: :unauthorized
+          return false
+          # else: they do match, everything is already set
+        end
+        logger.warn "[AUTH] #{@real_current_user.name}(#{@real_current_user.id}) impersonating #{@current_user.name} on page #{request.url} via masquerade token"
+      elsif user&.can_masquerade?(@current_user, @domain_root_account)
         @real_current_user = @current_user
         @current_user = user
         @real_current_pseudonym = @current_pseudonym
         @current_pseudonym = SisPseudonym.for(@current_user, @domain_root_account, type: :implicit, require_sis: false)
-        logger.warn "#{@real_current_user.name}(#{@real_current_user.id}) impersonating #{@current_user.name} on page #{request.url}"
-      elsif api_request?
-        # fail silently for UI, but not for API
-        render :json => {:errors => "Invalid as_user_id"}, :status => :unauthorized
+        logger.warn "[AUTH] #{@real_current_user.name}(#{@real_current_user.id}) impersonating #{@current_user.name} on page #{request.url}"
+      elsif api_request? # fail silently for UI, but not for API
+        result = { errors: "Invalid as_user_id" }
+        if user&.deleted? && user.merged_into_user_id && user.grants_right?(@current_user, :read)
+          result[:merged_into_user_id] = user.merged_into_user_id
+        end
+        # this should maybe be 404, not 401, but we can't change it now
+        render json: result, status: :unauthorized
         return false
       end
     end
 
+    logger.info "[AUTH] final user: #{@current_user&.id}"
+    if Sentry.initialized? && !Rails.env.test?
+      Sentry.set_user({ id: @current_user&.global_id, ip_address: request.remote_ip }.compact)
+    end
     @current_user
   end
   private :load_user
@@ -284,16 +321,27 @@ module AuthenticationMethods
   end
   protected :require_user
 
+  def require_non_jwt_auth
+    if @authenticated_with_jwt
+      render(
+        json: { error: "cannot generate a JWT when authorized by a JWT" },
+        status: :forbidden
+      )
+    end
+  end
+
   def clean_return_to(url)
     return nil if url.blank?
+
     begin
       uri = URI.parse(url)
     rescue URI::Error
       return nil
     end
-    return nil unless uri.path && uri.path[0] == '/'
-    return "#{request.protocol}#{request.host_with_port}#{uri.path.sub(%r{/download$}, '')}" if uri.path =~ %r{/files/(\d+~)?\d+/download$}
-    return "#{request.protocol}#{request.host_with_port}#{uri.path}#{uri.query && "?#{uri.query}"}#{uri.fragment && "##{uri.fragment}"}"
+    return nil unless uri.path && uri.path[0] == "/"
+    return "#{request.protocol}#{request.host_with_port}#{uri.path.sub(%r{/download$}, "")}" if %r{/files/(\d+~)?\d+/download$}.match?(uri.path)
+
+    "#{request.protocol}#{request.host_with_port}#{uri.path}#{uri.query && "?#{uri.query}"}#{uri.fragment && "##{uri.fragment}"}"
   end
 
   def return_to(url, fallback)
@@ -301,17 +349,16 @@ module AuthenticationMethods
     redirect_to url
   end
 
-  def store_location(uri=nil, overwrite=true)
+  def store_location(uri = nil, overwrite = true)
     if overwrite || !session[:return_to]
-      uri ||= request.get? ? request.fullpath : request.referrer
+      uri ||= request.get? ? request.fullpath : request.referer
       session[:return_to] = clean_return_to(uri)
     end
   end
   protected :store_location
 
   def redirect_back_or_default(default)
-    redirect_to(session[:return_to] || default)
-    session.delete(:return_to)
+    session.delete(:return_to) || default
   end
   protected :redirect_back_or_default
 
@@ -321,35 +368,46 @@ module AuthenticationMethods
 
   def redirect_to_login
     return unless fix_ms_office_redirects
+
     respond_to do |format|
-      format.json { render_json_unauthorized }
-      format.all do
+      format.any(:html, :pdf) do
         store_location
-        flash[:warning] = I18n.t('lib.auth.errors.not_authenticated', "You must be logged in to access this page") unless request.path == '/'
+        flash[:warning] = I18n.t("lib.auth.errors.not_authenticated", "You must be logged in to access this page") unless request.path == "/"
         redirect_to login_url(params.permit(:canvas_login, :authentication_provider))
       end
+      format.json { render_json_unauthorized }
+      format.all { render plain: "Unauthenticated", status: :unauthorized }
     end
   end
 
   def render_json_unauthorized
     add_www_authenticate_header if api_request? && !@current_user
-    if @current_user
-      render json: {
-        status: I18n.t('lib.auth.status_unauthorized', 'unauthorized'),
-        errors: [{ message: I18n.t('lib.auth.not_authorized', "user not authorized to perform that action") }]
-      },
-      status: :unauthorized
+
+    if Account.site_admin.feature_enabled?(:api_auth_error_updates)
+      if @current_user
+        code = :forbidden
+        status = "unauthorized"
+        message = I18n.t("lib.auth.not_authorized", "user not authorized to perform that action")
+      else
+        code = :unauthorized
+        status = "unauthenticated"
+        message = I18n.t("lib.auth.authentication_required", "user authorization required")
+      end
     else
-      render json: {
-        status: I18n.t('lib.auth.status_unauthenticated', 'unauthenticated'),
-        errors: [{ :message => I18n.t('lib.auth.authentication_required', "user authorization required") }]
-      },
-      status: :unauthorized
+      code = :unauthorized
+      if @current_user
+        status = I18n.t("lib.auth.status_unauthorized", "unauthorized")
+        message = I18n.t("lib.auth.not_authorized", "user not authorized to perform that action")
+      else
+        status = I18n.t("lib.auth.status_unauthenticated", "unauthenticated")
+        message = I18n.t("lib.auth.authentication_required", "user authorization required")
+      end
     end
+    render status: code, json: { status:, errors: [{ message: }] }
   end
 
   def add_www_authenticate_header
-    response['WWW-Authenticate'] = %{Bearer realm="canvas-lms"}
+    response["WWW-Authenticate"] = %(Bearer realm="canvas-lms")
   end
 
   # Reset the session, and copy the specified keys over to the new session.
@@ -360,5 +418,18 @@ module AuthenticationMethods
     keys.each { |k| saved[k] = session[k] if session[k] }
     reset_session
     saved.each_pair { |k, v| session[k] = v }
+  end
+
+  def invalidate_session
+    destroy_session
+    @current_pseudonym = nil
+
+    raise LoggedOutError if api_request? || request.format.json?
+
+    redirect_to_login unless login_request? && params[:action] == "new"
+  end
+
+  def login_request?
+    params[:controller]&.start_with?("login")
   end
 end

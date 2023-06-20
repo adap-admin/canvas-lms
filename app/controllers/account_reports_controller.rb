@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -192,37 +194,37 @@ class AccountReportsController < ApplicationController
   include Api::V1::Account
   include Api::V1::AccountReport
 
-# @API List Available Reports
-#
-# Returns a paginated list of reports for the current context.
-#
-# @response_field name The name of the report.
-# @response_field parameters The parameters will vary for each report
-#
-# @example_request
-#     curl -H 'Authorization: Bearer <token>' \
-#          https://<canvas>/api/v1/accounts/<account_id>/reports/
-#
-# @example_response
-#
-#  [
-#    {
-#      "report":"student_assignment_outcome_map_csv",
-#      "title":"Student Competency",
-#      "parameters":null
-#    },
-#    {
-#      "report":"grade_export_csv",
-#      "title":"Grade Export",
-#      "parameters":{
-#        "term":{
-#          "description":"The canvas id of the term to get grades from",
-#          "required":true
-#        }
-#      }
-#    }
-#  ]
-#
+  # @API List Available Reports
+  #
+  # Returns a paginated list of reports for the current context.
+  #
+  # @response_field name The name of the report.
+  # @response_field parameters The parameters will vary for each report
+  #
+  # @example_request
+  #     curl -H 'Authorization: Bearer <token>' \
+  #          https://<canvas>/api/v1/accounts/<account_id>/reports/
+  #
+  # @example_response
+  #
+  #  [
+  #    {
+  #      "report":"student_assignment_outcome_map_csv",
+  #      "title":"Student Competency",
+  #      "parameters":null
+  #    },
+  #    {
+  #      "report":"grade_export_csv",
+  #      "title":"Grade Export",
+  #      "parameters":{
+  #        "term":{
+  #          "description":"The canvas id of the term to get grades from",
+  #          "required":true
+  #        }
+  #      }
+  #    }
+  #  ]
+  #
   def available_reports
     if authorized_action(@account, @current_user, :read_reports)
       available_reports = AccountReport.available_reports
@@ -233,24 +235,24 @@ class AccountReportsController < ApplicationController
         last_run = @account.account_reports.active.where(report_type: key).most_recent.take
         last_run = account_report_json(last_run, @current_user) if last_run
         report = {
-          :title => value.title,
-          :parameters => nil,
-          :report => key,
-          :last_run => last_run
+          title: value.title,
+          parameters: nil,
+          report: key,
+          last_run:
         }
         parameters = {}
 
-        value[:parameters].each do |parameter_name, parameter|
+        value.parameters.each do |parameter_name, parameter|
           parameters[parameter_name] = {
-            :required => parameter[:required] || false,
-            :description => parameter[:description]
+            required: parameter[:required] || false,
+            description: parameter[:description]
           }
-        end unless value[:parameters].nil?
+        end
 
-        report[:parameters] = parameters unless parameters.length == 0
+        report[:parameters] = parameters unless parameters.empty?
         results << report
       end
-      render :json => results
+      render json: results
 
     end
   end
@@ -266,6 +268,9 @@ class AccountReportsController < ApplicationController
   #   of available parameters for each report, see {api:AccountReportsController#available_reports List Available Reports}.
   #   A few example parameters have been provided below. Note that the example
   #   parameters provided below may not be valid for every report.
+  #
+  # @argument parameters[skip_message] [Boolean] If true, no message will be sent
+  #   to the user upon completion of the report.
   #
   # @argument parameters[course_id] [Integer] The id of the course to report on.
   #   Note: this parameter has been listed to serve as an example and may not be
@@ -290,73 +295,74 @@ class AccountReportsController < ApplicationController
     if authorized_action(@context, @current_user, :read_reports)
       available_reports = AccountReport.available_reports.keys
       raise ActiveRecord::RecordNotFound unless available_reports.include? params[:report]
+
       parameters = params[:parameters]&.to_unsafe_h
-      report = @account.account_reports.build(:user=>@current_user, :report_type=>params[:report], :parameters=>parameters)
+      report = @account.account_reports.build(user: @current_user, report_type: params[:report], parameters:)
       report.workflow_state = :created
       report.progress = 0
       report.save
       report.run_report
-      render :json => account_report_json(report, @current_user)
+      render json: account_report_json(report, @current_user)
     end
   end
 
   def type_scope
-    @context.account_reports.where(:report_type => params[:report])
+    @context.account_reports.where(report_type: params[:report])
   end
 
-# @API Index of Reports
-# Shows all reports that have been run for the account of a specific type.
-#
-# @example_request
-#     curl -H 'Authorization: Bearer <token>' \
-#          https://<canvas>/api/v1/accounts/<account_id>/reports/<report_type>
-#
-# @returns [Report]
-#
+  # @API Index of Reports
+  # Shows all reports that have been run for the account of a specific type.
+  #
+  # @example_request
+  #     curl -H 'Authorization: Bearer <token>' \
+  #          https://<canvas>/api/v1/accounts/<account_id>/reports/<report_type>
+  #
+  # @returns [Report]
+  #
   def index
     if authorized_action(@context, @current_user, :read_reports)
-      reports = Api.paginate(type_scope.active.most_recent.except(:limit), self, url_for({action: :index, controller: :account_reports}))
+      reports = Api.paginate(type_scope.active.most_recent.except(:limit), self, url_for({ action: :index, controller: :account_reports }))
 
-      render :json => account_reports_json(reports, @current_user)
+      render json: account_reports_json(reports, @current_user)
     end
   end
 
-# @API Status of a Report
-# Returns the status of a report.
-#
-# @example_request
-#     curl -H 'Authorization: Bearer <token>' \
-#          https://<canvas>/api/v1/accounts/<account_id>/reports/<report_type>/<report_id>
-#
-# @returns Report
-#
+  # @API Status of a Report
+  # Returns the status of a report.
+  #
+  # @example_request
+  #     curl -H 'Authorization: Bearer <token>' \
+  #          https://<canvas>/api/v1/accounts/<account_id>/reports/<report_type>/<report_id>
+  #
+  # @returns Report
+  #
   def show
     if authorized_action(@context, @current_user, :read_reports)
 
       report = type_scope.active.find(params[:id])
-      render :json => account_report_json(report, @current_user)
+      render json: account_report_json(report, @current_user)
     end
   end
 
-# @API Delete a Report
-#
-# Deletes a generated report instance.
-# @example_request
-#     curl -H 'Authorization: Bearer <token>' \
-#          -X DELETE \
-#          https://<canvas>/api/v1/accounts/<account_id>/reports/<report_type>/<id>
-#
-# @returns Report
-#
+  # @API Delete a Report
+  #
+  # Deletes a generated report instance.
+  # @example_request
+  #     curl -H 'Authorization: Bearer <token>' \
+  #          -X DELETE \
+  #          https://<canvas>/api/v1/accounts/<account_id>/reports/<report_type>/<id>
+  #
+  # @returns Report
+  #
   def destroy
     if authorized_action(@context, @current_user, :read_reports)
       report = type_scope.active.find(params[:id])
 
       report.destroy
       if report.destroy
-        render :json => account_report_json(report, @current_user)
+        render json: account_report_json(report, @current_user)
       else
-        render :json => report.errors, :status => :bad_request
+        render json: report.errors, status: :bad_request
       end
     end
   end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -29,54 +31,59 @@ module MasterCourses::CollectionRestrictor
 
     klass.cattr_accessor :collection_owner_association # this is the association to find the quiz
 
-    klass.after_update :mark_downstream_changes
+    klass.after_update :mark_downstream_changes, if: -> { klass != Lti::LineItem || Account.site_admin.feature_enabled?(:blueprint_line_item_support) }
   end
 
   module ClassMethods
     def restrict_columns(edit_type, columns)
-      raise "set the collection owner first" unless self.collection_owner_association
+      raise "set the collection owner first" unless collection_owner_association
 
       super
-      owner_class = self.reflections[self.collection_owner_association.to_s].klass
+      owner_class = reflections[collection_owner_association.to_s].klass
       owner_class.restrict_columns(edit_type, pseudocolumn_for_type(edit_type)) # e.g. add "assessment_questions_content" as a restricted column
     end
 
     def pseudocolumn_for_type(type) # prepend with table name because it looks better than "Quizzes::QuizQuestion"
-      "#{self.table_name}_#{type}"
+      "#{table_name}_#{type}"
     end
   end
 
   def check_restrictions?
-    if self.is_a?(Quizzes::QuizQuestion)
-      !self.generated? # allow updating through the bank even though it's technically locked... shhh don't tell anybody
-    else
-      true
-    end
+    true
   end
 
   def owner_for_restrictions
-    self.send(self.class.base_class.collection_owner_association)
+    send(self.class.base_class.collection_owner_association)
   end
 
   # delegate to the owner
   def is_child_content?
-    owner_for_restrictions && owner_for_restrictions.is_child_content?
+    owner_for_restrictions&.is_child_content?
   end
 
-  def child_content_restrictions
-    self.owner_for_restrictions.child_content_restrictions
-  end
+  delegate :child_content_restrictions, to: :owner_for_restrictions
 
   def mark_downstream_changes
-    return if @importing_migration || !is_child_content? # don't mark changes on import
+    return if skip_restrictions? # don't mark changes on import
 
     # instead of marking the exact columns - i'm just going to be lazy and mark the edit type on the owner, e.g. "quiz_questions_content"
-    changed_types = []
-    self.class.base_class.restricted_column_settings.each do |edit_type, columns|
-      if (self.saved_changes.keys & columns).any?
-        changed_types << self.class.pseudocolumn_for_type(edit_type) # pretend it's sort of like a column in the downstream changes
+    changed_types = self.class.base_class.restricted_column_settings.each_with_object([]) do |(edit_type, columns), object|
+      if saved_changes.keys.intersect?(columns) || new_record? || destroyed?
+        object << self.class.pseudocolumn_for_type(edit_type) # pretend it's sort of like a column in the downstream changes
       end
     end
-    self.owner_for_restrictions.mark_downstream_changes(changed_types) if changed_types.any? # store changes on owner
+    owner_for_restrictions.mark_downstream_changes(changed_types) if changed_types.any? # store changes on owner
+  end
+
+  # very similar to mark_downstream_changes, but for items that are hard-deleted
+  def mark_downstream_create_destroy
+    return if skip_restrictions?
+
+    changed_types = self.class.base_class.restricted_column_settings.each_with_object([]) do |(edit_type, _), object|
+      if new_record? || destroyed?
+        object << self.class.pseudocolumn_for_type(edit_type)
+      end
+    end
+    owner_for_restrictions.mark_downstream_changes(changed_types) if changed_types.any? # store changes on owner
   end
 end

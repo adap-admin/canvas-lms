@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -16,24 +18,21 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../../spec_helper')
-require_dependency "lti/membership_service/group_lis_person_collator"
-
 module Lti::MembershipService
   describe GroupLisPersonCollator do
-    context 'group with many students' do
-      before(:each) do
+    context "group with many students" do
+      before do
         course_with_teacher
         @course.offer!
         @student1 = user_model
-        @course.enroll_user(@student1, 'StudentEnrollment', enrollment_state: 'active')
+        @course.enroll_user(@student1, "StudentEnrollment", enrollment_state: "active")
         @student2 = user_model
-        @course.enroll_user(@student2, 'StudentEnrollment', enrollment_state: 'active')
+        @course.enroll_user(@student2, "StudentEnrollment", enrollment_state: "active")
         @student3 = user_model
-        @course.enroll_user(@student3, 'StudentEnrollment', enrollment_state: 'active')
+        @course.enroll_user(@student3, "StudentEnrollment", enrollment_state: "active")
 
-        @group_category = @course.group_categories.create!(name: 'Membership')
-        @group = @course.groups.create!(name: 'Group 1', group_category: @group_category)
+        @group_category = @course.group_categories.create!(name: "Membership")
+        @group = @course.groups.create!(name: "Group 1", group_category: @group_category)
         @group.add_user(@student1)
         @group.add_user(@student2)
         @group.add_user(@student3)
@@ -42,16 +41,16 @@ module Lti::MembershipService
         @group.save!
       end
 
-      describe '#context' do
-        it 'returns the correct context' do
+      describe "#context" do
+        it "returns the correct context" do
           collator = GroupLisPersonCollator.new(@group, @student1)
 
           expect(collator.context).to eq(@group)
         end
       end
 
-      describe '#membership' do
-        it 'outputs the membership in a group' do
+      describe "#membership" do
+        it "outputs the membership in a group" do
           collator = GroupLisPersonCollator.new(@group, @student1)
 
           memberships = collator.memberships
@@ -63,12 +62,12 @@ module Lti::MembershipService
           [@student1, @student2, @student3].each do |student|
             membership = memberships.find { |m| m.member.user_id == student.lti_context_id }
 
-            expect(membership.status).to eq(IMS::LIS::Statuses::SimpleNames::Active)
+            expect(membership.status).to eq(::IMS::LIS::Statuses::SimpleNames::Active)
             if student == @group.leader
-              expect(membership.role).to match_array([IMS::LIS::Roles::Context::URNs::Member,
-                                                      IMS::LIS::Roles::Context::URNs::Manager])
+              expect(membership.role).to match_array([::IMS::LIS::Roles::Context::URNs::Member,
+                                                      ::IMS::LIS::Roles::Context::URNs::Manager])
             else
-              expect(membership.role).to match_array([IMS::LIS::Roles::Context::URNs::Member])
+              expect(membership.role).to match_array([::IMS::LIS::Roles::Context::URNs::Member])
             end
             expect(membership.member.name).to eq(student.name)
             expect(membership.member.given_name).to eq(student.first_name)
@@ -81,9 +80,9 @@ module Lti::MembershipService
         end
       end
 
-      context 'pagination' do
-        describe '#memberships' do
-          it 'returns the number of memberships specified by the per_page params' do
+      context "pagination" do
+        describe "#memberships" do
+          it "returns the number of memberships specified by the per_page params" do
             allow(Api).to receive(:per_page).and_return(1)
             collator = GroupLisPersonCollator.new(@group, @student1, per_page: 1, page: 1)
 
@@ -94,7 +93,7 @@ module Lti::MembershipService
             expect(collator.memberships.size).to eq(3)
           end
 
-          it 'returns the right page of memberships based on the page param' do
+          it "returns the right page of memberships based on the page param" do
             allow(Api).to receive(:per_page).and_return(1)
             collator1 = GroupLisPersonCollator.new(@group, @student1, per_page: 1, page: 1)
             collator2 = GroupLisPersonCollator.new(@group, @student1, per_page: 1, page: 2)
@@ -109,18 +108,18 @@ module Lti::MembershipService
           end
         end
 
-        describe '#next_page?' do
-          it 'returns true when there is an additional page of results' do
+        describe "#next_page?" do
+          it "returns true when there is an additional page of results" do
             allow(Api).to receive(:per_page).and_return(1)
             collator = GroupLisPersonCollator.new(@group, @student1, per_page: 1, page: 1)
-            expect(collator.next_page?).to eq(true)
+            expect(collator.next_page?).to be(true)
           end
 
-          it 'returns false when there are no more pages' do
+          it "returns false when there are no more pages" do
             allow(Api).to receive(:per_page).and_return(1)
             collator = GroupLisPersonCollator.new(@group, @student1, per_page: 1, page: 3)
             collator.memberships
-            expect(collator.next_page?).to eq(false)
+            expect(collator.next_page?).to be(false)
           end
         end
       end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -20,22 +22,24 @@ class AuthenticationProvider::Delegated < AuthenticationProvider
   after_create :disable_open_registration
 
   def disable_open_registration
-    if self.account.open_registration?
-      self.account.settings[:open_registration] = false
-      self.account.save!
+    if account.open_registration?
+      account.settings[:open_registration] = false
+      account.save!
     end
   end
 
   def user_logout_redirect(controller, _current_user)
     # can we send them to a disambiguation page?
     return account.auth_discovery_url if account.auth_discovery_url
+
     # Canvas or LDAP primary provider; go to the login url cause it won't
     # auto-log them back in
     primary_auth = account.authentication_providers.active.first
     if primary_auth.is_a?(AuthenticationProvider::Canvas) ||
-      primary_auth.is_a?(AuthenticationProvider::LDAP)
+       primary_auth.is_a?(AuthenticationProvider::LDAP)
       return controller.login_url
     end
+
     # otherwise, just go to a landing page
     controller.logout_url
   end

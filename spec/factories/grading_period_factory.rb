@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -22,7 +24,7 @@
 module Factories
   def grading_periods(options = {})
     now = Time.zone.now
-    course = options[:context] || @course || course_factory()
+    course = options[:context] || @course || course_factory
     count = options[:count] || 2
 
     default_weights = [1] * count
@@ -36,17 +38,17 @@ module Factories
     period_duration = options[:duration] || 1.month
 
     grading_period_group = Factories::GradingPeriodGroupHelper.new.legacy_create_for_course(course)
-    count.times.map do |n|
+    Array.new(count) do |n|
       grading_period_group.grading_periods.create!(
-        title:      "Period #{n}",
+        title: "Period #{n}",
         start_date: start_dates[n],
-        end_date:   start_dates[n] + period_duration,
-        weight:     weights[n]
+        end_date: start_dates[n] + period_duration,
+        weight: weights[n]
       )
     end
   end
 
-  def create_grading_periods_for(course, opts={})
+  def create_grading_periods_for(course, opts = {})
     course.root_account = Account.default unless course.root_account
     gp_group = Factories::GradingPeriodGroupHelper.new.legacy_create_for_course(course)
     class_name = course.class.name.demodulize
@@ -55,15 +57,15 @@ module Factories
     period_fixtures = {
       old: {
         start_date: 5.months.ago(now),
-        end_date:   2.months.ago(now)
+        end_date: 2.months.ago(now)
       },
       current: {
         start_date: 2.months.ago(now),
-        end_date:   2.months.from_now(now)
+        end_date: 2.months.from_now(now)
       },
       future: {
         start_date: 2.months.from_now(now),
-        end_date:   5.months.from_now(now)
+        end_date: 5.months.from_now(now)
       }
     }
     timeframes.map.with_index(1) do |timeframe, index|
@@ -81,12 +83,12 @@ module Factories
       end
     end
 
-    def create_with_weeks_for_group(group, start_weeks_ago, end_weeks_ago, title="Example Grading Period")
+    def create_with_weeks_for_group(group, start_weeks_ago, end_weeks_ago, title = "Example Grading Period")
       group.grading_periods.create!({
-        start_date: start_weeks_ago.weeks.ago,
-        end_date: end_weeks_ago.weeks.ago,
-        title: title
-      })
+                                      start_date: start_weeks_ago.weeks.ago,
+                                      end_date: end_weeks_ago.weeks.ago,
+                                      title:
+                                    })
     end
 
     def create_for_group(group, options = {})

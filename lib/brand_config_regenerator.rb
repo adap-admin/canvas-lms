@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -18,84 +20,135 @@
 # This is what is in charge of regenerating all of the child
 # brand configs when an account saves theirs in the theme editor
 class BrandConfigRegenerator
-
   attr_reader :progresses
 
-  def initialize(account, current_user, new_brand_config)
+  class << self
+    def process(account, current_user, new_brand_config)
+      progress = Progress.new(
+        context: account,
+        tag: "brand_config_regenerate_for_#{account.root_account.global_id}".to_sym,
+        message: I18n.t("Regenerating themes...")
+      )
+      progress.user = current_user
+      progress.reset!
+      new_brand_config.save! if new_brand_config&.changed?
+      progress.process_job(BrandConfigRegenerator,
+                           :process_sync,
+                           { priority: Delayed::HIGH_PRIORITY, singleton: progress.tag.to_s },
+                           account,
+                           new_brand_config)
+      progress
+    end
+
+    def process_sync(progress, account, new_brand_config)
+      new(progress, account, new_brand_config)
+    end
+  end
+
+  def initialize(progress, account, new_brand_config)
+    @progress = progress
     @account = account
-    @current_user = current_user
     old_config_md5 = @account.brand_config_md5
     @account.brand_config = new_brand_config
     @account.save!
     @new_configs = {}
     @new_configs[old_config_md5] = new_brand_config if old_config_md5
-    @progresses = []
     process
   end
 
+  private
+
   def things_that_need_to_be_regenerated
     @things_that_need_to_be_regenerated ||= begin
-      all_subaccounts = @account.sub_accounts_recursive(100000, nil)
-      result = all_subaccounts.select(&:brand_config_md5)
-      result.concat(SharedBrandConfig.where(account_id: all_subaccounts))
-      if @account.site_admin?
-        # note: this is only root accounts on the same shard as site admin
-        @account.shard.activate do
-          root_scope = Account.root_accounts.active.non_shadow.where.not(id: @account)
-          result.concat(root_scope.select(&:brand_config_md5))
-          result.concat(SharedBrandConfig.where(account_id: root_scope))
-
-          sub_scope = Account.active.where(root_account_id: root_scope)
-          result.concat(sub_scope.select(&:brand_config_md5))
-          result.concat(SharedBrandConfig.where(account_id: sub_scope))
+      result = []
+      # In prod this will take a pretty long time for siteadmin, but we don't expect this to ever be used on siteadmin in prod
+      Shard.with_each_shard(target_shards) do
+        root_scope = Account.root_accounts.active.non_shadow.preload(:brand_config)
+        if Shard.current == @account.shard
+          root_scope = root_scope.where.not(id: @account)
         end
+        root_scope = filter_root_scope(root_scope)
+        if root_scope
+          result.concat(root_scope.where.not(brand_config_md5: nil))
+          result.concat(SharedBrandConfig.where(account_id: root_scope).preload(:brand_config))
+        end
+
+        sub_scope = if @account.root_account?
+                      Account.active.where(root_account_id: [root_scope&.pluck(:id), (Shard.current == @account.shard) ? @account.id : nil].compact.flatten).preload(:brand_config)
+                    else
+                      Account.active.where(id: Account.sub_account_ids_recursive(@account.id))
+                    end
+        result.concat(sub_scope.where.not(brand_config_md5: nil))
+        result.concat(SharedBrandConfig.where(account_id: sub_scope).preload(:brand_config))
       end
       result
     end.freeze
   end
 
+  def target_shards
+    if @account.site_admin?
+      Shard.all
+    else
+      [@account.shard]
+    end
+  end
+
+  def filter_root_scope(scope)
+    if @account.site_admin?
+      scope
+    else
+      nil
+    end
+  end
+
   # Returns true if this brand config is not based on anything that needs to be regenerated.
   # This should not be common but can happen in dev/test setups that got into an inconsistent state
   def orphan?(brand_config)
-    things_that_need_to_be_regenerated.none? { |thing| thing.brand_config_md5 == brand_config.parent_md5 }
+    things_that_need_to_be_regenerated.none? { |thing| thing.brand_config_md5 == brand_config.local_parent_md5 }
   end
 
   # If we haven't saved a new copy for a config's parent,
   # we don't know its new parent_md5 yet.
   def ready_to_process?(account_or_shared_brand_config)
     config = account_or_shared_brand_config.brand_config
-    !config.parent || @new_configs.key?(config.parent_md5) || orphan?(config)
+    !config.parent || @new_configs.key?(config.local_parent_md5) || orphan?(config)
   end
 
   def regenerate(thing)
     config = thing.brand_config
     return unless config
-    new_parent_md5 = config.parent_md5 && @new_configs[config.parent_md5].try(:md5) || @account.brand_config_md5
-    new_config = config.clone_with_new_parent(new_parent_md5)
-    new_config.save_unless_dup!
 
-    account = thing.is_a?(SharedBrandConfig) ? thing.account : thing
-    job_type = thing.is_a?(SharedBrandConfig) ? :sync_to_s3_and_save_to_shared_brand_config! : :sync_to_s3_and_save_to_account!
-    progress = Progress.new(
-      context: @current_user,
-      tag: "#{job_type}_for_#{thing.id}".to_sym,
-      message: "Syncing for #{account.name}#{thing.is_a?(SharedBrandConfig) ? ": #{thing.name}" : ''}"
-    )
-    progress.user = @current_user
-    progress.reset!
-    progress.process_job(new_config, job_type, { priority: Delayed::HIGH_PRIORITY, strand: "brand_config_regenerate_#{thing.global_asset_string}" }, thing.id)
+    thing.shard.activate do
+      new_config = config.clone_with_new_parent((config.parent_md5 && @new_configs[config.local_parent_md5]) || @account.brand_config)
+      new_config.save_unless_dup!
 
-    @new_configs[config.md5] = new_config
-    @progresses << progress
-  end
+      job_type = thing.is_a?(SharedBrandConfig) ? :sync_to_s3_and_save_to_shared_brand_config! : :sync_to_s3_and_save_to_account!
+      new_config.send(job_type, @progress, thing)
 
-  def process
-    things_left_to_process = things_that_need_to_be_regenerated.dup
-    while thing = things_left_to_process.sample
-      next unless ready_to_process?(thing)
-      regenerate(thing)
-      things_left_to_process.delete(thing)
+      @new_configs[config.md5] = new_config
     end
   end
 
+  def process
+    # signify we started "1% completion"
+    @progress.update_completion!(1)
+    things_left_to_process = things_that_need_to_be_regenerated.dup
+    # every "thing" gets 5 units of work
+    total = things_left_to_process.length * 5
+    # the initial query shoud get us to 5%; recalculate so that the balance is 95%
+    five_percent = total * 5.0 / 95.0
+    total += five_percent
+    @progress.calculate_completion!(five_percent, total)
+    # take things off the queue from front-to-back
+    while (thing = things_left_to_process.shift)
+      # if for some reason this one isn't ready (it _should_ be by default,
+      # because we get higher tiers first) put it back on the queue to try
+      # again later
+      unless ready_to_process?(thing)
+        things_left_to_process.push(thing)
+        next
+      end
+      regenerate(thing)
+    end
+  end
 end

@@ -120,10 +120,10 @@
     flex-basis: 10rem;
   }
   .student-group-join {
-    text-transform: uppercase;
-    font-weight: bold;
-    text-align: direction(right);
-    flex-basis: 2rem;
+    flex-basis: 7rem;
+    button {
+      display: block;
+    }
   }
   .student-group-body {
     padding: direction-sides(16px 16px 16px 36px);
@@ -178,7 +178,7 @@
 }
 // group switcher within left sub-nav
 .al-trigger--within-left-menu {
-  margin: direction-sides(0 0 $ic-sp $ic-sp/2);
+  margin: direction-sides(0 0 $ic-sp $ic-sp*0.5);
 
   &.ui-menu-item {
     max-width: 200px; //override the kyle menu width for this instance

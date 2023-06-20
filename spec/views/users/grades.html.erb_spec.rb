@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -22,24 +24,25 @@ require_relative "../views_helper"
 describe "users/grades" do
   context "as a teacher" do
     let_once(:course) { Course.create!(workflow_state: "available") }
-    let_once(:student) { course_with_user("StudentEnrollment", course: course, active_all: true).user }
-    let_once(:teacher) { course_with_user("TeacherEnrollment", course: course, active_all: true).user }
+    let_once(:student) { course_with_user("StudentEnrollment", course:, active_all: true).user }
+    let_once(:teacher) { course_with_user("TeacherEnrollment", course:, active_all: true).user }
     let(:student_enrollment) { course.enrollments.find_by(user: student) }
 
     it "shows the computed score, even if override scores exist and feature is enabled" do
       course.enable_feature!(:final_grades_override)
       view_context(course, teacher)
       student_enrollment.scores.create!(course_score: true, current_score: 73.0, override_score: 89.2)
-      current_active_enrollments = teacher.
-        enrollments.
-        current.
-        preload(:course, :enrollment_state, :scores).
-        shard(teacher).
-        to_a
+      ScoreStatisticsGenerator.update_course_score_statistic(course.id)
+      current_active_enrollments = teacher
+                                   .enrollments
+                                   .current
+                                   .preload(:course, :enrollment_state, :scores)
+                                   .shard(teacher)
+                                   .to_a
       presenter = GradesPresenter.new(current_active_enrollments)
       assign(:presenter, presenter)
       render "users/grades"
-      expect(Nokogiri::HTML(response.body).css('.teacher_grades .percent').text).to include "73.00%"
+      expect(Nokogiri::HTML5(response.body).css(".teacher_grades .percent").text).to include "73.00%"
     end
   end
 end

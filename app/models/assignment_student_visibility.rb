@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -61,14 +63,14 @@ class AssignmentStudentVisibility < ActiveRecord::Base
     users_with_visibility_by_object_id(:assignment_id, opts)
   end
 
-  def self.visible_assignment_ids_for_user(user_id, course_ids=nil)
-    opts = {user_id: user_id}
+  def self.visible_assignment_ids_for_user(user_id, course_ids = nil)
+    opts = { user_id: }
     if course_ids
       opts[:course_id] = course_ids
     end
-    self.where(opts).pluck(:assignment_id)
+    where(opts).pluck(:assignment_id)
   end
 
   # readonly? is not checked in destroy though
-  before_destroy { |record| raise ActiveRecord::ReadOnlyRecord }
+  before_destroy { raise ActiveRecord::ReadOnlyRecord }
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -130,15 +132,15 @@ class Quizzes::QuizExtensionsController < ApplicationController
   #
   def create
     unless params[:quiz_extensions].is_a?(Array)
-      reject! 'missing required key :quiz_extensions'
+      reject! "missing required key :quiz_extensions"
     end
 
     # check permissions on all extensions before performing on submissions
     quiz_extensions = Quizzes::QuizExtension.build_extensions(
-       students, [@quiz], params[:quiz_extensions]) do |extension|
-
+      students, [@quiz], params[:quiz_extensions]
+    ) do |extension|
       unless extension.quiz_submission.grants_right?(participant.user, :add_attempts)
-        reject! 'you are not allowed to change extension settings for this submission', 403
+        reject! "you are not allowed to change extension settings for this submission", 403
       end
     end
 
@@ -148,17 +150,16 @@ class Quizzes::QuizExtensionsController < ApplicationController
     render json: serialize_jsonapi(quiz_extensions)
   end
 
-
   private
 
   def serialize_jsonapi(quiz_extensions)
     serialized_set = Canvas::APIArraySerializer.new(quiz_extensions, {
-      each_serializer: Quizzes::QuizExtensionSerializer,
-      controller: self,
-      scope: @current_user,
-      root: false,
-      include_root: false
-    }).as_json
+                                                      each_serializer: Quizzes::QuizExtensionSerializer,
+                                                      controller: self,
+                                                      scope: @current_user,
+                                                      root: false,
+                                                      include_root: false
+                                                    }).as_json
 
     { quiz_extensions: serialized_set }
   end
@@ -170,5 +171,4 @@ class Quizzes::QuizExtensionsController < ApplicationController
   def students
     @context.students
   end
-
 end

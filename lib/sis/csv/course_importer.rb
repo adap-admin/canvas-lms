@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -19,9 +21,8 @@
 module SIS
   module CSV
     class CourseImporter < CSVBaseImporter
-
       def self.course_csv?(row)
-        row.include?('course_id') && row.include?('short_name')
+        row.include?("course_id") && row.include?("short_name")
       end
 
       def self.identifying_fields
@@ -30,32 +31,45 @@ module SIS
 
       # expected columns
       # course_id,short_name,long_name,account_id,term_id,status
-      def process(csv, index=nil, count=nil)
+      def process(csv, index = nil, count = nil)
         messages = []
         count = SIS::CourseImporter.new(@root_account, importer_opts).process(messages) do |importer|
           csv_rows(csv, index, count) do |row|
-            start_date = (row.key? 'start_date') ? nil : 'not_present'
-            end_date = (row.key? 'end_date') ? nil : 'not_present'
+            start_date = row.key?("start_date") ? nil : "not_present"
+            end_date = row.key?("end_date") ? nil : "not_present"
             begin
-              start_date = Time.zone.parse(row['start_date']) if row['start_date'].present?
-              end_date = Time.zone.parse(row['end_date']) if row['end_date'].present?
+              start_date = Time.zone.parse(row["start_date"]) if row["start_date"].present?
+              end_date = Time.zone.parse(row["end_date"]) if row["end_date"].present?
             rescue
-              messages << SisBatch.build_error(csv, "Bad date format for course #{row['course_id']}", sis_batch: @batch, row: row['lineno'], row_info: row)
+              messages << SisBatch.build_error(csv, "Bad date format for course #{row["course_id"]}", sis_batch: @batch, row: row["lineno"], row_info: row)
             end
-            course_format = row.key?('course_format') && (row['course_format'] || 'not_set')
-            grade_passback_setting = row.key?('grade_passback_setting') && (row['grade_passback_setting'] || 'not_set')
+            course_format = row.key?("course_format") && (row["course_format"] || "not_set")
+            grade_passback_setting = row.key?("grade_passback_setting") && (row["grade_passback_setting"] || "not_set")
             begin
-              importer.add_course(row['course_id'], row['term_id'], row['account_id'], row['fallback_account_id'], row['status'], start_date, end_date,
-                                  row['abstract_course_id'], row['short_name'], row['long_name'], row['integration_id'], course_format, row['blueprint_course_id'],
-                                  grade_passback_setting)
+              importer.add_course(row["course_id"],
+                                  row["term_id"],
+                                  row["account_id"],
+                                  row["fallback_account_id"],
+                                  row["status"],
+                                  start_date,
+                                  end_date,
+                                  row["abstract_course_id"],
+                                  row["short_name"],
+                                  row["long_name"],
+                                  row["integration_id"],
+                                  course_format,
+                                  row["blueprint_course_id"],
+                                  grade_passback_setting,
+                                  row["homeroom_course"],
+                                  row["friendly_name"])
             rescue ImportError => e
-              messages << SisBatch.build_error(csv, e.to_s, sis_batch: @batch, row: row['lineno'], row_info: row)
+              messages << SisBatch.build_error(csv, e.to_s, sis_batch: @batch, row: row["lineno"], row_info: row)
             end
           end
         end
         errors = []
         messages.each do |message|
-          errors << ((message.is_a? SisBatchError) ? message : SisBatch.build_error(csv, message, sis_batch: @batch))
+          errors << (message.is_a?(SisBatchError) ? message : SisBatch.build_error(csv, message, sis_batch: @batch))
         end
         SisBatch.bulk_insert_sis_errors(errors)
         count

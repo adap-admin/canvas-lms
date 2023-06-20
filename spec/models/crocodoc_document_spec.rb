@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -16,22 +18,20 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
-
-describe 'CrocodocDocument' do
+describe "CrocodocDocument" do
   before :once do
-    Setting.set 'crocodoc_counter', 0
-    PluginSetting.create! :name => 'crocodoc',
-                          :settings => { :api_key => "blahblahblahblahblah" }
+    Setting.set "crocodoc_counter", 0
+    PluginSetting.create! name: "crocodoc",
+                          settings: { api_key: "blahblahblahblahblah" }
   end
 
-  before :each do
-    allow_any_instance_of(Crocodoc::API).to receive(:upload).and_return 'uuid' => '1234567890'
+  before do
+    allow_any_instance_of(Crocodoc::API).to receive(:upload).and_return "uuid" => "1234567890"
   end
 
-  context 'permissions_for_user' do
+  context "permissions_for_user" do
     before :once do
-      teacher_in_course(:active_all => true)
+      teacher_in_course(active_all: true)
       student_in_course
       ta_in_course
       @submitter = @student
@@ -41,97 +41,101 @@ describe 'CrocodocDocument' do
       @assignment = @course.assignments.create! name: "a1"
       attachment = crocodocable_attachment_model(context: @submitter)
       @submission = @assignment.submit_homework @submitter,
-        submission_type: "online_upload",
-        attachments: [attachment]
+                                                submission_type: "online_upload",
+                                                attachments: [attachment]
 
       @crocodoc = attachment.crocodoc_document
     end
 
-    it "should let the teacher view all annotations" do
+    it "lets the teacher view all annotations" do
       expect(@crocodoc.permissions_for_user(@teacher)).to eq({
-        :filter => 'all',
-        :admin => true,
-        :editable => true,
-      })
+                                                               filter: "all",
+                                                               admin: true,
+                                                               editable: true,
+                                                             })
     end
 
-    it "should only include ids specified in the whitelist" do
+    it "only includes ids specified in the allow list" do
       expect(@crocodoc.permissions_for_user(@teacher, [@teacher.crocodoc_id!, @submitter.crocodoc_id!])).to eq({
-        :filter => "#{@teacher.crocodoc_id!},#{@submitter.crocodoc_id!}",
-        :admin => true,
-        :editable => true,
-      })
+                                                                                                                 filter: "#{@teacher.crocodoc_id!},#{@submitter.crocodoc_id!}",
+                                                                                                                 admin: true,
+                                                                                                                 editable: true,
+                                                                                                               })
     end
 
-    it "should set :admin and :editable to false if the calling user isn't whitelisted" do
+    it "sets :admin and :editable to false if the calling user isn't allowed" do
       expect(@crocodoc.permissions_for_user(@submitter, [@teacher.crocodoc_id!])).to eq({
-        :filter => "#{@teacher.crocodoc_id!}",
-        :admin => false,
-        :editable => false,
-      })
+                                                                                          filter: @teacher.crocodoc_id!.to_s,
+                                                                                          admin: false,
+                                                                                          editable: false,
+                                                                                        })
     end
 
     context "submitter permissions" do
-      it "should see everything (unless the assignment is muted)" do
-        expect(@crocodoc.permissions_for_user(@submitter)).to eq({
-          :filter => 'all',
-          :admin => false,
-          :editable => true,
-        })
+      before :once do
+        @assignment.ensure_post_policy(post_manually: true)
       end
 
-      it "should only see their own annotations when assignment is muted" do
-        @assignment.mute!
+      it "sees everything when grades are posted" do
+        @assignment.post_submissions
         expect(@crocodoc.permissions_for_user(@submitter)).to eq({
-          :filter => @submitter.crocodoc_id,
-          :admin => false,
-          :editable => true,
-        })
+                                                                   filter: "all",
+                                                                   admin: false,
+                                                                   editable: true,
+                                                                 })
+      end
+
+      it "only sees their own annotations when grades are not posted" do
+        expect(@crocodoc.permissions_for_user(@submitter)).to eq({
+                                                                   filter: @submitter.crocodoc_id,
+                                                                   admin: false,
+                                                                   editable: true,
+                                                                 })
       end
     end
 
-    it "should only allow classmates to see their own annotations" do
+    it "only allows classmates to see their own annotations" do
       expect(@crocodoc.permissions_for_user(@other_student)).to eq({
-        :filter => @other_student.crocodoc_id!,
-        :admin => false,
-        :editable => true,
-      })
+                                                                     filter: @other_student.crocodoc_id!,
+                                                                     admin: false,
+                                                                     editable: true,
+                                                                   })
     end
 
-    it "should not allow annotations if no user is given" do
+    it "does not allow annotations if no user is given" do
       expect(@crocodoc.permissions_for_user(nil)).to eq({
-        :filter => 'none',
-        :admin => false,
-        :editable => false,
-      })
+                                                          filter: "none",
+                                                          admin: false,
+                                                          editable: false,
+                                                        })
     end
 
-    it "should not allow annotations if anonymous_peer_reviews" do
-      @submission.assignment.update_attributes anonymous_peer_reviews: true,
-                                               peer_reviews: true
+    it "does not allow annotations if anonymous_peer_reviews" do
+      @submission.assignment.update anonymous_peer_reviews: true,
+                                    peer_reviews: true
       expect(@crocodoc.permissions_for_user(@student)).to eq({
-        :filter => 'none',
-        :admin => false,
-        :editable => false,
-      })
+                                                               filter: "none",
+                                                               admin: false,
+                                                               editable: false,
+                                                             })
     end
 
     it "returns permissions for older submission versions" do
       attachment = crocodocable_attachment_model(context: @submitter)
-      submission2 = @assignment.submit_homework @submitter,
-        submission_type: "online_upload",
-        attachments: [attachment]
+      @assignment.submit_homework @submitter,
+                                  submission_type: "online_upload",
+                                  attachments: [attachment]
 
       cd1 = @crocodoc
       cd2 = attachment.crocodoc_document
 
-      [cd1, cd2].each { |cd|
+      [cd1, cd2].each do |cd|
         expect(cd.permissions_for_user(@submitter)).to eq({
-          filter: 'all',
-          admin: false,
-          editable: true,
-        })
-      }
+                                                            filter: "all",
+                                                            admin: false,
+                                                            editable: true,
+                                                          })
+      end
     end
 
     context "#upload" do
@@ -151,10 +155,10 @@ describe 'CrocodocDocument' do
     end
   end
 
-  context 'update_process_states' do
-    it "should honor the batch size setting" do
-      Setting.set('crocodoc_status_check_batch_size', 2)
-      4.times { CrocodocDocument.create!(:process_state => "QUEUED") }
+  context "update_process_states" do
+    it "honors the batch size setting" do
+      Setting.set("crocodoc_status_check_batch_size", 2)
+      4.times { CrocodocDocument.create!(process_state: "QUEUED") }
       api = double
       expect(api).to receive(:status).twice.and_return([])
       allow(CrocodocDocument).to receive(:crocodoc_api).and_return(api)

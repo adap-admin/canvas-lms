@@ -18,9 +18,9 @@
 
 import React from 'react'
 import {shallow} from 'enzyme'
-import axios from 'axios'
+import axios from '@canvas/axios'
 import moxios from 'moxios'
-import ConfirmEndTutorialDialog from 'jsx/new_user_tutorial/ConfirmEndTutorialDialog'
+import ConfirmEndTutorialDialog from 'ui/features/new_user_tutorial/react/ConfirmEndTutorialDialog'
 
 QUnit.module('ConfirmEndTutorialDialog Spec', {
   setup() {
@@ -28,18 +28,18 @@ QUnit.module('ConfirmEndTutorialDialog Spec', {
   },
   teardown() {
     moxios.uninstall()
-  }
+  },
 })
 
 const defaultProps = {
   isOpen: true,
-  handleRequestClose() {}
+  handleRequestClose() {},
 }
 
 test('handleOkayButtonClick calls the proper api endpoint and data', () => {
   const spy = sinon.spy(axios, 'put')
   const wrapper = shallow(<ConfirmEndTutorialDialog {...defaultProps} />)
-  wrapper.find('Button[variant="primary"]').simulate('click')
+  wrapper.find('Button[color="primary"]').simulate('click')
   ok(spy.calledWith('/api/v1/users/self/features/flags/new_user_tutorial_on_off', {state: 'off'}))
   spy.restore()
 })
@@ -49,7 +49,7 @@ test('handleOkayButtonClick calls onSuccessFunc after calling the api', assert =
   const spy = sinon.stub(ConfirmEndTutorialDialog, 'onSuccess')
 
   const wrapper = shallow(<ConfirmEndTutorialDialog {...defaultProps} />)
-  wrapper.find('Button[variant="primary"]').simulate('click')
+  wrapper.find('Button[color="primary"]').simulate('click')
   moxios.wait(() => {
     const request = moxios.requests.mostRecent()
     request.respondWith({status: 200}).then(() => {

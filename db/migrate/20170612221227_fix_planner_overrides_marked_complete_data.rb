@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -20,10 +22,6 @@ class FixPlannerOverridesMarkedCompleteData < ActiveRecord::Migration[4.2]
   disable_ddl_transaction!
 
   def self.up
-    DataFixup::FixPlannerOverridesMarkedCompleteData.send_later_if_production_enqueue_args(
-      :run, { priority: Delayed::LOWER_PRIORITY, max_attempts: 1 })
-  end
-
-  def self.down
+    DataFixup::FixPlannerOverridesMarkedCompleteData.delay_if_production(priority: Delayed::LOWER_PRIORITY).run
   end
 end

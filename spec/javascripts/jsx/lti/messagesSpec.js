@@ -18,25 +18,25 @@
 
 import $ from 'jquery'
 import sinon from 'sinon'
-import { ltiMessageHandler } from 'lti/messages'
+import {ltiMessageHandler} from '@canvas/lti/jquery/messages'
 
 const intialHeight = 100
 const finalHeight = 800
 
-let clock;
-let ltiToolWrapperFixture = $('#fixtures')
+let clock
+const ltiToolWrapperFixture = $('#fixtures')
 
 const resizeMessage = {
   subject: 'lti.frameResize',
-  height: finalHeight
+  height: finalHeight,
 }
 
 const fetchWindowSize = {
-  subject: 'lti.fetchWindowSize'
+  subject: 'lti.fetchWindowSize',
 }
 
-const scrollMessage = {
-  subject: 'lti.scrollToTop'
+const hideRightSideWrapper = {
+  subject: 'lti.hideRightSideWrapper',
 }
 
 const removeUnloadMessage = {
@@ -46,42 +46,42 @@ const removeUnloadMessage = {
 function showMessage(show = true) {
   return {
     subject: 'lti.showModuleNavigation',
-    show: show
+    show,
   }
 }
 
 function alertMessage(message = 'Alert message') {
-  return  {
+  return {
     subject: 'lti.screenReaderAlert',
-    body: message
+    body: message,
   }
 }
 
 function unloadMessage(message = 'unload message') {
   return {
     subject: 'lti.setUnloadMessage',
-    message: message
+    message,
   }
 }
 
 function postMessageEvent(data, source) {
   return {
     data: JSON.stringify(data),
-    source: source
+    source,
   }
 }
 
-QUnit.module('Messages', function (suiteHooks) {
-  suiteHooks.beforeEach(function () {
-    clock = sinon.useFakeTimers();
-  });
+QUnit.module('Messages', suiteHooks => {
+  suiteHooks.beforeEach(() => {
+    clock = sinon.useFakeTimers()
+  })
 
-  suiteHooks.afterEach(function () {
-    clock.restore();
+  suiteHooks.afterEach(() => {
+    clock.restore()
     ltiToolWrapperFixture.empty()
-  });
+  })
 
-  test('finds and resizes the tool content wrapper', () => {
+  test('finds and resizes the tool content wrapper', async () => {
     ltiToolWrapperFixture.append(`
       <div id="content-wrapper" class="ic-Layout-contentWrapper">
         <div id="content" class="ic-Layout-contentMain" role="main">
@@ -95,11 +95,11 @@ QUnit.module('Messages', function (suiteHooks) {
     const toolContentWrapper = el.find('.tool_content_wrapper')
 
     equal(toolContentWrapper.height(), 100)
-    ltiMessageHandler(postMessageEvent(resizeMessage));
+    await ltiMessageHandler(postMessageEvent(resizeMessage))
     equal(toolContentWrapper.height(), finalHeight)
   })
 
-  test('finds and resizes an iframe in embedded content', () => {
+  test('finds and resizes an iframe in embedded content', async () => {
     ltiToolWrapperFixture.append(`
       <div>
         <h1 class="page-title">LTI resize test</h1>
@@ -109,26 +109,24 @@ QUnit.module('Messages', function (suiteHooks) {
     const iframe = $('iframe')
 
     equal(iframe.height(), 100)
-    ltiMessageHandler(postMessageEvent(resizeMessage, iframe[0].contentWindow));
+    await ltiMessageHandler(postMessageEvent(resizeMessage, iframe[0].contentWindow))
     equal(iframe.height(), finalHeight)
   })
 
-  test('returns the hight and width of the page along with the iframe offset', () => {
+  test('returns the height and width of the page along with the iframe offset', async () => {
     ltiToolWrapperFixture.append(`
       <div>
         <h1 class="page-title">LTI resize test</h1>
         <p><iframe style="width: 100%; height: ${intialHeight}px;" src="https://canvas.example.com/courses/4/external_tools/retrieve?display=borderless" width="100%" height="${intialHeight}px" allowfullscreen="allowfullscreen" webkitallowfullscreen="webkitallowfullscreen" mozallowfullscreen="mozallowfullscreen"></iframe></p>
       </div>
     `)
-    const iframe = $('iframe')
-
-    sinon.spy(iframe[0].contentWindow, 'postMessage')
-    notOk(iframe[0].contentWindow.postMessage.calledOnce)
-    ltiMessageHandler(postMessageEvent(fetchWindowSize, iframe[0].contentWindow))
-    ok(iframe[0].contentWindow.postMessage.calledOnce)
+    const postMessageStub = sinon.stub()
+    notOk(postMessageStub.calledOnce)
+    await ltiMessageHandler(postMessageEvent(fetchWindowSize, {postMessage: postMessageStub}))
+    ok(postMessageStub.calledOnce)
   })
 
-  test('hides the module navigation', () => {
+  test('hides the module navigation', async () => {
     ltiToolWrapperFixture.append(`
       <div>
         <div id="module-footer" class="module-sequence-footer">Next</div>
@@ -137,29 +135,51 @@ QUnit.module('Messages', function (suiteHooks) {
     const moduleFooter = $('#module-footer')
 
     ok(moduleFooter.is(':visible'))
-    ltiMessageHandler(postMessageEvent(showMessage(false)));
+    await ltiMessageHandler(postMessageEvent(showMessage(false)))
     notOk(moduleFooter.is(':visible'))
   })
 
-  test('sets the unload message', () => {
+  test('sets the unload message', async () => {
     sinon.spy(window, 'addEventListener')
     notOk(window.addEventListener.calledOnce)
-    ltiMessageHandler(postMessageEvent(unloadMessage()))
+    await ltiMessageHandler(postMessageEvent(unloadMessage()))
     ok(window.addEventListener.calledOnce)
   })
 
-  test('remove the unload message', () => {
-    ltiMessageHandler(postMessageEvent(unloadMessage()))
+  test('hide the right side wrapper', async () => {
+    ltiToolWrapperFixture.append(`
+      <div>
+        <div id="right-side-wrapper">someWrapping</div>
+      </div>
+    `)
+    const moduleWrapper = $('#right-side-wrapper')
+
+    ok(moduleWrapper.is(':visible'))
+    await ltiMessageHandler(postMessageEvent(hideRightSideWrapper))
+    notOk(moduleWrapper.is(':visible'))
+  })
+
+  test('remove the unload message', async () => {
+    await ltiMessageHandler(postMessageEvent(unloadMessage()))
     sinon.spy(window, 'removeEventListener')
     notOk(window.removeEventListener.calledOnce)
-    ltiMessageHandler(postMessageEvent(removeUnloadMessage))
+    await ltiMessageHandler(postMessageEvent(removeUnloadMessage))
     ok(window.removeEventListener.calledOnce)
   })
 
-  test('triggers a screen reader alert', () => {
+  test('triggers a screen reader alert', async () => {
     sinon.spy($, 'screenReaderFlashMessageExclusive')
-    ltiMessageHandler(postMessageEvent(alertMessage()));
+    await ltiMessageHandler(postMessageEvent(alertMessage()))
     ok($.screenReaderFlashMessageExclusive.calledOnce)
   })
 
+  test('uses iframe title for visible alert', async () => {
+    sinon.spy($, 'flashMessageSafe')
+    const title = 'Tool Name'
+    ltiToolWrapperFixture.append(`
+      <iframe data-lti-launch="true" title="${title}" src="https://canvas.example.com/courses/4/external_tools/retrieve?display=borderless"></iframe>
+    `)
+    await ltiMessageHandler(postMessageEvent({subject: 'lti.showAlert', body: 'Hello world!'}))
+    sinon.assert.calledWith($.flashMessageSafe, sinon.match(title))
+  })
 })

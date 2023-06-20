@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -16,13 +18,9 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'active_model_serializers'
-require 'action_controller'
-require 'active_support'
-require 'active_record'
-require_dependency 'canvas/lock_explanation'
-require_dependency 'api'
-require_dependency 'text_helper'
+require "active_model_serializers"
+require "action_controller"
+require "active_record"
 
 # You can include just this file if your serializer doesn't need too much
 # from the whole stack to run your tests faster!
@@ -31,12 +29,12 @@ module ActiveModel
   class FakeController
     include Rails.application.routes.url_helpers
     def default_url_options
-      { host: 'example.com' }
+      { host: "example.com" }
     end
 
     attr_accessor :accepts_jsonapi, :stringify_json_ids, :session, :context
 
-    def initialize(options={})
+    def initialize(options = {})
       @accepts_jsonapi = options.fetch(:accepts_jsonapi, true)
       @stringify_json_ids = options.fetch(:stringify_json_ids, true)
       @session = options[:session]
@@ -50,14 +48,13 @@ module ActiveModel
     def stringify_json_ids?
       !!stringify_json_ids
     end
-
   end
 end
 
-require File.expand_path(File.dirname(__FILE__)) + '/../app/serializers/canvas/api_serialization.rb'
-require File.expand_path(File.dirname(__FILE__)) + '/../app/serializers/canvas/api_serializer.rb'
-require File.expand_path(File.dirname(__FILE__)) + '/../app/serializers/canvas/api_array_serializer.rb'
+require_relative "../app/serializers/canvas/api_serialization"
+require_relative "../app/serializers/canvas/api_serializer"
+require_relative "../app/serializers/canvas/api_array_serializer"
 
-Dir[File.expand_path(File.dirname(__FILE__) + '/../app/serializers/*.rb')].each do |file|
+Dir[File.expand_path(File.dirname(__FILE__) + "/../app/serializers/*.rb")].each do |file|
   require file
 end

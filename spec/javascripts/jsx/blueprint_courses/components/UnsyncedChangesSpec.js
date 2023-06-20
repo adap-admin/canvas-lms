@@ -17,11 +17,11 @@
  */
 
 import React from 'react'
-import { Provider } from 'react-redux'
+import {Provider} from 'react-redux'
 import {mount} from 'enzyme'
-import createStore from 'jsx/blueprint_courses/store'
-import {ConnectedUnsyncedChanges} from 'jsx/blueprint_courses/components/UnsyncedChanges'
-import MigrationStates from 'jsx/blueprint_courses/migrationStates'
+import createStore from '@canvas/blueprint-courses/react/store'
+import {ConnectedUnsyncedChanges} from 'ui/features/blueprint_course_master/react/components/UnsyncedChanges'
+import MigrationStates from '@canvas/blueprint-courses/react/migrationStates'
 
 const noop = () => {}
 const unsyncedChanges = [
@@ -31,7 +31,7 @@ const unsyncedChanges = [
     asset_name: 'Another Discussion',
     change_type: 'deleted',
     html_url: '/courses/4/assignments/22',
-    locked: false
+    locked: false,
   },
   {
     asset_id: '96',
@@ -39,7 +39,7 @@ const unsyncedChanges = [
     asset_name: 'Bulldog.png',
     change_type: 'updated',
     html_url: '/courses/4/files/96',
-    locked: true
+    locked: true,
   },
   {
     asset_id: 'page-1',
@@ -47,8 +47,17 @@ const unsyncedChanges = [
     asset_name: 'Page 1',
     change_type: 'created',
     html_url: '/4/pages/page-1',
-    locked: false
-  }
+    locked: false,
+  },
+  {
+    asset_id: '5',
+    asset_type: 'media_track',
+    asset_name: 'media.mp4',
+    change_type: 'created',
+    html_url: '/media_attachments/96/media_tracks',
+    locked: false,
+    locale: 'en',
+  },
 ]
 
 const defaultProps = {
@@ -68,11 +77,11 @@ const actionProps = {
   setNotificationMessage: noop,
 }
 
-function mockStore (props = {...defaultProps}) {
+function mockStore(props = {...defaultProps}) {
   return createStore({...props})
 }
 
-function connect (props = {...defaultProps}) {
+function connect(props = {...defaultProps}) {
   const store = mockStore()
   return (
     <Provider store={store}>
@@ -99,10 +108,22 @@ test('renders the migration options component', () => {
 
 test('renders the changes properly', () => {
   const tree = mount(connect())
-  const changes = tree.find('.bcs__unsynced-item')
-  equal(changes.length, 3)
-  const locks = tree.find('.bcs__unsynced-item IconBlueprintLock')
+  const changes = tree.find('tr[data-testid="bcs__unsynced-item"]')
+  equal(changes.length, 4)
+  const locks = changes.find('IconBlueprintLockSolid')
   equal(locks.length, 1)
-  const unlocks = tree.find('.bcs__unsynced-item IconBlueprint')
-  equal(unlocks.length, 2)
+  const unlocks = changes.find('IconBlueprintSolid')
+  equal(unlocks.length, 3)
+})
+
+test('renders the media tracks properly', () => {
+  const tree = mount(connect())
+  const changes = tree.find('tr[data-testid="bcs__unsynced-item"]')
+  equal(changes.length, 4)
+  const assetName = changes.findWhere(
+    node => node.name() === 'Text' && node.text() === 'media.mp4 (English)'
+  )
+  equal(assetName.length, 1)
+  const assetType = changes.findWhere(node => node.name() === 'Text' && node.text() === 'Caption')
+  equal(assetType.length, 1)
 })

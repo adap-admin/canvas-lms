@@ -18,7 +18,7 @@
 
 import fakeENV from 'helpers/fakeENV'
 
-import getEnv from 'jsx/assignments/GradeSummary/getEnv'
+import getEnv from 'ui/features/assignment_grade_summary/react/getEnv'
 
 QUnit.module('GradeSummary getEnv()', suiteHooks => {
   suiteHooks.beforeEach(() => {
@@ -28,23 +28,23 @@ QUnit.module('GradeSummary getEnv()', suiteHooks => {
         id: '2301',
         muted: true,
         grades_published: false,
-        title: 'Example Assignment'
+        title: 'Example Assignment',
       },
       CURRENT_USER: {
         can_view_grader_identities: true,
         can_view_student_identities: false,
         grader_id: 'admin',
-        id: '1100'
+        id: '1100',
       },
       FINAL_GRADER: {
         grader_id: 'teach',
-        id: '1105'
+        id: '1105',
       },
       GRADERS: [
-        {grader_name: 'Charlie Xi', id: '4502', user_id: '1103'},
-        {grader_name: 'Adam Jones', id: '4503', user_id: '1101'},
-        {grader_name: 'Betty Ford', id: '4501', user_id: '1102'}
-      ]
+        {grader_name: 'Charlie Xi', id: '4502', user_id: '1103', grader_selectable: true},
+        {grader_name: 'Adam Jones', id: '4503', user_id: '1101', grader_selectable: true},
+        {grader_name: 'Betty Ford', id: '4501', user_id: '1102', grader_selectable: false},
+      ],
     })
   })
 
@@ -156,6 +156,16 @@ QUnit.module('GradeSummary getEnv()', suiteHooks => {
         const graderNames = getEnv().graders.map(grader => grader.graderName)
         deepEqual(graderNames, ['Adam Jones', 'Betty Ford', 'Charlie Xi'])
       })
+
+      test('includes .graderSelectable', () => {
+        const graders = getEnv().graders
+
+        const deletedGrader = graders.find(grader => grader.graderName === 'Betty Ford')
+        strictEqual(deletedGrader.graderSelectable, false)
+
+        const activeGrader = graders.find(grader => grader.graderName === 'Adam Jones')
+        strictEqual(activeGrader.graderSelectable, true)
+      })
     })
 
     QUnit.module('when graders are anonymous', hooks => {
@@ -163,7 +173,7 @@ QUnit.module('GradeSummary getEnv()', suiteHooks => {
         ENV.GRADERS = [
           {anonymous_id: 'h2asd', id: '4502'},
           {anonymous_id: 'abcde', id: '4503'},
-          {anonymous_id: 'b01ng', id: '4501'}
+          {anonymous_id: 'b01ng', id: '4501'},
         ]
       })
 

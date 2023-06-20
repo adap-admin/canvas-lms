@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -17,9 +19,8 @@
 
 PactConfig::Consumers::ALL.each do |consumer|
   Pact.provider_states_for consumer do
-
     # Account ID: 2
-    provider_state 'an account with grading standards' do
+    provider_state "an account with grading standards" do
       set_up do
         @account = Pact::Canvas.base_state.account
         grading_standard = @account.grading_standards.build(title: "Number Before Letter")
@@ -35,7 +36,7 @@ PactConfig::Consumers::ALL.each do |consumer|
     end
 
     # Course ID: 1
-    provider_state 'a course with grading standards' do
+    provider_state "a course with grading standards" do
       set_up do
         @course = Pact::Canvas.base_state.course
         grading_standard = @course.grading_standards.build(title: "Number Before Letter")

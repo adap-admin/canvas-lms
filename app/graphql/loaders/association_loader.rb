@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -36,7 +38,8 @@ class Loaders::AssociationLoader < GraphQL::Batch::Loader
   #
   # +associations+ are the associations to preload (this can anything that
   # +ActiveRecord::Associations::Preloader+ accepts)
-  def initialize(model, association)
+  def initialize(_model, association)
+    super()
     @association = association
   end
 
@@ -44,14 +47,14 @@ class Loaders::AssociationLoader < GraphQL::Batch::Loader
 
   def load(record)
     if record.association(@association).loaded?
-      return Promise.resolve(record.send(@association))
+      Promise.resolve(record.send(@association))
     else
       super
     end
   end
 
   def perform(records)
-    ActiveRecord::Associations::Preloader.new.preload(records, @association)
+    ActiveRecord::Associations.preload(records, @association)
     records.each { |r| fulfill(r, r.send(@association)) }
   end
 end

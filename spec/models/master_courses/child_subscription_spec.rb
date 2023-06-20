@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -15,8 +17,6 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'spec_helper'
-
 describe MasterCourses::ChildSubscription do
   describe "is_child_course?" do
     before :once do
@@ -29,16 +29,16 @@ describe MasterCourses::ChildSubscription do
       MasterCourses::ChildSubscription.is_child_course?(@course)
     end
 
-    it "should cache the result" do
+    it "caches the result" do
       enable_cache do
         expect(check).to be_falsey
-        expect(MasterCourses::ChildSubscription).to receive(:where).never
+        expect(MasterCourses::ChildSubscription).not_to receive(:where)
         expect(check).to be_falsey
         expect(MasterCourses::ChildSubscription.is_child_course?(@course.id)).to be_falsey # should work with ids too
       end
     end
 
-    it "should invalidate the cache when set/unset as master course" do
+    it "invalidates the cache when set/unset as master course" do
       enable_cache do
         expect(check).to be_falsey
         sub = @template.add_child_course!(@course) # invalidate on create
@@ -50,23 +50,25 @@ describe MasterCourses::ChildSubscription do
   end
 
   describe "migration id invalidation" do
-    it "should deactivate and reactivate migration ids for course content" do
+    it "deactivates and reactivate migration ids for course content" do
       master_course = course_factory
       @template = MasterCourses::MasterTemplate.set_as_master_course(master_course)
       child_course = course_factory
       sub = @template.add_child_course!(@course)
+      expect(sub.root_account_id).to eq child_course.root_account_id
       expect(child_course.reload.syllabus_master_template_id).to eq @template.id.to_s
 
-      original_page = master_course.wiki_pages.create!(:title => "blah")
+      original_page = master_course.wiki_pages.create!(title: "blah")
       mc_tag = @template.create_content_tag_for!(original_page)
 
-      page_copy = child_course.wiki_pages.create!(:title => "blah", :migration_id => mc_tag.migration_id)
+      page_copy = child_course.wiki_pages.create!(title: "blah", migration_id: mc_tag.migration_id)
       child_tag = sub.create_content_tag_for!(page_copy)
+      expect(child_tag.root_account_id).to eq child_course.root_account_id
 
       sub.destroy!
-      expect(page_copy.reload.migration_id).to eq (sub.deactivation_prefix + mc_tag.migration_id)
-      expect(child_tag.reload.migration_id).to eq (sub.deactivation_prefix + mc_tag.migration_id)
-      expect(child_course.reload.syllabus_master_template_id).to be_empty
+      expect(page_copy.reload.migration_id).to eq(sub.deactivation_prefix + mc_tag.migration_id)
+      expect(child_tag.reload.migration_id).to eq(sub.deactivation_prefix + mc_tag.migration_id)
+      expect(child_course.reload.syllabus_master_template_id).to be_nil
 
       sub.undestroy
       expect(page_copy.reload.migration_id).to eq mc_tag.migration_id

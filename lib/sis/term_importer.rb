@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -18,15 +20,13 @@
 
 module SIS
   class TermImporter < BaseImporter
-
     def process
-      start = Time.zone.now
       importer = Work.new(@batch, @root_account, @logger)
       EnrollmentTerm.process_as_sis(@sis_options) do
         yield importer
       end
       SisBatchRollBackData.bulk_insert_roll_back_data(importer.roll_back_data)
-      @logger.debug("Terms took #{Time.zone.now - start} seconds")
+
       importer.success_count
     end
 
@@ -41,11 +41,9 @@ module SIS
         @success_count = 0
       end
 
-      def add_term(term_id, name, status, start_date=nil, end_date=nil, integration_id=nil, date_override_enrollment_type=nil)
-        @logger.debug("Processing Term #{[term_id, name, status, start_date, end_date, integration_id, date_override_enrollment_type].inspect}")
-
+      def add_term(term_id, name, status, start_date = nil, end_date = nil, integration_id = nil, date_override_enrollment_type = nil)
         raise ImportError, "No term_id given for a term" if term_id.blank?
-        raise ImportError, "Improper status \"#{status}\" for term #{term_id}" unless status =~ /\Aactive|\Adeleted/i
+        raise ImportError, "Improper status \"#{status}\" for term #{term_id}" unless /\Aactive|\Adeleted/i.match?(status)
         return if @batch.skip_deletes? && status =~ /deleted/i
 
         term = @root_account.enrollment_terms.where(sis_source_id: term_id).first_or_initialize
@@ -54,17 +52,19 @@ module SIS
         if date_override_enrollment_type
           # only configure the date override if this row is present
           raise ImportError, "Cannot set date override on non-existent term" if term.new_record?
-          unless %w(StudentEnrollment TeacherEnrollment TaEnrollment DesignerEnrollment).include?(date_override_enrollment_type)
+          unless %w[StudentEnrollment TeacherEnrollment TaEnrollment DesignerEnrollment].include?(date_override_enrollment_type)
             raise ImportError, "Invalid date_override_enrollment_type"
           end
 
-          if status =~ /active/i
-            term.set_overrides(@root_account, {date_override_enrollment_type => {:start_at => start_date, :end_at => end_date}})
-          elsif status =~ /deleted/i
+          case status
+          when /active/i
+            term.set_overrides(@root_account, { date_override_enrollment_type => { start_at: start_date, end_at: end_date } })
+          when /deleted/i
             term.enrollment_dates_overrides.where(enrollment_type: date_override_enrollment_type).destroy_all
           end
         else
           raise ImportError, "No name given for term #{term_id}" if name.blank?
+
           # only update the name on new records, and ones that haven't been
           # changed since the last sis import
           if term.new_record? || !term.stuck_sis_fields.include?(:name)
@@ -73,12 +73,13 @@ module SIS
 
           term.integration_id = integration_id
 
-          if status =~ /active/i
-            term.workflow_state = 'active'
-          elsif status =~ /deleted/i
-            term.workflow_state = 'deleted'
+          case status
+          when /active/i
+            term.workflow_state = "active"
+          when /deleted/i
+            term.workflow_state = "deleted"
           end
-          if (term.stuck_sis_fields & [:start_at, :end_at]).empty?
+          unless term.stuck_sis_fields.intersect?([:start_at, :end_at])
             term.start_at = start_date
             term.end_at = end_date
           end
@@ -95,7 +96,6 @@ module SIS
           raise ImportError, msg
         end
       end
-
     end
   end
 end

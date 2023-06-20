@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -16,12 +18,12 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require_relative '../../spec_helper'
+require_relative "../../spec_helper"
 
 describe Login::SamlIdpDiscoveryController do
   it "works" do
     a = Account.default
-    a.settings[:saml_entity_id] = 'http://school.instructure.com/saml2'
+    a.settings[:saml_entity_id] = "http://school.instructure.com/saml2"
     a.save!
     a.authentication_providers.create!(auth_type: "saml_idp_discovery", discovery_service_url: "http://idp.school.edu/WAYF")
 

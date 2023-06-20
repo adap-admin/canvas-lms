@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -17,14 +19,15 @@
 #
 
 class PageView
-  class CsvReport
-
+  class CSVReport
     attr_reader :user, :limit
 
-    def initialize(user, viewer = nil)
+    def initialize(user, viewer = nil, options = {})
       @user = user
-      @viewer = viewer
-      @limit = Setting.get('page_views_csv_export_rows', '300').to_i
+      @limit = Setting.get("page_views_csv_export_rows", "300").to_i
+      @options = {}
+      @options[:viewer] = viewer if viewer
+      @options.merge!(options)
     end
 
     def generate
@@ -43,6 +46,7 @@ class PageView
         while accum.length < limit
           accum.concat(batch)
           break unless batch.next_page
+
           batch = page_views(batch.next_page)
         end
         accum.take(limit)
@@ -50,7 +54,7 @@ class PageView
     end
 
     def page_views(page)
-      user.page_views(viewer: @viewer).paginate(page: page, per_page: limit)
+      user.page_views(@options).paginate(page:, per_page: limit)
     end
 
     def header

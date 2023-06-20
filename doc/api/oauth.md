@@ -114,7 +114,7 @@ ID and client secret. To obtain these application credentials, you will
 need to register your application.  The client secret should never be shared.
 
 For Canvas Cloud (hosted by Instructure), developer keys are
-<a href="https://community.canvaslms.com/docs/DOC-5141" target="_blank">issued by the admin of the institution</a>.
+<a href="https://community.canvaslms.com/t5/Admin-Guide/How-do-I-manage-developer-keys-for-an-account/ta-p/249" target="_blank">issued by the admin of the institution</a>.
 
 <b>NOTE for LTI providers:</b> Since developer keys are scoped to the institution they are issued
 from, tool providers that serve multiple institutions should store and look up the correct
@@ -122,7 +122,7 @@ developer key based on the launch parameters (eg. custom_canvas_api_domain) sent
 launch.
 
 For <a href="https://github.com/instructure/canvas-lms/wiki" target="_blank">open source Canvas users</a>,
-you can <a href="https://community.canvaslms.com/docs/DOC-5141" target="_blank">generate a client ID</a>
+you can <a href="https://community.canvaslms.com/t5/Admin-Guide/How-do-I-manage-developer-keys-for-an-account/ta-p/249" target="_blank">generate a client ID</a>
 and secret in the Site Admin account of your Canvas install.
 
 <a name="oauth2-flow-1"></a>
@@ -132,7 +132,7 @@ and secret in the Site Admin account of your Canvas install.
 A basic request looks like:
 
 <div class="method_details">
-<h3 class="endpoint">GET https://&lt;canvas-install-url&gt;/login/oauth2/auth?client_id=XXX&response_type=code&state=YYY&redirect_uri=https://example.com/oauth_complete</h3>
+<h3 class="endpoint">GET https://&lt;canvas-install-url&gt;/login/oauth2/auth?client_id=XXX&response_type=code&state=YYY&redirect_uri=https://example.com/oauth2response</h3>
 </div>
 
 See [GET login/oauth2/auth](file.oauth_endpoints.html#get-login-oauth2-auth) for details.
@@ -154,17 +154,18 @@ client_id and client_secret to obtain the final access_key.
 
 If your application passed a state parameter in step 1, it will be
 returned here in step 2 so that your app can tie the request and
-response together.
+response together, whether the response was successful or an error
+occurred.
 
 If the user doesn't accept the request for access, or if another error
 occurs, Canvas redirects back to your request\_uri with an `error`
 parameter, rather than a `code` parameter, in the query string.
 
 <div class="method_details">
-<h3 class="endpoint">http://www.example.com/oauth2response?error=access_denied</h3>
+<h3 class="endpoint">http://www.example.com/oauth2response?error=access_denied&error_description=a_description&state=YYY</h3>
 </div>
 
-`access_denied` is the only currently implemented error code.
+A list of possible error codes is found in the [RFC-7649 spec](https://datatracker.ietf.org/doc/html/rfc6749#section-4.2.2.1).
 
 <a name="oauth2-flow-2.1"></a>
 #### [Note for native apps](#oauth2-flow-2.1)
@@ -225,10 +226,14 @@ with the following parameters:
     </tr>
     <tr>
       <td class="mono">replace_tokens</td>
-      <td>(optional) If this option is provided, existing access tokens issued for this developer key/secret will be destroyed and replaced with the new token that is returned from this request</td>
+      <td>(optional) If this option is set to `1`, existing access tokens issued for this developer key/secret will be destroyed and replaced with the new token that is returned from this request</td>
     </tr>
   </tbody>
 </table>
+
+Note that the once the code issued in step 2 is used in a POST request
+to this endpoint, it is invalidated and further requests for tokens
+with the same code will fail.
 
 <a name="using-access-tokens"></a>
 ## [Using an Access Token to authenticate requests](#using-access-tokens)
@@ -315,7 +320,7 @@ To logout, simply send a [DELETE request to login/oauth2/token](file.oauth_endpo
 ## [Step 1: Developer Key Setup](#developer-key-setup)
 <small><a href="#top">Back to Top</a></small>
 
-<p>Before the client_credentials grant flow can be achieved, an <a href="https://community.canvaslms.com/docs/DOC-16729-42141110178" target="_blank">LTI developer key must be created</a>. During developer key configuration, a public JWK can either be configured statically or can be dynamically rotated by providing JWKs by a URL that Canvas can reach. Tools may also use a previously issued client_credentials token to <a href="/doc/api/public_jwk.html" target="_blank">retroactively rotate the public JWK via an API request</a>. The JWK <b>must</b> include an alg and use.</p>
+<p>Before the client_credentials grant flow can be achieved, an <a href="https://community.canvaslms.com/t5/Admin-Guide/How-do-I-configure-an-LTI-key-for-an-account/ta-p/140" target="_blank">LTI developer key must be created</a>. During developer key configuration, a public JWK can either be configured statically or can be dynamically rotated by providing JWKs by a URL that Canvas can reach. Tools may also use a previously issued client_credentials token to <a href="/doc/api/public_jwk.html" target="_blank">retroactively rotate the public JWK via an API request</a>. The JWK <b>must</b> include an alg and use.</p>
 
 <h4>Example JWK</h4>
 
@@ -359,8 +364,3 @@ The following endpoints are currently supported:
 - <a href="/doc/api/line_items.html" target="_blank">Line Items</a>
 - <a href="/doc/api/score.html" target="_blank">Score</a>
 - <a href="/doc/api/result.html" target="_blank">Result</a>
-
-
-
-
-

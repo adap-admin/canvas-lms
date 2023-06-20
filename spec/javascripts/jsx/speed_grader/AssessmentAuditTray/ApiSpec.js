@@ -16,8 +16,10 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Api from 'jsx/speed_grader/AssessmentAuditTray/Api'
-import FakeServer, {pathFromRequest} from 'jsx/__tests__/FakeServer'
+import Api from 'ui/features/speed_grader/react/AssessmentAuditTray/Api'
+import FakeServer, {
+  pathFromRequest,
+} from '@canvas/network/NaiveRequestDispatch/__tests__/FakeServer'
 
 QUnit.module('AssessmentAuditTray Api', suiteHooks => {
   let api
@@ -51,12 +53,12 @@ QUnit.module('AssessmentAuditTray Api', suiteHooks => {
           context_external_tool_id: null,
           id: '4901',
           payload: {
-            grades_published_at: [null, '2018-08-28T16:46:43Z']
+            grades_published_at: [null, '2018-08-28T16:46:43Z'],
           },
           quiz_id: null,
           submission_id: '2501',
-          user_id: '1101'
-        }
+          user_id: '1101',
+        },
       ]
 
       users = [{id: '1101', name: 'The Greatest Grader', role: 'grader'}]
@@ -64,7 +66,7 @@ QUnit.module('AssessmentAuditTray Api', suiteHooks => {
       quizzes = [{id: '1101', name: 'Accessibility', role: 'grader'}]
     })
 
-    async function loadAssessmentAuditTrail() {
+    function loadAssessmentAuditTrail() {
       return api.loadAssessmentAuditTrail('1201', '2301', '2501')
     }
 

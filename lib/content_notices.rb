@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -17,10 +19,10 @@
 #
 
 module ContentNotices
-  NOTICE_ATTRIBUTES = [:tag, :text, :variant, :link_text, :link_target, :should_show]
+  NOTICE_ATTRIBUTES = %i[tag text variant link_text link_target should_show].freeze
 
   class ContentNotice
-    attr_accessor *NOTICE_ATTRIBUTES
+    attr_accessor(*NOTICE_ATTRIBUTES)
   end
 
   module ClassMethods
@@ -52,13 +54,13 @@ module ContentNotices
   end
 
   def cn_cache_key(tag)
-    ["content_notice_present", tag, self.asset_string].cache_key
+    ["content_notice_present", tag, asset_string].cache_key
   end
 
   # add a notice to this context. if the notice with the given tag is already active for the context,
   # its expiration time will be reset.
   def add_content_notice(tag, expires_in = nil)
-    Rails.cache.write(cn_cache_key(tag), true, expires_in: expires_in)
+    Rails.cache.write(cn_cache_key(tag), true, expires_in:)
   end
 
   # remove a notice from this context
@@ -72,5 +74,4 @@ module ContentNotices
       Rails.cache.read(cn_cache_key(tag)) && (notice.should_show.nil? || notice.should_show.call(self, user))
     end.values
   end
-
 end

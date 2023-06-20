@@ -16,20 +16,20 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Backbone from 'Backbone'
-import ContentMigration from 'compiled/models/ContentMigration'
-import DaySubstitutionCollection from 'compiled/collections/DaySubstitutionCollection'
+import Backbone from '@canvas/backbone'
+import ContentMigration from '@canvas/content-migrations/backbone/models/ContentMigration'
+import DaySubstitutionCollection from '@canvas/day-substitution/backbone/collections/DaySubstitutionCollection'
 
 QUnit.module('ContentMigration', {
   setup() {
     this.model = new ContentMigration({foo: 'bar'})
-  }
+  },
 })
 
 test('dynamicDefaults are set when initializing the model', () => {
   const model = new ContentMigration({
     foo: 'bar',
-    cat: 'hat'
+    cat: 'hat',
   })
   equal(model.dynamicDefaults.foo, 'bar', 'bar was set')
   equal(model.dynamicDefaults.cat, 'hat', 'hat was set')
@@ -42,14 +42,14 @@ test('dynamicDefaults is stored on the instance, not all classes', () => {
   equal(model1.dynamicDefaults.cat, undefined)
 })
 
-test('resetModel adds restores dynamic defaults', function() {
+test('resetModel adds restores dynamic defaults', function () {
   this.model.clear()
   equal(this.model.get('foo'), undefined, 'Model is clear')
   this.model.resetModel()
   equal(this.model.get('foo'), 'bar', 'Model defaults are now reset')
 })
 
-test('resetModel removes non initialized attributes', function() {
+test('resetModel removes non initialized attributes', function () {
   this.model.set('cat', 'hat')
   this.model.resetModel()
   equal(this.model.get('cat'), undefined, 'Non initialized attributes removed')
@@ -59,7 +59,7 @@ test('resetModel resets all collections that were defined in the dynamicDefaults
   const collection = new Backbone.Collection([
     new Backbone.Model(),
     new Backbone.Model(),
-    new Backbone.Model()
+    new Backbone.Model(),
   ])
   const model = new ContentMigration({someCollection: collection})
   equal(model.get('someCollection').length, 3, 'There are 3 collections in the model')
@@ -67,12 +67,12 @@ test('resetModel resets all collections that were defined in the dynamicDefaults
   equal(model.get('someCollection').length, 0, 'All models in the collection were cleared')
 })
 
-test('toJSON adds a date_shift_options namespace if non exists', function() {
+test('toJSON adds a date_shift_options namespace if non exists', function () {
   const json = this.model.toJSON()
   equal(typeof json.date_shift_options, 'object', 'adds date_shift_options')
 })
 
-test('adds daySubsitution JSON to day_subsitutions namespace if daySubCollection exists', function() {
+test('adds daySubsitution JSON to day_subsitutions namespace if daySubCollection exists', function () {
   const collection = new DaySubstitutionCollection({bar: 'baz'})
   this.model.daySubCollection = collection
   const collectionJSON = collection.toJSON()
@@ -84,7 +84,7 @@ test('adds daySubsitution JSON to day_subsitutions namespace if daySubCollection
   )
 })
 
-test('toJSON keeps all date_shift_options when adding new day_substitutions', function() {
+test('toJSON keeps all date_shift_options when adding new day_substitutions', function () {
   const dsOptions = {bar: 'baz'}
   const collection = new DaySubstitutionCollection()
   this.model.daySubCollection = collection

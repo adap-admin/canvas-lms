@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -15,36 +17,25 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-require 'ims/lti'
+require "ims/lti"
 
 module Lti
   class ToolProxyService
-
     attr_reader :tc_half_secret
-
-    class << self
-      def delete_subscriptions(tool_proxy)
-        self.new.delete_subscriptions_for(tool_proxy)
-      end
-
-      def recreate_missing_subscriptions(tool_proxy)
-        tool_proxy&.message_handlers&.each(&:recreate_missing_subscriptions)
-      end
-    end
 
     def process_tool_proxy_json(json:, context:, guid:, tool_proxy_to_update: nil, tc_half_shared_secret: nil, developer_key: nil, registration_url: nil)
       @tc_half_secret = tc_half_shared_secret
-      tp = IMS::LTI::Models::ToolProxy.new.from_json(json)
+      tp = ::IMS::LTI::Models::ToolProxy.new.from_json(json)
       tp.tool_proxy_guid = guid
-      tcp_uuid = tp.tool_consumer_profile&.match(/tool_consumer_profile\/([a-fA-f0-9\-]+)/)&.captures&.first
+      tcp_uuid = tp.tool_consumer_profile&.match(%r{tool_consumer_profile/([a-fA-f0-9-]+)})&.captures&.first
       tcp_uuid ||= developer_key&.tool_consumer_profile&.uuid
       tcp_uuid ||= Lti::ToolConsumerProfile::DEFAULT_TCP_UUID
       begin
         tcp = Lti::ToolConsumerProfileCreator.new(
           context,
           tp.tool_consumer_profile,
-          developer_key: developer_key,
-          tcp_uuid: tcp_uuid
+          developer_key:,
+          tcp_uuid:
         ).create
         ToolProxyValidator.new(tool_proxy: tp, tool_consumer_profile: tcp).validate!
       rescue Lti::Errors::InvalidToolProxyError
@@ -53,13 +44,13 @@ module Lti
       tool_proxy = nil
       ToolProxy.transaction do
         product_family = create_product_family(tp, context.root_account, developer_key)
-        tool_proxy = create_tool_proxy(tp: tp,
-                                       context: context,
-                                       product_family: product_family,
+        tool_proxy = create_tool_proxy(tp:,
+                                       context:,
+                                       product_family:,
                                        tool_proxy:
                                        tool_proxy_to_update,
-                                       registration_url: registration_url,
-                                       developer_key: developer_key)
+                                       registration_url:,
+                                       developer_key:)
         process_resources(tp, tool_proxy)
         create_proxy_binding(tool_proxy, context)
         create_or_update_tool_settings(tp, tool_proxy)
@@ -68,29 +59,14 @@ module Lti
       tool_proxy.reload
     end
 
-
     def create_secret(tp)
       security_contract = tp.security_contract
       tp_half_secret = security_contract.tp_half_shared_secret
-      if (tp.enabled_capabilities & ['OAuth.splitSecret', 'Security.splitSecret']).present? && tp_half_secret.present?
+      if tp.enabled_capabilities.intersect?(["OAuth.splitSecret", "Security.splitSecret"]) && tp_half_secret.present?
         @tc_half_secret ||= SecureRandom.hex(64)
         tc_half_secret + tp_half_secret
       else
         security_contract.shared_secret
-      end
-    end
-
-    def delete_subscriptions_for(tool_proxy)
-      product_family = tool_proxy.product_family
-      subscription_helper = AssignmentSubscriptionsHelper.new(tool_proxy)
-      lookups = AssignmentConfigurationToolLookup.where(tool_product_code: product_family.product_code,
-                                                        tool_vendor_code: product_family.vendor_code)
-      lookups.each do |l|
-        subscription_helper.send_later_enqueue_args(
-          :destroy_subscription,
-          { n_strand: AssignmentConfigurationToolLookup::SUBSCRIPTION_MANAGEMENT_STRAND },
-          l.subscription_id
-        )
       end
     end
 
@@ -99,21 +75,23 @@ module Lti
     def developer_key_mismatch?(tool_proxy, developer_key)
       installing_vendor = tool_proxy&.tool_profile&.product_instance&.product_info&.product_family&.vendor&.code
       return true if installing_vendor.blank?
+
       vendor_dev_keys = DeveloperKey.by_cached_vendor_code(installing_vendor)
       return false if developer_key.blank? && vendor_dev_keys.blank?
+
       !vendor_dev_keys.include?(developer_key)
     end
 
     def deprecated_split_secret?(tp)
       tp.enabled_capability.present? &&
-      tp.enabled_capability.include?("OAuth.splitSecret") &&
-      tp.security_contract.tp_half_shared_secret.present?
+        tp.enabled_capability.include?("OAuth.splitSecret") &&
+        tp.security_contract.tp_half_shared_secret.present?
     end
 
     def create_tool_proxy(tp:, context:, product_family:, tool_proxy: nil, registration_url:, developer_key: nil)
       # make sure the guid never changes
       raise Lti::Errors::InvalidToolProxyError if tool_proxy && tp.tool_proxy_guid != tool_proxy.guid
-      raise Errors::InvalidToolProxyError, 'Developer key mismatch' if developer_key_mismatch?(tp, developer_key)
+      raise Errors::InvalidToolProxyError, "Developer key mismatch" if developer_key_mismatch?(tp, developer_key)
 
       tool_proxy ||= ToolProxy.new
       tool_proxy.registration_url = registration_url
@@ -125,7 +103,7 @@ module Lti
       tool_proxy.name = tp.tool_profile.product_instance.product_info.default_name
       tool_proxy.description = tp.tool_profile.product_instance.product_info.default_description
       tool_proxy.context = context
-      tool_proxy.workflow_state ||= 'disabled'
+      tool_proxy.workflow_state ||= "disabled"
       tool_proxy.raw_data = tp.as_json
       tool_proxy.update_payload = nil
       tool_proxy.save!
@@ -135,7 +113,7 @@ module Lti
     def create_product_family(tp, account, developer_key)
       vendor_code = tp.tool_profile.product_instance.product_info.product_family.vendor.code
       product_code = tp.tool_profile.product_instance.product_info.product_family.code
-      unless product_family = ProductFamily.where(vendor_code: vendor_code, product_code: product_code, developer_key: developer_key).first
+      unless (product_family = ProductFamily.where(vendor_code:, product_code:, developer_key:).first)
         product_family = ProductFamily.new
         product_family.vendor_code = vendor_code
         product_family.product_code = product_code
@@ -172,18 +150,18 @@ module Lti
     end
 
     def create_proxy_binding(tool_proxy, context)
-      ToolProxyBinding.where(context_id: context, context_type: context.class.to_s,
+      ToolProxyBinding.where(context_id: context,
+                             context_type: context.class.to_s,
                              tool_proxy_id: tool_proxy).first_or_create!
     end
-
 
     def process_resources(tp, tool_proxy)
       resource_handlers = tp.tool_profile.resource_handlers
       if tp.tool_profile.messages.present?
         product_name = tp.tool_profile.product_instance.product_info.product_name
-        r = IMS::LTI::Models::ResourceHandler.new.from_json(
+        r = ::IMS::LTI::Models::ResourceHandler.new.from_json(
           {
-            resource_type: {code: 'instructure.com:default'},
+            resource_type: { code: "instructure.com:default" },
             resource_name: product_name
           }.to_json
         )
@@ -211,18 +189,13 @@ module Lti
     end
 
     def create_placements(mh, message_handler)
-
       message_handler.placements.each do |placement|
-        placement.destroy unless ResourcePlacement::DEFAULT_PLACEMENTS.include? placement.placement
+        placement.destroy unless ResourcePlacement::LEGACY_DEFAULT_PLACEMENTS.include? placement.placement
       end
 
-      if (mh.enabled_capabilities & ResourcePlacement::PLACEMENT_LOOKUP.keys).blank?
-        ResourcePlacement::DEFAULT_PLACEMENTS.each do |p|
-          message_handler.placements.where(placement: p).first_or_create!
-        end
-      else
+      if mh.enabled_capabilities.intersect?(ResourcePlacement::PLACEMENT_LOOKUP.keys)
 
-        mhp = mh.enabled_capability.map {|p| ResourcePlacement::PLACEMENT_LOOKUP[p]}
+        mhp = mh.enabled_capability.map { |p| ResourcePlacement::PLACEMENT_LOOKUP[p] }
         message_handler.placements.each do |placement|
           placement.destroy unless mhp.include? placement.placement
         end
@@ -230,16 +203,19 @@ module Lti
         mhp.each do |p|
           message_handler.placements.where(placement: p).first_or_create! if p
         end
+      else
+        ResourcePlacement::LEGACY_DEFAULT_PLACEMENTS.each do |p|
+          message_handler.placements.where(placement: p).first_or_create!
+        end
       end
     end
 
     def create_or_update_tool_settings(tp, tool_proxy)
       if tp.custom.present?
-        tool_setting = ToolSetting.where(tool_proxy:tool_proxy).first_or_create!
+        tool_setting = ToolSetting.where(tool_proxy:).first_or_create!
         custom = tool_setting.custom || {}
-        tool_setting.update(custom: custom.merge(tp.custom) )
+        tool_setting.update(custom: custom.merge(tp.custom))
       end
-
     end
 
     def create_json(obj)

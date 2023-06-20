@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -16,53 +18,53 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require_relative '../../lib/duplicating_objects'
-require 'set'
 describe DuplicatingObjects do
   include DuplicatingObjects
 
-  describe 'normalize_title' do
-    it 'test it' do
-      expect(normalize_title('ThIs has 3 spaces')).to eq 'this-has-3-spaces'
+  describe "normalize_title" do
+    it "test it" do
+      expect(normalize_title("ThIs has 3 spaces")).to eq "this-has-3-spaces"
     end
   end
 
-  describe 'get_copy_title' do
-    class MockEntity
-      def initialize(title)
-        @title = title
-      end
+  describe "get_copy_title" do
+    let(:klass) do
+      Class.new do
+        def initialize(title)
+          @title = title
+        end
 
-      def get_potentially_conflicting_titles(_title_base)
-        [ 'Foo', 'assignment Copy', 'Foo Copy', 'Foo Copy 1', 'Foo Copy 2', 'Foo Copy 5' ].to_set
-      end
+        def get_potentially_conflicting_titles(_title_base)
+          ["Foo", "assignment Copy", "Foo Copy", "Foo Copy 1", "Foo Copy 2", "Foo Copy 5"].to_set
+        end
 
-      attr_accessor :title
+        attr_accessor :title
+      end
     end
 
     it 'copy treated as "Copy" but case is respected' do
-      entity = MockEntity.new('assignment copy')
-      expect(get_copy_title(entity, 'Copy', entity.title)).to eq('assignment copy 2')
+      entity = klass.new("assignment copy")
+      expect(get_copy_title(entity, "Copy", entity.title)).to eq("assignment copy 2")
     end
 
-    it 'no conflicts' do
-      entity = MockEntity.new('Bar')
-      expect(get_copy_title(entity, 'Copy', entity.title)).to eq 'Bar Copy'
+    it "no conflicts" do
+      entity = klass.new("Bar")
+      expect(get_copy_title(entity, "Copy", entity.title)).to eq "Bar Copy"
     end
 
-    it 'conflict not ending in suffix' do
-      entity = MockEntity.new('Foo')
-      expect(get_copy_title(entity, 'Copy', entity.title)).to eq 'Foo Copy 3'
+    it "conflict not ending in suffix" do
+      entity = klass.new("Foo")
+      expect(get_copy_title(entity, "Copy", entity.title)).to eq "Foo Copy 3"
     end
 
-    it 'conflict ending in suffix' do
-      entity = MockEntity.new('Foo Copy 1')
-      expect(get_copy_title(entity, 'Copy', entity.title)).to eq 'Foo Copy 3'
+    it "conflict ending in suffix" do
+      entity = klass.new("Foo Copy 1")
+      expect(get_copy_title(entity, "Copy", entity.title)).to eq "Foo Copy 3"
     end
 
-    it 'increments from given number' do
-      entity = MockEntity.new('Foo Copy 5')
-      expect(get_copy_title(entity, 'Copy', entity.title)).to eq 'Foo Copy 6'
+    it "increments from given number" do
+      entity = klass.new("Foo Copy 5")
+      expect(get_copy_title(entity, "Copy", entity.title)).to eq "Foo Copy 6"
     end
   end
 end

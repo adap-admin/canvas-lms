@@ -29,7 +29,7 @@
  * should look like.
  */
 .root {
-  background-color: var(--canvasBackgroundColor)
+  background-color: var(--canvasBackgroundColor);
 }
 
 :global {
@@ -47,13 +47,35 @@
   }
 
   /* fix RTL. tinyMCE tries to do this in its default theme but it's base style is too specific so when it does it, it isn't specific enough to override the base */
-  [dir="rtl"] .tox :not(svg) { direction: rtl }
+  [dir='rtl'] .tox :not(svg) {
+    direction: rtl;
+  }
+
+  .tox:not(.tox-tinymce-inline) .tox-editor-header {
+    background-color: var(--canvasBackgroundColor);
+  }
+
+  .tox.tox-tinymce .screenreader-only {
+    border: 0;
+    clip: rect(0 0 0 0);
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    padding: 0;
+    position: absolute;
+    width: 1px;
+    transform: translatez(0);
+  }
 
   .tox-tinymce-aux {
     font-family: var(--canvasFontFamily);
   }
+  /* z-index must be greater than the InstUI Modal/Tray ones */
+  .tox.tox-tinymce-aux {
+    z-index: 10000;
+  }
   .tox .tox-button {
-    background-color: var(--canvasPrimaryButtonBackground);
+    background-color: var(--canvasPrimaryButtonHoverBackground);
     font-family: var(--canvasFontFamily);
     font-weight: var(--canvasButtonFontWeight);
     font-size: var(--canvasButtonFontSize);
@@ -78,7 +100,7 @@
     color: var(--canvasPrimaryButtonHoverColor);
   }
   .tox .tox-button:active:not(:disabled) {
-    background-color:var(--canvasPrimaryButtonBackground);
+    background-color: var(--canvasPrimaryButtonBackground);
     border-color: var(--canvasPrimaryButtonBorderColor);
     color: var(--canvasPrimaryButtonColor);
   }
@@ -173,7 +195,9 @@
     background-color: var(--activeMenuItemBackground);
     color: var(--activeMenuItemLabelColor);
   }
-  .tox .tox-collection--list .tox-collection__item--active:not(.tox-collection__item--state-disabled) {
+  .tox
+    .tox-collection--list
+    .tox-collection__item--active:not(.tox-collection__item--state-disabled) {
     background-color: var(--activeMenuItemBackground);
     color: var(--activeMenuItemLabelColor);
   }
@@ -283,7 +307,7 @@
     padding: var(--canvasModalBodyPadding);
   }
   .tox .tox-dialog__body-nav-item {
-    color: rgba(45, 59, 69, 0.6);
+    color: rgba(45, 59, 69, 0.75);
     &:focus {
       box-shadow: var(--canvasFocusBoxShadow);
     }
@@ -387,6 +411,9 @@
   .tox .tox-insert-table-picker .tox-insert-table-picker__selected {
     background-color: var(--tableSelectorHighlightColor);
     border-color: var(--tableSelectorHighlightColor);
+  }
+  .tox-selected-menu .tox-insert-table-picker {
+    background-color: var(--canvasBackgroundColor);
   }
   .tox .tox-insert-table-picker__label {
     color: var(--canvasTextColor);
@@ -494,8 +521,7 @@
   .tox .tox-tbtn:hover,
   .tox .tox-split-button:hover,
   .tox .tox-tbtn.tox-tbtn--enabled:hover,
-  .tox .tox-split-button .tox-tbtn.tox-split-button__chevron:hover
-  {
+  .tox .tox-split-button .tox-tbtn.tox-split-button__chevron:hover {
     background: var(--toolbarButtonHoverBackground);
     color: var(--canvasButtonColor);
   }
@@ -507,13 +533,19 @@
   /* styling lifted from instui Tabs */
   .tox .tox-tbtn.tox-tbtn--enabled::after {
     position: absolute;
-    top:-3px;
-    content: "\\25BC";
+    top: -3px;
+    content: '\\25BC';
     text-align: center;
     height: 8px;
     font-size: 8px;
     width: 100%;
     color: var(--canvasEnabledColor);
+  }
+
+  /* place the chevron above the icon for buttons with dropdowns */
+  .tox .tox-tbtn.tox-tbtn--enabled.tox-tbtn--select::after {
+    text-align: left;
+    padding-left: 18px;
   }
 
   /* the split button is not enabled and the chevron has been clicked to open the popup
@@ -538,10 +570,14 @@
   }
   .tox .tox-tbtn__select-chevron svg {
     fill: var(--canvasButtonColor);
+    width: 10px;
+    height: 10px;
   }
 
   .tox .tox-split-button__chevron svg {
     fill: var(--canvasButtonColor);
+    width: 10px;
+    height: 10px;
   }
   .tox .tox-split-button.tox-tbtn--disabled:hover,
   .tox .tox-split-button.tox-tbtn--disabled:focus,
@@ -599,18 +635,25 @@
   .tox-editor-container .tox-toolbar__primary {
     background-image: none;
   }
+
+  /* tinymce 5.3 picked up a border since 5.0 */
+  .tox .tox-menubar + .tox-toolbar-overlord .tox-toolbar__primary {
+    border-style: none;
+  }
+
   .tox .tox-toolbar .tox-toolbar__group,
   .tox .tox-toolbar-overlord .tox-toolbar__group,
   .tox-toolbar__overflow .tox-toolbar__group,
-  .tox:not([dir=rtl]) .tox-toolbar__group:not(:last-of-type),
-  .tox[dir=rtl] .tox-toolbar__group:not(:last-of-type) {
+  .tox:not([dir='rtl']) .tox-toolbar__group:not(:last-of-type),
+  .tox[dir='rtl'] .tox-toolbar__group:not(:last-of-type) {
     border-style: none;
   }
   .tox-toolbar .tox-toolbar__group::after, /* regular toolbar */
   .tox-toolbar-overlord .tox-toolbar__group::after, /* wrapping toolbar */
-  .tox-toolbar__overflow .tox-toolbar__group::after, /* floating toolbar */
-  .tox-tinymce-aux .tox-toolbar .tox-toolbar__group::after { /* popup toolbar */
-    content: "";
+  .tox-toolbar__overflow .tox-toolbar__group::after, /* overflow toolbar */
+  .tox-tinymce-aux .tox-toolbar .tox-toolbar__group::after {
+    /* popup toolbar */
+    content: '';
     display: inline-block;
     box-sizing: border-box;
     border-inline-end: 1px solid var(--canvasBorderColor);
@@ -631,7 +674,7 @@
     padding-inline-end: 0;
   }
 
-    .tox .tox-tbtn {
+  .tox .tox-tbtn {
     box-sizing: border-box;
   }
 
@@ -651,7 +694,7 @@
 
   .tox .tox-edit-area.active,
   .tox .tox-edit-area.active iframe {
-    border-color: var(--canvasFocusBorderColor)
+    border-color: var(--canvasFocusBorderColor);
   }
 
   .tox .tox-split-button .tox-tbtn {
@@ -660,12 +703,19 @@
   .tox .tox-split-button .tox-tbtn.tox-split-button__chevron {
     margin-inline-start: -6px;
     background-color: var(--canvasBackgroundColor);
+
+    /* Increases touch-target width of split-button dropdowns for MAT-602 */
+    width: 30px;
+  }
+
+  .tox .tox-split-button:hover {
+    box-shadow: none;
   }
 
   .tox .tox-split-button:hover .tox-split-button__chevron {
     background: var(--canvasBackgroundColor);
     color: var(--canvasButtonColor);
-    box-shadow: none
+    box-shadow: none;
   }
 
   .tox .tox-tbtn:hover.tox-split-button__chevron,
@@ -683,7 +733,30 @@
 
   /* MAKE INSTUI ICONS THE SAME SIZE AS THE DEFAULT TINYMCE ONES */
   /* this is because instUI icons don't have a "height" attribute like tinymce ones do, so this will make them consistent */
-  .tox .tox-icon svg:not([height]) { height: 16px }
-  /* this is for instUI icons that that dropdown from a SplitButton like in our advlist plugin */
-  .tox .tox-collection__item-icon svg:not([height]) { height: 30px;}
+  .tox .tox-icon svg:not([height]),
+  .tox .tox-collection__item-icon svg:not([height]) {
+    height: 16px;
+  }
+
+  /* the default icon size for tinymce's large toolbar groups is 24px, so since we shrink all icons to 16px, we also need
+     to shrink the padding around these large groups */
+  .tox .tox-collection--toolbar-lg .tox-collection__item-icon {
+    height: 30px;
+    width: 30px;
+  }
+
+  .tox-selectfield__icon-js svg {
+    width: 10px;
+    height: 10px;
+  }
+
+  /* not part of tinymce, but a convenient place to add a style I need */
+  [data-canvascontenttray-content]:focus {
+    outline-color: var(--canvasFocusBorderColor);
+  }
+
+  .tox .tox-toolbar-overlord .tox-toolbar__overflow {
+    /* Remove the errant gray line below the expanded toolbar in "sliding" mode */
+    background: none;
+  }
 }

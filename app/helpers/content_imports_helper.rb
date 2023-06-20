@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -17,7 +19,6 @@
 #
 
 module ContentImportsHelper
-
   def return_or_context_url
     if params[:return_to]
       clean_return_to(params[:return_to])
@@ -28,13 +29,13 @@ module ContentImportsHelper
 
   def error_link_or_message(string)
     if string =~ /ErrorReport(?: id)?: ?(\d+)\z/
-      %{<a href="#{error_url($1)}">Error Report #{$1}</a>}.html_safe
+      %(<a href="#{error_url($1)}">Error Report #{$1}</a>).html_safe
     else
       user_content(string)
     end
   end
 
   def mig_id(obj, global: false)
-    CC::CCHelper.create_key(obj, global: global)
+    CC::CCHelper.create_key(obj, global:)
   end
 end

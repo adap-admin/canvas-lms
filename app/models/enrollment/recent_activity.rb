@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -16,7 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-
 class Enrollment
   class RecentActivity
     attr_reader :context, :enrollment
@@ -28,7 +29,8 @@ class Enrollment
     end
 
     def record_for_access(response)
-      return if response.response_code.to_s =~ /^((4|5)\d{2})$/
+      return if /^((4|5)\d{2})$/.match?(response.response_code.to_s)
+
       if context.is_a?(Course) && enrollment
         record!
       end
@@ -36,6 +38,7 @@ class Enrollment
 
     def record!(as_of = Time.zone.now)
       return unless record_worthwhile?(as_of, last_threshold)
+
       if increment_total_activity?(as_of)
         new_total = total_activity_interval(as_of)
         enrollment.total_activity_time = new_total
@@ -47,12 +50,15 @@ class Enrollment
     end
 
     private
+
     def total_activity_interval(as_of)
       total_activity_time + (as_of - last_activity_at).to_i
     end
 
     def update_with(options)
-      all_enrollments_scope.update_all(options)
+      all_enrollments_scope
+        .where("last_activity_at IS NULL OR last_activity_at < ?", options[:last_activity_at] - last_threshold)
+        .update_all_locked_in_order(**options)
     end
 
     def increment_total_activity?(as_of)
@@ -62,13 +68,13 @@ class Enrollment
     end
 
     def last_threshold
-      @_last_threshold ||= @settings.
-        get('enrollment_last_activity_at_threshold', 2.minutes).to_i
+      @_last_threshold ||= @settings
+                           .get("enrollment_last_activity_at_threshold", 2.minutes).to_i
     end
 
     def total_threshold
-      @_total_threshold ||= @settings.
-        get('enrollment_total_activity_time_threshold', 10.minutes).to_i
+      @_total_threshold ||= @settings
+                            .get("enrollment_total_activity_time_threshold", 10.minutes).to_i
     end
 
     def record_worthwhile?(as_of, threshold)
@@ -84,7 +90,7 @@ class Enrollment
     end
 
     def all_enrollments_scope
-      Enrollment.where(:course_id => enrollment.course_id, :user_id => enrollment.user_id)
+      Enrollment.where(course_id: enrollment.course_id, user_id: enrollment.user_id)
     end
   end
 end

@@ -16,53 +16,53 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Sidebar from "../components/Sidebar";
-import sidebarHandlers from "./sidebarHandlers";
-import { connect } from "react-redux";
-
 export function propsFromState(state) {
   const {
     ui,
+    containingContext,
     contextType,
     contextId,
     files,
     images,
     documents,
+    media,
     folders,
     rootFolderId,
     flickr,
     upload,
     session,
-    newPageLinkExpanded
-  } = state;
+    newPageLinkExpanded,
+    all_files,
+    jwt,
+    host,
+    source,
+  } = state
 
-  const collections = {};
+  const collections = {}
   for (const key in state.collections) {
-    const collection = state.collections[key];
-    collections[key] = {
-      links: collection.links,
-      lastError: collection.error,
-      isLoading: !!collection.loading,
-      hasMore: !!collection.bookmark
-    };
+    const collection = state.collections[key]
+    collections[key] = collection
   }
 
   return {
-    
+    containingContext,
     contextType,
-      contextId,
-      collections,
-      files,
-      images,
-      documents,
-      folders,
-      rootFolderId,
-      flickr,
-      upload,
-      session,
-      newPageLinkExpanded,
-    ...ui
-  };
+    contextId,
+    collections,
+    files,
+    images,
+    documents,
+    media,
+    folders,
+    rootFolderId,
+    flickr,
+    upload,
+    session,
+    newPageLinkExpanded,
+    ...ui,
+    all_files,
+    jwt,
+    host,
+    source,
+  }
 }
-
-export default connect(propsFromState, sidebarHandlers)(Sidebar);

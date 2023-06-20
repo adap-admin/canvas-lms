@@ -19,7 +19,7 @@
 /* eslint-disable qunit/no-setup-teardown */
 
 import $ from 'jquery'
-import DialogBaseView from 'compiled/views/DialogBaseView'
+import DialogBaseView from '@canvas/dialog-base-view'
 
 QUnit.module('DialogBaseView', {
   setup() {
@@ -27,7 +27,7 @@ QUnit.module('DialogBaseView', {
   },
   teardown() {
     $('.ui-dialog').remove()
-  }
+  },
 })
 
 test('it removes the created dialog upon close when the destroy option is set', () => {

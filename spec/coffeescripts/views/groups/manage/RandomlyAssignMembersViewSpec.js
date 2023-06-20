@@ -17,25 +17,24 @@
  */
 
 import $ from 'jquery'
-import _ from 'underscore'
-import GroupCategoryView from 'compiled/views/groups/manage/GroupCategoryView'
-import RandomlyAssignMembersView from 'compiled/views/groups/manage/RandomlyAssignMembersView'
-import GroupCategory from 'compiled/models/GroupCategory'
+import _ from 'lodash'
+import GroupCategoryView from 'ui/features/manage_groups/backbone/views/GroupCategoryView'
+import RandomlyAssignMembersView from 'ui/features/manage_groups/backbone/views/RandomlyAssignMembersView'
+import GroupCategory from '@canvas/groups/backbone/models/GroupCategory'
 import 'helpers/fakeENV'
 
 let server = null
 let view = null
 let model = null
-const globalObj = this
 let clock = null
 
 const queueResponse = (method, url, json) =>
   server.respondWith(method, url, [
     200,
     {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
     },
-    JSON.stringify(json)
+    JSON.stringify(json),
   ])
 
 const groupsResponse =
@@ -53,7 +52,7 @@ const groupsResponse =
       context_type: 'Course',
       course_id: 1,
       avatar_url: null,
-      role: null
+      role: null,
     },
     {
       description: null,
@@ -67,7 +66,7 @@ const groupsResponse =
       context_type: 'Course',
       course_id: 1,
       avatar_url: null,
-      role: null
+      role: null,
     },
     {
       description: null,
@@ -81,8 +80,8 @@ const groupsResponse =
       context_type: 'Course',
       course_id: 1,
       avatar_url: null,
-      role: null
-    }
+      role: null,
+    },
   ]
 
 const unassignedUsersResponse =
@@ -95,21 +94,21 @@ const unassignedUsersResponse =
       short_name: 'Panda Farmer',
       sis_user_id: '337733',
       sis_login_id: 'pandafarmer134123@gmail.com',
-      login_id: 'pandafarmer134123@gmail.com'
+      login_id: 'pandafarmer134123@gmail.com',
     },
     {
       id: 45,
       name: 'Elmer Fudd',
       sortable_name: 'Fudd, Elmer',
       short_name: 'Elmer Fudd',
-      login_id: 'elmerfudd'
+      login_id: 'elmerfudd',
     },
     {
       id: 2,
       name: 'Leeroy Jenkins',
       sortable_name: 'Jenkins, Leeroy',
-      short_name: 'Leeroy Jenkins'
-    }
+      short_name: 'Leeroy Jenkins',
+    },
   ]
 
 const assignUnassignedMembersResponse =
@@ -125,7 +124,7 @@ const assignUnassignedMembersResponse =
     updated_at: '2013-07-17T11:05:38-06:00',
     user_id: null,
     workflow_state: 'running',
-    url: 'http://localhost:3000/api/v1/progress/105'
+    url: 'http://localhost:3000/api/v1/progress/105',
   }
 const partialProgressResponse =
   // GET  /api/v1/progress/105
@@ -140,7 +139,7 @@ const partialProgressResponse =
     updated_at: '2013-07-17T11:05:44-06:00',
     user_id: null,
     workflow_state: 'running',
-    url: 'http://localhost:3000/api/v1/progress/105'
+    url: 'http://localhost:3000/api/v1/progress/105',
   }
 const progressResponse =
   // GET  /api/v1/progress/105
@@ -155,7 +154,7 @@ const progressResponse =
     updated_at: '2013-07-17T11:05:44-06:00',
     user_id: null,
     workflow_state: 'completed',
-    url: 'http://localhost:3000/api/v1/progress/105'
+    url: 'http://localhost:3000/api/v1/progress/105',
   }
 
 const groupCategoryResponse =
@@ -166,7 +165,7 @@ const groupCategoryResponse =
     role: null,
     self_signup: 'enabled',
     context_type: 'Course',
-    course_id: 1
+    course_id: 1,
   }
 
 QUnit.module('RandomlyAssignMembersView', {
@@ -175,7 +174,8 @@ QUnit.module('RandomlyAssignMembersView', {
     this._ENV = window.ENV
     window.ENV = {
       group_user_type: 'student',
-      IS_LARGE_ROSTER: false
+      permissions: {can_manage_groups: true},
+      IS_LARGE_ROSTER: false,
     }
 
     model = new GroupCategory({id: 20, name: 'Project Group'})
@@ -205,7 +205,7 @@ QUnit.module('RandomlyAssignMembersView', {
     window.ENV = this._ENV
     view.remove()
     document.getElementById('fixtures').innerHTML = ''
-  }
+  },
 })
 
 test('randomly assigns unassigned users', () => {
@@ -273,7 +273,7 @@ test('randomly assigns unassigned users', () => {
     {
       ...groupCategoryResponse,
       groups_count: 1,
-      unassigned_users_count: 0
+      unassigned_users_count: 0,
     }
   )
   server.respond()

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -16,11 +18,13 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper')
 require_relative "../graphql_spec_helper"
 
 describe Types::CoursePermissionsType do
-  let_once(:course) { course_with_student(active_all: true); @course }
+  let_once(:course) do
+    course_with_student(active_all: true)
+    @course
+  end
   let(:course_type) { GraphQLTypeTester.new(course) }
 
   it "works" do
@@ -29,12 +33,12 @@ describe Types::CoursePermissionsType do
         "permissions { viewAllGrades }",
         current_user: @student
       )
-    ).to eq false
+    ).to be false
     expect(
       course_type.resolve(
         "permissions { viewAllGrades }",
         current_user: @teacher
       )
-    ).to eq true
+    ).to be true
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -21,8 +23,8 @@ class BackfillDiscussionTopicIsSectionSpecific < ActiveRecord::Migration[5.0]
   disable_ddl_transaction!
 
   def up
-     DataFixup::BackfillNulls.run(DiscussionTopic, :is_section_specific, default_value: false)
-     change_column_null(:discussion_topics, :is_section_specific, false)
+    DataFixup::BackfillNulls.run(DiscussionTopic, :is_section_specific, default_value: false)
+    change_column_null(:discussion_topics, :is_section_specific, false)
   end
 
   def down

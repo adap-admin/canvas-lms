@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -20,12 +22,12 @@ module Api::V1::QuizIpFilter
   include Api::V1::Json
 
   API_ALLOWED_QUIZ_IP_FILTER_OUTPUT_FIELDS = {
-    :only => %w[
+    only: %w[
       name
       account
       filter
     ]
-  }
+  }.freeze
 
   def quiz_ip_filters_json(filters, context, user, session)
     hash = {}
@@ -37,7 +39,7 @@ module Api::V1::QuizIpFilter
     hash
   end
 
-  def quiz_ip_filter_json(filter, context, user, session)
+  def quiz_ip_filter_json(filter, _context, user, session)
     api_json(filter.with_indifferent_access, user, session, API_ALLOWED_QUIZ_IP_FILTER_OUTPUT_FIELDS)
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -17,13 +19,14 @@
 #
 module CC
   module WikiResources
-
     def add_wiki_pages
       wiki_folder = File.join(@export_dir, CCHelper::WIKI_FOLDER)
-      FileUtils::mkdir_p wiki_folder
+      FileUtils.mkdir_p wiki_folder
 
       scope = @course.wiki_pages.not_deleted
-      WikiPages::ScopedToUser.new(@course, @user, scope).scope.each do |page|
+      # @user is nil if it's kicked off by the system, like a course template
+      scope = WikiPages::ScopedToUser.new(@course, @user, scope).scope if @user
+      scope.each do |page|
         next unless export_object?(page)
         next if @user && page.locked_for?(@user)
 
@@ -31,10 +34,19 @@ module CC
           add_exported_asset(page)
 
           migration_id = create_key(page)
-          file_name = "#{page.url}.html"
+          name_max = path_max = nil
+          File.open(wiki_folder) do |f|
+            name_max = f.pathconf(Etc::PC_NAME_MAX)
+            path_max = f.pathconf(Etc::PC_PATH_MAX)
+          end
+          name_max -= 5 if name_max
+          path_max -= 5 + wiki_folder.length + 1 if path_max
+          max = [name_max, path_max].compact.min
+          file_name = "#{page.url[0...max]}.html"
+
           relative_path = File.join(CCHelper::WIKI_FOLDER, file_name)
           path = File.join(wiki_folder, file_name)
-          meta_fields = {:identifier => migration_id}
+          meta_fields = { identifier: migration_id }
           meta_fields[:editing_roles] = page.editing_roles
           meta_fields[:notify_of_update] = page.notify_of_update
           meta_fields[:workflow_state] = page.workflow_state
@@ -45,21 +57,22 @@ module CC
             meta_fields[:only_visible_to_overrides] = page.assignment.only_visible_to_overrides
           end
           meta_fields[:todo_date] = page.todo_date
+          meta_fields[:publish_at] = page.publish_at
 
-          File.open(path, 'w') do |file|
+          File.open(path, "w") do |file|
             file << @html_exporter.html_page(page.body, page.title, meta_fields)
           end
 
           @resources.resource(
-                  :identifier => migration_id,
-                  "type" => CCHelper::WEBCONTENT,
-                  :href => relative_path
+            :identifier => migration_id,
+            "type" => CCHelper::WEBCONTENT,
+            :href => relative_path
           ) do |res|
-            res.file(:href=>relative_path)
+            res.file(href: relative_path)
           end
         rescue
-          title = page.title rescue I18n.t('course_exports.unknown_titles.wiki_page', "Unknown wiki page")
-          add_error(I18n.t('course_exports.errors.wiki_page', "The wiki page \"%{title}\" failed to export", :title => title), $!)
+          title = page.title rescue I18n.t("course_exports.unknown_titles.wiki_page", "Unknown wiki page")
+          add_error(I18n.t("course_exports.errors.wiki_page", "The wiki page \"%{title}\" failed to export", title:), $!)
         end
       end
     end

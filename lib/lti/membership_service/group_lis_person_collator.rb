@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -19,23 +21,15 @@
 module Lti
   module MembershipService
     class GroupLisPersonCollator < LisPersonCollatorBase
-      attr_reader :context, :user
-
-      def initialize(context, user, opts={})
-        super(opts)
-        @context = context
-        @user = user
-      end
-
       private
 
       def scope
-        @user_scope ||= @user.nil? ? @context.participating_users : UserSearch.scope_for(@context, @user)
+        @user_scope ||= @user.nil? ? context.participating_users : UserSearch.scope_for(context, @user)
       end
 
       def generate_roles(user)
-        roles = [IMS::LIS::Roles::Context::URNs::Member]
-        roles << IMS::LIS::Roles::Context::URNs::Manager if user.id == @context.leader_id
+        roles = [::IMS::LIS::Roles::Context::URNs::Member]
+        roles << ::IMS::LIS::Roles::Context::URNs::Manager if user.id == context.leader_id
         roles
       end
     end

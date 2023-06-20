@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -17,11 +19,12 @@
 
 module Lti::RedisMessageClient
   TTL = 5.minutes
-  LTI_1_3_PREFIX = 'external_tool:id_token:'.freeze
-  SESSIONLESS_LAUNCH_PREFIX = 'external_tool:sessionless_launch:'.freeze
+  LTI_1_3_PREFIX = "external_tool:id_token:"
+  SESSIONLESS_LAUNCH_PREFIX = "external_tool:sessionless_launch:"
 
   def cache_launch(launch, context, prefix: LTI_1_3_PREFIX)
     return unless Canvas.redis_enabled?
+
     verifier = SecureRandom.hex(64)
     Canvas.redis.setex("#{context.class.name}:#{prefix}#{verifier}", 5.minutes, launch.to_json)
     verifier
@@ -29,6 +32,7 @@ module Lti::RedisMessageClient
 
   def fetch_and_delete_launch(context, verifier, prefix: LTI_1_3_PREFIX)
     return unless Canvas.redis_enabled?
+
     redis_key = "#{context.class.name}:#{prefix}#{verifier}"
     launch = Canvas.redis.get(redis_key)
     Canvas.redis.del(redis_key)

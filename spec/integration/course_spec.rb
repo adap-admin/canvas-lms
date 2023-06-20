@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,102 +18,108 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
-
-require 'nokogiri'
+require "nokogiri"
 
 describe "course" do
-
   # normally this would be a controller test, but there is a some code in the
   # views that i need to not explode
-  it "should not require authorization for public courses" do
+  it "does not require authorization for public courses" do
     course_factory(active_all: true)
     @course.update_attribute(:is_public, true)
     get "/courses/#{@course.id}"
     expect(response).to be_successful
   end
 
-  it "should load syllabus on public course with no user logged in" do
+  it "loads syllabus on public course with no user logged in" do
     course_factory(active_all: true)
     @course.update_attribute(:is_public, true)
     get "/courses/#{@course.id}/assignments/syllabus"
     expect(response).to be_successful
   end
 
-  it "should show the migration-in-progress notice" do
+  it "shows the migration-in-progress notice" do
     enable_cache do
       course_factory(active_all: true)
       user_session(@teacher)
       migration = @course.content_migrations.build
-      migration.migration_settings[:import_in_progress_notice] = '1'
+      migration.migration_settings[:import_in_progress_notice] = "1"
       migration.save!
 
-      migration.update_attribute(:workflow_state, 'importing')
+      migration.update_attribute(:workflow_state, "importing")
       get "/courses/#{@course.id}"
       expect(response).to be_successful
-      expect(controller.js_env[:CONTENT_NOTICES].map { |cn| cn[:tag] }).to include :import_in_progress
+      expect(controller.js_env[:CONTENT_NOTICES].pluck(:tag)).to include :import_in_progress
 
-      migration.update_attribute(:workflow_state, 'imported')
+      migration.update_attribute(:workflow_state, "imported")
       get "/courses/#{@course.id}"
       expect(response).to be_successful
-      expect((controller.js_env[:CONTENT_NOTICES] || []).map { |cn| cn[:tag] }).not_to include :import_in_progress
+      expect((controller.js_env[:CONTENT_NOTICES] || []).pluck(:tag)).not_to include :import_in_progress
     end
   end
 
-  it "should not show the migration-in-progress notice to students" do
+  it "does not show the migration-in-progress notice to students" do
     enable_cache do
       course_factory(active_all: true)
       student_in_course active_all: true
       user_session(@student)
       migration = @course.content_migrations.build
-      migration.migration_settings[:import_in_progress_notice] = '1'
+      migration.migration_settings[:import_in_progress_notice] = "1"
       migration.save!
 
-      migration.update_attribute(:workflow_state, 'importing')
+      migration.update_attribute(:workflow_state, "importing")
       get "/courses/#{@course.id}"
       expect(response).to be_successful
-      expect((controller.js_env[:CONTENT_NOTICES] || []).map { |cn| cn[:tag] }).not_to include :import_in_progress
+      expect((controller.js_env[:CONTENT_NOTICES] || []).pluck(:tag)).not_to include :import_in_progress
     end
   end
 
-  it "should use nicknames in the course index" do
-    course_with_student(:active_all => true, :course_name => "Course 1")
-    course_with_student(:user => @student, :active_all => true, :course_name => "Course 2")
-    @student.course_nicknames[@course.id] = 'A nickname or something'
-    @student.save!
+  it "uses nicknames in the course index" do
+    course_with_student(active_all: true, course_name: "Course 1")
+    course_with_student(user: @student, active_all: true, course_name: "Course 2")
+    @student.set_preference(:course_nicknames, @course.id, "A nickname or something")
     user_session(@student)
     get "/courses"
-    doc = Nokogiri::HTML(response.body)
-    course_rows = doc.css('#my_courses_table tr')
+    doc = Nokogiri::HTML5(response.body)
+    course_rows = doc.css("#my_courses_table tr")
     expect(course_rows.size).to eq 3
-    expect(course_rows[1].to_s).to include 'A nickname or something'
-    expect(course_rows[2].to_s).to include 'Course 1'
+    expect(course_rows[1].to_s).to include "Course 1"
+    expect(course_rows[2].to_s).to include "A nickname or something"
   end
 
-  it "should not show links to unpublished courses in course index" do
-    course_with_student(:course_name => "Course 1")
+  it "does not show links to unpublished courses in course index" do
+    course_with_student(course_name: "Course 1")
     c1 = @course
     @student.enrollments.first.update_attribute(:workflow_state, "active") # force active, like with sis
-    course_with_student(:user => @student, :active_all => true, :course_name => "Course 2")
+    course_with_student(user: @student, active_all: true, course_name: "Course 2")
     c2 = @course
     user_session(@student)
     get "/courses"
-    doc = Nokogiri::HTML(response.body)
-    course_rows = doc.css('#my_courses_table tr')
+    doc = Nokogiri::HTML5(response.body)
+    course_rows = doc.css("#my_courses_table tr")
     expect(course_rows.size).to eq 3
-    expect(course_rows[1].to_s).to include 'Course 1'
-    expect(course_rows[1].to_s).to_not include("href=\"/courses/#{c1.id}\"") # unpublished
-    expect(course_rows[2].to_s).to include 'Course 2'
-    expect(course_rows[2].to_s).to include("href=\"/courses/#{c2.id}\"") # published
+    expect(course_rows[2].to_s).to include "Course 1"
+    expect(course_rows[2].to_s).to_not include("href=\"/courses/#{c1.id}\"") # unpublished
+    expect(course_rows[1].to_s).to include "Course 2"
+    expect(course_rows[1].to_s).to include("href=\"/courses/#{c2.id}\"") # published
   end
 
-  it "should not show students' nicknames to admins on the student's account profile page" do
-    course_with_student(:active_all => true)
-    @student.course_nicknames[@course.id] = 'STUDENT_NICKNAME'; @student.save!
+  it "does not show students' nicknames to admins on the student's account profile page" do
+    course_with_student(active_all: true)
+    @student.set_preference(:course_nicknames, @course.id, "STUDENT_NICKNAME")
     user_session(account_admin_user)
     get "/accounts/#{@course.root_account.id}/users/#{@student.id}"
-    doc = Nokogiri::HTML(response.body)
-    course_list = doc.at_css('#courses_list').to_s
-    expect(course_list).not_to include 'STUDENT_NICKNAME'
+    doc = Nokogiri::HTML5(response.body)
+    course_list = doc.at_css("#courses_list").to_s
+    expect(course_list).not_to include "STUDENT_NICKNAME"
+  end
+
+  it "shows readable role types that includes custom roles" do
+    custom_role = custom_teacher_role("CustomTeacherRole", account: Account.default)
+    user = course_with_teacher(course_name: "Course 1", user: @user, active_all: true, role: custom_role).user
+    user_session(@teacher)
+    get "/courses/#{@course.id}/users/#{user.id}"
+    doc = Nokogiri::HTML5(response.body)
+    membership = doc.at_css(".enrollment td").to_s
+    expect(membership).to match(/CustomTeacherRole/)
   end
 end

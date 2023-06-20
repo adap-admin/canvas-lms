@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -16,16 +18,13 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '../../../spec_helper.rb')
-require_dependency "alerts/interaction"
-
 module Alerts
   describe Interaction do
     before :once do
-      course_with_teacher(:active_all => 1)
+      course_with_teacher(active_all: 1)
       @teacher = @user
       @user = nil
-      student_in_course(:active_all => 1)
+      student_in_course(active_all: 1)
     end
 
     describe "#should_not_receive_message?" do
@@ -33,14 +32,14 @@ module Alerts
         context "when there is a start_at set on the course" do
           it "returns true for new courses" do
             interaction_alert = Alerts::Interaction.new(@course, [@student.id], [@teacher.id])
-            expect(interaction_alert.should_not_receive_message?(@student.id, 7)).to eq true
+            expect(interaction_alert.should_not_receive_message?(@student.id, 7)).to be true
           end
 
           it "returns false for old courses" do
             @course.start_at = Time.now - 30.days
 
             interaction_alert = Alerts::Interaction.new(@course, [@student.id], [@teacher.id])
-            expect(interaction_alert.should_not_receive_message?(@student.id, 7)).to eq false
+            expect(interaction_alert.should_not_receive_message?(@student.id, 7)).to be false
           end
         end
 
@@ -51,7 +50,7 @@ module Alerts
             @course.save!
 
             interaction_alert = Alerts::Interaction.new(@course, [@student.id], [@teacher.id])
-            expect(interaction_alert.should_not_receive_message?(@student.id, 7)).to eq true
+            expect(interaction_alert.should_not_receive_message?(@student.id, 7)).to be true
           end
 
           it "returns false for old courses" do
@@ -60,38 +59,38 @@ module Alerts
             @course.save!
 
             interaction_alert = Alerts::Interaction.new(@course, [@student.id], [@teacher.id])
-            expect(interaction_alert.should_not_receive_message?(@student.id, 7)).to eq false
+            expect(interaction_alert.should_not_receive_message?(@student.id, 7)).to be false
           end
         end
       end
 
       it "returns true for submission comments" do
-        @assignment = @course.assignments.new(:title => "some assignment")
+        @assignment = @course.assignments.new(title: "some assignment")
         @assignment.workflow_state = "published"
         @assignment.save
         @submission = @assignment.submit_homework(@student)
-        SubmissionComment.create!(:submission => @submission, :comment => 'new comment', :author => @teacher)
-        SubmissionComment.create!(:submission => @submission, :comment => 'old comment', :author => @teacher) do |submission_comment|
+        SubmissionComment.create!(submission: @submission, comment: "new comment", author: @teacher)
+        SubmissionComment.create!(submission: @submission, comment: "old comment", author: @teacher) do |submission_comment|
           submission_comment.created_at = Time.now - 30.days
         end
         @course.start_at = Time.now - 30.days
 
         interaction_alert = Alerts::Interaction.new(@course, [@student.id], [@teacher.id])
-        expect(interaction_alert.should_not_receive_message?(@student.id, 7)).to eq true
+        expect(interaction_alert.should_not_receive_message?(@student.id, 7)).to be true
       end
 
       it "returns false for old submission comments" do
-        @assignment = @course.assignments.new(:title => "some assignment")
+        @assignment = @course.assignments.new(title: "some assignment")
         @assignment.workflow_state = "published"
         @assignment.save
         @submission = @assignment.submit_homework(@student)
-        SubmissionComment.create!(:submission => @submission, :comment => 'some comment', :author => @teacher) do |sc|
+        SubmissionComment.create!(submission: @submission, comment: "some comment", author: @teacher) do |sc|
           sc.created_at = Time.now - 30.days
         end
         @course.start_at = Time.now - 30.days
 
         interaction_alert = Alerts::Interaction.new(@course, [@student.id], [@teacher.id])
-        expect(interaction_alert.should_not_receive_message?(@student.id, 7)).to eq false
+        expect(interaction_alert.should_not_receive_message?(@student.id, 7)).to be false
       end
 
       it "returns true for conversation messages" do
@@ -100,7 +99,7 @@ module Alerts
         @course.start_at = Time.now - 30.days
 
         interaction_alert = Alerts::Interaction.new(@course, [@student.id], [@teacher.id])
-        expect(interaction_alert.should_not_receive_message?(@student.id, 7)).to eq true
+        expect(interaction_alert.should_not_receive_message?(@student.id, 7)).to be true
       end
 
       it "returns false for old conversation messages" do
@@ -113,7 +112,7 @@ module Alerts
         expect(@conversation.messages.length).to eq 2
 
         interaction_alert = Alerts::Interaction.new(@course, [@student.id], [@teacher.id])
-        expect(interaction_alert.should_not_receive_message?(@student.id, 7)).to eq false
+        expect(interaction_alert.should_not_receive_message?(@student.id, 7)).to be false
       end
     end
   end

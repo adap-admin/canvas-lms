@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -17,34 +19,35 @@
 #
 
 module Factories
-  def message_model(opts={})
+  def message_model(opts = {})
     @message = factory_with_protected_attributes(Message, message_valid_attributes.merge(opts))
   end
 
   def message_valid_attributes
     {
-      :subject => "value for subject",
-      :body => "value for body",
-      :sent_at => Time.now
+      subject: "value for subject",
+      body: "value for body",
+      sent_at: Time.now
     }
   end
 
   def generate_message(notification_name, path_type, asset, options = {})
     raise "options must be a hash!" unless options.is_a? Hash
+
     @notification = Notification.where(name: notification_name.to_s).first_or_create!
     user = options[:user]
     data = options[:data] || {}
-    user ||= User.create!(:name => "some user")
+    user ||= User.create!(name: "some user")
 
-    cc_path_type = path_type == :summary ? :email : path_type
+    cc_path_type = (path_type == :summary) ? :email : path_type
     @cc = user.communication_channels.of_type(cc_path_type.to_s).first
     @cc ||= user.communication_channels.create!(path_type: cc_path_type.to_s,
-                                                path: 'generate_message@example.com')
+                                                path: "generate_message@example.com")
     @message = Message.new(notification: @notification,
                            context: asset,
-                           user: user,
+                           user:,
                            communication_channel: @cc,
-                           data: data)
+                           data:)
     @message.delayed_messages = []
     @message.parse!(path_type.to_s)
     @message

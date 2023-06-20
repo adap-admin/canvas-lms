@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -16,20 +18,19 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 class PactApiConsumerProxy
-
-  AUTH_HEADER = 'HTTP_AUTHORIZATION'.freeze
-  USER_HEADER = 'HTTP_AUTH_USER'.freeze
+  AUTH_HEADER = "HTTP_AUTHORIZATION"
+  USER_HEADER = "HTTP_AUTH_USER"
 
   def call(env)
     # Users calling the API will know the user name of the
     # user that they want to identify as. For example, "Admin1".
-    if expects_auth_header?(env)
+    if expects_auth_header_added?(env)
       user = find_requesting_user(env)
 
       # You can create an access token without having a pseudonym;
       # however, when Canvas receives a request and looks up the user
       # for that access token, it expects that user to have a pseudonym.
-      Pseudonym.create!(user: user, unique_id: "#{user.name}@instructure.com") if user.pseudonyms.empty?
+      Pseudonym.create!(user:, unique_id: "#{user.name}@instructure.com") if user.pseudonyms.empty?
       token = user.access_tokens.create!.full_token
 
       env[AUTH_HEADER] = "Bearer #{token}"
@@ -44,8 +45,24 @@ class PactApiConsumerProxy
 
   private
 
-  def expects_auth_header?(env)
-    env[AUTH_HEADER]
+  def expects_auth_header_added?(env)
+    # If the auth header exists, and can *not* be read
+    # as a JWT, then we add an access token to it.
+    # If it can be read as a JWT, then leave it as it is.
+    if env[AUTH_HEADER]
+      begin
+        JSON::JWT.decode(env[AUTH_HEADER].split.last) # Remove the "Bearer "
+      rescue JSON::JWT::InvalidFormat
+        true
+      rescue
+        # Other exceptions (like VerificationFailed) are OK -- we do not
+        # expect a new token to be filled in if we get here. JWT
+        # verification should be stubbed in the provider state.
+        false
+      end
+    else
+      false
+    end
   end
 
   def find_requesting_user(env)

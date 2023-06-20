@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -15,8 +17,8 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_relative '../common'
-require_relative '../helpers/blueprint_common'
+require_relative "../common"
+require_relative "../helpers/blueprint_common"
 
 describe "master courses - child courses - settings" do
   include_context "in-process server selenium tests"
@@ -32,15 +34,15 @@ describe "master courses - child courses - settings" do
     run_master_course_migration(@master)
   end
 
-  before :each do
+  before do
     user_session(@teacher)
   end
 
-  it "should show the child course blueprint information modal" do
+  it "shows the child course blueprint information modal" do
     skip("Jenkins fails with no page load at line 46, though succeeds in canvas__selenium--chrome. Browser issue?")
     get "/courses/#{@minion.id}/settings"
 
-    info_button = f('.blueprint_information_button')
+    info_button = f(".blueprint_information_button")
     expect(info_button).to be_displayed
     expect_new_page_load { info_button.click }
     # the info modal is opened
@@ -49,6 +51,6 @@ describe "master courses - child courses - settings" do
     close_button = fxpath("//span[contains(@aria-label, 'Blueprint Course Information')]//button")
     close_button.click
     # modal has closed and focus is returned to the trigger button
-    check_element_has_focus(f('.blueprint_information_button'))
+    check_element_has_focus(f(".blueprint_information_button"))
   end
 end

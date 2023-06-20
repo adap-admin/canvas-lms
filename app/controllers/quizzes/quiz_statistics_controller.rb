@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -136,7 +138,7 @@
 #           "type": "string"
 #         },
 #         "weight": {
-#           "description": "An integer to determine correctness of the answer. Incorrect answers should be 0, correct answers should be non-negative.",
+#           "description": "An integer to determine correctness of the answer. Incorrect answers should be 0, correct answers should 100",
 #           "example": 100,
 #           "type": "integer",
 #           "format": "int64"
@@ -255,10 +257,9 @@ class Quizzes::QuizStatisticsController < ApplicationController
   #  }
   def index
     if authorized_action(@quiz, @current_user, :read_statistics)
-      scope = @quiz.quiz_submissions.not_settings_only.completed
-      updated = scope.order('updated_at DESC').limit(1).pluck(:updated_at).first
+      updated = @quiz.quiz_submissions.not_settings_only.completed.order(updated_at: :desc).limit(1).pick(:updated_at)
       cache_key = [
-        'quiz_statistics_1',
+        "quiz_statistics_1",
         @quiz.id,
         @quiz.updated_at,
         updated,
@@ -267,15 +268,15 @@ class Quizzes::QuizStatisticsController < ApplicationController
       ].cache_key
 
       if Quizzes::QuizStatistics.large_quiz?(@quiz)
-        head :no_content  #operation not available for large quizzes
+        head :no_content # operation not available for large quizzes
       else
         json = Rails.cache.fetch(cache_key) do
           all_versions = value_to_boolean(params[:all_versions])
-          statistics = @service.generate_aggregate_statistics(all_versions, include_sis_ids?, {section_ids: params[:section_ids]})
+          statistics = @service.generate_aggregate_statistics(all_versions, include_sis_ids?, { section_ids: params[:section_ids] })
           serialize(statistics)
         end
 
-        render json: json
+        render json:
       end
     end
   end
@@ -291,13 +292,13 @@ class Quizzes::QuizStatisticsController < ApplicationController
   end
 
   def serialize(statistics)
-    Canvas::APIArraySerializer.new([ statistics ], {
-      controller: self,
-      scope: @current_user,
-      each_serializer: Quizzes::QuizStatisticsSerializer,
-      root: :quiz_statistics,
-      include_root: false
-    }).as_json
+    Canvas::APIArraySerializer.new([statistics], {
+                                     controller: self,
+                                     scope: @current_user,
+                                     each_serializer: Quizzes::QuizStatisticsSerializer,
+                                     root: :quiz_statistics,
+                                     include_root: false
+                                   }).as_json
   end
 
   # @!appendix Question Specific Statistics

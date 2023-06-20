@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -15,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_relative '../../common'
+require_relative "../../common"
 
 module HideGradesTray
   extend SeleniumDependencies
@@ -46,6 +48,7 @@ module HideGradesTray
 
   def self.select_sections(sections:)
     return if sections.empty?
+
     specific_sections_toggle.click
     sections.each do |section|
       section_checkbox(section_name: section.name).click
@@ -54,7 +57,7 @@ module HideGradesTray
 
   def self.select_section(section_name)
     specific_sections_toggle.click
-    section_checkbox(section_name: section_name).click
+    section_checkbox(section_name:).click
   end
 
   def self.hide_grades

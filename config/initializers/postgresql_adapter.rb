@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -15,29 +17,82 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
+require "active_record/pg_extensions/all"
+
 class QuotedValue < String
 end
 
 module PostgreSQLAdapterExtensions
-  def explain(arel, binds = [], analyze: false)
-    sql = "EXPLAIN #{"ANALYZE " if analyze}#{to_sql(arel, binds)}"
-    ActiveRecord::ConnectionAdapters::PostgreSQL::ExplainPrettyPrinter.new.pp(exec_query(sql, "EXPLAIN", binds))
+  def configure_connection
+    super
+
+    @connection.set_notice_receiver do |result|
+      severity = result.result_error_field(PG::PG_DIAG_SEVERITY_NONLOCALIZED)
+      rails_severity = case severity
+                       when "WARNING", "NOTICE"
+                         :warn
+                       when "DEBUG"
+                         :debug
+                       when "INFO", "LOG"
+                         :info
+                       else
+                         :error
+                       end
+      logger.send(rails_severity, "PG notice: " + result.result_error_message.strip)
+
+      primary_message = result.result_error_field(PG::PG_DIAG_MESSAGE_PRIMARY)
+      detail_message = result.result_error_field(PG::PG_DIAG_MESSAGE_DETAIL)
+      formatted_message = if detail_message
+                            primary_message + "\n" + detail_message
+                          else
+                            primary_message
+                          end
+      Sentry.capture_message(formatted_message, level: rails_severity)
+    end
   end
 
-  def readonly?(table = nil, column = nil)
+  def receive_timeout_wrapper(&)
+    return yield unless @config[:receive_timeout]
+
+    Timeout.timeout(@config[:receive_timeout], PG::ConnectionBad, "receive timeout", &)
+  end
+
+  %I[begin_db_transaction create_savepoint active?].each do |method|
+    class_eval <<~RUBY, __FILE__, __LINE__ + 1
+      def #{method}(*)
+        receive_timeout_wrapper { super }
+      end
+    RUBY
+  end
+
+  def explain(arel, binds = [], analyze: false)
+    sql = "EXPLAIN #{"ANALYZE " if analyze}#{to_sql(arel, binds)}"
+    ActiveRecord::ConnectionAdapters::PostgreSQL::ExplainPrettyPrinter.new
+                                                                      .pp(exec_query(sql, "EXPLAIN", binds))
+  end
+
+  def readonly?
     return @readonly unless @readonly.nil?
-    @readonly = (select_value("SELECT pg_is_in_recovery();") == true)
+
+    @readonly = in_recovery?
   end
 
   def bulk_insert(table_name, records)
     keys = records.first.keys
-    quoted_keys = keys.map{ |k| quote_column_name(k) }.join(', ')
+    quoted_keys = keys.map { |k| quote_column_name(k) }.join(", ")
     execute "COPY #{quote_table_name(table_name)} (#{quoted_keys}) FROM STDIN"
-    raw_connection.put_copy_data records.inject(''){ |result, record|
-                                   result << keys.map{ |k| quote_text(record[k]) }.join("\t") << "\n"
+    raw_connection.put_copy_data records.inject(+"") { |result, record|
+                                   result << keys.map { |k| quote_text(record[k]) }.join("\t") << "\n"
                                  }
     ActiveRecord::Base.connection.clear_query_cache
     raw_connection.put_copy_end
+    result = raw_connection.get_result
+    begin
+      result.check
+    rescue => e
+      raise translate_exception(e, message: e.message, sql: "COPY FROM STDIN", binds: [])
+    end
+    result.cmd_tuples
   end
 
   def quote_text(value)
@@ -46,33 +101,9 @@ module PostgreSQLAdapterExtensions
     elsif value.is_a?(ActiveRecord::ConnectionAdapters::PostgreSQL::OID::Array::Data)
       quote_text(encode_array(value))
     else
-      hash = {"\n" => "\\n", "\r" => "\\r", "\t" => "\\t", "\\" => "\\\\"}
-      value.to_s.gsub(/[\n\r\t\\]/){ |c| hash[c] }
+      hash = { "\n" => "\\n", "\r" => "\\r", "\t" => "\\t", "\\" => "\\\\" }
+      value.to_s.gsub(/[\n\r\t\\]/) { |c| hash[c] }
     end
-  end
-
-  def add_foreign_key(from_table, to_table, options = {})
-    raise ArgumentError, "Cannot specify custom options with :delay_validation" if options[:options] && options[:delay_validation]
-
-    # pointless if we're in a transaction
-    options.delete(:delay_validation) if open_transactions > 0
-    options[:column] ||= "#{to_table.to_s.singularize}_id"
-    column = options[:column]
-
-    foreign_key_name = foreign_key_name(from_table, options)
-
-    if options[:delay_validation]
-      options[:options] = 'NOT VALID'
-      # NOT VALID doesn't fully work through 9.3 at least, so prime the cache to make
-      # it as fast as possible. Note that a NOT EXISTS would be faster, but this is
-      # the query postgres does for the VALIDATE CONSTRAINT, so we want exactly this
-      # query to be warm
-      execute("SELECT fk.#{column} FROM #{quote_table_name(from_table)} fk LEFT OUTER JOIN #{quote_table_name(to_table)} pk ON fk.#{column}=pk.id WHERE pk.id IS NULL AND fk.#{column} IS NOT NULL LIMIT 1")
-    end
-
-    super(from_table, to_table, options)
-
-    execute("ALTER TABLE #{quote_table_name(from_table)} VALIDATE CONSTRAINT #{quote_column_name(foreign_key_name)}") if options[:delay_validation]
   end
 
   def set_standard_conforming_strings
@@ -90,7 +121,7 @@ module PostgreSQLAdapterExtensions
   # have max length validations in the models.
   def type_to_sql(type, limit: nil, **)
     if type == :text && limit
-      if limit <= 10485760
+      if limit <= 10_485_760
         type = :string
       else
         limit = nil
@@ -101,10 +132,10 @@ module PostgreSQLAdapterExtensions
 
   def func(name, *args)
     case name
-      when :group_concat
-        "string_agg((#{func_arg_esc(args.first)})::text, #{quote(args[1] || ',')})"
-      else
-        super
+    when :group_concat
+      "string_agg((#{func_arg_esc(args.first)})::text, #{quote(args[1] || ",")})"
+    else
+      super
     end
   end
 
@@ -113,35 +144,35 @@ module PostgreSQLAdapterExtensions
     # dependent on the primary keys, that's only true if the FROM items are
     # all tables (i.e. not subselects). to keep things simple, we always
     # specify all columns for postgres
-    infer_group_by_columns(columns).flatten.join(', ')
+    infer_group_by_columns(columns).flatten.join(", ")
   end
 
   # ActiveRecord 3.2 ignores indexes if it cannot parse the column names
   # (for instance when using functions like LOWER)
   # this will lead to problems if we try to remove the index (index_exists? will return false)
   def indexes(table_name)
-    schema = shard.name if @config[:use_qualified_names]
+    schema = shard.name
 
-    result = query(<<-SQL, 'SCHEMA')
-         SELECT distinct i.relname, d.indisunique, d.indkey, pg_get_indexdef(d.indexrelid), t.oid
-         FROM pg_class t
-         INNER JOIN pg_index d ON t.oid = d.indrelid
-         INNER JOIN pg_class i ON d.indexrelid = i.oid
-         WHERE i.relkind = 'i'
-           AND d.indisprimary = 'f'
-           AND t.relname = '#{table_name}'
-           AND i.relnamespace IN (SELECT oid FROM pg_namespace WHERE nspname = #{schema ? "'#{schema}'" : 'ANY (current_schemas(false))'} )
-        ORDER BY i.relname
+    result = query(<<~SQL.squish, "SCHEMA")
+       SELECT distinct i.relname, d.indisunique, d.indkey, pg_get_indexdef(d.indexrelid), t.oid
+       FROM pg_class t
+       INNER JOIN pg_index d ON t.oid = d.indrelid
+       INNER JOIN pg_class i ON d.indexrelid = i.oid
+       WHERE i.relkind = 'i'
+         AND d.indisprimary = 'f'
+         AND t.relname = '#{table_name}'
+         AND t.relnamespace IN (SELECT oid FROM pg_namespace WHERE nspname = #{schema ? "'#{schema}'" : "ANY (current_schemas(false))"} )
+      ORDER BY i.relname
     SQL
 
     result.map do |row|
       index_name = row[0]
-      unique = row[1] == 't'
-      indkey = row[2].split(" ")
+      unique = row[1] == "t" || row[1] == true
+      indkey = row[2].split
       inddef = row[3]
       oid = row[4]
 
-      columns = Hash[query(<<-SQL, "SCHEMA")]
+      columns = query(<<~SQL.squish, "SCHEMA").to_h
         SELECT a.attnum, a.attname
         FROM pg_attribute a
         WHERE a.attrelid = #{oid}
@@ -152,24 +183,92 @@ module PostgreSQLAdapterExtensions
 
       # add info on sort order for columns (only desc order is explicitly specified, asc is the default)
       desc_order_columns = inddef.scan(/(\w+) DESC/).flatten
-      orders = desc_order_columns.any? ? Hash[desc_order_columns.map {|order_column| [order_column, :desc]}] : {}
+      orders = desc_order_columns.any? ? desc_order_columns.index_with { :desc } : {}
 
-      ActiveRecord::ConnectionAdapters::IndexDefinition.new(table_name, index_name, unique, column_names, orders: orders)
+      ActiveRecord::ConnectionAdapters::IndexDefinition.new(table_name, index_name, unique, column_names, orders:)
     end
   end
 
-  def index_exists?(_table_name, columns, _options = {})
-    raise ArgumentError.new("if you're identifying an index by name only, you should use index_name_exists?") if columns.is_a?(Hash) && columns[:name]
-    raise ArgumentError.new("columns should be a string, a symbol, or an array of those ") unless columns.is_a?(String) || columns.is_a?(Symbol) || columns.is_a?(Array)
-    super
+  def index_exists?(table_name, columns, **options)
+    # This makes up for a rails bug where column as an option does not work correctly with `if_exists` on `remove_index`
+    columns ||= options[:column]
+    raise ArgumentError, "if you're identifying an index by name only, you should use index_name_exists?" if columns.is_a?(Hash) && columns[:name]
+    raise ArgumentError, "columns should be a string, a symbol, or an array of those " unless columns.nil? || columns.is_a?(String) || columns.is_a?(Symbol) || columns.is_a?(Array)
+
+    super(table_name, columns, **options)
   end
 
   # some migration specs test migrations that add concurrent indexes; detect that, and strip the concurrent
   # but _only_ if there isn't another transaction in the stack
-  def add_index_options(_table_name, _column_name, _options = {})
+  def add_index_options(_table_name, _column_name, **)
     index_name, index_type, index_columns, index_options, algorithm, using = super
     algorithm = nil if Rails.env.test? && algorithm == "CONCURRENTLY" && !ActiveRecord::Base.in_transaction_in_test?
     [index_name, index_type, index_columns, index_options, algorithm, using]
+  end
+
+  def index_algorithm(algorithm)
+    return nil if open_transactions > 0
+
+    super
+  end
+
+  def add_column(table_name, column_name, type, if_not_exists: false, **options)
+    return if if_not_exists && column_exists?(table_name, column_name)
+
+    super(table_name, column_name, type, **options)
+  end
+
+  def remove_column(table_name, column_name, type = nil, if_exists: false, **options)
+    return if if_exists && !column_exists?(table_name, column_name)
+
+    super
+  end
+
+  def create_table(table_name, id: :primary_key, primary_key: nil, force: nil, **options)
+    super
+
+    add_guard_excessive_updates(table_name)
+  end
+
+  def add_guard_excessive_updates(table_name)
+    # Don't try to install this on rails-internal tables; they need to be created for
+    # internal_metadata to exist and this guard isn't really useful there either
+    return if ["schema_migrations", "internal_metadata"].include?(table_name)
+    # If the function doesn't exist yet it will be backfilled
+    return unless ::ActiveRecord::InternalMetadata[:guard_dangerous_changes_installed]
+
+    ["UPDATE", "DELETE"].each do |operation|
+      trigger_name = "guard_excessive_#{operation.downcase}s"
+      already_installed_sql = <<~SQL.squish
+        SELECT count(*) FROM pg_trigger
+          WHERE tgrelid = '#{quote_table_name(table_name)}'::regclass
+            AND tgname = '#{trigger_name}'
+      SQL
+      next if select_value(already_installed_sql).to_i.positive?
+
+      execute(<<~SQL.squish)
+        CREATE TRIGGER #{trigger_name}
+          AFTER #{operation}
+          ON #{quote_table_name(table_name)}
+          REFERENCING OLD TABLE AS oldtbl
+          FOR EACH STATEMENT
+          EXECUTE PROCEDURE #{quote_table_name("guard_excessive_updates")}();
+      SQL
+    end
+  end
+
+  def with_max_update_limit(limit)
+    if transaction_open?
+      execute("SET LOCAL inst.max_update_limit = #{limit}")
+      ret = yield
+      execute("SET LOCAL inst.max_update_limit = DEFAULT")
+    else
+      transaction do
+        execute("SET LOCAL inst.max_update_limit = #{limit}")
+        ret = yield
+      end
+    end
+    ret
   end
 
   def quote(*args)
@@ -177,42 +276,6 @@ module PostgreSQLAdapterExtensions
     return value if value.is_a?(QuotedValue)
 
     super
-  end
-
-  def extension_installed?(extension)
-    @extensions ||= {}
-    @extensions.fetch(extension) do
-      select_value(<<-SQL)
-        SELECT nspname
-        FROM pg_extension
-          INNER JOIN pg_namespace ON extnamespace=pg_namespace.oid
-        WHERE extname='#{extension}'
-      SQL
-    end
-  end
-
-  def extension_available?(extension)
-    select_value("SELECT 1 FROM pg_available_extensions WHERE name='#{extension}'").to_i == 1
-  end
-
-  # temporarily adds schema to the search_path (i.e. so you can use an extension that won't work
-  # using qualified names)
-  def add_schema_to_search_path(schema)
-    if schema_search_path.split(',').include?(schema)
-      yield
-    else
-      old_search_path = schema_search_path
-      transaction(requires_new: true) do
-        begin
-          self.schema_search_path += ",#{schema}"
-          yield
-        ensure
-          # the transaction rolling back or committing will revert the search path change;
-          # we don't need to do another query to set it
-          @schema_search_path = old_search_path
-        end
-      end
-    end
   end
 
   # we no longer use any triggers, so we removed hair_trigger,
@@ -240,44 +303,150 @@ module PostgreSQLAdapterExtensions
     execute("DROP TRIGGER IF EXISTS #{name} ON #{quote_table_name(table)};\nDROP FUNCTION IF EXISTS #{quote_table_name(name)}();\n")
   end
 
-  # does a query first to warm the db cache, to make the actual constraint adding fast
-  def change_column_null(table, column, nullness, default = nil)
-    # no point in pre-warming the cache to avoid locking if we're already in a transaction
-    return super if nullness != false || default || open_transactions != 0
-    execute("SELECT COUNT(*) FROM #{quote_table_name(table)} WHERE #{column} IS NULL")
-    super
+  def icu_collations
+    @collations ||= select_rows <<~SQL.squish, "SCHEMA"
+      SELECT nspname, collname
+      FROM pg_collation
+      INNER JOIN pg_namespace ON collnamespace=pg_namespace.oid
+      WHERE
+        collprovider='i' AND
+        NOT collisdeterministic AND
+        collname LIKE '%-u-kn-true'
+    SQL
   end
 
-  def initialize_type_map(m = type_map)
-    m.register_type "pg_lsn", ActiveRecord::ConnectionAdapters::PostgreSQL::OID::SpecializedString.new(:pg_lsn)
-
-    super
-  end
-
-  def column_definitions(table_name)
-    # migrations need to see any interstitial states; also, we don't
-    # want to pollute the cache with an interstitial state
-    return super if ActiveRecord::Base.in_migration
-
-    # be wary of error reporting inside of MultiCache triggering a
-    # separate model access
-    return super if @nested_column_definitions
-    @nested_column_definitions = true
-    begin
-      got_inside = false
-      MultiCache.fetch(["schema", table_name]) do
-        got_inside = true
-        super
-      end
-    rescue
-      raise if got_inside
-      # we never got inside, so something is wrong with the cache,
-      # just ignore it
-      super
-    ensure
-      @nested_column_definitions = false
+  def create_icu_collations
+    collation = "und-u-kn-true"
+    unless icu_collations.find { |_schema, extant_collation| extant_collation == collation }
+      update("CREATE COLLATION public.#{quote_column_name(collation)} (LOCALE=#{quote(collation)}, PROVIDER='icu', DETERMINISTIC=false)")
     end
+
+    I18n.available_locales.each do |locale|
+      next if locale.to_s.include?("-x-")
+
+      I18n.with_locale(locale) do
+        next if Canvas::ICU.collator.rules.empty?
+
+        collation = "#{locale}-u-kn-true"
+        next if icu_collations.find { |_schema, extant_collation| extant_collation == collation }
+
+        update("CREATE COLLATION public.#{quote_column_name(collation)} (LOCALE=#{quote(collation)}, PROVIDER='icu', DETERMINISTIC=false)")
+      end
+    end
+  ensure
+    @collations = nil
+  end
+
+  class AbortExceptionMatcher
+    def self.===(other)
+      return true if defined?(IRB::Abort) && other.is_a?(IRB::Abort)
+
+      false
+    end
+  end
+
+  def execute(...)
+    super
+  rescue AbortExceptionMatcher
+    @connection.cancel
+    raise
+  end
+
+  def exec_query(...)
+    super
+  rescue AbortExceptionMatcher
+    @connection.cancel
+    raise
   end
 end
 
 ActiveRecord::ConnectionAdapters::PostgreSQLAdapter.prepend(PostgreSQLAdapterExtensions)
+
+module SchemaCreationExtensions
+  def set_table_context(table)
+    @table = table
+  end
+
+  def visit_AlterTable(o)
+    set_table_context(o.name)
+    super
+  end
+
+  def visit_TableDefinition(o)
+    set_table_context(o.name)
+    super
+  end
+
+  def visit_ColumnDefinition(o)
+    column_sql = super
+    column_sql << " " << foreign_key_column_constraint(@table, o.foreign_key[:to_table], column: o.name, **o.foreign_key) if o.foreign_key
+    column_sql
+  end
+
+  def visit_ForeignKeyDefinition(o, constraint_type: :table)
+    sql = +"CONSTRAINT #{quote_column_name(o.name)}"
+    sql << " FOREIGN KEY (#{quote_column_name(o.column)})" if constraint_type == :table
+    sql << " REFERENCES #{quote_table_name(o.to_table)} (#{quote_column_name(o.primary_key)})"
+    sql << " #{action_sql("DELETE", o.on_delete)}" if o.on_delete
+    sql << " #{action_sql("UPDATE", o.on_update)}" if o.on_update
+    sql
+  end
+
+  def foreign_key_column_constraint(from_table, to_table, options)
+    prefix = ActiveRecord::Base.table_name_prefix
+    suffix = ActiveRecord::Base.table_name_suffix
+    to_table = "#{prefix}#{to_table}#{suffix}"
+
+    options = @conn.foreign_key_options(from_table, to_table, options)
+    fk = ActiveRecord::ConnectionAdapters::ForeignKeyDefinition.new(from_table, to_table, options)
+    visit_ForeignKeyDefinition(fk, constraint_type: :column)
+  end
+end
+
+module ColumnDefinitionExtensions
+  def foreign_key
+    options[:foreign_key]
+  end
+
+  def foreign_key=(value)
+    options[:foreign_key] = value
+  end
+end
+
+module ReferenceDefinitionExtensions
+  def add_to(table)
+    columns.each do |name, type, options|
+      options = options.merge(foreign_key: foreign_key_options) if foreign_key
+      table.column(name, type, **options)
+    end
+
+    if index
+      table.index(column_names, **index_options(table.name))
+    end
+  end
+
+  def foreign_key_options
+    as_options(foreign_key).merge(column: column_name, to_table: foreign_table_name)
+  end
+
+  def foreign_table_name
+    as_options(foreign_key).fetch(:to_table) do
+      ActiveRecord::Base.pluralize_table_names ? name.to_s.pluralize : name
+    end
+  end
+end
+
+module SchemaStatementsExtensions
+  def add_column_for_alter(table_name, column_name, type, **options)
+    td = create_table_definition(table_name)
+    cd = td.new_column_definition(column_name, type, **options)
+    schema = schema_creation
+    schema.set_table_context(table_name)
+    schema.accept(AddColumnDefinition.new(cd))
+  end
+end
+
+ActiveRecord::ConnectionAdapters::PostgreSQL::SchemaCreation.prepend(SchemaCreationExtensions)
+ActiveRecord::ConnectionAdapters::ColumnDefinition.prepend(ColumnDefinitionExtensions)
+ActiveRecord::ConnectionAdapters::ReferenceDefinition.prepend(ReferenceDefinitionExtensions)
+ActiveRecord::ConnectionAdapters::PostgreSQLAdapter.prepend(SchemaStatementsExtensions)

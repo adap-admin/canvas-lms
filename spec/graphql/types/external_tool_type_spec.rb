@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -16,14 +18,16 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper')
 require_relative "../graphql_spec_helper"
 
 describe Types::ExternalToolType do
-  let_once(:course) { course_with_teacher(active_all: true); @course }
-  let_once(:context_module) { course.context_modules.create! name: 'Module 1' }
+  let_once(:course) do
+    course_with_teacher(active_all: true)
+    @course
+  end
+  let_once(:context_module) { course.context_modules.create! name: "Module 1" }
   let_once(:external_tool) { external_tool_model(context: course) }
-  let_once(:module_item) { context_module.add_item({type: 'ExternalTool', id: external_tool.id}, nil, position: 1) }
+  let_once(:module_item) { context_module.add_item({ type: "ExternalTool", id: external_tool.id }, nil, position: 1) }
   let(:module_item_type) { GraphQLTypeTester.new(module_item, current_user: @teacher) }
 
   it "works" do
@@ -34,16 +38,16 @@ describe Types::ExternalToolType do
   end
 
   it "has modules" do
-    module2 = course.context_modules.create! name: 'Module 2'
-    module2.add_item({type: 'ExternalTool', id: external_tool.id}, nil, position: 2)
+    module2 = course.context_modules.create! name: "Module 2"
+    module2.add_item({ type: "ExternalTool", id: external_tool.id }, nil, position: 2)
     expect(
       module_item_type.resolve("content { ... on ExternalTool { modules { _id } } }")
     ).to match_array [context_module.id.to_s, module2.id.to_s]
   end
 
   it "does not duplicate modules" do
-    context_module.add_item({type: 'ExternalTool', id: external_tool.id}, nil, position: 2)
-    context_module.add_item({type: 'ExternalTool', id: external_tool.id}, nil, position: 3)
+    context_module.add_item({ type: "ExternalTool", id: external_tool.id }, nil, position: 2)
+    context_module.add_item({ type: "ExternalTool", id: external_tool.id }, nil, position: 3)
     expect(
       module_item_type.resolve("content { ... on ExternalTool { modules { _id } } }")
     ).to match_array [context_module.id.to_s]

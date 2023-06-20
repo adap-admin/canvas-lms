@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -22,8 +24,9 @@ module Importers
   end
 
   def self.content_importer_for(context_type)
-    klass = @content_importers[context_type]
+    klass = @content_importers&.[](context_type)
     raise "No content importer registered for #{context_type}" unless klass
+
     klass
   end
 
@@ -44,18 +47,20 @@ module Importers
 
       # forward translations to CalendarEvent; they used to live there.
       def translate(*args)
-        raise "Needs self.item_class to be set in #{self}" unless self.item_class
-        self.item_class.translate(*args)
+        raise "Needs self.item_class to be set in #{self}" unless item_class
+
+        item_class.translate(*args)
       end
-      alias :t :translate
+      alias_method :t, :translate
 
       def logger(*args)
-        raise "Needs self.item_class to be set in #{self}" unless self.item_class
-        self.item_class.logger(*args)
+        raise "Needs self.item_class to be set in #{self}" unless item_class
+
+        item_class.logger(*args)
       end
     end
   end
-end
 
-require_dependency 'importers/account_content_importer'
-require_dependency 'importers/course_content_importer'
+  register_content_importer(AccountContentImporter)
+  register_content_importer(CourseContentImporter)
+end

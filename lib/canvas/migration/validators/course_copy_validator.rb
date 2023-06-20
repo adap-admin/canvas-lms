@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -17,17 +19,18 @@
 #
 
 module Canvas::Migration::Validators::CourseCopyValidator
-  def self.has_error(options, user, course)
+  def self.has_error(options, user, _course)
     if !options || !options[:source_course_id]
-      return I18n.t :course_copy_argument_error, 'A course copy requires a source course.'
+      return I18n.t :course_copy_argument_error, "A course copy requires a source course."
     end
+
     source = Course.where(id: options[:source_course_id]).first
     if source
-      if !(source.grants_right?(user, :read_as_admin) && source.grants_right?(user, :read))
-        return I18n.t :course_copy_not_allowed_error, 'You are not allowed to copy the source course.'
+      unless source.grants_right?(user, :read_as_admin) && source.grants_right?(user, :read)
+        return I18n.t :course_copy_not_allowed_error, "You are not allowed to copy the source course."
       end
     else
-      return I18n.t :course_copy_no_course_error, 'The source course was not found.'
+      return I18n.t :course_copy_no_course_error, "The source course was not found."
     end
 
     false

@@ -16,25 +16,38 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+import {parse} from 'url'
+import {absoluteToRelativeUrl} from '../../../common/fileUrl'
 import {
+  IconAudioLine,
   IconDocumentLine,
   IconMsExcelLine,
   IconMsPptLine,
   IconMsWordLine,
-  IconPdfLine
+  IconPdfLine,
+  IconVideoLine,
 } from '@instructure/ui-icons'
+import RCEGlobals from '../../RCEGlobals'
 
 export function getIconFromType(type) {
-  switch(type) {
+  if (isVideo(type)) {
+    return IconVideoLine
+  } else if (isAudio(type)) {
+    return IconAudioLine
+  }
+  switch (type) {
     case 'application/msword':
+    case 'application/vnd.apple.pages':
     case 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
       return IconMsWordLine
     case 'application/vnd.ms-powerpoint':
+    case 'application/vnd.apple.keynote':
     case 'application/vnd.openxmlformats-officedocument.presentationml.presentation':
       return IconMsPptLine
     case 'application/pdf':
       return IconPdfLine
     case 'application/vnd.ms-excel':
+    case 'application/vnd.apple.numbers':
     case 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
       return IconMsExcelLine
     default:
@@ -60,4 +73,61 @@ export function isAudio(type) {
 
 export function isText(type) {
   return /^text/.test(type)
+}
+
+export function isIWork(filename) {
+  return [/.pages$/i, /.key$/i, /.numbers$/i].some(regex => regex.test(filename))
+}
+
+export function getIWorkType(filename) {
+  const tokens = filename.split('.')
+  if (tokens.length <= 1) return ''
+  const lastToken = tokens[tokens.length - 1]
+  switch (lastToken.toLowerCase()) {
+    case 'pages':
+      return 'application/vnd.apple.pages'
+    case 'key':
+      return 'application/vnd.apple.keynote'
+    case 'numbers':
+      return 'application/vnd.apple.numbers'
+    default:
+      return ''
+  }
+}
+
+export function mediaPlayerURLFromFile(file, canvasOrigin) {
+  // why oh why aren't we consistent?
+  const content_type = file['content-type'] || file.content_type || file.type
+  const type = content_type.replace(/\/.*$/, '')
+
+  if (
+    RCEGlobals.getFeatures()?.media_links_use_attachment_id &&
+    isAudioOrVideo(content_type) &&
+    file.id
+  ) {
+    if (!file.url && !file.href) {
+      return `/media_attachments_iframe/${file.id}?type=${type}&embedded=true`
+    }
+
+    const parsed_url = parse(file.url || file.href, true)
+    const verifier = parsed_url.query.verifier ? `&verifier=${parsed_url.query.verifier}` : ''
+    return `/media_attachments_iframe/${file.id}?type=${type}${verifier}&embedded=true`
+  }
+
+  if (file.embedded_iframe_url) {
+    return `${absoluteToRelativeUrl(file.embedded_iframe_url, canvasOrigin)}?type=${type}`
+  }
+
+  if (isAudioOrVideo(content_type)) {
+    const mediaEntryId = file.media_entry_id || file.embed?.id || file.mediaEntryId
+
+    if (mediaEntryId && mediaEntryId !== 'maybe') {
+      return `/media_objects_iframe/${mediaEntryId}?type=${type}`
+    }
+
+    const parsed_url = parse(file.url || file.href, true)
+    const verifier = parsed_url.query.verifier ? `&verifier=${parsed_url.query.verifier}` : ''
+    return `/media_objects_iframe?mediahref=${parsed_url.pathname}${verifier}&type=${type}`
+  }
+  return undefined
 }

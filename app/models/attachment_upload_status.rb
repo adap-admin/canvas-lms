@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright (C) 2019 - present Instructure, Inc.
 #
 # This file is part of Canvas.
@@ -24,7 +26,7 @@ class AttachmentUploadStatus < ApplicationRecord
   end
 
   def self.pending!(attachment)
-    Rails.cache.write(cache_key(attachment), 'pending', expires_in: 1.day.from_now)
+    Rails.cache.write(cache_key(attachment), "pending", expires_in: 1.day.from_now)
   end
 
   def self.success!(attachment)
@@ -34,8 +36,8 @@ class AttachmentUploadStatus < ApplicationRecord
   def self.failed!(attachment, error)
     attachment.shard.activate do
       create!(
-        attachment: attachment,
-        error: error
+        attachment:,
+        error:
       ).tap { Rails.cache.delete(cache_key(attachment)) }
     end
   end
@@ -43,11 +45,18 @@ class AttachmentUploadStatus < ApplicationRecord
   # If Rails.cache has a status, use that. Otherwise check for AttachmentUploadStatus in db.
   # If everything is empty, means the upload was a success.
   def self.upload_status(attachment)
-    status = Rails.cache.read(cache_key(attachment))
-    return status if status
+    if attachment.created_at > 1.day.ago # seems like we can skip the cache check if it's old enough
+      status = Rails.cache.read(cache_key(attachment))
+      return status if status
+    end
 
-    return 'failed' if where(attachment: attachment).exists?
+    failed = if attachment.attachment_upload_statuses.loaded?
+               attachment.attachment_upload_statuses.any?
+             else
+               attachment.attachment_upload_statuses.exists?
+             end
+    return "failed" if failed
 
-    'success'
+    "success"
   end
 end

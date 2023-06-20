@@ -16,8 +16,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Role from 'compiled/models/Role'
-import Account from 'compiled/models/Account'
+import Role from 'ui/features/roster/backbone/models/Role'
+import Account from 'ui/features/account_settings/backbone/models/Account'
 import fakeENV from 'helpers/fakeENV'
 
 QUnit.module('RoleModel', {
@@ -25,20 +25,20 @@ QUnit.module('RoleModel', {
     this.account = new Account({id: 4})
     this.role = new Role({account: this.account})
     this.server = sinon.fakeServer.create()
-    fakeENV.setup({CURRENT_ACCOUNT: {account: {id: 3}}})
+    fakeENV.setup({ACCOUNT_ID: 3})
   },
   teardown() {
     this.server.restore()
     this.role = null
     this.account_id = null
     fakeENV.teardown()
-  }
+  },
 })
 
-test('generates the correct url for existing and non-existing roles', 2, function() {
+test('generates the correct url for existing and non-existing roles', 2, function () {
   equal(this.role.url(), '/api/v1/accounts/3/roles', 'non-existing role url')
   this.role.fetch({
-    success: () => equal(this.role.url(), '/api/v1/accounts/3/roles/1', 'existing role url')
+    success: () => equal(this.role.url(), '/api/v1/accounts/3/roles/1', 'existing role url'),
   })
   return this.server.respond('GET', this.role.url(), [
     200,
@@ -46,7 +46,7 @@ test('generates the correct url for existing and non-existing roles', 2, functio
     JSON.stringify({
       role: 'existingRole',
       id: '1',
-      account: this.account
-    })
+      account: this.account,
+    }),
   ])
 })

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -20,9 +22,8 @@
 # Includes helpers for integration with SIS systems.
 #
 class DisablePostToSisApiController < ApplicationController
-
   before_action :require_authorized_user
-  before_action :require_valid_grading_period, :if => :grading_period_exists?
+  before_action :require_valid_grading_period, if: :grading_period_exists?
 
   # @API Disable assignments currently enabled for grade export to SIS
   #
@@ -68,7 +69,7 @@ class DisablePostToSisApiController < ApplicationController
       if params[:course_id]
         api_find(Course, params[:course_id])
       else
-        fail ActiveRecord::RecordNotFound, 'unknown context type'
+        raise ActiveRecord::RecordNotFound, "unknown context type"
       end
   end
 
@@ -81,24 +82,25 @@ class DisablePostToSisApiController < ApplicationController
     assignments = Assignment.published.for_course(context)
     if grading_period
       assignments.where("due_at BETWEEN ? AND ? OR due_at IS NULL",
-                        grading_period.start_date, grading_period.end_date)
+                        grading_period.start_date,
+                        grading_period.end_date)
     else
       assignments
     end
   end
 
   def grading_period_exists?
-    params.has_key?(:grading_period_id) && !params[:grading_period_id].blank?
+    params.key?(:grading_period_id) && params[:grading_period_id].present?
   end
 
   def require_authorized_user
-    head :unauthorized unless context.grants_right?(@current_user, session, :manage_assignments)
+    head :unauthorized unless context.grants_any_right?(@current_user, session, :manage_assignments, :manage_assignments_edit)
   end
 
   def require_valid_grading_period
     body = {
-      code: 'not_found',
-      error: I18n.t('The Grading Period cannot be found')
+      code: "not_found",
+      error: I18n.t("The Grading Period cannot be found")
     }
     render json: body, status: :bad_request if params[:grading_period_id] && grading_period.blank?
   end

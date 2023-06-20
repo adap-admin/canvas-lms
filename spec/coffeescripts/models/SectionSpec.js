@@ -16,8 +16,10 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Section from 'compiled/models/Section'
-import I18n from 'i18n!modelsSection'
+import Section from '@canvas/sections/backbone/models/Section'
+import {useScope as useI18nScope} from '@canvas/i18n'
+
+const I18n = useI18nScope('modelsSection')
 
 QUnit.module('Section')
 

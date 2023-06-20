@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -18,7 +20,8 @@
 
 # @API Services
 class ServicesApiController < ApplicationController
-  
+  before_action :require_user, :get_context, only: [:rce_config]
+
   # @API Get Kaltura config
   # Return the config information for the Kaltura plugin in json format.
   #
@@ -45,14 +48,14 @@ class ServicesApiController < ApplicationController
   def show_kaltura_config
     if @current_user
       @kal = CanvasKaltura::ClientV3.config
-      response = { 'enabled' => !@kal.nil? }
+      response = { "enabled" => !@kal.nil? }
       if @kal
-        response['domain'] = @kal['domain']
-        response['resource_domain'] = @kal['resource_domain']
-        response['rtmp_domain'] = @kal['rtmp_domain']
-        response['partner_id'] = @kal['partner_id']
+        response["domain"] = @kal["domain"]
+        response["resource_domain"] = @kal["resource_domain"]
+        response["rtmp_domain"] = @kal["rtmp_domain"]
+        response["partner_id"] = @kal["partner_id"]
       end
-      render :json => response
+      render json: response
     else
       render_unauthorized_action
     end
@@ -72,37 +75,88 @@ class ServicesApiController < ApplicationController
   #     }
   def start_kaltura_session
     @user = @current_user
-    if !@current_user
-      render :json => {:errors => {:base => t('must_be_logged_in', "You must be logged in to use Kaltura")}, :logged_in => false}
+    unless @current_user
+      payload = { errors: { base: t("must_be_logged_in", "You must be logged in to use Kaltura") }, logged_in: false }
+      return render json: payload, status: :unauthorized
     end
     client = CanvasKaltura::ClientV3.new
     uid = "#{@user.id}_#{@domain_root_account.id}"
     res = client.startSession(CanvasKaltura::SessionType::USER, uid)
-    raise "Kaltura session failed to generate" if res =~ /START_SESSION_ERROR/
+    raise "Kaltura session failed to generate" if res.nil? || res.include?("START_SESSION_ERROR")
 
     hash = {
-      :ks => res,
-      :subp_id => CanvasKaltura::ClientV3.config['subpartner_id'],
-      :partner_id => CanvasKaltura::ClientV3.config['partner_id'],
-      :uid => uid,
-      :serverTime => Time.zone.now.to_i
+      ks: res,
+      subp_id: CanvasKaltura::ClientV3.config["subpartner_id"],
+      partner_id: CanvasKaltura::ClientV3.config["partner_id"],
+      uid:,
+      serverTime: Time.zone.now.to_i
     }
     if value_to_boolean(params[:include_upload_config])
       pseudonym = @context ? SisPseudonym.for(@current_user, @context) : @current_user.primary_pseudonym
       hash[:kaltura_setting] = CanvasKaltura::ClientV3.config.try(:slice,
-                                    'domain', 'resource_domain', 'rtmp_domain',
-                                    'partner_id', 'subpartner_id', 'player_ui_conf',
-                                    'player_cache_st', 'kcw_ui_conf', 'upload_ui_conf',
-                                    'max_file_size_bytes', 'do_analytics', 'hide_rte_button', 'js_uploader')
-      hash[:kaltura_setting][:uploadUrl] ="#{request.protocol}#{hash[:kaltura_setting][:domain]}/index.php/partnerservices2/upload"
-      hash[:kaltura_setting][:entryUrl] ="#{request.protocol}#{hash[:kaltura_setting][:domain]}/index.php/partnerservices2/addEntry"
-      hash[:kaltura_setting][:uiconfUrl] ="#{request.protocol}#{hash[:kaltura_setting][:domain]}/index.php/partnerservices2/getuiconf"
+                                                                  "domain",
+                                                                  "resource_domain",
+                                                                  "rtmp_domain",
+                                                                  "protocol",
+                                                                  "partner_id",
+                                                                  "subpartner_id",
+                                                                  "player_ui_conf",
+                                                                  "player_cache_st",
+                                                                  "kcw_ui_conf",
+                                                                  "upload_ui_conf",
+                                                                  "max_file_size_bytes",
+                                                                  "do_analytics",
+                                                                  "hide_rte_button",
+                                                                  "js_uploader")
+      protocol = hash[:kaltura_setting][:protocol] || request.protocol.gsub(%r{://$}, "")
+      base_url = "#{protocol}://#{hash[:kaltura_setting][:domain]}/index.php/partnerservices2"
+      hash[:kaltura_setting][:uploadUrl] = "#{base_url}/upload"
+      hash[:kaltura_setting][:entryUrl] = "#{base_url}/addEntry"
+      hash[:kaltura_setting][:uiconfUrl] = "#{base_url}/getuiconf"
       hash[:kaltura_setting][:partner_data] = {
-        :root_account_id => @domain_root_account.id,
-        :sis_user_id => pseudonym&.sis_user_id,
-        :sis_source_id  => @context&.sis_source_id
+        root_account_id: @domain_root_account.id,
+        sis_user_id: pseudonym&.sis_user_id,
+        sis_source_id: @context&.sis_source_id
       }
     end
     render json: hash
+  end
+
+  def rce_config
+    @include_js_env = true
+    inst = inst_env || {}
+    env = rce_js_env || {}
+
+    should_add_base_url = !Canvas::Cdn.config.host
+    base_url = "#{request.scheme}://#{HostUrl.context_host(@domain_root_account, request.host)}"
+    add_base_url_if_needed = ->(url) { "#{should_add_base_url ? base_url : ""}#{url}" }
+
+    high_contrast_css_urls = env[:url_for_high_contrast_tinymce_editor_css] || []
+    editor_css_urls = env[:url_to_what_gets_loaded_inside_the_tinymce_editor_css] || []
+    active_brand_css_url = env[:active_brand_config_json_url]
+    locales = env[:LOCALES] || ["en"]
+
+    render json: {
+      RICH_CONTENT_CAN_UPLOAD_FILES: env[:RICH_CONTENT_CAN_UPLOAD_FILES],
+      RICH_CONTENT_INST_RECORD_TAB_DISABLED: env[:RICH_CONTENT_INST_RECORD_TAB_DISABLED],
+      RICH_CONTENT_FILES_TAB_DISABLED: env[:RICH_CONTENT_FILES_TAB_DISABLED],
+      RICH_CONTENT_CAN_EDIT_FILES: env[:RICH_CONTENT_CAN_EDIT_FILES],
+      K5_SUBJECT_COURSE: env[:K5_SUBJECT_COURSE],
+      K5_HOMEROOM_COURSE: env[:K5_HOMEROOM_COURSE],
+      context_asset_string: env[:context_asset_string],
+      DEEP_LINKING_POST_MESSAGE_ORIGIN: env[:DEEP_LINKING_POST_MESSAGE_ORIGIN],
+      current_user_id: env[:current_user_id],
+      disable_keyboard_shortcuts: env[:disable_keyboard_shortcuts],
+      rce_auto_save_max_age_ms: env[:rce_auto_save_max_age_ms],
+      editorButtons: inst[:editorButtons] || [],
+      kalturaSettings: { hide_rte_button: inst.dig(:kalturaSettings, :hide_rte_button) || false },
+      LOCALES: locales,
+      LOCALE: locales[0],
+      active_brand_config_json_url: active_brand_css_url && add_base_url_if_needed.call(active_brand_css_url),
+      url_for_high_contrast_tinymce_editor_css: high_contrast_css_urls.map(&add_base_url_if_needed),
+      url_to_what_gets_loaded_inside_the_tinymce_editor_css: editor_css_urls.map(&add_base_url_if_needed),
+      FEATURES: env[:FEATURES]&.transform_values { |v| !!v },
+      LTI_LAUNCH_FRAME_ALLOWANCES: Lti::Launch.iframe_allowances,
+    }
   end
 end

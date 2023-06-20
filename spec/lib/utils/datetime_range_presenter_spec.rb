@@ -1,5 +1,5 @@
-# encoding: UTF-8
-#
+# frozen_string_literal: true
+
 # Copyright (C) 2014 - present Instructure, Inc.
 #
 # This file is part of Canvas.
@@ -31,8 +31,7 @@
 #
 # You should have received a copy of the GNU Affero General Public License along
 
-require_relative '../../spec_helper'
-require_dependency "utils/datetime_range_presenter"
+require_relative "../../spec_helper"
 
 module Utils
   describe DatetimeRangePresenter do
@@ -42,10 +41,16 @@ module Utils
     end
 
     describe "#as_string" do
-      it 'can display a single datetime if theres no range' do
+      it "can display a single datetime if theres no range" do
         datetime = Time.zone.parse("#{Time.zone.now.year}-01-01 12:00:00")
         presenter = DatetimeRangePresenter.new(datetime)
         expect(presenter.as_string).to eq("Jan 1 at 12pm")
+      end
+
+      it "does not include an extra space in the returned time" do
+        time = Time.zone.parse("Tue, 14 Dec 2021 13:32:00 UTC +00:00")
+        presenter = DatetimeRangePresenter.new(time)
+        expect(presenter.as_string).to eq("Dec 14, 2021 at 1:32pm")
       end
 
       describe "with shortened midnight" do
@@ -73,7 +78,7 @@ module Utils
         expect(presenter.as_string).to eq("Jan 1 by 12pm")
       end
 
-      it 'handles ranges' do
+      it "handles ranges" do
         datetime = Time.zone.parse("#{Time.now.year}-01-01 12:00:00")
         end_datetime = datetime + 2.days
         presenter = DatetimeRangePresenter.new(datetime, end_datetime)
@@ -84,14 +89,14 @@ module Utils
         datetime = Time.zone.parse("#{Time.zone.now.year}-01-01 12:00:00")
         end_datetime = datetime.advance(hours: 1)
         presenter = DatetimeRangePresenter.new(datetime, end_datetime)
-        expect(presenter.as_string).to eq("Jan 1 from 12pm to  1pm")
+        expect(presenter.as_string).to eq("Jan 1 from 12pm to 1pm")
       end
 
-      it "should include the year if the current year isn't the same" do
+      it "includes the year if the current year isn't the same" do
         Timecop.travel(Time.utc(2014, 10, 1, 9, 30)) do
           nextyear = Time.zone.now.advance(years: 1)
           presenter = DatetimeRangePresenter.new(nextyear)
-          expect(presenter.as_string).to eq("Oct 1, 2015 at  9:30am")
+          expect(presenter.as_string).to eq("Oct 1, 2015 at 9:30am")
         end
       end
 
@@ -99,39 +104,34 @@ module Utils
         datetime = Time.zone.parse("#{Time.zone.now.year}-01-01 12:00:00")
         mountain_presenter = overridden_presenter(datetime, "America/Denver")
         central_presenter = overridden_presenter(datetime, "America/Chicago")
-        expect(mountain_presenter.as_string).to eq("Jan 1 at  5am")
-        expect(central_presenter.as_string).to eq("Jan 1 at  6am")
+        expect(mountain_presenter.as_string).to eq("Jan 1 at 5am")
+        expect(central_presenter.as_string).to eq("Jan 1 at 6am")
       end
 
       it "uses the default timezone if none provided" do
-        begin
-          datetime = Time.zone.parse("#{Time.zone.now.year}-01-01 12:00:00")
-          pre_zone = Time.zone
-          Time.zone = "Mountain Time (US & Canada)"
-          nilzone_presenter = DatetimeRangePresenter.new(datetime, nil, :event, nil)
-          expect(nilzone_presenter.as_string).to eq("Jan 1 at  5am")
-        ensure
-          Time.zone = pre_zone
-        end
+        datetime = Time.zone.parse("#{Time.zone.now.year}-01-01 12:00:00")
+        pre_zone = Time.zone
+        Time.zone = "Mountain Time (US & Canada)"
+        nilzone_presenter = DatetimeRangePresenter.new(datetime, nil, :event, nil)
+        expect(nilzone_presenter.as_string).to eq("Jan 1 at 5am")
+      ensure
+        Time.zone = pre_zone
       end
 
       it "can deal with date boundaries in the override on time objects" do
-        begin
-          pre_zone = Time.zone
-          Time.zone = "Alaska"
-          Timecop.freeze(Time.utc(2014,10,1,7,30)) do
-            datetime = Time.now
+        pre_zone = Time.zone
+        Time.zone = "Alaska"
+        Timecop.freeze(Time.utc(2014, 10, 1, 7, 30)) do
+          datetime = Time.now
 
-            alaskan_presenter = DatetimeRangePresenter.new(datetime)
-            mountain_presenter = overridden_presenter(datetime, "America/Denver")
-            expect(alaskan_presenter.as_string).to eq("Sep 30 at 11:30pm")
-            expect(mountain_presenter.as_string).to eq("Oct 1 at  1:30am")
-          end
-        ensure
-          Time.zone = pre_zone
+          alaskan_presenter = DatetimeRangePresenter.new(datetime)
+          mountain_presenter = overridden_presenter(datetime, "America/Denver")
+          expect(alaskan_presenter.as_string).to eq("Sep 30 at 11:30pm")
+          expect(mountain_presenter.as_string).to eq("Oct 1 at 1:30am")
         end
+      ensure
+        Time.zone = pre_zone
       end
-
     end
   end
 end

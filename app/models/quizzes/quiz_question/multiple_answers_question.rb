@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -18,12 +20,12 @@
 
 class Quizzes::QuizQuestion::MultipleAnswersQuestion < Quizzes::QuizQuestion::Base
   def total_answer_parts
-    len = @question_data[:answers].select { |a| a[:weight] == 100 }.length
+    len = @question_data[:answers].count { |a| a[:weight] == 100 }
     len = 1 if len == 0
     len
   end
 
-  def incorrect_answer_parts(user_answer)
+  def incorrect_answer_parts(_user_answer)
     @incorrect_answers
   end
 
@@ -35,6 +37,7 @@ class Quizzes::QuizQuestion::MultipleAnswersQuestion < Quizzes::QuizQuestion::Ba
     @question_data[:answers].each do |answer|
       response = user_answer["answer_#{answer[:id]}"]
       next unless response
+
       total_answers += 1
       user_answer.answer_details["answer_#{answer[:id]}".to_sym] = response
 
@@ -50,7 +53,8 @@ class Quizzes::QuizQuestion::MultipleAnswersQuestion < Quizzes::QuizQuestion::Ba
       end
     end
     return nil if total_answers == 0
-    return correct_answers
+
+    correct_answers
   end
 
   # TODO: remove once new stats is on for everybody
@@ -59,7 +63,7 @@ class Quizzes::QuizQuestion::MultipleAnswersQuestion < Quizzes::QuizQuestion::Ba
 
     responses.each do |response|
       answers.each do |answer|
-        if response[:"answer_#{answer[:id]}"] == '1'
+        if response[:"answer_#{answer[:id]}"] == "1"
           answer[:responses] += 1
           answer[:user_ids] << response[:user_id]
         end

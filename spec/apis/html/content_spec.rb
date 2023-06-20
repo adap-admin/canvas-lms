@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 Instructure, Inc.
 #
@@ -16,45 +18,45 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../api_spec_helper')
+require_relative "../api_spec_helper"
 
 describe Api::Html::Content, type: :request do
   describe "apply_mathml" do
     context "valid latex" do
       before do
         @latex = '\frac{a}{b}'
-        @node = Nokogiri::HTML::DocumentFragment.parse("<img alt='#{@latex}' />").children.first
+        @node = Nokogiri::HTML5.fragment("<img alt='#{@latex}' />").children.first
       end
 
       it "retains the alt attribute" do
         Api::Html::Content.apply_mathml(@node)
-        expect(@node['alt']).to eql(@latex)
+        expect(@node["alt"]).to eql(@latex)
       end
 
       it "sets x-canvaslms-safe-mathml" do
         Api::Html::Content.apply_mathml(@node)
-        expect(@node['x-canvaslms-safe-mathml']).to eql(Ritex::Parser.new.parse(@latex))
+        expect(@node["x-canvaslms-safe-mathml"]).to eql(Ritex::Parser.new.parse(@latex))
       end
     end
 
     context "invalid latex" do
       before do
         @latex = '\frac{a}{' # incomplete
-        @node = Nokogiri::HTML::DocumentFragment.parse("<img alt='#{@latex}' />").children.first
+        @node = Nokogiri::HTML5.fragment("<img alt='#{@latex}' />").children.first
       end
 
       it "handles error gracefully" do
-        expect{ Api::Html::Content.apply_mathml(@node) }.not_to raise_error
+        expect { Api::Html::Content.apply_mathml(@node) }.not_to raise_error
       end
 
       it "retains the alt attribute" do
         Api::Html::Content.apply_mathml(@node)
-        expect(@node['alt']).to eql(@latex)
+        expect(@node["alt"]).to eql(@latex)
       end
 
       it "doesn't set x-canvaslms-safe-mathml" do
         Api::Html::Content.apply_mathml(@node)
-        expect(@node['x-canvaslms-safe-mathml']).to be_nil
+        expect(@node["x-canvaslms-safe-mathml"]).to be_nil
       end
     end
   end

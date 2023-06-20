@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -17,12 +19,12 @@
 
 module Qti
   module Flavors
-    ANGEL = 'angel'
-    BBLEARN = 'bblearn'
-    CANVAS = 'canvas'
-    D2L = 'd2l'
-    RESPONDUS = 'respondus'
-    WEBCT = 'webct'
-    COMMON_CARTRIDGE = 'common_cartridge'
+    ANGEL = "angel"
+    BBLEARN = "bblearn"
+    CANVAS = "canvas"
+    D2L = "d2l"
+    RESPONDUS = "respondus"
+    WEBCT = "webct"
+    COMMON_CARTRIDGE = "common_cartridge"
   end
-end 
+end

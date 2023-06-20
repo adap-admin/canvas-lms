@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright (C) 2018 - present Instructure, Inc.
 #
 # This file is part of Canvas.
@@ -24,18 +26,18 @@ module QuizzesNext
       def begin_export(course, opts)
         selected_assignment_ids = nil
         if opts[:selective]
-          selected_assignment_ids = opts[:exported_assets].map{|asset| (match = asset.match(/assignment_(\d+)/)) && match[1]}.compact
+          selected_assignment_ids = opts[:exported_assets].filter_map { |asset| (match = asset.match(/assignment_(\d+)/)) && match[1] }
           return unless selected_assignment_ids.any?
         end
-        assignments = QuizzesNext::Service.active_lti_assignments_for_course(course, selected_assignment_ids: selected_assignment_ids)
+        assignments = QuizzesNext::Service.active_lti_assignments_for_course(course, selected_assignment_ids:)
         return if assignments.empty?
 
         {
-          "original_course_uuid": course.uuid,
-          "assignments": assignments.map do |assignment|
+          original_course_uuid: course.uuid,
+          assignments: assignments.map do |assignment|
             {
-              "original_resource_link_id": assignment.lti_resource_link_id,
-              "original_assignment_id": assignment.id,
+              original_resource_link_id: assignment.lti_resource_link_id,
+              original_assignment_id: assignment.id,
               "$canvas_assignment_id": assignment.id # transformed to new id
             }
           end
@@ -64,18 +66,27 @@ module QuizzesNext
           old_assignment_id = assignment.fetch(:original_assignment_id)
           old_assignment = Assignment.find(old_assignment_id)
 
+          new_assignment.skip_downstream_changes! # don't let these updates prevent future blueprint syncs
           new_assignment.duplicate_of = old_assignment
-          new_assignment.workflow_state = 'duplicating'
+          new_assignment.workflow_state = "duplicating"
           new_assignment.duplication_started_at = Time.zone.now
           new_assignment.save!
         end
 
         if send_quizzes_next_quiz_duplicated
+          is_blueprint_sync =
+            content_migration.migration_type == "master_course_import" &&
+            MasterCourses::ChildSubscription.is_child_course?(new_course)
+
           Canvas::LiveEvents.quizzes_next_quiz_duplicated(
             {
               original_course_uuid: imported_content[:original_course_uuid],
               new_course_uuid: new_course.uuid,
-              new_course_resource_link_id: new_course.lti_context_id
+              new_course_resource_link_id: new_course.lti_context_id,
+              domain: new_course.root_account&.domain(ApplicationController.test_cluster_name),
+              new_course_name: new_course.name,
+              created_on_blueprint_sync: is_blueprint_sync,
+              resource_map_url: content_migration.asset_map_url(generate_if_needed: true)
             }
           )
         end

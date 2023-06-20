@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -22,7 +24,6 @@ class CourseGroups
     # elements
     def visit_course_groups(course_id)
       get "/courses/#{course_id}/groups"
-      make_full_screen
     end
 
     def groupset_actions_button(groupset_id)
@@ -30,7 +31,7 @@ class CourseGroups
     end
 
     def randomly_assign_students_option
-      f('a.randomly-assign-members')
+      f("a.randomly-assign-members")
     end
 
     def confirm_randomly_assign_students_button
@@ -50,7 +51,7 @@ class CourseGroups
     end
 
     def delete_group_option
-      f('a.delete-group')
+      f("a.delete-group")
     end
 
     def clone_category_submit_button
@@ -70,11 +71,11 @@ class CourseGroups
     end
 
     def group_sets_tabs
-      ff('.group-category-tab-link')
+      ff(".group-category-tab-link")
     end
 
     def all_users_in_group
-      ff('.group-user-name')
+      ff(".group-user-name")
     end
 
     def group_user_action_button(student_id)
@@ -102,7 +103,7 @@ class CourseGroups
     end
 
     def groupset_tabs
-      ff('.group-category-tab-link')
+      ff(".group-category-tab-link")
     end
 
     # methods and actions
@@ -110,7 +111,7 @@ class CourseGroups
       group_detail_view_arrow_selector(group_name).click
     end
 
-    def move_unassigned_user_to_group(user_id, group_id=0)
+    def move_unassigned_user_to_group(user_id, group_id = 0)
       user_assign_to_group_button(user_id).click
       group_option_for_user_button(group_id).click
       wait_for_ajaximations

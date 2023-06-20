@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,12 +18,14 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'oauth2'
-require 'canvas/core_ext/oauth2'
+require "oauth2"
+require "canvas/core_ext/oauth2"
 
-class AuthenticationProvider::Oauth2 < AuthenticationProvider::Delegated
+class OAuthValidationError < RuntimeError
+end
 
-  SENSITIVE_PARAMS = [ :client_secret ].freeze
+class AuthenticationProvider::OAuth2 < AuthenticationProvider::Delegated
+  SENSITIVE_PARAMS = [:client_secret].freeze
 
   # rename DB fields to something that makes sense for OAuth2
   alias_method :client_secret=, :auth_password=
@@ -32,15 +36,15 @@ class AuthenticationProvider::Oauth2 < AuthenticationProvider::Delegated
   alias_attribute :scope, :requested_authn_context
 
   def client
-    @client ||= OAuth2::Client.new(client_id, client_secret, client_options)
+    @client ||= ::OAuth2::Client.new(client_id, client_secret, client_options)
   end
 
   def generate_authorize_url(redirect_uri, state)
-    client.auth_code.authorize_url({ redirect_uri: redirect_uri, state: state }.merge(authorize_options))
+    client.auth_code.authorize_url({ redirect_uri:, state: }.merge(authorize_options))
   end
 
-  def get_token(code, redirect_uri)
-    client.auth_code.get_token(code, { redirect_uri: redirect_uri }.merge(token_options))
+  def get_token(code, redirect_uri, _params)
+    client.auth_code.get_token(code, { redirect_uri: }.merge(token_options))
   end
 
   def provider_attributes(_token)
@@ -51,8 +55,8 @@ class AuthenticationProvider::Oauth2 < AuthenticationProvider::Delegated
 
   def client_options
     {
-      authorize_url: authorize_url,
-      token_url: token_url
+      authorize_url:,
+      token_url:
     }
   end
 

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -17,7 +19,6 @@
 
 module Quizzes::QuizQuestion::AnswerSerializers
   class FileUpload < Quizzes::QuizQuestion::AnswerSerializers::AnswerSerializer
-
     # @example output where the question ID is 5
     # {
     #   question_5_answer: "123"
@@ -38,10 +39,10 @@ module Quizzes::QuizQuestion::AnswerSerializers
     #
     # @example output for not uploading any file:
     #   null
-    def deserialize(submission_data, full=false)
+    def deserialize(submission_data, full: false)
       # when this is present, it would be an array, but it always includes 1
       # ID (or none, in which case it would contain 1 item which is '')
-      attachment_ids = Array(submission_data[question_key]).reject(&:blank?)
+      attachment_ids = Array(submission_data[question_key]).compact_blank
 
       if attachment_ids.present?
         attachment_ids.first

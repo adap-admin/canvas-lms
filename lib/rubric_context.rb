@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -18,26 +20,28 @@
 module RubricContext
   def self.included(klass)
     if klass < ActiveRecord::Base
-      klass.has_many :rubrics, :as => :context, :inverse_of => :context
-      klass.has_many :rubric_associations, -> { preload(:rubric) }, as: :context, inverse_of: :context, dependent: :destroy
-      klass.send :include, InstanceMethods
+      klass.has_many :rubrics, as: :context, inverse_of: :context
+      klass.has_many :rubric_associations_with_deleted, -> { preload(:rubric) }, as: :context, inverse_of: :context, class_name: "RubricAssociation"
+      klass.has_many :rubric_associations, -> { where(workflow_state: "active").preload(:rubric) }, as: :context, inverse_of: :context, dependent: :destroy
+      klass.include InstanceMethods
     end
   end
+
   module InstanceMethods
     # return the rubric but only if it's available in either the context or one
     # of the context's associated accounts.
-    def available_rubric(rubric_id, opts={})
+    def available_rubric(rubric_id, opts = {})
       outcome = rubrics.where(id: rubric_id).first
       return outcome if outcome
 
       unless opts[:recurse] == false
         (associated_accounts.uniq - [self]).each do |context|
-          rubric = context.available_rubric(rubric_id, :recurse => false)
+          rubric = context.available_rubric(rubric_id, recurse: false)
           return rubric if rubric
         end
       end
 
-      return nil
+      nil
     end
 
     def available_rubrics

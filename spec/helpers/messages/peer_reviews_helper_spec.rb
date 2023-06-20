@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -16,78 +18,74 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper')
-
 describe Messages::PeerReviewsHelper do
-
-  describe 'assessment requests' do
+  describe "assessment requests" do
     before :once do
       assessment_request_model
     end
 
-    it 'should should return reviewee name' do
+    it "shoulds return reviewee name" do
       expect(reviewee_name(@assessment_request, @user)).to eq(@assessment_request.asset.user.name)
     end
 
-    it 'should return anonymous when anonymous peer reviews enabled' do
+    it "returns anonymous when anonymous peer reviews enabled" do
       assignment = @assessment_request.asset.assignment
       assignment.update_attribute(:anonymous_peer_reviews, true)
       @assessment_request.reload
-      expect(reviewee_name(@assessment_request, @user2)).to eq(I18n.t(:anonymous_user, 'Anonymous User'))
+      expect(reviewee_name(@assessment_request, @user2)).to eq(I18n.t(:anonymous_user, "Anonymous User"))
     end
 
-    it 'should return anonymous URL when get_submission_link is called with anonymous peer reviews enabled' do
+    it "returns anonymous URL when get_submission_link is called with anonymous peer reviews enabled" do
       assignment = @assessment_request.asset.assignment
       assignment.update!(anonymous_peer_reviews: true)
-      expect(get_submission_link(@assessment_request, @user)).to include('anonymous_submission')
+      expect(get_submission_link(@assessment_request, @user)).to include("anonymous_submission")
     end
 
-    it 'should return normal URL when get_submission_link is called without anonymous peer reviews enabled' do
+    it "returns normal URL when get_submission_link is called without anonymous peer reviews enabled" do
       assignment = @assessment_request.asset.assignment
       assignment.update!(anonymous_peer_reviews: false)
-      expect(get_submission_link(@assessment_request, @user)).to include('/submissions/')
+      expect(get_submission_link(@assessment_request, @user)).to include("/submissions/")
+    end
+
+    it "returns a url with host" do
+      expect(HostUrl).to receive(:context_host).with(Account.default).and_return("customhost.example.com")
+      expect(get_submission_link(@assessment_request, @user)).to include("#{HostUrl.protocol}://customhost.example.com")
     end
   end
 
-  describe 'submission comments' do
-
-    context 'anonymous peer reviews disabled' do
-
-      it 'should return author name' do
+  describe "submission comments" do
+    context "anonymous peer reviews disabled" do
+      it "returns author name" do
         submission_model
-        comment = @submission.add_comment(:comment => "new comment")
+        comment = @submission.add_comment(comment: "new comment")
         expect(submission_comment_author(comment, @user)).to eq(comment.author_name)
       end
 
-      it 'should return anonymous' do
+      it "returns anonymous" do
         @user2 = user_model
         submission_model
-        comment = @submission.add_comment(:comment => "new comment", :user => @user2)
+        comment = @submission.add_comment(comment: "new comment", user: @user2)
         @submission.assignment.update_attribute(:anonymous_peer_reviews, true)
         comment.reload
-        expect(submission_comment_author(comment, @user)).to eq(I18n.t(:anonymous_user, 'Anonymous User'))
+        expect(submission_comment_author(comment, @user)).to eq(I18n.t(:anonymous_user, "Anonymous User"))
       end
-
     end
 
-    context 'anonymous peer reviews enabled' do
-
-      it 'should return submittor' do
+    context "anonymous peer reviews enabled" do
+      it "returns submittor" do
         submission_model
-        comment = @submission.add_comment(:comment => "new comment")
+        comment = @submission.add_comment(comment: "new comment")
         expect(submission_comment_submittor(comment, @user)).to eq(@submission.user.short_name)
       end
 
-      it 'should return anonymous' do
+      it "returns anonymous" do
         @user2 = user_model
         submission_model
-        comment = @submission.add_comment(:comment => "new comment", :user => @user2)
+        comment = @submission.add_comment(comment: "new comment", user: @user2)
         @submission.assignment.update_attribute(:anonymous_peer_reviews, true)
         comment.reload
-        expect(submission_comment_submittor(comment, @user2)).to eq(I18n.t(:anonymous_user, 'Anonymous User'))
+        expect(submission_comment_submittor(comment, @user2)).to eq(I18n.t(:anonymous_user, "Anonymous User"))
       end
-
     end
   end
-
 end

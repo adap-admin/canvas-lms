@@ -46,13 +46,13 @@ describe('RCE "Links" Plugin > NavigationPanel', () => {
 
     expect(getByText('Course Navigation')).toBeInTheDocument()
     expect(getByText('Collapse to hide Course Navigation')).toBeInTheDocument()
-    expect(getAllByTestId('instructure_links-Link')).toHaveLength(11)
+    expect(getAllByTestId('instructure_links-Link')).toHaveLength(12)
   })
 
   it('renders group navigation open', () => {
     const {getByText, getAllByTestId} = renderComponent({
       selectedAccordionIndex: 'navigation',
-      contextType: 'group'
+      contextType: 'group',
     })
 
     expect(getByText('Group Navigation')).toBeInTheDocument()

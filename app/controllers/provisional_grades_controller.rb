@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -86,18 +88,18 @@ class ProvisionalGradesController < ProvisionalGradesBaseController
     render_unauthorized_action and return unless @assignment.permits_moderation?(@current_user)
 
     provisional_grade_ids = params[:provisional_grade_ids]
-    provisional_grades_by_id = @assignment.provisional_grades.
-      where(id: provisional_grade_ids).
-      preload(:submission).
-      index_by(&:id)
+    provisional_grades_by_id = @assignment.provisional_grades
+                                          .where(id: provisional_grade_ids)
+                                          .preload(:submission)
+                                          .index_by(&:id)
 
     submissions_by_student_id = provisional_grades_by_id.values.each_with_object({}) do |grade, map|
       map[grade.submission.user_id] = grade.submission
     end
 
-    selections_by_student_id = @assignment.moderated_grading_selections.
-      where(student_id: submissions_by_student_id.keys).
-      index_by(&:student_id)
+    selections_by_student_id = @assignment.moderated_grading_selections
+                                          .where(student_id: submissions_by_student_id.keys)
+                                          .index_by(&:student_id)
 
     all_by_student_id = provisional_grade_ids.each_with_object({}) do |grade_id, map|
       provisional_grade = provisional_grades_by_id[grade_id.to_i]
@@ -108,7 +110,7 @@ class ProvisionalGradesController < ProvisionalGradesBaseController
 
       map[student_id] = {
         provisional_grade_id: provisional_grade.id,
-        selection: selection,
+        selection:,
         submission: provisional_grade.submission
       }
     end
@@ -125,7 +127,7 @@ class ProvisionalGradesController < ProvisionalGradesBaseController
         selection.save!
         selection.create_moderation_event(@current_user)
         changed_submission_ids.push(map[:submission].id)
-        selection_json = selection.as_json(include_root: false, only: %w(assignment_id student_id selected_provisional_grade_id))
+        selection_json = selection.as_json(include_root: false, only: %w[assignment_id student_id selected_provisional_grade_id])
 
         unless @assignment.can_view_student_names?(@current_user)
           selection_json.delete(:student_id)
@@ -142,7 +144,7 @@ class ProvisionalGradesController < ProvisionalGradesBaseController
       Submission.where(id: changed_submission_ids).touch_all
     end
 
-    render json: json
+    render json:
   end
 
   # @API Show provisional grade status for a student
@@ -161,7 +163,7 @@ class ProvisionalGradesController < ProvisionalGradesBaseController
   #       { "needs_provisional_grade": false }
   #
   def status
-    @student = @context.students.find(params.fetch(:student_id))
+    @student = @assignment.submissions.find_by!(user_id: params.fetch(:student_id)).user
     super
   end
 
@@ -183,7 +185,8 @@ class ProvisionalGradesController < ProvisionalGradesBaseController
     pg = @assignment.provisional_grades.find(params[:provisional_grade_id])
     submission = pg.submission
     selection = @assignment.moderated_grading_selections.where(student_id: submission.user_id).first
-    return render :json => { :message => 'student not in moderation set' }, :status => :bad_request unless selection
+    return render json: { message: "student not in moderation set" }, status: :bad_request unless selection
+
     selection.provisional_grade = pg
     selection.save!
     selection.create_moderation_event(@current_user)
@@ -194,12 +197,12 @@ class ProvisionalGradesController < ProvisionalGradesBaseController
     # related student is selected.
     submission.touch
 
-    json = selection.as_json(include_root: false, only: %w(assignment_id student_id selected_provisional_grade_id))
+    json = selection.as_json(include_root: false, only: %w[assignment_id student_id selected_provisional_grade_id])
     unless @assignment.can_view_student_names?(@current_user)
       json.delete(:student_id)
       json[:anonymous_id] = submission.anonymous_id
     end
-    render json: json
+    render json:
   end
 
   # @API Publish provisional grades for an assignment
@@ -224,18 +227,19 @@ class ProvisionalGradesController < ProvisionalGradesBaseController
     end
 
     unless @assignment.moderated_grading?
-      return render :json => { :message => "Assignment does not use moderated grading" }, :status => :bad_request
+      return render json: { message: "Assignment does not use moderated grading" }, status: :bad_request
     end
     if @assignment.grades_published?
-      return render :json => { :message => "Assignment grades have already been published" }, :status => :bad_request
+      return render json: { message: "Assignment grades have already been published" }, status: :bad_request
     end
 
     submissions = @assignment.submissions.preload(:all_submission_comments,
-                                                  { :provisional_grades => :rubric_assessments })
+                                                  { provisional_grades: :rubric_assessments })
     selections = @assignment.moderated_grading_selections.index_by(&:student_id)
+    student_ids = @context.students_visible_to(@current_user, include: :inactive).pluck(:id)
 
     graded_submissions = submissions.select do |submission|
-      submission.provisional_grades.any?
+      submission.provisional_grades.any? && student_ids.include?(submission.user_id)
     end
 
     graded_users_ids = graded_submissions.map(&:user_id)
@@ -243,15 +247,15 @@ class ProvisionalGradesController < ProvisionalGradesBaseController
     grades_to_publish = graded_submissions.map do |submission|
       if (selection = selections[submission.user_id])
         # student in moderation: choose the selected provisional grade
-        selected_provisional_grade = submission.provisional_grades.
-          detect { |pg| pg.id == selection.selected_provisional_grade_id }
+        selected_provisional_grade = submission.provisional_grades
+                                               .detect { |pg| pg.id == selection.selected_provisional_grade_id }
       end
 
       # either the student is not in moderation, or not all provisional grades were entered
       # choose the first one with a grade (there should only be one)
       unless selected_provisional_grade
-        provisional_grades = submission.provisional_grades.
-          select { |pg| pg.graded_at.present? }
+        provisional_grades = submission.provisional_grades
+                                       .select { |pg| pg.graded_at.present? }
         selected_provisional_grade = provisional_grades.first if provisional_grades.count == 1
       end
 
@@ -276,6 +280,6 @@ class ProvisionalGradesController < ProvisionalGradesBaseController
     @context.clear_todo_list_cache_later(:admins) # just in case nothing got published
     @assignment.updating_user = @current_user
     @assignment.update_attribute(:grades_published_at, Time.now.utc)
-    render :json => { :message => "OK" }
+    render json: { message: "OK" }
   end
 end

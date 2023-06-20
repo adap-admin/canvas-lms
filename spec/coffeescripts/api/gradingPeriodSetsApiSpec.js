@@ -16,11 +16,11 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import axios from 'axios'
+import axios from '@canvas/axios'
 import fakeENV from 'helpers/fakeENV'
-import api from 'compiled/api/gradingPeriodSetsApi'
+import api from '@canvas/grading/jquery/gradingPeriodSetsApi'
 import $ from 'jquery'
-import 'jquery.ajaxJSON'
+import '@canvas/jquery/jquery.ajaxJSON'
 
 const deserializedSets = [
   {
@@ -37,7 +37,7 @@ const deserializedSets = [
         closeDate: new Date('2015-11-07T12:00:00Z'),
         isClosed: true,
         isLast: false,
-        weight: 43.5
+        weight: 43.5,
       },
       {
         id: '2',
@@ -47,16 +47,17 @@ const deserializedSets = [
         closeDate: new Date('2016-01-07T12:00:00Z'),
         isClosed: false,
         isLast: true,
-        weight: null
-      }
+        weight: null,
+      },
     ],
     permissions: {
       read: true,
       create: true,
       update: true,
-      delete: true
+      delete: true,
     },
-    createdAt: new Date('2015-12-29T12:00:00Z')
+    createdAt: new Date('2015-12-29T12:00:00Z'),
+    enrollmentTermIDs: undefined,
   },
   {
     id: '2',
@@ -68,10 +69,11 @@ const deserializedSets = [
       read: true,
       create: true,
       update: true,
-      delete: true
+      delete: true,
     },
-    createdAt: new Date('2015-11-29T12:00:00Z')
-  }
+    createdAt: new Date('2015-11-29T12:00:00Z'),
+    enrollmentTermIDs: undefined,
+  },
 ]
 const serializedSets = {
   grading_period_sets: [
@@ -89,7 +91,7 @@ const serializedSets = {
           close_date: new Date('2015-11-07T12:00:00Z'),
           is_closed: true,
           is_last: false,
-          weight: 43.5
+          weight: 43.5,
         },
         {
           id: '2',
@@ -99,16 +101,16 @@ const serializedSets = {
           close_date: new Date('2016-01-07T12:00:00Z'),
           is_closed: false,
           is_last: true,
-          weight: null
-        }
+          weight: null,
+        },
       ],
       permissions: {
         read: true,
         create: true,
         update: true,
-        delete: true
+        delete: true,
       },
-      created_at: '2015-12-29T12:00:00Z'
+      created_at: '2015-12-29T12:00:00Z',
     },
     {
       id: '2',
@@ -120,11 +122,11 @@ const serializedSets = {
         read: true,
         create: true,
         update: true,
-        delete: true
+        delete: true,
       },
-      created_at: '2015-11-29T12:00:00Z'
-    }
-  ]
+      created_at: '2015-11-29T12:00:00Z',
+    },
+  ],
 }
 
 QUnit.module('gradingPeriodSetsApi.list', {
@@ -137,30 +139,29 @@ QUnit.module('gradingPeriodSetsApi.list', {
   teardown() {
     fakeENV.teardown()
     this.server.restore()
-  }
+  },
 })
 
-test('calls the resolved endpoint', function() {
+test('calls the resolved endpoint', () => {
   sandbox.stub($, 'ajaxJSON').returns(new Promise(() => {}))
   api.list()
   ok($.ajaxJSON.calledWith('api/grading_period_sets'))
 })
 
-test('deserializes returned grading period sets', function() {
-  let promise
+test('deserializes returned grading period sets', function () {
   this.server.respondWith('GET', /grading_period_sets/, [
     200,
     {
       'Content-Type': 'application/json',
-      Link: this.fakeHeaders
+      Link: this.fakeHeaders,
     },
-    JSON.stringify(serializedSets)
+    JSON.stringify(serializedSets),
   ])
   this.server.autoRespond = true
-  return (promise = api.list().then(sets => deepEqual(sets, deserializedSets)))
+  return api.list().then(sets => deepEqual(sets, deserializedSets))
 })
 
-test('creates a title from the creation date when the set has no title', function() {
+test('creates a title from the creation date when the set has no title', function () {
   const untitledSets = {
     grading_period_sets: [
       {
@@ -171,20 +172,20 @@ test('creates a title from the creation date when the set has no title', functio
           read: true,
           create: true,
           update: true,
-          delete: true
+          delete: true,
         },
-        created_at: '2015-11-29T12:00:00Z'
-      }
-    ]
+        created_at: '2015-11-29T12:00:00Z',
+      },
+    ],
   }
   const jsonString = JSON.stringify(untitledSets)
   this.server.respondWith('GET', /grading_period_sets/, [
     200,
     {
       'Content-Type': 'application/json',
-      Link: this.fakeHeaders
+      Link: this.fakeHeaders,
     },
-    jsonString
+    jsonString,
   ])
   this.server.autoRespond = true
   return api.list().then(sets => equal(sets[0].title, 'Set created Nov 29, 2015'))
@@ -193,7 +194,7 @@ const deserializedSetCreating = {
   title: 'Fall 2015',
   weighted: null,
   displayTotalsForAllGradingPeriods: false,
-  enrollmentTermIDs: ['1', '2']
+  enrollmentTermIDs: ['1', '2'],
 }
 const deserializedSetCreated = {
   id: '1',
@@ -206,17 +207,17 @@ const deserializedSetCreated = {
     read: true,
     create: true,
     update: true,
-    delete: true
+    delete: true,
   },
-  createdAt: new Date('2015-12-31T12:00:00Z')
+  createdAt: new Date('2015-12-31T12:00:00Z'),
 }
 const serializedSetCreating = {
   grading_period_set: {
     title: 'Fall 2015',
     weighted: null,
-    display_totals_for_all_grading_periods: false
+    display_totals_for_all_grading_periods: false,
   },
-  enrollment_term_ids: ['1', '2']
+  enrollment_term_ids: ['1', '2'],
 }
 const serializedSetCreated = {
   grading_period_set: {
@@ -230,10 +231,10 @@ const serializedSetCreated = {
       read: true,
       create: true,
       update: true,
-      delete: true
+      delete: true,
     },
-    created_at: '2015-12-31T12:00:00Z'
-  }
+    created_at: '2015-12-31T12:00:00Z',
+  },
 }
 
 QUnit.module('gradingPeriodSetsApi.create', {
@@ -243,24 +244,25 @@ QUnit.module('gradingPeriodSetsApi.create', {
   },
   teardown() {
     fakeENV.teardown()
-  }
+  },
 })
 
-test('calls the resolved endpoint with the serialized grading period set', function() {
-  const apiSpy = sandbox.stub(axios, 'post').returns(new Promise(() => {}))
+test('calls the resolved endpoint with the serialized grading period set', () => {
+  sandbox.stub(axios, 'post').returns(new Promise(() => {}))
   api.create(deserializedSetCreating)
   ok(axios.post.calledWith('api/grading_period_sets', serializedSetCreating))
 })
 
-test('deserializes returned grading period sets', function() {
+test('deserializes returned grading period sets', () => {
   const successPromise = new Promise(resolve => resolve({data: serializedSetCreated}))
   sandbox.stub(axios, 'post').returns(successPromise)
   return api.create(deserializedSetCreating).then(set => deepEqual(set, deserializedSetCreated))
 })
 
-test('rejects the promise upon errors', function() {
-  sandbox.stub(axios, 'post').returns(Promise.reject('FAIL'))
-  return api.create(deserializedSetCreating).catch(error => equal(error, 'FAIL'))
+test('rejects the promise upon errors', () => {
+  const fail = new Error('FAIL')
+  sandbox.stub(axios, 'post').returns(Promise.reject(fail))
+  return api.create(deserializedSetCreating).catch(error => equal(error, fail))
 })
 const deserializedSetUpdating = {
   id: '1',
@@ -272,16 +274,16 @@ const deserializedSetUpdating = {
     read: true,
     create: true,
     update: true,
-    delete: true
-  }
+    delete: true,
+  },
 }
 const serializedSetUpdating = {
   grading_period_set: {
     title: 'Fall 2015',
     weighted: true,
-    display_totals_for_all_grading_periods: true
+    display_totals_for_all_grading_periods: true,
   },
-  enrollment_term_ids: ['1', '2']
+  enrollment_term_ids: ['1', '2'],
 }
 const serializedSetUpdated = {
   grading_period_set: {
@@ -297,7 +299,7 @@ const serializedSetUpdated = {
         start_date: new Date('2015-09-01T12:00:00Z'),
         end_date: new Date('2015-10-31T12:00:00Z'),
         close_date: new Date('2015-11-07T12:00:00Z'),
-        weight: 40
+        weight: 40,
       },
       {
         id: '2',
@@ -305,16 +307,16 @@ const serializedSetUpdated = {
         start_date: new Date('2015-11-01T12:00:00Z'),
         end_date: new Date('2015-12-31T12:00:00Z'),
         close_date: null,
-        weight: 60
-      }
+        weight: 60,
+      },
     ],
     permissions: {
       read: true,
       create: true,
       update: true,
-      delete: true
-    }
-  }
+      delete: true,
+    },
+  },
 }
 
 QUnit.module('gradingPeriodSetsApi.update', {
@@ -324,21 +326,22 @@ QUnit.module('gradingPeriodSetsApi.update', {
   },
   teardown() {
     fakeENV.teardown()
-  }
+  },
 })
 
-test('calls the resolved endpoint with the serialized grading period set', function() {
-  const apiSpy = sandbox.stub(axios, 'patch').returns(new Promise(() => {}))
+test('calls the resolved endpoint with the serialized grading period set', () => {
+  sandbox.stub(axios, 'patch').returns(new Promise(() => {}))
   api.update(deserializedSetUpdating)
   ok(axios.patch.calledWith('api/grading_period_sets/1', serializedSetUpdating))
 })
 
-test('returns the given grading period set', function() {
+test('returns the given grading period set', () => {
   sandbox.stub(axios, 'patch').returns(Promise.resolve({data: serializedSetUpdated}))
   return api.update(deserializedSetUpdating).then(set => deepEqual(set, deserializedSetUpdating))
 })
 
-test('rejects the promise upon errors', function() {
-  sandbox.stub(axios, 'patch').returns(Promise.reject('FAIL'))
-  return api.update(deserializedSetUpdating).catch(error => equal(error, 'FAIL'))
+test('rejects the promise upon errors', () => {
+  const fail = new Error('FAIL')
+  sandbox.stub(axios, 'patch').returns(Promise.reject(fail))
+  return api.update(deserializedSetUpdating).catch(error => equal(error, fail))
 })

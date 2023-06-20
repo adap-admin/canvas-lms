@@ -19,16 +19,17 @@
 import React from 'react'
 import ReactDOM from 'react-dom'
 import TestUtils from 'react-dom/test-utils'
-import NewCollaborationsDropDown from 'jsx/collaborations/NewCollaborationsDropDown'
+import NewCollaborationsDropDown from 'ui/features/lti_collaborations/react/NewCollaborationsDropDown'
 
 QUnit.module('NewCollaborationsDropDown')
 
 const defaultProps = {
-  ltiCollaborators: [{name: 'A name', id: '1'}]
+  ltiCollaborators: [{name: 'A name', id: '1'}],
 }
 
 test('renders the create-collaborations-dropdown div', () => {
   ENV.context_asset_string = 'courses_1'
+  ENV.CREATE_PERMISSION = true
 
   const component = TestUtils.renderIntoDocument(<NewCollaborationsDropDown {...defaultProps} />)
   ok(TestUtils.findRenderedDOMComponentWithClass(component, 'create-collaborations-dropdown'))
@@ -36,6 +37,7 @@ test('renders the create-collaborations-dropdown div', () => {
 
 test('has a link to open the lti tool to create a collaboration', () => {
   ENV.context_asset_string = 'courses_1'
+  ENV.CREATE_PERMISSION = true
 
   const component = TestUtils.renderIntoDocument(<NewCollaborationsDropDown {...defaultProps} />)
   const button = TestUtils.scryRenderedDOMComponentsWithClass(component, 'Button')[0]
@@ -48,18 +50,19 @@ test('has a link to open the lti tool to create a collaboration', () => {
 
 test('has a dropdown if there is more than one tool', () => {
   ENV.context_asset_string = 'courses_1'
+  ENV.CREATE_PERMISSION = true
 
   const props = {
     ltiCollaborators: [
       {
         name: 'A name',
-        id: '1'
+        id: '1',
       },
       {
         name: 'Another name',
-        id: '2'
-      }
-    ]
+        id: '2',
+      },
+    ],
   }
 
   const component = TestUtils.renderIntoDocument(<NewCollaborationsDropDown {...props} />)

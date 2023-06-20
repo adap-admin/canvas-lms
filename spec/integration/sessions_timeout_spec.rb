@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -15,21 +17,20 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
 
 describe "Session Timeout" do
-  context " when sessions timeout is set to 30 minutes" do
+  context "when sessions timeout is set to 30 minutes" do
     before do
-      plugin_setting = PluginSetting.new(:name => "sessions", :settings => {"session_timeout" => "30"})
+      plugin_setting = PluginSetting.new(name: "sessions", settings: { "session_timeout" => "30" })
       plugin_setting.save!
     end
 
     context "when a user logs in" do
       before do
-        course_with_student(:active_all => true, :user => user_with_pseudonym(:active_user => true))
+        course_with_student(active_all: true, user: user_with_pseudonym(active_user: true))
       end
 
-      it "should time out after 40 minutes of inactivity" do
+      it "times out after 40 minutes of inactivity" do
         login_as
 
         now = Time.now
@@ -41,7 +42,7 @@ describe "Session Timeout" do
         expect(response).to redirect_to "http://www.example.com/login"
       end
 
-      it "should not time out if the user remains active" do
+      it "does not time out if the user remains active" do
         login_as
 
         now = Time.now

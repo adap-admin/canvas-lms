@@ -16,15 +16,15 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-export default function getSampleData () {
+export default function getSampleData() {
   return {
     terms: [
-      { id: '1', name: 'Term One' },
-      { id: '2', name: 'Term Two' },
+      {id: '1', name: 'Term One'},
+      {id: '2', name: 'Term Two'},
     ],
     subAccounts: [
-      { id: '1', name: 'Account One' },
-      { id: '2', name: 'Account Two' },
+      {id: '1', name: 'Account One'},
+      {id: '2', name: 'Account Two'},
     ],
     childCourse: {
       id: '1',
@@ -45,9 +45,11 @@ export default function getSampleData () {
           id: '1',
           name: 'Term One',
         },
-        teachers: [{
-          display_name: 'Teacher One',
-        }],
+        teachers: [
+          {
+            display_name: 'Teacher One',
+          },
+        ],
         sis_course_id: '1001',
       },
       {
@@ -58,17 +60,22 @@ export default function getSampleData () {
           id: '2',
           name: 'Term Two',
         },
-        teachers: [{
-          display_name: 'Teacher Two',
-        }],
+        teachers: [
+          {
+            display_name: 'Teacher Two',
+          },
+        ],
         sis_course_id: '1001',
-      }
+      },
     ],
     history: [
       {
         id: '2',
         workflow_state: 'completed',
         created_at: '2013-08-28T23:59:00-06:00',
+        user: {
+          display_name: 'Bob Jones',
+        },
         changes: [
           {
             asset_id: '2',
@@ -81,22 +88,22 @@ export default function getSampleData () {
                 course_id: '1',
                 conflicting_changes: ['points'],
                 name: 'Course 1',
-                term: { name: 'Default Term' },
+                term: {name: 'Default Term'},
               },
               {
                 course_id: '5',
                 conflicting_changes: ['content'],
                 name: 'Course 5',
-                term: { name: 'Default Term' },
+                term: {name: 'Default Term'},
               },
               {
                 course_id: '56',
                 conflicting_changes: ['deleted'],
                 name: 'Course 56',
-                term: { name: 'Default Term' },
-              }
+                term: {name: 'Default Term'},
+              },
             ],
-          }
+          },
         ],
       },
     ],
@@ -107,7 +114,7 @@ export default function getSampleData () {
         asset_name: 'Another Discussion',
         change_type: 'deleted',
         html_url: '/courses/4/assignments/22',
-        locked: false
+        locked: false,
       },
       {
         asset_id: '22',
@@ -115,7 +122,7 @@ export default function getSampleData () {
         asset_name: 'Bulldog.png',
         change_type: 'updated',
         html_url: '/courses/4/files/96',
-        locked: true
+        locked: true,
       },
       {
         asset_id: 'page-1',
@@ -123,8 +130,8 @@ export default function getSampleData () {
         asset_name: 'Page 1',
         change_type: 'created',
         html_url: '/4/pages/page-1',
-        locked: false
-      }
-    ]
+        locked: false,
+      },
+    ],
   }
-};
+}

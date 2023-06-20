@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -30,6 +32,7 @@ class Quizzes::QuizQuestion::AnswerGroup
 
   def set_correct_if_none
     return if @answers.empty?
+
     @answers.first[:weight] = 100.to_f unless correct_answer
   end
 
@@ -53,9 +56,8 @@ class Quizzes::QuizQuestion::AnswerGroup
 
   def self.generate(question)
     answers = if question[:answers].is_a? Hash
-                question[:answers].reduce([]) do |arr, (key, value)|
+                question[:answers].each_with_object([]) do |(key, value), arr|
                   arr[key.to_i] = value
-                  arr
                 end
               else
                 question[:answers] || []
@@ -78,8 +80,8 @@ class Quizzes::QuizQuestion::AnswerGroup
       @data
     end
 
-    def any_value_of(keys, default="")
-      key = keys.find { |key| @data.key?(key) }
+    def any_value_of(keys, default = "")
+      key = keys.find { |k| @data.key?(k) }
       @data[key] || default
     end
 
@@ -87,27 +89,27 @@ class Quizzes::QuizQuestion::AnswerGroup
       @data[:weight].to_i == 100
     end
 
-    def set_id(taken_ids, key=:id)
-
+    def set_id(taken_ids, key = :id)
       @data[key] = @data[key.to_s] if @data[key.to_s]
-      @data[key] = nil if (@data[key] && @data[key].to_i.zero?) || taken_ids.include?(@data[key])
+      @data[key] = nil if @data[key]&.to_i&.zero? || taken_ids.include?(@data[key])
       @data[key] ||= unique_local_id(taken_ids)
       @data[key]
     end
 
     private
-    def unique_local_id(taken_ids = [], suggested_id=nil)
+
+    def unique_local_id(taken_ids = [], suggested_id = nil)
       if suggested_id && suggested_id > 0 && !taken_ids.include?(suggested_id)
         return suggested_id
       end
-      id = rand(10000)
+
+      id = rand(10_000)
 
       while taken_ids.include?(id)
-        id = rand(10000)
+        id = rand(10_000)
       end
 
       id
     end
-
   end
 end

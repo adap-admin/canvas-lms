@@ -1,6 +1,4 @@
-# coding: utf-8
-lib = File.expand_path('../lib', __FILE__)
-$LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
+# frozen_string_literal: true
 
 Gem::Specification.new do |spec|
   spec.name          = "dr_diff"
@@ -10,12 +8,11 @@ Gem::Specification.new do |spec|
   spec.summary       = "Run linters only on the git diff."
 
   spec.files         = Dir.glob("{lib,spec,bin}/**/*")
-  spec.test_files    = spec.files.grep(%r{^spec/})
   spec.require_paths = ["lib"]
 
-  spec.add_dependency "gergich", "0.1.15"
-  spec.add_development_dependency "rspec", "~> 3.5.0"
+  spec.add_dependency "gergich", "2.1.1"
+
+  spec.add_development_dependency "byebug", "~> 11.1"
+  spec.add_development_dependency "rspec", "~> 3.12"
   spec.add_development_dependency "rspec-mocks"
-  spec.add_development_dependency "pry"
-  spec.add_development_dependency "pry-nav"
 end

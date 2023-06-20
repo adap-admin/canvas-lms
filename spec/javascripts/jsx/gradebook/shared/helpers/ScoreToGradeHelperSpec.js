@@ -16,69 +16,74 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import ScoreToGradeHelper from 'jsx/gradebook/shared/helpers/ScoreToGradeHelper'
+import ScoreToGradeHelper from 'ui/features/gradebook/react/shared/helpers/ScoreToGradeHelper'
 
 QUnit.module('ScoreToGradeHelper#scoreToGrade')
 
-test('formats score as empty string when score is null', function() {
+test('formats score as empty string when score is null', () => {
   const grade = ScoreToGradeHelper.scoreToGrade(null)
   equal(grade, '')
 })
 
-test('formats score as points when grading_type is "points"', function() {
+test('formats score as points when grading_type is "points"', () => {
   const grade = ScoreToGradeHelper.scoreToGrade(12.34, {grading_type: 'points'})
   equal(grade, '12.34')
 })
 
-test('formats score as percentage when grading_type is "percent"', function() {
+test('formats score as percentage when grading_type is "percent"', () => {
   const grade = ScoreToGradeHelper.scoreToGrade(12.34, {
     grading_type: 'percent',
-    points_possible: 50
+    points_possible: 50,
   })
   equal(grade, '24.68%')
 })
 
-test('formats score as empty string when grading_type is "percent" and assignment has no points_possible', function() {
+test('formats score as empty string when grading_type is "percent" and assignment has no points_possible', () => {
   const grade = ScoreToGradeHelper.scoreToGrade(12.34, {
     grading_type: 'percent',
-    points_possible: 0
+    points_possible: 0,
   })
   equal(grade, '')
 })
 
-test('formats score as "complete" when grading_type is "pass_fail" and score is nonzero"', function() {
+test('formats score as "complete" when grading_type is "pass_fail" and score is nonzero"', () => {
   const grade = ScoreToGradeHelper.scoreToGrade(12.34, {grading_type: 'pass_fail'})
   equal(grade, 'complete')
 })
 
-test('formats score as "incomplete" when grading_type is "pass_fail" and score is zero"', function() {
+test('formats score as "incomplete" when grading_type is "pass_fail" and score is zero"', () => {
   const grade = ScoreToGradeHelper.scoreToGrade(0, {grading_type: 'pass_fail'})
   equal(grade, 'incomplete')
 })
 
-test('formats score as empty string when grading_type is "letter_grade" and no gradingScheme given', function() {
+test('formats score as empty string when grading_type is "letter_grade" and no gradingScheme given', () => {
   const grade = ScoreToGradeHelper.scoreToGrade(12.34, {
     grading_type: 'letter_grade',
-    points_possible: 10
+    points_possible: 10,
   })
   equal(grade, '')
 })
 
-test('formats score as empty string when grading_type is "letter_grade" and assignment has no points_possible', function() {
+test('formats score as empty string when grading_type is "letter_grade" and assignment has no points_possible', () => {
   const grade = ScoreToGradeHelper.scoreToGrade(12.34, {grading_type: 'letter_grade'}, [
     ['A', 0.9],
     ['B', 0.8],
     ['C', 0.7],
-    ['F', 0]
+    ['F', 0],
   ])
   equal(grade, '')
 })
 
-test('formats score as letter grade when grading_type is "letter_grade" and gradingScheme given', function() {
+test('formats score as letter grade when grading_type is "letter_grade" and gradingScheme given', () => {
   const grade = ScoreToGradeHelper.scoreToGrade(
     7,
     {grading_type: 'letter_grade', points_possible: 10},
-    [['A', 0.9], ['B', 0.8], ['C', 0.7], ['F', 0]]
+    [
+      ['A', 0.9],
+      ['B', 0.8],
+      ['C', 0.7],
+      ['F', 0],
+    ]
   )
   equal(grade, 'C')
 })

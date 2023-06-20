@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -15,30 +17,28 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'spec_helper'
-
-RSpec.describe Lti::Ims::LineItemsSerializer do
-  let(:resource_link) { resource_link_model(overrides: {resource_link_id: assignment.lti_context_id}) }
+RSpec.describe Lti::IMS::LineItemsSerializer do
+  let(:resource_link) { resource_link_model(overrides: { resource_link_uuid: assignment.lti_context_id }) }
   let_once(:course) { course_model }
-  let(:tool) {
+  let(:tool) do
     ContextExternalTool.create!(
       context: course,
-      consumer_key: 'key',
-      shared_secret: 'secret',
-      name: 'wrong tool',
-      url: 'http://www.wrong_tool.com/launch',
+      consumer_key: "key",
+      shared_secret: "secret",
+      name: "wrong tool",
+      url: "http://www.wrong_tool.com/launch",
       developer_key: DeveloperKey.create!,
-      settings: { use_1_3: true },
-      workflow_state: 'public'
+      lti_version: "1.3",
+      workflow_state: "public"
     )
-  }
+  end
   let(:assignment) do
     opts = {
-      course: course,
-      submission_types: 'external_tool',
+      course:,
+      submission_types: "external_tool",
       external_tool_tag_attributes: {
         url: tool.url,
-        content_type: 'context_external_tool',
+        content_type: "context_external_tool",
         content_id: tool.id
       }
     }
@@ -52,17 +52,17 @@ RSpec.describe Lti::Ims::LineItemsSerializer do
   end
   let(:line_item) do
     line_item_model(
-      assignment: assignment,
-      resource_link: resource_link,
-      label: 'label',
-      tag: 'tag',
+      assignment:,
+      resource_link:,
+      label: "label",
+      tag: "tag",
       score_maximum: 60,
-      resource_id: 'resource_id'
+      resource_id: "resource_id"
     )
   end
 
-  describe '#as_json' do
-    it 'properly formats the line item hash' do
+  describe "#as_json" do
+    it "properly formats the line item hash" do
       expect(described_class.new(line_item, line_item_id).as_json).to eq(
         {
           id: line_item_id,
@@ -70,21 +70,42 @@ RSpec.describe Lti::Ims::LineItemsSerializer do
           label: line_item.label,
           resourceId: line_item.resource_id,
           tag: line_item.tag,
-          resourceLinkId: line_item.resource_link&.resource_link_id
+          resourceLinkId: line_item.resource_link&.resource_link_uuid
         }
       )
     end
 
-    it 'does not incude values that are nil' do
-      line_item.update_attributes!(resource_link: nil, tag: nil)
-      expect(described_class.new(line_item, line_item_id).as_json).to eq(
-        {
-          id: line_item_id,
-          scoreMaximum: line_item.score_maximum,
-          label: line_item.label,
-          resourceId: line_item.resource_id
-        }
-      )
+    context "with nil values" do
+      before do
+        line_item.update!(resource_link: nil, tag: nil)
+      end
+
+      it "does not incude values that are nil" do
+        expect(described_class.new(line_item, line_item_id).as_json).to eq(
+          {
+            id: line_item_id,
+            scoreMaximum: line_item.score_maximum,
+            label: line_item.label,
+            resourceId: line_item.resource_id
+          }
+        )
+      end
+    end
+
+    context "with submission_type extensions" do
+      before do
+        line_item.update!(extensions: { Lti::LineItem::AGS_EXT_SUBMISSION_TYPE => "extension" })
+      end
+
+      it "includes extension" do
+        expect(described_class.new(line_item, line_item_id).as_json).to include(Lti::LineItem::AGS_EXT_SUBMISSION_TYPE => "extension")
+      end
+    end
+
+    context "with launch_url extensions" do
+      it "includes extension" do
+        expect(described_class.new(line_item, line_item_id, true).as_json).to include(Lti::LineItem::AGS_EXT_LAUNCH_URL => tool.url)
+      end
     end
   end
 end

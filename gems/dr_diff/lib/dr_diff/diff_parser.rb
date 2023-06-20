@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -20,20 +22,18 @@ module DrDiff
     attr_reader :diff
     attr_reader :campsite
 
-    # campsite = true: consider relevant the severe linter errors near lines changed
-    def initialize(input, raw = true, campsite=true)
+    # campsite = true: consider relevant linter errors near lines changed
+    def initialize(input, raw: true, campsite: true)
       @diff = (raw ? parse_raw_diff(input) : input)
       @campsite = campsite
     end
 
-    def relevant?(path, line_number, severe=false)
+    def relevant?(path, line_number, severe: false)
       return false unless diff[path]
-      if UserConfig.only_report_errors?
-        if severe
-          diff[path][:change].include?(line_number)
-        end
-      elsif campsite && severe
-        diff[path][:context].any?{|range| range.include?(line_number)}
+      return true if line_number == 1 # whole-file comments are addressed to line 1
+
+      if campsite && severe
+        diff[path][:context].any? { |range| range.include?(line_number) }
       else
         diff[path][:change].include?(line_number)
       end
@@ -43,12 +43,12 @@ module DrDiff
 
     def parse_raw_diff(raw_diff)
       key = "GLOBAL"
-      parsed = {key => {context: [], change: []}}
+      parsed = { key => { context: [], change: [] } }
       cur_line_number = 0
       raw_diff.each_line.map(&:strip).each do |line|
         if file_line?(line)
           key = path_from_file_line(line)
-          parsed[key] ||= {context: [], change: []}
+          parsed[key] ||= { context: [], change: [] }
         end
 
         if line_range?(line)
@@ -56,26 +56,27 @@ module DrDiff
           parsed[key][:context] << range
           cur_line_number = range.first
         end
-        if code_line?(line)
-          if touched?(line)
-            parsed[key][:change] << cur_line_number
-          end
-          cur_line_number += 1 unless line_gone?(line)
+        next unless code_line?(line)
+
+        if touched?(line)
+          parsed[key][:change] << cur_line_number
         end
+        cur_line_number += 1 unless line_gone?(line)
       end
       parsed
     end
 
     def line_gone?(line)
-      line =~ /^\-/
+      line =~ /^-/
     end
 
     def code_line?(line)
       return false if file_line?(line)
       return false if line_range?(line)
-      return false if line =~ /^\-\-\- a\/.*\./
-      return false if line =~/^index .*\d\d\d$/
-      return false if line =~/^diff \-\-git/
+      return false if %r{^--- a/.*\.}.match?(line)
+      return false if /^index .*\d\d\d$/.match?(line)
+      return false if /^diff --git/.match?(line)
+
       true
     end
 
@@ -84,7 +85,11 @@ module DrDiff
     end
 
     def file_line?(line)
-      line =~ /^\+\+\+ b\//
+      line =~ %r{^\+\+\+ b/}
+    rescue ArgumentError => e
+      puts("UNABLE TO DIGEST THIS LINE: |#{line}|")
+      puts(e)
+      raise
     end
 
     def line_range?(line)
@@ -92,7 +97,7 @@ module DrDiff
     end
 
     def path_from_file_line(line)
-      line.split(/\s/).last.gsub(/^b\//, "")
+      line.split(/\s/).last.gsub(%r{^b/}, "")
     end
 
     def range_from_file_line(line)

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -16,16 +18,16 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/swagger_helper')
-require 'object_part_view'
+require_relative "swagger_helper"
+require "object_part_view"
 
 describe ObjectPartView do
   let(:name) { "Tag" }
-  let(:part) { {"id" => 1, "name" => "Jimmy Wales"} }
+  let(:part) { { "id" => 1, "name" => "Jimmy Wales" } }
   let(:view) { ObjectPartView.new(name, part) }
 
   it "guesses types" do
-    expect(view.guess_type("hey")).to eq({"type" => "string"})
+    expect(view.guess_type("hey")).to eq({ "type" => "string" })
   end
 
   it "renders properties" do

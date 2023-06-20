@@ -18,11 +18,13 @@
 
 <% provide :page_title, t(:page_title, "Rubrics") %>
 <% add_crumb t('#crumbs.rubrics', "Rubrics") %>
-<% provide :right_side do %>
-  <a href="<%= context_url(@context, :context_rubrics_url) %>" class="btn button-sidebar-wide add_rubric_link">
-    <i class="icon-add"></i>
-    <%= t('buttons.add_rubric', 'Add Rubric') %>
-  </a>
+<% if !!js_env.dig(:PERMISSIONS, :manage_rubrics)%>
+  <% provide :right_side do %>
+    <a href="<%= context_url(@context, :context_rubrics_url) %>" role="button" class="btn button-sidebar-wide add_rubric_link">
+      <i class="icon-add"></i>
+      <%= t('buttons.add_rubric', 'Add Rubric') %>
+    </a>
+  <% end %>
 <% end %>
 
 <% js_bundle :edit_rubric %>
@@ -38,8 +40,8 @@
     }
   </style>
 
-<% js_bundle 'legacy/rubrics_index' %>
-<h1>
+<% js_bundle 'rubrics_index' %>
+<h1 class="screenreader-only">
   <% case @context.class.to_s %>
     <% when 'Course' %>
       <%= t 'course_rubrics', "Course Rubrics" %>
@@ -57,7 +59,7 @@
   <ul>
   <% @rubric_associations.each do |association| %>
     <% rubric = association.rubric %>
-    <li>
+    <li class="hover-container">
       <a href="<%= context_url(@context, :context_rubric_url, association.rubric_id) %>" class="title"><%= rubric.title %></a>
       <span class="links">
         <% if can_do(rubric, @current_user, :update) %>

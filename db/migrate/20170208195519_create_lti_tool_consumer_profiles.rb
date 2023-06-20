@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -19,7 +21,6 @@ class CreateLtiToolConsumerProfiles < ActiveRecord::Migration[4.2]
   tag :predeploy
 
   def change
-
     create_table :lti_tool_consumer_profiles do |t|
       t.text :services
       t.text :capabilities
@@ -32,6 +33,5 @@ class CreateLtiToolConsumerProfiles < ActiveRecord::Migration[4.2]
     add_index :lti_tool_consumer_profiles, :uuid, unique: true
 
     add_foreign_key :lti_tool_consumer_profiles, :developer_keys
-
   end
 end

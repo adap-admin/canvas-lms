@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -17,29 +19,38 @@
 #
 
 module Factories
-  def submission_model(opts={})
-    enroll_user = !(opts[:user] && (opts[:assignment] || opts[:course]))
-    assignment = opts[:assignment] || assignment_model(:course => opts[:course])
+  def submission_model(opts = {})
+    enroll_user = !opts[:user] || !(opts[:assignment] || opts[:course])
+    assignment = opts[:assignment] || assignment_model(course: opts[:course])
     @student = opts.delete(:user) || @user = create_users(1, return_type: :record).first
     @course.enroll_student(@student, section: opts[:section], enrollment_state: :active) if enroll_user
     assignment.reload # it caches the course pre-student enrollment
-    @submission = assignment.submit_homework(@student, (opts.presence || { :url => "http://www.instructure.com/" }))
+    @submission = assignment.submit_homework(@student, (opts.presence || { url: "http://www.instructure.com/" }))
     @submission
   end
 
   # just create the object, we don't care about callbacks or usual side effects
   def bare_submission_model(assignment, user, opts = {})
-    opts = (opts.presence || {submission_type: "online_text_entry", body: "o hai"}).
-      merge(workflow_state: "submitted", updated_at: Time.now.utc)
-    submission = assignment.submissions.find_by!(user: user)
+    opts = (opts.presence || { submission_type: "online_text_entry", body: "o hai" })
+           .merge(workflow_state: "submitted", updated_at: Time.now.utc)
+    submission = assignment.submissions.find_by!(user:)
     submission.update_columns(opts)
     submission
   end
 
-  def graded_submission_model(opts={})
+  def graded_submission_model(opts = {})
     submission_model(opts)
-    @submission.workflow_state = 'graded'
+    @submission.workflow_state = "graded"
     @submission.save!
     @submission
+  end
+
+  def unsubmitted_submission_model(opts = {})
+    enroll_user = !opts[:user] || !(opts[:assignment] || opts[:course])
+    assignment = opts[:assignment] || assignment_model(course: opts[:course])
+    @student = opts.delete(:user) || @user = create_users(1, return_type: :record).first
+    @course.enroll_student(@student, section: opts[:section], enrollment_state: :active) if enroll_user
+    assignment.reload # it caches the course pre-student enrollment
+    @submission = Submission.where(user: @student, assignment:).first or raise "Submission not created"
   end
 end

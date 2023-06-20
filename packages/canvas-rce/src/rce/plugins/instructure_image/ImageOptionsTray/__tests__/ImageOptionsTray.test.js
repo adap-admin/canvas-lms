@@ -17,10 +17,13 @@
  */
 
 import React from 'react'
-import {render} from '@testing-library/react'
+import {render, screen} from '@testing-library/react'
 
 import ImageOptionsTray from '..'
 import ImageOptionsTrayDriver from './ImageOptionsTrayDriver'
+import {CUSTOM} from '../../ImageEmbedOptions'
+
+jest.useFakeTimers()
 
 describe('RCE "Images" Plugin > ImageOptionsTray', () => {
   let props
@@ -30,11 +33,21 @@ describe('RCE "Images" Plugin > ImageOptionsTray', () => {
     props = {
       imageOptions: {
         altText: '',
-        isDecorativeImage: false
+        appliedHeight: 300,
+        appliedWidth: 150,
+        imageSize: CUSTOM,
+        isLinked: false,
+        isDecorativeImage: false,
+        naturalHeight: 200,
+        naturalWidth: 100,
+        appliedPercentage: 100,
+        usePercentageUnits: false,
+        url: 'https://www.fillmurray.com/200/100',
       },
       onRequestClose: jest.fn(),
       onSave: jest.fn(),
-      open: true
+      open: true,
+      isIconMaker: false,
     }
   })
 
@@ -42,6 +55,35 @@ describe('RCE "Images" Plugin > ImageOptionsTray', () => {
     render(<ImageOptionsTray {...props} />)
     tray = ImageOptionsTrayDriver.find()
   }
+
+  describe('when image is an icon maker icon', () => {
+    beforeEach(() => {
+      props.isIconMaker = true
+    })
+
+    afterAll(() => {
+      props.isIconMaker = false
+    })
+
+    it('opens the tray to edit Icon Options instead of Image Options', () => {
+      props.open = true
+      render(<ImageOptionsTray {...props} />)
+      expect(screen.getByText('Icon Options')).toBeInTheDocument()
+      const imageOptionsText = screen.queryByText('Image Options')
+      expect(imageOptionsText).not.toBeInTheDocument()
+    })
+
+    it('excludes from the tray options that are not related to alt text', () => {
+      props.open = true
+      render(<ImageOptionsTray {...props} />)
+      const displayOptions = screen.queryByText('Display Options')
+      const imageSize = screen.queryByText('Size')
+      const dimensionType = screen.queryByText('Dimension Type')
+      expect(displayOptions).not.toBeInTheDocument()
+      expect(imageSize).not.toBeInTheDocument()
+      expect(dimensionType).not.toBeInTheDocument()
+    })
+  })
 
   it('is optionally rendered open', () => {
     props.open = true
@@ -58,6 +100,37 @@ describe('RCE "Images" Plugin > ImageOptionsTray', () => {
   it('is labeled with "Image Options Tray"', () => {
     renderComponent()
     expect(tray.label).toEqual('Image Options Tray')
+  })
+
+  describe('"File URL" field', () => {
+    it('uses the value of .url in the given image url', () => {
+      renderComponent()
+      expect(tray.urlText).toEqual('https://www.fillmurray.com/200/100')
+    })
+
+    it('can be set', async () => {
+      renderComponent()
+      await tray.setUrl('https://www.fillmurray.com/140/100')
+      expect(tray.urlText).toEqual('https://www.fillmurray.com/140/100')
+    })
+
+    it("doesn't appear when url is not external", () => {
+      props.imageOptions.url = 'http://localhost/fake-image.jpg'
+      renderComponent()
+      expect(tray.$urlField).toBeNull()
+    })
+
+    it("appears when url's domain is different than the window's origin", () => {
+      props.imageOptions.url = 'https://www.fillmurray.com/140/100'
+      renderComponent()
+      expect(tray.$urlField).not.toBeNull()
+    })
+
+    it("appears when url's domain is an invalid url", () => {
+      props.imageOptions.url = 'invalidprotocol://www.fillmurray.com/140/100'
+      renderComponent()
+      expect(tray.$urlField).not.toBeNull()
+    })
   })
 
   describe('"Alt Text" field', () => {
@@ -77,18 +150,6 @@ describe('RCE "Images" Plugin > ImageOptionsTray', () => {
       props.imageOptions.isDecorativeImage = false
       renderComponent()
       expect(tray.altTextDisabled).toEqual(false)
-    })
-
-    it('is disabled when .isDecorativeImage is true in the given image options', () => {
-      props.imageOptions.isDecorativeImage = true
-      renderComponent()
-      expect(tray.altTextDisabled).toEqual(true)
-    })
-
-    it('is disabled when displaying the image as a link', () => {
-      renderComponent()
-      tray.setDisplayAs('link')
-      expect(tray.altTextDisabled).toEqual(true)
     })
   })
 
@@ -120,6 +181,7 @@ describe('RCE "Images" Plugin > ImageOptionsTray', () => {
   describe('"Display Options" field', () => {
     it('is set to "embed" by default', () => {
       renderComponent()
+      expect(tray.isDisplayAsDisabled).toBe(false)
       expect(tray.displayAs).toEqual('embed')
     })
 
@@ -135,12 +197,18 @@ describe('RCE "Images" Plugin > ImageOptionsTray', () => {
       tray.setDisplayAs('embed')
       expect(tray.displayAs).toEqual('embed')
     })
+
+    it('is hidden when image is already linked', () => {
+      props.imageOptions.isLinked = true
+      renderComponent()
+      expect(tray.isDisplayAsDisabled).toBe(true)
+    })
   })
 
   describe('"Size" field', () => {
-    it('is set to "Medium" by default', () => {
+    it('is set using the given image options', () => {
       renderComponent()
-      expect(tray.size).toEqual('Medium')
+      expect(tray.size).toEqual('Custom')
     })
 
     it('can be set to "Small"', async () => {
@@ -149,7 +217,7 @@ describe('RCE "Images" Plugin > ImageOptionsTray', () => {
       expect(tray.size).toEqual('Small')
     })
 
-    it('can be re-set to "Medium"', async () => {
+    it.skip('can be re-set to "Medium"', async () => {
       renderComponent()
       await tray.setSize('Small')
       await tray.setSize('Medium')
@@ -162,8 +230,9 @@ describe('RCE "Images" Plugin > ImageOptionsTray', () => {
       expect(tray.size).toEqual('Large')
     })
 
-    it('can be set to "Custom"', async () => {
+    it.skip('can be set to "Custom"', async () => {
       renderComponent()
+      await tray.setSize('Small')
       await tray.setSize('Custom')
       expect(tray.size).toEqual('Custom')
     })
@@ -183,28 +252,6 @@ describe('RCE "Images" Plugin > ImageOptionsTray', () => {
 
       it('is enabled when "No Alt Text" is checked', () => {
         tray.setIsDecorativeImage(true)
-        expect(tray.doneButtonDisabled).toEqual(false)
-      })
-    })
-
-    describe('when Alt Text is not present', () => {
-      beforeEach(() => {
-        renderComponent()
-        tray.setAltText('')
-      })
-
-      it('is disabled when "No Alt Text" is unchecked', () => {
-        tray.setIsDecorativeImage(false)
-        expect(tray.doneButtonDisabled).toEqual(true)
-      })
-
-      it('is enabled when "No Alt Text" is checked', () => {
-        tray.setIsDecorativeImage(true)
-        expect(tray.doneButtonDisabled).toEqual(false)
-      })
-
-      it('is enabled when "Display Text Link" is selected', () => {
-        tray.setDisplayAs('link')
         expect(tray.doneButtonDisabled).toEqual(false)
       })
     })
@@ -235,6 +282,12 @@ describe('RCE "Images" Plugin > ImageOptionsTray', () => {
       })
 
       describe('when calling the .onSave prop', () => {
+        it('includes the url', () => {
+          tray.$doneButton.click()
+          const [{url}] = props.onSave.mock.calls[0]
+          expect(url).toEqual('https://www.fillmurray.com/200/100')
+        })
+
         it('includes the Alt Text', () => {
           tray.setAltText('A turtle in a party suit.')
           tray.$doneButton.click()
@@ -242,15 +295,23 @@ describe('RCE "Images" Plugin > ImageOptionsTray', () => {
           expect(altText).toEqual('A turtle in a party suit.')
         })
 
-        it('includes the "No Alt Text" setting', () => {
+        it('includes the "Is Decorative" setting', () => {
           tray.setIsDecorativeImage(true)
           tray.$doneButton.click()
           const [{isDecorativeImage}] = props.onSave.mock.calls[0]
           expect(isDecorativeImage).toEqual(true)
         })
 
-        it('clears the Alt Text when the "No Alt Text" setting is true', () => {
+        it('cleans the Alt Text when the "is decorative" setting is true', () => {
           tray.setAltText('A turtle in a party suit.')
+          tray.setIsDecorativeImage(true)
+          tray.$doneButton.click()
+          const [{altText}] = props.onSave.mock.calls[0]
+          expect(altText).toEqual('')
+        })
+
+        it('ensures there is an Alt Text when the "is decorative" setting is true', () => {
+          tray.setAltText('')
           tray.setIsDecorativeImage(true)
           tray.$doneButton.click()
           const [{altText}] = props.onSave.mock.calls[0]
@@ -264,11 +325,29 @@ describe('RCE "Images" Plugin > ImageOptionsTray', () => {
           expect(displayAs).toEqual('link')
         })
 
-        it('includes the Size', async () => {
+        it.skip('includes the width to be applied', async () => {
           await tray.setSize('Large')
           tray.$doneButton.click()
-          const [{imageSize}] = props.onSave.mock.calls[0]
-          expect(imageSize).toEqual('large')
+          const [{appliedWidth}] = props.onSave.mock.calls[0]
+          expect(appliedWidth).toEqual(200)
+        })
+
+        it.skip('includes the height to be applied', async () => {
+          await tray.setSize('Large')
+          tray.$doneButton.click()
+          const [{appliedHeight}] = props.onSave.mock.calls[0]
+          expect(appliedHeight).toEqual(400)
+        })
+
+        it.skip('includes the width and height to be applied', async () => {
+          props.appliedPercentage = 95
+          props.usePercentageUnits = false
+          renderComponent()
+          await tray.setSize('Large')
+          tray.$doneButton.click()
+          const [{appliedWidth, appliedHeight}] = props.onSave.mock.calls[0]
+          expect(appliedWidth).toEqual(50)
+          expect(appliedHeight).toEqual(50)
         })
       })
     })

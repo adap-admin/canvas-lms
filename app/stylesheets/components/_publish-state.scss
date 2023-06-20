@@ -16,50 +16,11 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*
-@styleguide Publish State
-
-<br/>
-The publish button has two states on click (publish and published) and a hover state of 'Unpublish' once published.
-
-```html
-
-<p>
-  <button class="btn" id="publish"></button>
-</p>
-
-<p>
-  <button class="btn" id="published"></button>
-</p>
-
-<p>
-  <button class="btn" id="published-disabled" data-tooltip></button>
-</p>
-
-<p>
-  <span class="publish-icon"></span>
-</p>
-
-<p>
-  <span class='published-status published'>
-    <i class="icon-publish"></i> Published
-  </span>
-</p>
-
-<p>
-  <span class='published-status unpublished'>
-    <i class="icon-unpublished"></i> Not Published
-  </span>
-</p>
-
-```
-
-*/
-
 /* publish buttons */
 .btn-publish,
 .btn-published,
-.btn-unpublish {
+.btn-unpublish,
+.btn-unpublished {
   transition: none;
   padding-#{direction(left)}: 9px;
 
@@ -97,7 +58,7 @@ The publish button has two states on click (publish and published) and a hover s
   color: #fff;
 }
 
-.btn-unpublish {
+.btn-unpublished {
   @include buttonBackground($btnDangerBackground, $btnDangerBackgroundHighlight);
   box-shadow: none;
   &:focus { @include button-focus-dark; }
@@ -105,8 +66,8 @@ The publish button has two states on click (publish and published) and a hover s
 
 .btn-published.disabled,
 .btn-published.disabled:hover,
-.btn-unpublish.disabled,
-.btn-unpublish.disabled:hover {
+.btn-unpublished.disabled,
+.btn-unpublished.disabled:hover {
   @if $use_high_contrast { opacity: 1; }
 }
 
@@ -115,10 +76,18 @@ The publish button has two states on click (publish and published) and a hover s
   display: inline-block;
   color: $ic-color-icon-disabled;
   cursor: pointer;
-  &:focus { @include ic-focus-variant; }
+  border-radius: 3px;
+  outline: none;
+  padding: 2px 4px;
+  &:focus {
+    @include button-focus-light;
+  }
   &.publish-icon-unpublish { color: $ic-color-icon-disabled; }
   &.publish-icon-published { color: $ic-color-success; }
   .publish-text { display: none; }
+  &.disabled {
+    opacity: .5;
+  }
 }
 
 .published-status {

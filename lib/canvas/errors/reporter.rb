@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -15,12 +17,12 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_relative '../errors'
+require_relative "../errors"
 
 module Canvas
   class Errors
     class Reporter
-      def self.raise_canvas_error(existing_exception_class, message, opts={})
+      def self.raise_canvas_error(existing_exception_class, message, opts = {})
         # This little bit of code lets you add meta data to your existing exceptions, without having to
         # modify the exception, create a new exception (and updating rescues)!
         #

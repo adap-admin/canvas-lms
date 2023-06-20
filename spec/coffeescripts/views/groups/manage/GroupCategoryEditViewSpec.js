@@ -17,8 +17,8 @@
  */
 
 import $ from 'jquery'
-import GroupCategory from 'compiled/models/GroupCategory'
-import GroupCategoryEditView from 'compiled/views/groups/manage/GroupCategoryEditView'
+import GroupCategory from '@canvas/groups/backbone/models/GroupCategory'
+import GroupCategoryEditView from '@canvas/groups/backbone/views/GroupCategoryEditView'
 import fakeENV from 'helpers/fakeENV'
 import assertions from 'helpers/assertions'
 
@@ -37,7 +37,7 @@ QUnit.module('GroupCategoryEditView', {
     fakeENV.teardown()
     view.remove()
     document.getElementById('fixtures').innerHTML = ''
-  }
+  },
 })
 
 test('it should be accessible', assert => {

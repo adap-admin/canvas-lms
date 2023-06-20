@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -18,6 +20,7 @@
 
 class Loaders::ApiContentAttachmentLoader < GraphQL::Batch::Loader
   def initialize(context)
+    super()
     @context = context
   end
 

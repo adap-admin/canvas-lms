@@ -16,20 +16,20 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React, { Component, useRef } from "react";
-import {bool, func} from "prop-types";
+import React, {Component, useRef} from 'react'
+import {bool, func, string} from 'prop-types'
 import {linksShape, linkType} from './propTypes'
-import formatMessage from "../../../../format-message";
-import { ScreenReaderContent } from '@instructure/ui-a11y'
-import {List} from '@instructure/ui-elements'
-import {View} from '@instructure/ui-layout'
+import formatMessage from '../../../../format-message'
+import {ScreenReaderContent} from '@instructure/ui-a11y-content'
+import {List} from '@instructure/ui-list'
+import {View} from '@instructure/ui-view'
 import uid from '@instructure/uid'
 
 import {
   LoadMoreButton,
   LoadingIndicator,
   LoadingStatus,
-  useIncrementalLoading
+  useIncrementalLoading,
 } from '../../../../common/incremental-loading'
 import Link from './Link'
 
@@ -37,7 +37,7 @@ import Link from './Link'
  * This is needed only as long as `LinkSet` is a class component.
  */
 function IncrementalLoader(props) {
-  const {children, collection, fetchInitialPage, fetchNextPage} = props
+  const {children, collection, fetchInitialPage, fetchNextPage, contextType, searchString} = props
   const {hasMore, isLoading, links} = collection
   const lastItemRef = useRef(null)
 
@@ -45,6 +45,9 @@ function IncrementalLoader(props) {
     hasMore: hasMore && fetchNextPage != null,
     isLoading,
     lastItemRef,
+    contextType,
+    sortBy: {sort: 'alphabetical', order: 'asc'}, // not actually used in the query, but a required param
+    searchString,
 
     onLoadInitial() {
       if (fetchInitialPage) {
@@ -56,7 +59,7 @@ function IncrementalLoader(props) {
       fetchNextPage()
     },
 
-    records: links
+    records: links,
   })
 
   return children({loader, lastItemRef})
@@ -64,8 +67,8 @@ function IncrementalLoader(props) {
 
 class LinkSet extends Component {
   constructor(props) {
-    super(props);
-    this.describedByID = `rce-LinkSet-describedBy-${uid()}`;
+    super(props)
+    this.describedByID = `rce-LinkSet-describedBy-${uid()}`
     this.loadMoreButtonRef = null
   }
 
@@ -74,11 +77,7 @@ class LinkSet extends Component {
   }
 
   isEmpty(props) {
-    return (
-      !this.hasLinks(props) &&
-      !props.collection.hasMore &&
-      !props.collection.isLoading
-    );
+    return !this.hasLinks(props) && !props.collection.hasMore && !props.collection.isLoading
   }
 
   renderLinks(lastItemRef) {
@@ -96,7 +95,7 @@ class LinkSet extends Component {
     return (
       <>
         <ScreenReaderContent id={this.describedByID}>
-          {formatMessage("Click to insert a link into the editor.")}
+          {formatMessage('Click to insert a link into the editor.')}
         </ScreenReaderContent>
 
         <List variant="unstyled" as="ul" margin="0">
@@ -108,29 +107,33 @@ class LinkSet extends Component {
                 onClick={this.props.onLinkClick}
                 describedByID={this.describedByID}
                 elementRef={refFor(index, array)}
+                editing={this.props.editing}
+                onEditClick={this.props.onEditClick}
               />
             </List.Item>
           ))}
         </List>
       </>
-    );
+    )
   }
 
   renderEmptyIndicator() {
     return (
-      <View as="div" padding="medium">{formatMessage("No results.")}</View>
-    );
+      <View as="div" role="alert" padding="medium">
+        {formatMessage('No results.')}
+      </View>
+    )
   }
 
   renderLoadingError() {
     if (this.props.collection.lastError) {
       return (
         <span className="rcs-LinkSet-LoadFailed" role="alert">
-          {formatMessage("Loading failed...")}
+          {formatMessage('Loading failed...')}
         </span>
-      );
+      )
     }
-    return null;
+    return null
   }
 
   render() {
@@ -163,9 +166,13 @@ LinkSet.propTypes = {
   type: linkType.isRequired,
   collection: linksShape.isRequired,
   onLinkClick: func.isRequired,
+  contextType: string.isRequired,
   fetchInitialPage: func,
   fetchNextPage: func,
-  suppressRenderEmpty: bool
+  suppressRenderEmpty: bool,
+  searchString: string,
+  editing: bool,
+  onEditClick: func,
 }
 
-export default LinkSet;
+export default LinkSet

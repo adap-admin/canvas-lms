@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -15,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-shared_examples_for 'it provides variable mapping' do |key, method_name|
+shared_examples_for "it provides variable mapping" do |key, method_name|
   it "maps #{key} to ##{method_name}" do
     object = described_class.new
 

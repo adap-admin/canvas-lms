@@ -19,10 +19,10 @@
 import React from 'react'
 import {mount} from 'enzyme'
 
-import {speedGraderUrl} from 'jsx/assignments/GradeSummary/assignment/AssignmentApi'
-import Grid from 'jsx/assignments/GradeSummary/components/GradesGrid/Grid'
-import GridRow from 'jsx/assignments/GradeSummary/components/GradesGrid/GridRow'
-import {STARTED, SUCCESS} from 'jsx/assignments/GradeSummary/grades/GradeActions'
+import {speedGraderUrl} from 'ui/features/assignment_grade_summary/react/assignment/AssignmentApi'
+import Grid from 'ui/features/assignment_grade_summary/react/components/GradesGrid/Grid'
+import GridRow from 'ui/features/assignment_grade_summary/react/components/GradesGrid/GridRow'
+import {STARTED, SUCCESS} from 'ui/features/assignment_grade_summary/react/grades/GradeActions'
 
 QUnit.module('GradeSummary Grid', suiteHooks => {
   let props
@@ -37,11 +37,11 @@ QUnit.module('GradeSummary Grid', suiteHooks => {
       disabledCustomGrade: false,
       finalGrader: {
         graderId: 'teach',
-        id: '1105'
+        id: '1105',
       },
       graders: [
         {graderId: '1101', graderName: 'Miss Frizzle'},
-        {graderId: '1102', graderName: 'Mr. Keating'}
+        {graderId: '1102', graderName: 'Mr. Keating'},
       ],
 
       grades: {
@@ -52,7 +52,7 @@ QUnit.module('GradeSummary Grid', suiteHooks => {
             id: '4601',
             score: 10,
             selected: false,
-            studentId: '1111'
+            studentId: '1111',
           },
           1102: {
             grade: 'B',
@@ -60,8 +60,8 @@ QUnit.module('GradeSummary Grid', suiteHooks => {
             id: '4602',
             score: 8.9,
             selected: false,
-            studentId: '1111'
-          }
+            studentId: '1111',
+          },
         },
         1112: {
           1102: {
@@ -70,8 +70,8 @@ QUnit.module('GradeSummary Grid', suiteHooks => {
             id: '4603',
             score: 7.8,
             selected: false,
-            studentId: '1112'
-          }
+            studentId: '1112',
+          },
         },
         1113: {
           1101: {
@@ -80,9 +80,9 @@ QUnit.module('GradeSummary Grid', suiteHooks => {
             id: '4604',
             score: 10,
             selected: false,
-            studentId: '1113'
-          }
-        }
+            studentId: '1113',
+          },
+        },
       },
 
       horizontalScrollRef: sinon.spy(),
@@ -91,12 +91,12 @@ QUnit.module('GradeSummary Grid', suiteHooks => {
         {speedGraderUrl: speedGraderUrlFor('1111'), studentId: '1111', studentName: 'Adam Jones'},
         {speedGraderUrl: speedGraderUrlFor('1112'), studentId: '1112', studentName: 'Betty Ford'},
         {speedGraderUrl: speedGraderUrlFor('1113'), studentId: '1113', studentName: 'Charlie Xi'},
-        {speedGraderUrl: speedGraderUrlFor('1114'), studentId: '1114', studentName: 'Dana Smith'}
+        {speedGraderUrl: speedGraderUrlFor('1114'), studentId: '1114', studentName: 'Dana Smith'},
       ],
       selectProvisionalGradeStatuses: {
         1111: SUCCESS,
-        1112: STARTED
-      }
+        1112: STARTED,
+      },
     }
   })
 
@@ -126,7 +126,10 @@ QUnit.module('GradeSummary Grid', suiteHooks => {
   test('displays the grader names in the column headers', () => {
     mountComponent()
     const headers = wrapper.find('th.GradesGrid__GraderHeader')
-    deepEqual(headers.map(header => header.text()), ['Miss Frizzle', 'Mr. Keating'])
+    deepEqual(
+      headers.map(header => header.text()),
+      ['Miss Frizzle', 'Mr. Keating']
+    )
   })
 
   test('includes a GridRow for each student', () => {

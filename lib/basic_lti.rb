@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -17,5 +19,3 @@
 #
 module BasicLTI
 end
-
-require_dependency 'basic_lti/basic_outcomes'

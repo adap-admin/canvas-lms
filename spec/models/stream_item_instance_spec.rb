@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -16,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
-
 describe StreamItemInstance do
   describe ".update_all" do
     it "raises an exception to warn about necessary cache invalidation" do
@@ -26,13 +26,13 @@ describe StreamItemInstance do
   end
 
   describe ".update_all_with_invalidation" do
-     it "invalidates stream item cache keys and runs update_all (the original)" do
-       # expect
-       expect(StreamItemCache).to receive(:invalidate_context_stream_item_key).twice
-       expect(StreamItemInstance).to receive(:original_update_all).with('updates')
-       # when
-       StreamItemInstance.update_all_with_invalidation(['code_1', 'code_2'],
-                                                       'updates')
-     end
+    it "invalidates stream item cache keys and runs batched updates" do
+      # expect
+      expect(StreamItemCache).to receive(:invalidate_context_stream_item_key).twice
+      expect(StreamItemInstance).to receive(:in_batches).and_call_original
+      # when
+      StreamItemInstance.update_all_with_invalidation(["code_1", "code_2"],
+                                                      "updates")
+    end
   end
 end

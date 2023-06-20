@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -19,8 +21,8 @@ module RuboCop
   module Cop
     module Specs
       class NoBeforeOnceStubs < Cop
-        MSG = "Stubs in a `before(:once)` block won't carry over"\
-              " to the examples; you should move this to a `before(:each)`"
+        MSG = "Stubs in a `before(:once)` block won't carry over " \
+              "to the examples; you should move this to a `before(:each)`"
 
         # http://gofreerange.com/mocha/docs/Mocha/Mock.html
         # - stubs
@@ -45,13 +47,13 @@ module RuboCop
           return unless STUB_METHODS.include? method_name
           return unless node.ancestors.find do |ancestor|
             child = ancestor.children && ancestor.children[0]
-            child &&
-              child.is_a?(::RuboCop::AST::Node) &&
-              child.to_a[1] == BLOCK_METHOD &&
-              child.to_a[2] &&
-              child.to_a[2].is_a?(::RuboCop::AST::Node) &&
-              child.to_a[2].children[0] == BLOCK_ARG
+            child.is_a?(::RuboCop::AST::Node) &&
+            child.to_a[1] == BLOCK_METHOD &&
+            child.to_a[2] &&
+            child.to_a[2].is_a?(::RuboCop::AST::Node) &&
+            child.to_a[2].children[0] == BLOCK_ARG
           end
+
           add_offense node, message: MSG, severity: :warning
         end
       end

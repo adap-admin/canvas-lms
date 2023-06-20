@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -18,16 +20,21 @@
 
 module Types
   class SubmissionCommentFilterInputType < Types::BaseInputObject
-    graphql_name 'SubmissionCommentFilterInput'
+    graphql_name "SubmissionCommentFilterInput"
 
-    argument :all_comments, Boolean, <<~DESC, required: false, default_value: false
+    argument :all_comments, Boolean, <<~MD, required: false, default_value: false
       If all of the comments, regardless of the submission attempt, should be returned.
       If this is true, the for_attempt argument will be ignored.
-    DESC
+    MD
 
-    argument :for_attempt, Integer, <<~DESC, required: false, default_value: nil
+    argument :for_attempt, Integer, <<~MD, required: false, default_value: nil
       What submission attempt the comments should be returned for. If not specified,
-      it will return the comments for the current submisssion or submission history.
-    DESC
+      it will return the comments for the current submission or submission history.
+    MD
+
+    argument :peer_review, Boolean, <<~MD, required: false, default_value: false
+      Whether the current user is completing a peer review and should only see
+      comments authored by themselves.
+    MD
   end
 end

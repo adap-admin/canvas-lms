@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -34,21 +36,19 @@ class WebZipExport < EpubExport
 
   def generate
     job_progress.update_attribute(:completion, PERCENTAGE_COMPLETE[:generating])
-    update_attribute(:workflow_state, 'generating')
+    update_attribute(:workflow_state, "generating")
     convert_to_offline_web_zip
   end
-  handle_asynchronously :generate, priority: Delayed::LOW_PRIORITY, max_attempts: 1
+  handle_asynchronously :generate, priority: Delayed::LOW_PRIORITY
 
   # WebZip Exportable overrides
   def content_cartridge
-    self.content_export.attachment
+    content_export.attachment
   end
 
   def convert_to_offline_web_zip
     begin
-      set_locale
-      file_path = super(cache_key)
-      I18n.locale = :en
+      file_path = I18n.with_locale(set_locale) { super(cache_key) }
 
       create_attachment_from_path!(file_path)
     rescue => e
@@ -59,7 +59,7 @@ class WebZipExport < EpubExport
     mark_as_generated
     cleanup_file_path!(file_path)
   end
-  handle_asynchronously :convert_to_offline_web_zip, priority: Delayed::LOW_PRIORITY, max_attempts: 1
+  handle_asynchronously :convert_to_offline_web_zip, priority: Delayed::LOW_PRIORITY
 
   def cache_key
     "web_zip_export_user_progress_#{global_id}"

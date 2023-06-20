@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -16,23 +18,31 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper.rb')
+require_relative "../spec_helper"
 
-require 'securerandom'
+require "securerandom"
 
 describe EventStream::Failure do
   describe "Record" do
-    class EventRecord < ::EventStream::Record
-      attributes :attribute1,
-                 :attribute2
+    let(:event_record) do
+      Class.new(EventStream::Record) do
+        class << self
+          def name
+            "EventRecord"
+          end
+        end
+
+        attributes :attribute1,
+                   :attribute2
+      end
     end
 
     before do
       @request_id = SecureRandom.uuid
-      @event = EventRecord.new(
-        'attribute1' => 'value1',
-        'attribute2' => 'value2',
-        'request_id' => @request_id
+      @event = event_record.new(
+        "attribute1" => "value1",
+        "attribute2" => "value2",
+        "request_id" => @request_id
       )
     end
 
@@ -42,45 +52,45 @@ describe EventStream::Failure do
     end
 
     it "sets default values" do
-      expect(@event.id).to_not eq nil
-      expect(@event.created_at).to_not eq nil
+      expect(@event.id).to_not be_nil
+      expect(@event.created_at).to_not be_nil
       expect(@event.event_type).to eq "event_record"
       expect(@event.request_id).to eq @request_id
     end
 
     it "allows overrided default values" do
       attributes = {
-        'id' => SecureRandom.uuid,
-        'event_type' => 'other_type',
-        'request_id' => SecureRandom.uuid,
-        'created_at' => Time.zone.now
+        "id" => SecureRandom.uuid,
+        "event_type" => "other_type",
+        "request_id" => SecureRandom.uuid,
+        "created_at" => Time.zone.now
       }
-      event = EventRecord.new(attributes)
+      event = event_record.new(attributes)
 
-      expect(event.id).to eq attributes['id']
-      expect(event.created_at).to eq Time.zone.at(attributes['created_at'].to_i)
-      expect(event.event_type).to eq attributes['event_type']
-      expect(event.request_id).to eq attributes['request_id']
+      expect(event.id).to eq attributes["id"]
+      expect(event.created_at).to eq Time.zone.at(attributes["created_at"].to_i)
+      expect(event.event_type).to eq attributes["event_type"]
+      expect(event.request_id).to eq attributes["request_id"]
     end
 
     it "defines accessors for attributes" do
       expect((defined? @event.attribute1)).to eq "method"
       expect((defined? @event.attribute2)).to eq "method"
 
-      expect(@event.attribute1).to eq 'value1'
-      expect(@event.attribute2).to eq 'value2'
+      expect(@event.attribute1).to eq "value1"
+      expect(@event.attribute2).to eq "value2"
     end
 
     it "converts request_id to string" do
       request_id = 42
 
       attributes = {
-        'id' => SecureRandom.uuid,
-        'event_type' => 'other_type',
-        'request_id' => request_id,
-        'created_at' => Time.zone.now
+        "id" => SecureRandom.uuid,
+        "event_type" => "other_type",
+        "request_id" => request_id,
+        "created_at" => Time.zone.now
       }
-      event = EventRecord.new(attributes)
+      event = event_record.new(attributes)
       expect(event.request_id).to eq request_id.to_s
 
       event.request_id = request_id

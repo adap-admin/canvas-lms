@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -20,7 +22,7 @@ require_relative "../api_spec_helper"
 
 describe ErrorsController, type: :request do
   describe "reporting an error" do
-    let(:path){ "/api/v1/error_reports" }
+    let(:path) { "/api/v1/error_reports" }
 
     let(:api_options) do
       {
@@ -40,7 +42,7 @@ describe ErrorsController, type: :request do
           comments: "My Description"
         }
       }
-      expect(json['logged']).to eq(true)
+      expect(json["logged"]).to be(true)
       expect(ErrorReport.last.email).to eq("TestErrorsEmail@example.com")
     end
 
@@ -51,15 +53,15 @@ describe ErrorsController, type: :request do
           email: "TestErrorsEmail@example.com",
           comments: "My Description",
           http_env: {
-            foo: 'bar',
-            meta: 'data'
+            foo: "bar",
+            meta: "data"
           }
         }
       }
-      expect(json['logged']).to eq(true)
+      expect(json["logged"]).to be(true)
       report = ErrorReport.last
-      expect(report.http_env['foo']).to eq("bar")
-      expect(report.http_env['meta']).to eq("data")
+      expect(report.http_env["foo"]).to eq("bar")
+      expect(report.http_env["meta"]).to eq("data")
     end
   end
 end

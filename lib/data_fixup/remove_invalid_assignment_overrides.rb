@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -21,11 +23,11 @@ module DataFixup::RemoveInvalidAssignmentOverrides
 
     bad_aos = AssignmentOverrideStudent.active.where(assignment_override_id: bad_ao)
     bad_aos.find_ids_in_batches do |ids|
-      AssignmentOverrideStudent.where(id: ids).update_all(workflow_state: 'deleted')
+      AssignmentOverrideStudent.where(id: ids).update_all(workflow_state: "deleted")
     end
 
     bad_ao.find_ids_in_batches do |ids|
-      AssignmentOverride.where(id: ids).update_all(workflow_state: 'deleted')
+      AssignmentOverride.where(id: ids).update_all(workflow_state: "deleted")
     end
   end
 end

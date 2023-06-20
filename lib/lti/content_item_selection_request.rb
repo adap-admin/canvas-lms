@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 Instructure, Inc.
 #
@@ -32,7 +34,7 @@ module Lti
 
     def generate_lti_launch(placement:, opts: {}, expanded_variables: {})
       lti_launch = Lti::Launch.new(opts)
-      lti_launch.resource_url = opts[:launch_url] || @tool.extension_setting(placement, :url)
+      lti_launch.resource_url = @tool.launch_url(extension_type: placement, preferred_launch_url: opts[:launch_url])
       lti_launch.link_text = @tool.label_for(placement.to_sym, I18n.locale)
       lti_launch.analytics_id = @tool.tool_id
       lti_launch.params = launch_params(
@@ -40,7 +42,8 @@ module Lti
         placement,
         expanded_variables,
         opts[:content_item_id],
-        opts[:assignment]
+        opts[:assignment],
+        opts[:parent_frame_context]
       )
 
       lti_launch
@@ -54,27 +57,27 @@ module Lti
         tool_consumer_instance_guid: domain_root_account.lti_guid,
         roles: lti_helper.current_lis_roles,
         launch_presentation_locale: I18n.locale.to_s || I18n.default_locale.to_s,
-        launch_presentation_document_target: 'iframe',
+        launch_presentation_document_target: "iframe",
         ext_roles: lti_helper.all_roles,
-        oauth_callback: 'about:blank'
+        oauth_callback: "about:blank"
       }
 
-      params[:user_id] = Lti::Asset.opaque_identifier_for(user, context: context) if user
+      params[:user_id] = Lti::Asset.opaque_identifier_for(user, context:) if user
       params
     end
 
     private
 
-    def launch_params(resource_url, placement, expanded_variables, content_item_id = nil, assignment = nil)
-      content_item_return_url = return_url(content_item_id)
+    def launch_params(resource_url, placement, expanded_variables, content_item_id = nil, assignment = nil, parent_frame_context = nil)
+      content_item_return_url = return_url(content_item_id, parent_frame_context)
 
-      params = ContentItemSelectionRequest.default_lti_params(@context, @domain_root_account, @user).
-        merge(message_params(content_item_return_url)).
-        merge(data: data_hash_jwt(resource_url, content_item_id)).
-        merge(placement_params(placement, assignment: assignment)).
-        merge(expanded_variables)
+      params = ContentItemSelectionRequest.default_lti_params(@context, @domain_root_account, @user)
+                                          .merge(message_params(content_item_return_url))
+                                          .merge(data: data_hash_jwt(resource_url, content_item_id))
+                                          .merge(placement_params(placement, assignment:))
+                                          .merge(expanded_variables)
 
-      params[:ext_lti_assignment_id] = lti_assignment_id(assignment: assignment)
+      params[:ext_lti_assignment_id] = lti_assignment_id(assignment:)
 
       Lti::Security.signed_post_params(
         params,
@@ -92,9 +95,9 @@ module Lti
     def message_params(content_item_return_url)
       {
         # required params
-        lti_message_type: 'ContentItemSelectionRequest',
-        lti_version: 'LTI-1p0',
-        content_item_return_url: content_item_return_url,
+        lti_message_type: "ContentItemSelectionRequest",
+        lti_version: "LTI-1p0",
+        content_item_return_url:,
         context_title: @context.name,
         # optional params
         accept_multiple: false
@@ -102,7 +105,7 @@ module Lti
     end
 
     def data_hash_jwt(resource_url, content_item_id = nil)
-      data_hash = {default_launch_url: resource_url}
+      data_hash = { default_launch_url: resource_url }
       if content_item_id
         data_hash[:content_item_id] = content_item_id
         data_hash[:oauth_consumer_key] = @tool.consumer_key
@@ -111,13 +114,17 @@ module Lti
       Canvas::Security.create_jwt(data_hash)
     end
 
-    def return_url(content_item_id)
+    def return_url(content_item_id, parent_frame_context)
       return_url_opts = {
-        service: 'external_tool_dialog',
+        service: "external_tool_dialog",
         host: @base_url.host,
         protocol: @base_url.scheme,
         port: @base_url.port
       }
+
+      if parent_frame_context
+        return_url_opts[:parent_frame_context] = parent_frame_context
+      end
 
       if content_item_id
         return_url_opts[:id] = content_item_id
@@ -127,38 +134,51 @@ module Lti
       end
     end
 
+    INDEX_MENU_TOOL_TYPES = %w[
+      assignment_index_menu
+      assignment_group_menu
+      discussion_topic_index_menu
+      file_index_menu
+      module_index_menu
+      module_group_menu
+      quiz_index_menu
+      wiki_index_menu
+    ].freeze
+
     def placement_params(placement, assignment: nil)
       case placement
-      when 'migration_selection'
+      when "migration_selection"
         migration_selection_params
-      when 'editor_button'
+      when "editor_button"
         editor_button_params
-      when 'resource_selection', 'link_selection', 'assignment_selection'
+      when "resource_selection", "link_selection", "assignment_selection", "submission_type_selection"
         lti_launch_selection_params
-      when 'collaboration'
+      when "collaboration"
         collaboration_params
-      when 'homework_submission'
+      when "homework_submission"
         homework_submission_params(assignment)
+      when *INDEX_MENU_TOOL_TYPES
+        {}
       else
         # TODO: we _could_, if configured, have any other placements return to the content migration page...
-        raise "Content-Item not supported at this placement"
+        raise ::Lti::Errors::UnsupportedPlacement, "Content-Item not supported at this placement"
       end
     end
 
     def migration_selection_params
-      accept_media_types = %w(
+      accept_media_types = %w[
         application/vnd.ims.imsccv1p1
         application/vnd.ims.imsccv1p2
         application/vnd.ims.imsccv1p3
         application/zip
         application/xml
-      )
+      ]
 
       {
-        accept_media_types: accept_media_types.join(','),
-        accept_presentation_document_targets: 'download',
+        accept_media_types: accept_media_types.join(","),
+        accept_presentation_document_targets: "download",
         accept_copy_advice: true,
-        ext_content_file_extensions: %w(zip imscc mbz xml).join(','),
+        ext_content_file_extensions: %w[zip imscc mbz xml].join(","),
         accept_unsigned: true,
         auto_create: false
       }
@@ -166,17 +186,18 @@ module Lti
 
     def editor_button_params
       {
-        accept_media_types: %w(image/* text/html application/vnd.ims.lti.v1.ltilink */*).join(','),
-        accept_presentation_document_targets: %w(embed frame iframe window).join(','),
+        accept_media_types: %w[image/* text/html application/vnd.ims.lti.v1.ltilink */*].join(","),
+        accept_presentation_document_targets: %w[embed frame iframe window].join(","),
         accept_unsigned: true,
+        accept_multiple: true,
         auto_create: false
       }
     end
 
     def lti_launch_selection_params
       {
-        accept_media_types: 'application/vnd.ims.lti.v1.ltilink',
-        accept_presentation_document_targets: %w(frame window).join(','),
+        accept_media_types: "application/vnd.ims.lti.v1.ltilink",
+        accept_presentation_document_targets: %w[frame window].join(","),
         accept_unsigned: true,
         auto_create: false
       }
@@ -184,8 +205,8 @@ module Lti
 
     def collaboration_params
       {
-        accept_media_types: 'application/vnd.ims.lti.v1.ltilink',
-        accept_presentation_document_targets: 'window',
+        accept_media_types: "application/vnd.ims.lti.v1.ltilink",
+        accept_presentation_document_targets: "window",
         accept_unsigned: false,
         auto_create: true,
       }
@@ -193,17 +214,17 @@ module Lti
 
     def homework_submission_params(assignment)
       params = {}
-      params[:accept_media_types] = '*/*'
+      params[:accept_media_types] = "*/*"
       accept_presentation_document_targets = []
-      accept_presentation_document_targets << 'window' if assignment.submission_types.include?('online_url')
-      accept_presentation_document_targets << 'none' if assignment.submission_types.include?('online_upload')
-      params[:accept_presentation_document_targets] = accept_presentation_document_targets.join(',')
-      params[:accept_copy_advice] = !!assignment.submission_types.include?('online_upload')
-      if assignment.submission_types.strip == 'online_upload' && assignment.allowed_extensions.present?
-        params[:ext_content_file_extensions] = assignment.allowed_extensions.compact.join(',')
-        params[:accept_media_types] = assignment.allowed_extensions.map do |ext|
+      accept_presentation_document_targets << "window" if assignment.submission_types.include?("online_url")
+      accept_presentation_document_targets << "none" if assignment.submission_types.include?("online_upload")
+      params[:accept_presentation_document_targets] = accept_presentation_document_targets.join(",")
+      params[:accept_copy_advice] = !!assignment.submission_types.include?("online_upload")
+      if assignment.submission_types.strip == "online_upload" && assignment.allowed_extensions.present?
+        params[:ext_content_file_extensions] = assignment.allowed_extensions.compact.join(",")
+        params[:accept_media_types] = assignment.allowed_extensions.filter_map do |ext|
           MimetypeFu::EXTENSIONS[ext]
-        end.compact.join(',')
+        end.join(",")
       end
       params
     end

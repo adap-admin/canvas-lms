@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,35 +18,31 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
-
 describe "locale_selection" do
   before do
-    allow(I18n).to receive(:available_locales).and_return([:en, :es, :fr])
+    allow(I18n).to receive(:available_locales).and_return(%i[en es fr])
   end
 
-  after do
-    I18n.locale = I18n.default_locale
-  end
-
-  it "should set the locale when authenticated" do
-    course_with_teacher(:active_all => true, :user => user_with_pseudonym)
+  it "sets the locale when authenticated" do
+    course_with_teacher(active_all: true, user: user_with_pseudonym)
     user_session(@user, @pseudonym)
-    @user.update_attribute :locale, 'es'
+    @user.update_attribute :locale, "es"
     @pseudonym.reload
     @domain_root_account = Account.default
 
+    allow(I18n).to receive(:locale=)
     get dashboard_url
     expect(response).to be_successful
-    expect(I18n.locale).to eql(:es)
+    expect(I18n).to have_received(:locale=).with("es").at_least(:once)
   end
 
-  it "should set the locale when not authenticated" do
+  it "sets the locale when not authenticated" do
     account = Account.default
-    account.update_attribute :default_locale, 'fr'
+    account.update_attribute :default_locale, "fr"
+
+    allow(I18n).to receive(:locale=)
     get canvas_login_url
     expect(response).to be_successful
-    expect(I18n.locale).to eql(:fr)
+    expect(I18n).to have_received(:locale=).with("fr").at_least(:once)
   end
-
 end

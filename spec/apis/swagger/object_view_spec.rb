@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -16,12 +18,12 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/swagger_helper')
-require 'object_view'
+require_relative "swagger_helper"
+require "object_view"
 
 describe ObjectView do
   let(:text) { "Example\n{ \"id\": 5 } { \"start_date\": \"2012-01-01\" }" }
-  let(:view) { ObjectView.new(double('Element', :text => text)) }
+  let(:view) { ObjectView.new(double("Element", text:)) }
 
   it "separates json into parts" do
     expect(view.clean_json_text_parts).to eq(

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -15,16 +17,17 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_relative '../../helpers/gradebook_common'
+require_relative "../../helpers/gradebook_common"
+require_relative "../pages/gradebook_page"
 
-describe "gradebook" do
+describe "Gradebook" do
   include_context "in-process server selenium tests"
   include GradebookCommon
 
   before(:once) do
     gradebook_data_setup
     @page_size = 5
-    Setting.set 'api_max_per_page', @page_size
+    Setting.set "api_max_per_page", @page_size
   end
 
   before do
@@ -33,17 +36,18 @@ describe "gradebook" do
 
   def test_n_students(n)
     create_users_in_course @course, n
-    get "/courses/#{@course.id}/gradebook"
-    f('.gradebook_filter input').send_keys n
-    expect(ff('.student-name')).to have_size 1
-    expect(f('.student-name')).to include_text "user #{n}"
+    Gradebook.visit(@course)
+    f("#gradebook-student-search input").send_keys "user #{n}"
+    f("#gradebook-student-search input").send_keys(:return)
+    expect(ff(".student-name")).to have_size 1
+    expect(f(".student-name")).to include_text "user #{n}"
   end
 
-  it "should work for 2 pages" do
+  it "works for 2 pages" do
     test_n_students @page_size + 1
   end
 
-  it "should work for >2 pages" do
-    test_n_students @page_size * 2 + 1
+  it "works for >2 pages" do
+    test_n_students (@page_size * 2) + 1
   end
 end

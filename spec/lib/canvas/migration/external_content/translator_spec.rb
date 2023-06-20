@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -15,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_relative '../../../../spec_helper.rb'
+require_relative "../../../../spec_helper"
 
 describe Canvas::Migration::ExternalContent::Translator do
   context "#translate_data" do
@@ -34,25 +36,25 @@ describe Canvas::Migration::ExternalContent::Translator do
       @translator = described_class.new(content_migration: @cm)
     end
 
-    it "should search through arrays" do
+    it "searches through arrays" do
       data = [
-        {'something' => 'somethingelse'},
-        {'$canvas_quiz_id' => @quiz.id}
+        { "something" => "somethingelse" },
+        { "$canvas_quiz_id" => @quiz.id }
       ]
       exported_data = @translator.translate_data(data, :export)
-      expect(exported_data.last['$canvas_quiz_id']).to eq @mig_id
+      expect(exported_data.last["$canvas_quiz_id"]).to eq @mig_id
 
       imported_data = @translator.translate_data(exported_data, :import)
-      expect(imported_data.last['$canvas_quiz_id']).to eq @quiz_copy.id
+      expect(imported_data.last["$canvas_quiz_id"]).to eq @quiz_copy.id
     end
 
-    it "should search through nested hashes" do
-      data = {'key' => {'$canvas_quiz_id' => @quiz.id}}
+    it "searches through nested hashes" do
+      data = { "key" => { "$canvas_quiz_id" => @quiz.id } }
       exported_data = @translator.translate_data(data, :export)
-      expect(exported_data['key']['$canvas_quiz_id']).to eq @mig_id
+      expect(exported_data["key"]["$canvas_quiz_id"]).to eq @mig_id
 
       imported_data = @translator.translate_data(exported_data, :import)
-      expect(imported_data['key']['$canvas_quiz_id']).to eq @quiz_copy.id
+      expect(imported_data["key"]["$canvas_quiz_id"]).to eq @quiz_copy.id
     end
   end
 
@@ -63,14 +65,14 @@ describe Canvas::Migration::ExternalContent::Translator do
       @translator = described_class.new(content_migration: @cm)
     end
 
-    it "should be able to search for all of the types in the course" do
+    it "is able to search for all of the types in the course" do
       # make sure none of the types asplode the fallback logic
-      described_class::TYPES_TO_CLASSES.values.each do |obj_class|
+      described_class::TYPES_TO_CLASSES.each_value do |obj_class|
         expect(@translator.get_canvas_id_from_migration_id(obj_class, "some_migration_id")).to eq described_class::NOT_FOUND
       end
     end
 
-    it "should be able to find an already imported item" do
+    it "is able to find an already imported item" do
       mig_id = "somemigrationid"
       assmt = @course.assignments.new
       assmt.migration_id = mig_id
@@ -79,14 +81,14 @@ describe Canvas::Migration::ExternalContent::Translator do
       expect(@translator.get_canvas_id_from_migration_id(Assignment, mig_id)).to eq assmt.id
     end
 
-    it "should search through recently imported items first" do
+    it "searches through recently imported items first" do
       mig_id = "somemigrationid"
       assmt = @course.assignments.new
       assmt.migration_id = mig_id
       assmt.save!
       @cm.add_imported_item(assmt)
 
-      expect(@course).to receive(:assignments).never
+      expect(@course).not_to receive(:assignments)
       expect(@translator.get_canvas_id_from_migration_id(Assignment, mig_id)).to eq assmt.id
     end
   end
@@ -97,12 +99,15 @@ describe Canvas::Migration::ExternalContent::Translator do
       template = MasterCourses::MasterTemplate.create!(course: @course)
       mm = template.master_migrations.create!
       @cm = @course.content_migrations.create!
-      ce = ContentExport.create!(export_type: ContentExport::MASTER_COURSE_COPY, content_migration: @cm,
-        context: @course, workflow_state: 'active', settings: {master_migration_id: mm.id})
+      ce = ContentExport.create!(export_type: ContentExport::MASTER_COURSE_COPY,
+                                 content_migration: @cm,
+                                 context: @course,
+                                 workflow_state: "active",
+                                 settings: { master_migration_id: mm.id })
       @translator = described_class.new(content_export: ce)
     end
 
-    it "should return the same migration_id for graded item assignments as it does for the item" do
+    it "returns the same migration_id for graded item assignments as it does for the item" do
       quiz = assignment_quiz([], course: @course, due_at: Time.zone.now)
       quiz_mig_id = @translator.get_migration_id_from_canvas_id(quiz.class, quiz.id)
       assign_mig_id = @translator.get_migration_id_from_canvas_id(quiz.assignment.class, quiz.assignment.id)

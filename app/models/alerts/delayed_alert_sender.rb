@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -20,10 +22,10 @@ module Alerts
     def self.process
       Account.root_accounts.active.non_shadow.find_each do |account|
         next unless account.settings[:enable_alerts]
+
         account.all_courses.active.find_ids_in_batches(batch_size: 200) do |batch|
-          self.send_later_if_production_enqueue_args(:evaluate_courses,
-                                                     {n_strand: ['delayed_alert_sender_evaluate_courses', account.global_id],
-                                                      priority: Delayed::LOW_PRIORITY}, batch)
+          delay_if_production(n_strand: ["delayed_alert_sender_evaluate_courses", account.global_id], priority: Delayed::LOW_PRIORITY)
+            .evaluate_courses(batch)
         end
       end
     end
@@ -32,7 +34,7 @@ module Alerts
       alerts_cache = {}
       Course.where(id: course_ids).find_each do |course|
         alerts_cache[course.account_id] ||= course.account.account_chain.map { |a| a.alerts.to_a }.flatten
-        self.evaluate_for_course(course, alerts_cache[course.account_id])
+        evaluate_for_course(course, alerts_cache[course.account_id])
       end
     end
 
@@ -47,7 +49,7 @@ module Alerts
       student_ids = student_enrollments.map(&:user_id)
       return if student_ids.empty?
 
-      teacher_enrollments = course.instructor_enrollments.active_or_pending
+      teacher_enrollments = course.instructor_enrollments.active_or_pending_by_date
       teacher_ids = teacher_enrollments.map(&:user_id)
       return if teacher_ids.empty?
 
@@ -72,17 +74,18 @@ module Alerts
           if matches
             last_sent = Rails.cache.fetch(cache_key)
             if last_sent.blank?
+              nil
             elsif alert.repetition.blank?
               matches = false
             else
               matches = last_sent + alert.repetition.days <= today
             end
           end
-          if matches
-            Rails.cache.write(cache_key, today)
+          next unless matches
 
-            send_alert(alert, alert.resolve_recipients(user_id, teacher_student_mapper.teachers_for_student(user_id)), student_enrollments.to_ary.find { |enrollment| enrollment.user_id == user_id } )
-          end
+          Rails.cache.write(cache_key, today)
+
+          send_alert(alert, alert.resolve_recipients(user_id, teacher_student_mapper.teachers_for_student(user_id)), student_enrollments.to_ary.find { |enrollment| enrollment.user_id == user_id })
         end
       end
     end
@@ -90,12 +93,12 @@ module Alerts
     def self.send_alert(alert, user_ids, student_enrollment)
       notification = BroadcastPolicy.notification_finder.by_name("Alert")
       notification.create_message(alert, user_ids, {
-        data: {
-          student_name: student_enrollment.user.name,
-          user_id: student_enrollment.user_id,
-          course_id: student_enrollment.course_id
-        }
-      })
+                                    data: {
+                                      student_name: student_enrollment.user.name,
+                                      user_id: student_enrollment.user_id,
+                                      course_id: student_enrollment.course_id
+                                    }
+                                  })
     end
   end
 end

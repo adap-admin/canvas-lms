@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -20,12 +22,14 @@ class Quizzes::QuizQuestion::MultipleChoiceQuestion < Quizzes::QuizQuestion::Bas
   def correct_answer_parts(user_answer)
     answer_text = user_answer.answer_text
     return nil if answer_text.nil?
+
     answer_id = answer_text.to_i
     answer = @question_data.answers.find { |a| a[:id] == answer_id }
 
     return 0 unless answer
+
     user_answer.answer_id = answer[:id] || answer[:answer_id]
-    answer[:weight] == 100 ? 1 : 0
+    (answer[:weight] == 100) ? 1 : 0
   end
 end
 

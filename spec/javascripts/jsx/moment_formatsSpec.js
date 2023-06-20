@@ -16,11 +16,11 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import moment_formats from 'moment_formats'
 import I18nStubber from 'helpers/I18nStubber'
+import {prepareFormats} from '../../../ui/boot/initializers/configureDateTimeMomentParser'
 
 QUnit.module('Moment formats', {
-  setup () {
+  setup() {
     I18nStubber.pushFrame()
     I18nStubber.setLocale('test')
     I18nStubber.stub('test', {
@@ -28,22 +28,22 @@ QUnit.module('Moment formats', {
       'date.formats.short': '%b %-d',
       'time.formats.tiny': '%l:%M%P',
       'time.formats.tiny_on_the_hour': '%l%P',
-      'time.event': '%{date} event %{time}'
+      'time.event': '%{date} event %{time}',
     })
   },
-  teardown () {
-    I18nStubber.popFrame()
-  }
+  teardown() {
+    I18nStubber.clear()
+  },
 })
 
 test('formatsForLocale include formats matching datepicker', () => {
-  const formats = moment_formats.formatsForLocale()
+  const formats = prepareFormats().map(x => x())
   ok(formats.includes('%b %-d, %Y %l:%M%P'))
   ok(formats.includes('%b %-d, %Y %l%P'))
 })
 
 test('formatsForLocale includes all event formats', () => {
-  const formats = moment_formats.formatsForLocale()
+  const formats = prepareFormats().map(x => x())
   ok(formats.includes('%b %-d, %Y event %l:%M%P'))
   ok(formats.includes('%b %-d event %l:%M%P'))
   ok(formats.includes('%b %-d, %Y event %l%P'))

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -15,10 +17,8 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper.rb')
-
 describe AddressBook::Empty do
-  before :each do
+  before do
     @address_book = AddressBook::Empty.new(user_model)
   end
 
@@ -46,7 +46,7 @@ describe AddressBook::Empty do
   describe "common_groups" do
     it "returns an empty hash" do
       other_user = user_model
-      expect(@address_book.common_courses(other_user)).to eql({})
+      expect(@address_book.common_groups(other_user)).to eql({})
     end
   end
 
@@ -66,9 +66,9 @@ describe AddressBook::Empty do
 
   describe "search_users" do
     it "returns an empty but paginatable collection" do
-      known_users = @address_book.search_users(search: 'Bob')
+      known_users = @address_book.search_users(search: "Bob")
       expect(known_users).to respond_to(:paginate)
-      expect(known_users.paginate(per_page: 1).size).to eql(0)
+      expect(known_users.paginate(per_page: 1).size).to be(0)
     end
   end
 

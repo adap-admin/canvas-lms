@@ -17,10 +17,11 @@
  */
 
 import jQuery from 'jquery'
+import 'jquery.cookie'
 
-import submitHtmlForm from 'jsx/theme_editor/submitHtmlForm'
+import submitHtmlForm from '@canvas/theme-editor/submitHtmlForm'
 
-let action, method, md5, csrfToken, form
+let action, method, md5, csrfToken
 
 QUnit.module('submitHtmlForm', {
   setup() {
@@ -31,7 +32,7 @@ QUnit.module('submitHtmlForm', {
     md5 = '0123456789abcdef0123456789abcdef'
     csrfToken = 'csrftoken'
     sandbox.stub(jQuery, 'cookie').returns(csrfToken)
-  }
+  },
 })
 
 function getForm() {

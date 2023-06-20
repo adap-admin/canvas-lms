@@ -35,7 +35,7 @@
           <%= render :partial => 'login/shared/header_logo' %>
           <div class="ic-Login-header__links">
             <%= render "login/canvas/login_banner" %>
-            <% if @domain_root_account.feature_enabled?(:course_catalog) %>
+            <% if @domain_root_account.enable_course_catalog? %>
               <a href="/search/all_courses" class="ic-Login__link">
                 <%= t('browse_courses', 'Browse courses') %>
               </a>
@@ -44,6 +44,7 @@
         </div>
 
         <div class="ic-Login__body">
+          <%= render "shared/login_fft_helper" %>
           <%= form_for :pseudonym_session, :url => url_for({ action: :create }.merge(params.slice(:id).to_unsafe_h)), :html => {:id => "login_form"} do |f| %>
             <h1 class="ui-helper-hidden-accessible">
               <%= t('log_in', 'Log In') %>
@@ -113,8 +114,11 @@
           <%= render :partial => 'shared/footer_links' %>
         </div>
         <a href="http://www.instructure.com" class="ic-Login-footer__logo-link" aria-label="By Instructure">
-          <%= render "login/canvas/instructure_logo.svg" %>
+          <%= render partial: "login/canvas/instructure_logo", formats: [:svg] %>
         </a>
+        <div id="footer-epilogue" class="ic-Login-footer__links">
+          <%= render :partial => 'shared/footer_epilogue' %>
+        </div>
     </footer>
     </div> <!-- end ic-Login__content -->
   </div>

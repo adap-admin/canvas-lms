@@ -1,5 +1,5 @@
-# encoding: UTF-8
-#
+# frozen_string_literal: true
+
 # Copyright (C) 2011 - present Instructure, Inc.
 #
 # This file is part of Canvas.
@@ -17,19 +17,16 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper.rb')
-
 describe Quizzes::QuizSubmissionAttempt do
-
   describe "#initialize" do
-    it "should assign number" do
-      attempt = Quizzes::QuizSubmissionAttempt.new(:number => 1)
+    it "assigns number" do
+      attempt = Quizzes::QuizSubmissionAttempt.new(number: 1)
       expect(attempt.number).to eq 1
     end
 
-    it "should assign versions" do
+    it "assigns versions" do
       versions = [1, 2, 3]
-      attempt = Quizzes::QuizSubmissionAttempt.new(:number => 1, :versions => versions)
+      attempt = Quizzes::QuizSubmissionAttempt.new(number: 1, versions:)
       expect(attempt.versions).to eq versions
     end
   end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -19,9 +21,14 @@ class AssignmentCreateEditPage
   class << self
     include SeleniumDependencies
 
+    # CSS Selectors
+    def submission_type_selector
+      "#assignment_submission_type"
+    end
+
     # Selectors
     def assignment_form
-      f('#edit_assignment_form')
+      f("#edit_assignment_form")
     end
 
     def assignment_name_textfield
@@ -29,23 +36,43 @@ class AssignmentCreateEditPage
     end
 
     def assignment_save_button
-      find_button('Save')
+      find_button("Save")
     end
 
     def save_publish_button
-      find_button('Save & Publish')
+      find_button("Save & Publish")
     end
 
     def points_possible
-      f('#assignment_points_possible')
+      f("#assignment_points_possible")
     end
 
     def display_grade_as
-      f('#assignment_grading_type')
+      f("#assignment_grading_type")
     end
 
     def submission_type
-      f('#assignment_submission_type')
+      f("#assignment_submission_type")
+    end
+
+    def limited_attempts_fieldset
+      f("#allowed_attempts_fields")
+    end
+
+    def limited_attempts_dropdown
+      f("#allowed-attempts-target select")
+    end
+
+    def limited_attempts_input
+      f("input[name='allowed_attempts']")
+    end
+
+    def increase_attempts_btn
+      f("button svg[name='IconArrowOpenUp']")
+    end
+
+    def decrease_attempts_btn
+      f("button svg[name='IconArrowOpenDown']")
     end
 
     # Moderated Grading Options
@@ -67,6 +94,14 @@ class AssignmentCreateEditPage
 
     def assignment_edit_permission_error_text
       f("#unauthorized_message")
+    end
+
+    def hide_from_gradebooks_checkbox
+      f("#assignment_hide_in_gradebook")
+    end
+
+    def omit_from_final_grade_checkbox
+      f("#assignment_omit_from_final_grade")
     end
 
     # Methods & Actions

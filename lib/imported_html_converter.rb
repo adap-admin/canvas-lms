@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,14 +18,15 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'nokogiri'
+require "nokogiri"
 
 class ImportedHtmlConverter
   include TextHelper
   include HtmlTextHelper
 
-  CONTAINER_TYPES = ['div', 'p', 'body']
-  LINK_ATTRS = ['rel', 'href', 'src', 'data', 'value', 'longdesc']
+  CONTAINER_TYPES = %w[div p body].freeze
+  LINK_ATTRS = %w[rel href src data value longdesc data-download-url].freeze
+  RCE_MEDIA_TYPES = %w[audio video].freeze
 
   attr_reader :link_parser, :link_resolver, :link_replacer
 
@@ -34,20 +37,33 @@ class ImportedHtmlConverter
     @link_replacer = Importers::LinkReplacer.new(migration)
   end
 
-  def convert(html, item_type, mig_id, field, opts={})
+  def convert(html, item_type, mig_id, field, opts = {})
     mig_id = mig_id.to_s
-    doc = Nokogiri::HTML(html || "")
+    doc = Nokogiri::HTML5(html || "")
+
+    # Replace source tags with iframes
+    doc.search("source[data-media-id]").each do |source|
+      next unless RCE_MEDIA_TYPES.include?(source.parent.name)
+
+      media_node = source.parent
+      media_node.name = "iframe"
+      media_node["src"] = source["src"]
+      source.remove
+    end
+
     doc.search("*").each do |node|
       LINK_ATTRS.each do |attr|
         @link_parser.convert_link(node, attr, item_type, mig_id, field)
       end
     end
 
-    node = doc.at_css('body')
+    node = doc.at_css("body")
     return "" unless node
+
     if opts[:remove_outer_nodes_if_one_child]
       while node.children.size == 1 && node.child.child
         break unless CONTAINER_TYPES.member?(node.child.name) && node.child.attributes.blank?
+
         node = node.child
       end
     end
@@ -77,5 +93,4 @@ class ImportedHtmlConverter
     Rails.logger.warn "attempting to translate invalid url: #{url}"
     false
   end
-
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 Instructure, Inc.
 #
@@ -16,53 +18,53 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../api_spec_helper')
+require_relative "../api_spec_helper"
 
 describe Api::V1::Collaboration do
   include Api::V1::Collaboration
 
   before(:once) do
-    @current_user  = user_with_pseudonym(:active_all => true)
+    @current_user = user_with_pseudonym(active_all: true)
     course = course_with_teacher(user: @current_user).course
-    @collaboration = ExternalToolCollaboration.new(:title => 'Test collaboration',
-                                       :description => 'Let us collaborate',
-                                       :type => 'ExternalToolCollaboration',
-                                       :url => 'https://google.com',
-                                       :user => @current_user)
+    @collaboration = ExternalToolCollaboration.new(title: "Test collaboration",
+                                                   description: "Let us collaborate",
+                                                   type: "ExternalToolCollaboration",
+                                                   url: "https://google.com",
+                                                   user: @current_user)
     @collaboration.context = course
-    @collaboration.data = {updateUrl: 'https://google.com'}
+    @collaboration.data = { updateUrl: "https://google.com" }
     @collaboration.save!
   end
 
-  it 'should properly serialize' do
+  it "properly serializes" do
     json = collaboration_json(@collaboration, @current_user, nil)
 
-    expect(json['id']).to eq @collaboration.id
-    expect(json['collaboration_type']).to eq @collaboration.collaboration_type
-    expect(json['document_id']).to eq @collaboration.document_id
-    expect(json['user_id']).to eq @collaboration.user_id
-    expect(json['context_id']).to eq @collaboration.context_id
-    expect(json['context_type']).to eq @collaboration.context_type
-    expect(json['url']).to eq @collaboration.url
-    expect(json['created_at']).to eq @collaboration.created_at
-    expect(json['updated_at']).to eq @collaboration.updated_at
-    expect(json['title']).to eq @collaboration.title
-    expect(json['description']).to eq @collaboration.description
-    expect(json['type']).to eq @collaboration.type
+    expect(json["id"]).to eq @collaboration.id
+    expect(json["collaboration_type"]).to eq @collaboration.collaboration_type
+    expect(json["document_id"]).to eq @collaboration.document_id
+    expect(json["user_id"]).to eq @collaboration.user_id
+    expect(json["context_id"]).to eq @collaboration.context_id
+    expect(json["context_type"]).to eq @collaboration.context_type
+    expect(json["url"]).to eq @collaboration.url
+    expect(json["created_at"]).to eq @collaboration.created_at
+    expect(json["updated_at"]).to eq @collaboration.updated_at
+    expect(json["title"]).to eq @collaboration.title
+    expect(json["description"]).to eq @collaboration.description
+    expect(json["type"]).to eq @collaboration.type
 
-    expect(json['data']).to eq nil
-    expect(json['deleted_at']).to eq nil
+    expect(json["data"]).to be_nil
+    expect(json["deleted_at"]).to be_nil
   end
 
-  it 'should include the owning users name' do
+  it "includes the owning users name" do
     json = collaboration_json(@collaboration, @current_user, nil)
 
-    expect(json['user_name']).to eq @current_user.name
+    expect(json["user_name"]).to eq @current_user.name
   end
 
-  it 'should include the update_url' do
+  it "includes the update_url" do
     json = collaboration_json(@collaboration, @current_user, nil)
 
-    expect(json['update_url']).to eq @collaboration.update_url
+    expect(json["update_url"]).to eq @collaboration.update_url
   end
 end

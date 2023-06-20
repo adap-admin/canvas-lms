@@ -17,14 +17,35 @@
  */
 
 import $ from 'jquery'
-import FindFlickrImageView from 'compiled/views/FindFlickrImageView'
+import FindFlickrImageView from '@canvas/rce/backbone/views/FindFlickrImageView'
 import 'helpers/jquery.simulate'
 
 const searchTerm = 'bunnies'
 const photoData = [
-  {id: 'noooooo', secret: 'whyyyyy', farm: 'moooo', owner: 'notyou', server: 'maneframe', needs_interstitial: 0},
-  {id: 'nooope', secret: 'sobbbbb', farm: 'sadface', owner: 'meeee', server: 'mwhahahah', needs_interstitial: 0},
-  {id: 'nsfwid', secret: 'nsfwsecret', farm: 'nsfwfarm', owner: 'nsfwowner', server: 'nsfwserver', needs_interstitial: 1}
+  {
+    id: 'noooooo',
+    secret: 'whyyyyy',
+    farm: 'moooo',
+    owner: 'notyou',
+    server: 'maneframe',
+    needs_interstitial: 0,
+  },
+  {
+    id: 'nooope',
+    secret: 'sobbbbb',
+    farm: 'sadface',
+    owner: 'meeee',
+    server: 'mwhahahah',
+    needs_interstitial: 0,
+  },
+  {
+    id: 'nsfwid',
+    secret: 'nsfwsecret',
+    farm: 'nsfwfarm',
+    owner: 'nsfwowner',
+    server: 'nsfwserver',
+    needs_interstitial: 1,
+  },
 ]
 
 function setupServerResponses() {
@@ -50,10 +71,10 @@ QUnit.module('FindFlickrImage', {
   teardown() {
     this.form.remove()
     this.server.restore()
-  }
+  },
 })
 
-test('render', function() {
+test('render', function () {
   expect(6)
   ok(this.form.length, 'flickr - form added to dom')
   ok(this.form.is(':visible'), 'flickr - form is visible')
@@ -65,7 +86,7 @@ test('render', function() {
   ok(button.is(':visible'), 'flickr - submit button form is visible')
 })
 
-test('search', function() {
+test('search', function () {
   expect(13)
   const input = $('input.flickrSearchTerm', this.form)
   const button = $('button[type=submit]', this.form)
@@ -77,10 +98,22 @@ test('search', function() {
 
   for (let idx = 0; idx <= 1; idx++) {
     ok(results.eq(idx).attr('data-fullsize').includes(photoData[idx].id), 'flickr - img src has id')
-    ok(results.eq(idx).attr('data-fullsize').includes(photoData[idx].secret), 'flickr - img src has secret')
-    ok(results.eq(idx).attr('data-fullsize').includes(photoData[idx].farm), 'flickr - img src has farm')
-    ok(results.eq(idx).attr('data-fullsize').includes(photoData[idx].server), 'flickr - img src has server')
+    ok(
+      results.eq(idx).attr('data-fullsize').includes(photoData[idx].secret),
+      'flickr - img src has secret'
+    )
+    ok(
+      results.eq(idx).attr('data-fullsize').includes(photoData[idx].farm),
+      'flickr - img src has farm'
+    )
+    ok(
+      results.eq(idx).attr('data-fullsize').includes(photoData[idx].server),
+      'flickr - img src has server'
+    )
     ok(results.eq(idx).attr('data-linkto').includes(photoData[idx].id), 'flickr - link has id')
-    ok(results.eq(idx).attr('data-linkto').includes(photoData[idx].owner), 'flickr - link has owner')
+    ok(
+      results.eq(idx).attr('data-linkto').includes(photoData[idx].owner),
+      'flickr - link has owner'
+    )
   }
 })

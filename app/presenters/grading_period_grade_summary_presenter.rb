@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -19,18 +21,18 @@ class GradingPeriodGradeSummaryPresenter < GradeSummaryPresenter
   attr_reader :grading_period_id
 
   def initialize(context, current_user, id_param, assignment_order: :due_at, grading_period_id:)
-    super(context, current_user, id_param, assignment_order: assignment_order)
+    super(context, current_user, id_param, assignment_order:)
     @grading_period_id = grading_period_id
   end
 
-  def assignments_visible_to_student
+  def assignments_for_student
+    includes = ["completed"]
+    includes << "inactive" if user_has_elevated_permissions?
     grading_period = GradingPeriod.for(@context).where(id: grading_period_id).first
-    grading_period.assignments_for_student(super, student)
+    grading_period.assignments_for_student(@context, super, student, includes:)
   end
 
   def groups
-    @groups ||= begin
-      assignments.uniq(&:assignment_group_id).map(&:assignment_group)
-    end
+    @groups ||= assignments.uniq(&:assignment_group_id).map(&:assignment_group)
   end
 end

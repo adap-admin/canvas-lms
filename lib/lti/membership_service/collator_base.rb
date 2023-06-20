@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -18,10 +20,15 @@
 
 module Lti::MembershipService
   class CollatorBase
-    attr_reader :next_page
+    attr_reader :next_page, :role, :per_page, :page, :context
 
-    def initialize
+    def initialize(context, opts = {})
+      per_page = opts[:per_page].to_i
       @next_page = true
+      @role = opts[:role]
+      @per_page = [((per_page > 0) ? per_page : Api.per_page), Api.max_per_page].min
+      @page = [opts[:page].to_i, 1].max
+      @context = context
     end
 
     def next_page?
@@ -29,17 +36,17 @@ module Lti::MembershipService
     end
 
     def memberships
-      raise 'Abstract Method'
+      raise "Abstract Method"
     end
 
     protected
 
     def scope
-      raise 'Abstract Method'
+      raise "Abstract Method"
     end
 
     def membership_type
-      raise 'Abstract Method'
+      raise "Abstract Method"
     end
 
     def bookmarked_collection

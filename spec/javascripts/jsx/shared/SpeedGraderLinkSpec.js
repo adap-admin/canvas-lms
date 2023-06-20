@@ -19,7 +19,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom'
 
-import SpeedGraderLink from 'jsx/shared/SpeedGraderLink'
+import SpeedGraderLink from '@canvas/speed-grader-link'
 
 QUnit.module('SpeedGraderLink', suiteHooks => {
   let $container
@@ -38,7 +38,7 @@ QUnit.module('SpeedGraderLink', suiteHooks => {
     context = {
       disabled: false,
       href: 'https://example.com',
-      disabledTip: ''
+      disabledTip: '',
     }
   })
 
@@ -72,5 +72,16 @@ QUnit.module('SpeedGraderLink', suiteHooks => {
     mountComponent()
     const tooltip = document.getElementById(getLink().getAttribute('aria-describedby'))
     strictEqual(tooltip.innerText, 'tooltip text')
+  })
+
+  test('has a class of "icon-speed-grader"', () => {
+    mountComponent()
+    strictEqual(getLink().className, 'icon-speed-grader')
+  })
+
+  test('takes optional classes', () => {
+    context.className = 'classA classB'
+    mountComponent()
+    strictEqual(getLink().className, 'icon-speed-grader classA classB')
   })
 })

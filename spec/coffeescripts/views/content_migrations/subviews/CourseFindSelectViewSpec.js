@@ -16,8 +16,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Backbone from 'Backbone'
-import CourseFindSelectView from 'compiled/views/content_migrations/subviews/CourseFindSelectView'
+import Backbone from '@canvas/backbone'
+import CourseFindSelectView from 'ui/features/content_migrations/backbone/views/subviews/CourseFindSelectView'
 import fakeENV from 'helpers/fakeENV'
 import assertions from 'helpers/assertions'
 
@@ -31,44 +31,44 @@ QUnit.module('CourseFindSelectView: #setSourceCourseId', {
         id: 5,
         term: 'Default Term',
         label: 'A',
-        enrollment_start: null
+        enrollment_start: null,
       },
       {
         id: 4,
         term: 'Spring 2016',
         label: 'B',
-        enrollment_start: '2016-01-01T07:00:00Z'
+        enrollment_start: '2016-01-01T07:00:00Z',
       },
       {
         id: 3,
         term: 'Spring 2016',
         label: 'A',
-        enrollment_start: '2016-01-01T07:00:00Z'
+        enrollment_start: '2016-01-01T07:00:00Z',
       },
       {
         id: 2,
         term: 'Fall 2016',
         label: 'B',
-        enrollment_start: '2016-10-01T09:00:00Z'
+        enrollment_start: '2016-10-01T09:00:00Z',
       },
       {
         id: 1,
         term: 'Fall 2016',
         label: 'A',
-        enrollment_start: '2016-10-01T09:00:00Z'
-      }
+        enrollment_start: '2016-10-01T09:00:00Z',
+      },
     ]
     return this.server.respondWith('GET', this.urlPattern, [
       200,
       {'Content-Type': 'application/json'},
-      JSON.stringify(this.courses)
+      JSON.stringify(this.courses),
     ])
   },
 
   teardown() {
     fakeENV.teardown()
     return this.server.restore()
-  }
+  },
 })
 
 test('it should be accessible', assert => {
@@ -77,7 +77,7 @@ test('it should be accessible', assert => {
   assertions.isAccessible(courseFindSelectView, done, {a11yReport: true})
 })
 
-test('Triggers "course_changed" when course is found by its id', function() {
+test('Triggers "course_changed" when course is found by its id', () => {
   const courseFindSelectView = new CourseFindSelectView({model: new Backbone.Model()})
   const course = {id: 42}
   courseFindSelectView.courses = [course]
@@ -88,11 +88,11 @@ test('Triggers "course_changed" when course is found by its id', function() {
   ok(sinonSpy.calledWith('course_changed', course), 'Triggered course_changed with a course')
 })
 
-test('Sorts courses by most recent term to least, then alphabetically', function() {
+test('Sorts courses by most recent term to least, then alphabetically', function () {
   const courseFindSelectView = new CourseFindSelectView({
     model: new Backbone.Model(),
     current_user_id: 101,
-    show_select: true
+    show_select: true,
   })
 
   courseFindSelectView.courses = this.courses

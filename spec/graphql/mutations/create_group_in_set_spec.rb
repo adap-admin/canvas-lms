@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -16,7 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + "/../../spec_helper")
 require_relative "../graphql_spec_helper"
 
 describe Mutations::CreateGroupInSet do
@@ -46,7 +47,7 @@ describe Mutations::CreateGroupInSet do
   end
 
   it "works" do
-    result = CanvasSchema.execute(mutation_str, context: {current_user: @teacher})
+    result = CanvasSchema.execute(mutation_str, context: { current_user: @teacher })
 
     new_group_id = result.dig(*%w[data createGroupInSet group _id])
     expect(Group.find(new_group_id).name).to eq "zxcv"
@@ -55,14 +56,14 @@ describe Mutations::CreateGroupInSet do
   end
 
   it "fails gracefully for invalid group sets" do
-    invalid_group_set_id = 111111111111111111
-    result = CanvasSchema.execute(mutation_str(group_set_id: invalid_group_set_id), context: {current_user: @student})
+    invalid_group_set_id = 111_111_111_111_111_111
+    result = CanvasSchema.execute(mutation_str(group_set_id: invalid_group_set_id), context: { current_user: @student })
     expect(result["errors"]).not_to be_nil
     expect(result.dig(*%w[data createGroupInSet])).to be_nil
   end
 
   it "requires permission" do
-    result = CanvasSchema.execute(mutation_str, context: {current_user: @student})
+    result = CanvasSchema.execute(mutation_str, context: { current_user: @student })
     expect(result["errors"]).not_to be_nil
     expect(result.dig(*%w[data createGroupInSet])).to be_nil
   end
@@ -71,7 +72,7 @@ describe Mutations::CreateGroupInSet do
     it "returns validation errors" do
       result = CanvasSchema.execute(
         mutation_str(name: "!" * (Group.maximum_string_length + 1)),
-        context: {current_user: @teacher}
+        context: { current_user: @teacher }
       )
 
       # top-level errors are nil since this is a user error

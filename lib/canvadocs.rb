@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -15,18 +17,12 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'cgi'
-require 'net/http'
-require 'net/https'
-require 'json'
-
-require_dependency 'canvadocs/session'
 module Canvadocs
   extend CanvadocsHelper
-  RENDER_O365     = 'office_365'
-  RENDER_BOX      = 'box_view'
-  RENDER_CROCODOC = 'crocodoc'
-  RENDER_PDFJS    = 'pdfjs'
+  RENDER_O365     = "office_365"
+  RENDER_BOX      = "box_view"
+  RENDER_CROCODOC = "crocodoc"
+  RENDER_PDFJS    = "pdfjs"
 
   # Public: A small ruby client that wraps the Box View api.
   #
@@ -69,11 +65,11 @@ module Canvadocs
     # Returns a hash containing the document's id and status
     def upload(obj, extra_params = {})
       params = if obj.is_a?(File)
-        { file: obj }.merge(extra_params)
-        raise Canvadocs::Error, "TODO: support raw files"
-      else
-        { url: obj.to_s }.merge(extra_params)
-      end
+                 { file: obj }.merge(extra_params)
+                 raise Canvadocs::Error, "TODO: support raw files"
+               else
+                 { url: obj.to_s }.merge(extra_params)
+               end
 
       raw_body = api_call(:post, "documents", params)
       JSON.parse(raw_body)
@@ -100,9 +96,10 @@ module Canvadocs
     #   # => { "id": "CFAmd3Qjm_2ehBI7HyndnXKsDrQXJ7jHCuzcRv" }
     #
     # Returns a hash containing the session id
-    def session(document_id, opts={})
-      raw_body = api_call(:post, "sessions",
-                          opts.merge(:document_id => document_id))
+    def session(document_id, opts = {})
+      raw_body = api_call(:post,
+                          "sessions",
+                          opts.merge(document_id:))
       JSON.parse(raw_body)
     end
 
@@ -118,7 +115,6 @@ module Canvadocs
     def view(session_id)
       "#{@url}/sessions/#{session_id}/view?theme=dark"
     end
-
 
     # -- API Glue --
 
@@ -138,18 +134,23 @@ module Canvadocs
     #   # => { "id": 1234 }
     #
     # Returns the json parsed response body of the call
-    def api_call(method, endpoint, params={})
+    def api_call(method, endpoint, params = {})
       # dispatch to the right method, with the full path (/api/v2 + endpoint)
-      request = self.send("format_#{method}", "#{@url.path}/#{endpoint}", params)
+      request = send("format_#{method}", "#{@url.path}/#{endpoint}", params)
       request["Authorization"] = "Token #{token}"
       response = @http.request(request)
 
-      unless response.code =~ /\A20./
-        raise Canvadocs::Error, "HTTP Error #{response.code}: #{response.body}"
+      unless /\A20./.match?(response.code)
+        err_message = "HTTP Error #{response.code}: #{response.body}"
+        klass = Canvadocs::HttpError
+        klass = Canvadocs::ServerError if response.code.to_s == "500"
+        klass = Canvadocs::BadGateway if response.code.to_s == "502"
+        klass = Canvadocs::HeavyLoadError if %w[503 504].include? response.code.to_s
+        klass = Canvadocs::BadRequest if response.code.to_s == "400"
+        raise klass, err_message
       end
       response.body
     end
-
 
     # Internal: Format and create a Net::HTTP get request, with query
     # parameters.
@@ -166,7 +167,7 @@ module Canvadocs
     #
     # Returns a Net::HTTP::Get object for the path with query params
     def format_get(path, params)
-      query = params.map { |k,v| "#{k}=#{CGI::escape(v.to_s)}" }.join("&")
+      query = params.map { |k, v| "#{k}=#{CGI.escape(v.to_s)}" }.join("&")
       Net::HTTP::Get.new("#{path}?#{query}")
     end
 
@@ -184,14 +185,24 @@ module Canvadocs
     #
     # Returns a Net::HTTP::Post object for the path with json-formatted params
     def format_post(path, params)
-      Net::HTTP::Post.new(path).tap { |req|
+      Net::HTTP::Post.new(path).tap do |req|
         req["Content-Type"] = "application/json"
         req.body = params.to_json
-      }
+      end
     end
   end
 
   class Error < StandardError; end
+
+  class HttpError < Error; end
+
+  class ServerError < HttpError; end
+
+  class BadGateway < HttpError; end
+
+  class BadRequest < HttpError; end
+
+  class HeavyLoadError < HttpError; end
 
   def self.config
     PluginSetting.settings_for_plugin(:canvadocs)
@@ -210,23 +221,56 @@ module Canvadocs
     annotations_supported? && Canvas::Plugin.value_to_boolean(config["hijack_crocodoc_sessions"])
   end
 
-  def self.user_session_params(current_user, attachment: nil, submission: nil)
+  def self.user_session_params(current_user, attachment: nil, submission: nil, attempt: nil)
     if submission.nil?
       return {} if attachment.nil?
+
       submission = Submission.find_by(
-        id: AttachmentAssociation.where(context_type: 'Submission', attachment: attachment).select(:context_id)
+        id: AttachmentAssociation.where(context_type: "Submission", attachment:).select(:context_id)
       )
       return {} if submission.nil?
     end
     assignment = submission.assignment
     enrollments = assignment.course.enrollments.index_by(&:user_id)
     session_params = current_user_session_params(submission, current_user, enrollments)
+
+    # Graders may not have access to other graders' annotations if the
+    # assignment is set that way.
     if assignment.moderated_grading?
       session_params[:user_filter] = moderated_grading_user_filter(submission, current_user, enrollments)
       session_params[:restrict_annotations_to_user_filter] = true
     elsif assignment.anonymize_students?
       session_params[:user_filter] = anonymous_unmoderated_user_filter(submission, current_user, enrollments)
       session_params[:restrict_annotations_to_user_filter] = current_user.id == submission.user_id
+    end
+
+    # Set visibility for students and peer reviewers.
+    unless submission.user_can_read_grade?(current_user)
+      session_params[:restrict_annotations_to_user_filter] = true
+      session_params[:user_filter] ||= [
+        user_filter_entry(
+          current_user,
+          submission,
+          role: canvadocs_user_role(submission.assignment.course, current_user, enrollments),
+          anonymize: false
+        )
+      ]
+
+      if assignment.peer_reviews?
+        session_params[:user_filter] = session_params[:user_filter] | peer_review_user_filter(submission, current_user, enrollments)
+      end
+    end
+
+    # For Student Annotation assignments, the Canvadoc won't have a
+    # relationship with the Submission through CanvadocsSubmission, so we set
+    # a blank user_filter here to avoid the default of restricting to only the
+    # viewing user's annotations (default is in Canvadocs::Session). If we the
+    # user_filter is nil here, then we know we didn't have any other reason to
+    # be restrictive.
+    submission_type = attempt ? submission.type_for_attempt(attempt) : submission.submission_type
+    if session_params[:user_filter].nil? && submission_type == "student_annotation"
+      session_params[:restrict_annotations_to_user_filter] = false
+      session_params[:user_filter] = []
     end
 
     session_params
@@ -248,22 +292,51 @@ module Canvadocs
       # Not calling submission.anonymous_identities here because we want to include
       # anonymous_ids for moderation_graders that have not yet taken a slot
       anonymous_id = if submission.user_id == current_user.id
-        submission.anonymous_id
-      elsif submission.assignment.moderated_grading?
-        submission.assignment.moderation_graders.find_by(user: current_user)&.anonymous_id
-      end
+                       submission.anonymous_id
+                     elsif submission.assignment.moderated_grading?
+                       submission.assignment.moderation_graders.find_by(user: current_user)&.anonymous_id
+                     end
 
       current_user_params[:user_anonymous_id] = anonymous_id if anonymous_id
       current_user_params
     end
 
-    def moderated_grading_user_filter(submission, current_user, enrollments)
-      submission.moderation_whitelist_for_user(current_user).map do |user|
+    def peer_review_user_filter(submission, current_user, enrollments)
+      # Submitter, instructors, and admins should always see assessors' annotations.
+      is_instructor = submission.course.participating_instructors.include?(current_user)
+      is_admin = submission.course.account_membership_allows(current_user)
+      users_for_filter = if current_user == submission.user || is_instructor || is_admin
+                           User.where(id: submission.assessment_requests.pluck(:assessor_id)).to_a
+                         else
+                           []
+                         end
+
+      # The current user's annotations should always be visible.
+      users_for_filter.push(current_user)
+
+      # When the submission is for a Student Annotation assignment, the
+      # annotations are the submission, so add the submitter.
+      if submission.submission_type == "student_annotation"
+        users_for_filter.push(submission.user)
+      end
+
+      users_for_filter.map do |user|
         user_filter_entry(
           user,
           submission,
           role: canvadocs_user_role(submission.assignment.course, user, enrollments),
-          anonymize: anonymize_user_for_moderated_assignment?(user, current_user, submission),
+          anonymize: submission.assignment.anonymous_peer_reviews?
+        )
+      end
+    end
+
+    def moderated_grading_user_filter(submission, current_user, enrollments)
+      submission.moderation_allow_list_for_user(current_user).map do |user|
+        user_filter_entry(
+          user,
+          submission,
+          role: canvadocs_user_role(submission.assignment.course, user, enrollments),
+          anonymize: anonymize_user_for_moderated_assignment?(user, current_user, submission)
         )
       end
     end
@@ -291,15 +364,16 @@ module Canvadocs
     def user_filter_entry(user, submission, role:, anonymize:)
       if anonymize
         id = submission.anonymous_identities.dig(user.id, :id).to_s
-        type = 'anonymous'
+        type = "anonymous"
         name = submission.anonymous_identities.dig(user.id, :name)
       else
-        id = user.global_id.to_s
-        type = 'real'
-        name = canvadocs_user_name(user)
+        filter_user = submission.observer?(user) ? submission.user : user
+        id = filter_user.global_id.to_s
+        type = "real"
+        name = canvadocs_user_name(filter_user)
       end
 
-      { id: id, type: type, role: role, name: name }
+      { id:, type:, role:, name: }
     end
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -20,31 +22,31 @@ module Types
   class GroupSetType < ApplicationObjectType
     graphql_name "GroupSet"
 
-    alias set object
+    alias_method :set, :object
 
     implements GraphQL::Types::Relay::Node
+    implements Interfaces::LegacyIDInterface
 
     global_id_field :id
-    field :_id, ID, "legacy canvas id", method: :id, null: false
 
     field :name, String, null: true
 
     class SelfSignupPolicyType < BaseEnum
       graphql_name "SelfSignupPolicy"
-      description <<~DESC
+      description <<~MD
         Determines if/how a student may join a group. A student can belong to
         only one group per group set at a time.
-      DESC
+      MD
 
       value "enabled", "students may join any group", value: "enabled"
       value "restricted", "students may join a group in their section", value: "restricted"
       value "disabled", "self signup is not allowed"
     end
 
-    field :member_limit, Integer, <<~DESC, method: :group_limit, null: true
+    field :member_limit, Integer, <<~MD, method: :group_limit, null: true
       Sets a cap on the number of members in the group.  Only applies when
       self-signup is enabled.
-    DESC
+    MD
 
     field :self_signup, SelfSignupPolicyType, null: false
     def self_signup
@@ -63,14 +65,30 @@ module Types
 
     field :groups_connection, GroupType.connection_type, null: true
     def groups_connection
-      Loaders::AssociationLoader.for(GroupCategory, :context).load(set).then {
+      Loaders::AssociationLoader.for(GroupCategory, :context).load(set).then do
         # this permission matches the REST api, but is probably too strict.
         # students are able to see groups in the canvas ui, so probably should
         # be able to see them here too
-        set.context.grants_right?(current_user, :manage_groups) ?
-          set.groups.active.by_name :
+        if set.context.grants_any_right?(current_user, :manage_groups, *RoleOverride::GRANULAR_MANAGE_GROUPS_PERMISSIONS)
+          set.groups.active.by_name
+        else
           nil
-      }
+        end
+      end
+    end
+
+    field :current_group, GroupType, null: true
+    def current_group
+      load_association(:groups).then do
+        object.groups.active.find { |group| group.has_member?(current_user) }
+      end
+    end
+
+    field :sis_id, String, null: true
+    def sis_id
+      load_association(:root_account).then do |root_account|
+        set.sis_source_id if root_account.grants_any_right?(current_user, :read_sis, :manage_sis)
+      end
     end
   end
 end

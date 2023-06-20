@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -41,7 +43,7 @@ module CanvasQuizStatistics::Analyzers
     #
     # @return [Integer]
     metric :graded do |responses|
-      responses.select { |r| r[:correct] == 'defined' }.length
+      responses.select { |r| r[:correct] == "defined" }.length
     end
 
     # The number of students who got graded with a full score.
@@ -50,7 +52,7 @@ module CanvasQuizStatistics::Analyzers
     metric :full_credit do |responses|
       full_credit = @question_data[:points_possible].to_f
 
-      responses.select { |response| response[:points].to_f >= full_credit }.length
+      responses.count { |response| response[:points].to_f >= full_credit }
     end
 
     # A set of scores and the number of students who received them.
@@ -71,10 +73,9 @@ module CanvasQuizStatistics::Analyzers
       responses.each { |response| point_distribution[response[:points]] += 1 }
 
       point_distribution.keys.map do |score|
-        { score: score, count: point_distribution[score] }
+        { score:, count: point_distribution[score] }
       end.sort_by { |v| v[:score] || -1 }
     end
-
 
     # Statistics for answers which scored specific values
     #
@@ -88,6 +89,9 @@ module CanvasQuizStatistics::Analyzers
     #     {
     #       // Number of students who picked this answer.
     #       "responses": 3,
+    #
+    #       // The ids of the students who scored this value.
+    #       "user_ids": [100, 101, 102],
     #
     #       // The names of the students who scored this value.
     #       "user_names": ["John", "Jim", "Jenny"],
@@ -108,8 +112,9 @@ module CanvasQuizStatistics::Analyzers
     # }
     # ```
     metric :answers do |responses|
-      answers = Hash.new do |h,k|
+      answers = Hash.new do |h, k|
         h[k] = {
+          user_ids: [],
           user_names: [],
           responses: 0
         }
@@ -123,34 +128,34 @@ module CanvasQuizStatistics::Analyzers
 
       graded_responses = []
       ungraded_responses = []
-      responses.each {|r| r[:correct] == 'defined' ? graded_responses << r : ungraded_responses << r}
-      ranked_responses_by_score = graded_responses.sort_by {|h| h[:points]}
+      responses.each { |r| (r[:correct] == "defined") ? graded_responses << r : ungraded_responses << r }
+      ranked_responses_by_score = graded_responses.sort_by { |h| h[:points] }
 
       previous_floor = ranked_responses_by_score.length
       buckets.each do |name, cutoff|
         floor = (cutoff * ranked_responses_by_score.length).round
-        floor_score = ranked_responses_by_score[floor].try{|h| h[:points]}
+        floor_score = ranked_responses_by_score[floor].try { |h| h[:points] }
 
         # include all tied users in this bucket
         floor -= 1 while (floor > 0) && (ranked_responses_by_score[floor - 1][:points] == floor_score)
 
         # Set bucket for selected buckets
-        ranked_responses_by_score[floor...previous_floor].map {|r| r[:performance_bucket] = name.to_s}
+        ranked_responses_by_score[floor...previous_floor].map { |r| r[:performance_bucket] = name.to_s }
         previous_floor = floor
       end
 
-      ungraded_responses.each {|r| r[:performance_bucket] = "ungraded"}
+      ungraded_responses.each { |r| r[:performance_bucket] = "ungraded" }
 
-      sorted_graded_responses = graded_responses.sort_by {|h| h[:performance_bucket]}.reverse
+      sorted_graded_responses = graded_responses.sort_by { |h| h[:performance_bucket] }.reverse
 
       (sorted_graded_responses + ungraded_responses).each do |response|
-
         hash = answers[response[:performance_bucket]]
         hash[:id] ||= response[:performance_bucket]
         hash[:score] ||= response[:points]
         # This will indicate correct if any point value reaches 100%
         hash[:full_credit] ||= response[:points].to_f >= @question_data[:points_possible].to_f
 
+        hash[:user_ids] << response[:user_id]
         hash[:user_names] << response[:user_name]
         hash[:responses] += 1
       end

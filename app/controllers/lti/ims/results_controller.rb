@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -15,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-module Lti::Ims
+module Lti::IMS
   # @API Result
   #
   # Result API for IMS Assignment and Grade Services
@@ -62,7 +64,7 @@ module Lti::Ims
     before_action :verify_line_item_in_context
     before_action :verify_result_in_line_item, only: %i[show]
 
-    MIME_TYPE = 'application/vnd.ims.lis.v2.resultcontainer+json'.freeze
+    MIME_TYPE = "application/vnd.ims.lis.v2.resultcontainer+json"
 
     # @API Show a collection of Results
     #
@@ -76,8 +78,8 @@ module Lti::Ims
     def index
       render(json: [], content_type: MIME_TYPE) and return if user.present? && !context.user_is_student?(user)
 
-      results = Lti::Result.active.where(line_item: line_item)
-      results = results.where(user: user).preload(:user) if params.key?(:user_id)
+      results = Lti::Result.active.where(line_item:).preload(:assignment, :submission)
+      results = results.where(user:).preload(:user) if params.key?(:user_id)
       results = Api.paginate(results, self, "#{line_item_url}/results", pagination_args)
       render json: results_collection(results), content_type: MIME_TYPE
     end
@@ -88,9 +90,8 @@ module Lti::Ims
     #
     # @returns Result
     def show
-      render json: Lti::Ims::ResultsSerializer.new(result, line_item_url).as_json, content_type: MIME_TYPE
+      render json: Lti::IMS::ResultsSerializer.new(result, line_item_url).as_json, content_type: MIME_TYPE
     end
-
 
     private
 
@@ -106,7 +107,15 @@ module Lti::Ims
     end
 
     def line_item_url
-      lti_line_item_show_url(course_id: params[:course_id], id: params[:line_item_id])
+      if line_item.root_account.feature_enabled?(:consistent_ags_ids_based_on_account_principal_domain)
+        lti_line_item_show_url(
+          host: line_item.root_account.domain,
+          course_id: params[:course_id],
+          id: params[:line_item_id]
+        )
+      else
+        lti_line_item_show_url(course_id: params[:course_id], id: params[:line_item_id])
+      end
     end
 
     def result
@@ -115,7 +124,7 @@ module Lti::Ims
 
     def results_collection(results)
       results.map do |result|
-        Lti::Ims::ResultsSerializer.new(result, line_item_url).as_json
+        Lti::IMS::ResultsSerializer.new(result, line_item_url).as_json
       end
     end
   end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -52,7 +54,7 @@ module AuthenticationProvider::PluginSettings
       # or a parent
       mod = Module.new
       settings_hash.each do |(accessor, setting)|
-        mod.module_eval <<-RUBY, __FILE__, __LINE__ + 1
+        mod.module_eval <<~RUBY, __FILE__, __LINE__ + 1
           def #{accessor}
             self.class.globally_configured? ? settings_from_plugin[#{setting.inspect}] : super
           end

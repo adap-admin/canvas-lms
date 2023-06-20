@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -21,7 +23,7 @@ class AddWorkflowStateIndexToSisBatches < ActiveRecord::Migration[5.1]
   disable_ddl_transaction!
 
   def change
-    add_index :sis_batches, [:account_id, :workflow_state, :created_at], algorithm: :concurrently, name: "index_sis_batches_workflow_state_for_accounts"
+    add_index :sis_batches, %i[account_id workflow_state created_at], algorithm: :concurrently, name: "index_sis_batches_workflow_state_for_accounts"
     remove_index :sis_batches, name: "index_sis_batches_pending_for_accounts"
   end
 end

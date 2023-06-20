@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,11 +18,10 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/../views_helper')
+require_relative "../views_helper"
 
-describe "/users/user_dashboard" do
-  it "should render" do
+describe "users/user_dashboard" do
+  it "renders" do
     course_with_student
     view_context
     assign(:courses, [@course])
@@ -34,7 +35,7 @@ describe "/users/user_dashboard" do
     expect(response).not_to be_nil
   end
 
-  it "should show announcements to users with no enrollments" do
+  it "shows announcements to users with no enrollments" do
     user_factory
     view_context
     assign(:courses, [])
@@ -43,10 +44,33 @@ describe "/users/user_dashboard" do
     assign(:topics, [])
     assign(:upcoming_events, [])
     assign(:stream_items, [])
-    assign(:announcements, [AccountNotification.create(:message => 'hi', :start_at => Date.today - 1.day,
-                                                          :end_at => Date.today + 2.days, :user => User.create!,
-                                                          :subject => "My Global Announcement", :account => Account.default)])
+    assign(:announcements, [AccountNotification.create(message: "hi",
+                                                       start_at: Time.zone.today - 1.day,
+                                                       end_at: Time.zone.today + 2.days,
+                                                       user: User.create!,
+                                                       subject: "My Global Announcement",
+                                                       account: Account.default)])
     render "users/user_dashboard"
-    expect(response.body).to match /My Global Announcement/
+    expect(response.body).to match(/My\sGlobal\sAnnouncement/)
+    expect(response.body).to match(/(This\sis\sa\smessage\sfrom\s<b>Default\sAccount)/)
+  end
+
+  it "shows announcements (site_admin) to users with no enrollments" do
+    user_factory
+    view_context
+    assign(:courses, [])
+    assign(:enrollments, [])
+    assign(:group_memberships, [])
+    assign(:topics, [])
+    assign(:upcoming_events, [])
+    assign(:stream_items, [])
+    assign(:announcements, [AccountNotification.create(message: "hi",
+                                                       start_at: Time.zone.today - 1.day,
+                                                       end_at: Time.zone.today + 2.days,
+                                                       user: User.create!,
+                                                       subject: "My Global Announcement",
+                                                       account: Account.site_admin)])
+    render "users/user_dashboard"
+    expect(response.body).to match(/(This\sis\sa\smessage\sfrom\s<b>Canvas\sAdministration)/)
   end
 end

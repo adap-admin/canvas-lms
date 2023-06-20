@@ -17,18 +17,15 @@
  */
 
 import $ from 'jquery'
-import _ from 'underscore'
-import 'compiled/jquery/mediaCommentThumbnail'
+import '@canvas/media-comments/jquery/mediaCommentThumbnail'
+
+const awhile = () => new Promise(resolve => setTimeout(resolve, 2))
 
 QUnit.module('mediaCommentThumbnail', {
   setup() {
-    // flop out the _.defer function to just call directly down to the passed
-    // function reference. this helps the tests run in a synchronous order
-    // internally so asserts can work like we expect.
-    sandbox.stub(_, 'defer').callsFake((func, ...args) => func(...Array.from(args || [])))
     window.INST.kalturaSettings = {
       resource_domain: 'example.com',
-      partner_id: '12345'
+      partner_id: '12345',
     }
     const mediaComment = $(`
       <a
@@ -48,12 +45,13 @@ QUnit.module('mediaCommentThumbnail', {
   teardown() {
     window.INST.kalturaSettings = null
     $('#fixtures').empty()
-  }
+  },
 })
 
-test('creates a thumbnail span with a background image URL generated from kaltura settings and media id', function() {
+test('creates a thumbnail span with a background image URL generated from kaltura settings and media id', async function () {
   // emulating the call from enhanceUserContent() in instructure.js
   $('.instructure_inline_media_comment', this.$fixtures).mediaCommentThumbnail('normal')
+  await awhile()
   equal($('.media_comment_thumbnail', this.$fixtures).length, 1)
   ok(
     $('.media_comment_thumbnail', this.$fixtures)
@@ -65,15 +63,19 @@ test('creates a thumbnail span with a background image URL generated from kaltur
   )
 })
 
-test('creates screenreader text describing media comment', function() {
+test('creates screenreader text describing media comment', async function () {
   $('.instructure_inline_media_comment', this.$fixtures).mediaCommentThumbnail('normal')
-  const screenreaderText = document.querySelector('.media_comment_thumbnail .screenreader-only').innerText
+  await awhile()
+  const screenreaderText = document.querySelector(
+    '.media_comment_thumbnail .screenreader-only'
+  ).innerText
   strictEqual(screenreaderText, 'Play media comment by Tom from Oct 22 at 7:10pm.')
 })
 
-test('creates generic screenreader text if no authoring info provided', function() {
+test('creates generic screenreader text if no authoring info provided', async function () {
   this.$fixtures.html('')
-  this.$fixtures.append($(`
+  this.$fixtures.append(
+    $(`
     <a
       id="media_comment_23"
       class="instructure_inline_media_comment video_comment"
@@ -81,8 +83,12 @@ test('creates generic screenreader text if no authoring info provided', function
     >
       this is a media comment
     </a>
-  `))
+  `)
+  )
   $('.instructure_inline_media_comment', this.$fixtures).mediaCommentThumbnail('normal')
-  const screenreaderText = document.querySelector('.media_comment_thumbnail .screenreader-only').innerText
+  await awhile()
+  const screenreaderText = document.querySelector(
+    '.media_comment_thumbnail .screenreader-only'
+  ).innerText
   strictEqual(screenreaderText, 'Play media comment.')
 })

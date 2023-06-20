@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -16,10 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'account_reports/report_helper'
-
 module AccountReports
-
   class CourseReports
     include ReportHelper
 
@@ -29,9 +28,14 @@ module AccountReports
     end
 
     def default_courses
-      root_account.all_courses.
-        select([:id, :sis_source_id, :name, :course_code, :start_at,
-                :conclude_at, :restrict_enrollments_to_course_dates])
+      root_account.all_courses
+                  .select(%i[id
+                             sis_source_id
+                             name
+                             course_code
+                             start_at
+                             conclude_at
+                             restrict_enrollments_to_course_dates])
     end
 
     def recently_deleted
@@ -44,7 +48,7 @@ module AccountReports
     end
 
     def unpublished_courses
-      csv(default_courses.where(:workflow_state => ['claimed', 'created']))
+      csv(default_courses.where(workflow_state: ["claimed", "created"]))
     end
 
     def course_storage
@@ -52,21 +56,19 @@ module AccountReports
       courses = add_course_sub_account_scope(courses)
       courses = add_term_scope(courses)
 
-
       headers = []
-      headers << I18n.t('id')
-      headers << I18n.t('sis id')
-      headers << I18n.t('short name')
-      headers << I18n.t('name')
-      headers << I18n.t('account id')
-      headers << I18n.t('account sis id')
-      headers << I18n.t('account name')
-      headers << I18n.t('storage used in MB')
-      headers << I18n.t('sum of all files in MB')
+      headers << I18n.t("id")
+      headers << I18n.t("sis id")
+      headers << I18n.t("short name")
+      headers << I18n.t("name")
+      headers << I18n.t("account id")
+      headers << I18n.t("account sis id")
+      headers << I18n.t("account name")
+      headers << I18n.t("storage used in MB")
+      headers << I18n.t("sum of all files in MB")
       write_report headers do |csv|
-
         total = courses.count(:all)
-        Shackles.activate(:master) { AccountReport.where(id: @account_report.id).update_all(total_lines: total) }
+        GuardRail.activate(:primary) { AccountReport.where(id: @account_report.id).update_all(total_lines: total) }
 
         courses.find_each do |c|
           row = []
@@ -92,16 +94,15 @@ module AccountReports
       courses = add_term_scope(courses)
 
       headers = []
-      headers << I18n.t('#account_reports.report_header_id', 'id')
-      headers << I18n.t('#account_reports.report_header_sis_id', 'sis id')
-      headers << I18n.t('#account_reports.report_header_short_name', 'short name')
-      headers << I18n.t('#account_reports.report_header_name', 'name')
-      headers << I18n.t('#account_reports.report_header_start_date', 'start date')
-      headers << I18n.t('#account_reports.report_header_end_date', 'end date')
+      headers << I18n.t("#account_reports.report_header_id", "id")
+      headers << I18n.t("#account_reports.report_header_sis_id", "sis id")
+      headers << I18n.t("#account_reports.report_header_short_name", "short name")
+      headers << I18n.t("#account_reports.report_header_name", "name")
+      headers << I18n.t("#account_reports.report_header_start_date", "start date")
+      headers << I18n.t("#account_reports.report_header_end_date", "end date")
       write_report headers do |csv|
-
         total = courses.count(:all)
-        Shackles.activate(:master) { AccountReport.where(id: @account_report.id).update_all(total_lines: total) }
+        GuardRail.activate(:primary) { AccountReport.where(id: @account_report.id).update_all(total_lines: total) }
 
         courses.find_each do |c|
           row = []
@@ -123,16 +124,16 @@ module AccountReports
       end
     end
 
-    def unused_courses()
-      courses = root_account.all_courses.active.
-        select("courses.id, courses.name, courses.course_code,
+    def unused_courses
+      courses = root_account.all_courses.active
+                            .select("courses.id, courses.name, courses.course_code,
                 courses.sis_source_id, courses.created_at,
            CASE WHEN courses.workflow_state = 'claimed' THEN 'unpublished'
                 WHEN courses.workflow_state = 'created' THEN 'unpublished'
                 WHEN courses.workflow_state = 'completed' THEN 'concluded'
                 WHEN courses.workflow_state = 'available' THEN 'active'
-            END AS course_state").
-        where("NOT EXISTS (SELECT NULL
+            END AS course_state")
+                            .where("NOT EXISTS (SELECT NULL
                            FROM #{Assignment.quoted_table_name} a
                            WHERE a.context_id = courses.id
                              AND a.context_type = 'Course'
@@ -166,12 +167,12 @@ module AccountReports
       courses = add_course_sub_account_scope(courses)
 
       headers = []
-      headers << I18n.t('#account_reports.report_header_course_id', 'course id')
-      headers << I18n.t('#account_reports.report_header_course_sis_id', 'course sis id')
-      headers << I18n.t('#account_reports.report_header_short_name', 'short name')
-      headers << I18n.t('#account_reports.report_header_long_name', 'long name')
-      headers << I18n.t('#account_reports.report_header_status', 'status')
-      headers << I18n.t('#account_reports.report_header_created_at', 'created at')
+      headers << I18n.t("#account_reports.report_header_course_id", "course id")
+      headers << I18n.t("#account_reports.report_header_course_sis_id", "course sis id")
+      headers << I18n.t("#account_reports.report_header_short_name", "short name")
+      headers << I18n.t("#account_reports.report_header_long_name", "long name")
+      headers << I18n.t("#account_reports.report_header_status", "status")
+      headers << I18n.t("#account_reports.report_header_created_at", "created at")
 
       write_report headers do |csv|
         courses.find_each do |c|
@@ -187,5 +188,4 @@ module AccountReports
       end
     end
   end
-
 end

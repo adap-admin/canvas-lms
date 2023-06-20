@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -30,5 +32,5 @@ class Quizzes::QuizStudentVisibility < ActiveRecord::Base
   end
 
   # readonly? is not checked in destroy though
-  before_destroy { |record| raise ActiveRecord::ReadOnlyRecord }
+  before_destroy { raise ActiveRecord::ReadOnlyRecord }
 end

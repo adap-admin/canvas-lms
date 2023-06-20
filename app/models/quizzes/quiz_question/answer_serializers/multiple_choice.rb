@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -17,7 +19,6 @@
 
 module Quizzes::QuizQuestion::AnswerSerializers
   class MultipleChoice < Quizzes::QuizQuestion::AnswerSerializers::AnswerSerializer
-
     # Select an answer from the set of available answers.
     #
     # Serialization request will be rejected if:
@@ -38,7 +39,7 @@ module Quizzes::QuizQuestion::AnswerSerializers
       answer_id = Util.to_integer answer_id
 
       if answer_id.nil?
-        return rc.reject :invalid_type, 'answer', Integer
+        return rc.reject :invalid_type, "answer", Integer
       elsif !answer_available? answer_id
         return rc.reject :unknown_answer, answer_id
       end
@@ -52,7 +53,7 @@ module Quizzes::QuizQuestion::AnswerSerializers
     #
     # @example output for answer #3 selected:
     #   "3"
-    def deserialize(submission_data, full=false)
+    def deserialize(submission_data, full: false)
       submission_data[question_key]
     end
   end

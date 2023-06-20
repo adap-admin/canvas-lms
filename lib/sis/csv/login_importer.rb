@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -18,10 +20,10 @@
 
 module SIS
   module CSV
-    # note these are account-level groups, not course groups
+    # NOTE: these are account-level groups, not course groups
     class LoginImporter < CSVBaseImporter
       def self.login_csv?(row)
-        (row&%w{existing_user_id existing_integration_id existing_canvas_user_id}).any?
+        row.intersect?(%w[existing_user_id existing_integration_id existing_canvas_user_id])
       end
 
       def self.identifying_fields
@@ -30,16 +32,14 @@ module SIS
 
       # expected columns:
       # existing_user_id user_id,login_id,email
-      def process(csv, index=nil, count=nil)
+      def process(csv, index = nil, count = nil)
         messages = []
         count = SIS::UserImporter.new(@root_account, importer_opts).process(messages, login_only: true) do |importer|
           csv_rows(csv, index, count) do |row|
-            begin
-              p = create_user(row, csv)
-              importer.add_user(p, login_only: true)
-            rescue ImportError => e
-              messages << SisBatch.build_error(csv, e.to_s, sis_batch: @batch, row: row['lineno'], row_info: p.login_row_info)
-            end
+            p = create_user(row, csv)
+            importer.add_user(p, login_only: true)
+          rescue ImportError => e
+            messages << SisBatch.build_error(csv, e.to_s, sis_batch: @batch, row: row["lineno"], row_info: p.login_row_info)
           end
         end
         SisBatch.bulk_insert_sis_errors(messages)
@@ -47,22 +47,24 @@ module SIS
       end
 
       private
+
       def create_user(row, csv)
         SIS::Models::User.new(
-          user_id: row['user_id'],
-          login_id: row['login_id'],
-          status: 'active',
-          existing_user_id: row['existing_user_id'],
-          existing_integration_id: row['existing_integration_id'],
-          existing_canvas_user_id: row['existing_canvas_user_id'],
-          root_account_id: row['root_account'],
-          email: row['email'],
-          password: row['password'],
-          ssha_password: row['ssha_password'],
-          integration_id: row['integration_id'],
-          lineno: row['lineno'],
-          csv: csv,
-          authentication_provider_id: row['authentication_provider_id']
+          user_id: row["user_id"],
+          login_id: row["login_id"],
+          status: "active",
+          existing_user_id: row["existing_user_id"],
+          existing_integration_id: row["existing_integration_id"],
+          existing_canvas_user_id: row["existing_canvas_user_id"],
+          root_account_id: row["root_account"],
+          email: row["email"],
+          password: row["password"],
+          ssha_password: row["ssha_password"],
+          integration_id: row["integration_id"],
+          lineno: row["lineno"],
+          csv:,
+          row:,
+          authentication_provider_id: row["authentication_provider_id"]
         )
       end
     end

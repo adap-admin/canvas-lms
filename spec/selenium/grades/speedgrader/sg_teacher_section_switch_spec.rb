@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -19,7 +21,7 @@ require_relative "../../common"
 require_relative "../../helpers/speed_grader_common"
 require_relative "../../helpers/gradebook_common"
 require_relative "../../helpers/groups_common"
-require_relative '../pages/speedgrader_page.rb'
+require_relative "../pages/speedgrader_page"
 
 describe "In speedgrader" do
   include_context "in-process server selenium tests"
@@ -27,11 +29,11 @@ describe "In speedgrader" do
   include SpeedGraderCommon
   include GroupsCommon
 
-  context "as a teacher in course with unlimited sections " do
-    before(:each) do
+  context "as a teacher in course with unlimited sections" do
+    before do
       @teacher_enrollment = course_with_teacher(course: @course, active_all: true)
       user_logged_in(user: @teacher)
-      @assignment = @course.assignments.create(name: 'assignment with rubric', points_possible: 10)
+      @assignment = @course.assignments.create(name: "assignment with rubric", points_possible: 10)
 
       @section = @course.course_sections.create!
       student_in_course(active_all: true)

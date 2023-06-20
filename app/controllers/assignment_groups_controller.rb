@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -101,10 +103,16 @@ class AssignmentGroupsController < ApplicationController
   # Returns the paginated list of assignment groups for the current context.
   # The returned groups are sorted by their position field.
   #
-  # @argument include[] [String, "assignments"|"discussion_topic"|"all_dates"|"assignment_visibility"|"overrides"|"submission"]
-  #  Associations to include with the group. "discussion_topic", "all_dates"
+  # @argument include[] [String, "assignments"|"discussion_topic"|"all_dates"|"assignment_visibility"|"overrides"|"submission"|"observed_users"|"can_edit"|"score_statistics"]
+  #  Associations to include with the group. "discussion_topic", "all_dates", "can_edit",
   #  "assignment_visibility" & "submission" are only valid if "assignments" is also included.
+  #  "score_statistics" requires that the "assignments" and "submission" options are included.
   #  The "assignment_visibility" option additionally requires that the Differentiated Assignments course feature be turned on.
+  #  If "observed_users" is passed along with "assignments" and "submission", submissions for observed users will also be included as an array.
+  #
+  # @argument assignment_ids[] [String]
+  #  If "assignments" are included, optionally return only assignments having their ID in this array. This argument may also be passed as
+  #  a comma separated string.
   #
   # @argument exclude_assignment_submission_types[] [String, "online_quiz"|"discussion_topic"|"wiki_page"|"external_tool"]
   #  If "assignments" are included, those with the specified submission types
@@ -126,18 +134,18 @@ class AssignmentGroupsController < ApplicationController
   #
   # @returns [AssignmentGroup]
   def index
-    Shackles.activate(:slave) do
+    GuardRail.activate(:secondary) do
       if authorized_action(@context.assignment_groups.temp_record, @current_user, :read)
         groups = Api.paginate(@context.assignment_groups.active, self, api_v1_course_assignment_groups_url(@context))
 
-        assignments = if include_params.include?('assignments')
+        assignments = if include_params.include?("assignments")
                         visible_assignments(@context, @current_user, groups)
                       else
                         []
                       end
 
-        if assignments.any? && include_params.include?('submission')
-          submissions = submissions_hash(['submission'], assignments)
+        if assignments.any? && include_params.include?("submission")
+          submissions = submissions_hash(include_params, assignments)
         end
 
         respond_to do |format|
@@ -151,34 +159,34 @@ class AssignmentGroupsController < ApplicationController
 
   def reorder
     if authorized_action(@context.assignment_groups.temp_record, @current_user, :update)
-      order = params[:order].split(',')
+      order = params[:order].split(",")
       @context.assignment_groups.first.update_order(order)
       new_order = @context.assignment_groups.pluck(:id)
-      render :json => {:reorder => true, :order => new_order}, :status => :ok
+      render json: { reorder: true, order: new_order }, status: :ok
     end
   end
 
   def reorder_assignments
     @group = @context.assignment_groups.find(params[:assignment_group_id])
     if authorized_action(@group, @current_user, :update)
-      order = params[:order].split(',').map{|id| id.to_i }
+      order = params[:order].split(",").map(&:to_i)
       group_ids = ([@group.id] + (order.empty? ? [] : @context.assignments.where(id: order).distinct.except(:order).pluck(:assignment_group_id)))
       assignments = @context.active_assignments.where(id: order)
 
       return render json: { message: t("Cannot move assignments due to closed grading periods") }, status: :unauthorized unless can_reorder_assignments?(assignments, @group)
 
-      assignment_ids_to_update = assignments.where.not(:assignment_group_id => @group.id).pluck(:id)
+      assignment_ids_to_update = assignments.where.not(assignment_group_id: @group.id).pluck(:id)
       tags_to_update = []
       if assignment_ids_to_update.any?
-        assignments.where(:id => assignment_ids_to_update).update_all(assignment_group_id: @group.id, updated_at: Time.now.utc)
-        tags_to_update += MasterCourses::ChildContentTag.where(:content_type => "Assignment", :content_id => assignment_ids_to_update).to_a
-        Canvas::LiveEvents.send_later_if_production(:assignments_bulk_updated, assignment_ids_to_update)
+        assignments.where(id: assignment_ids_to_update).update_all(assignment_group_id: @group.id, updated_at: Time.now.utc)
+        tags_to_update += MasterCourses::ChildContentTag.where(content_type: "Assignment", content_id: assignment_ids_to_update).to_a
+        Canvas::LiveEvents.delay_if_production.assignments_bulk_updated(assignment_ids_to_update)
       end
       quizzes = @context.active_quizzes.where(assignment_id: order)
-      quiz_ids_to_update = quizzes.where.not(:assignment_group_id => @group.id).pluck(:id)
+      quiz_ids_to_update = quizzes.where.not(assignment_group_id: @group.id).pluck(:id)
       if quiz_ids_to_update.any?
-        quizzes.where(:id => quiz_ids_to_update).update_all(assignment_group_id: @group.id, updated_at: Time.now.utc)
-        tags_to_update += MasterCourses::ChildContentTag.where(:content_type => "Quizzes::Quiz", :content_id => quiz_ids_to_update).to_a
+        quizzes.where(id: quiz_ids_to_update).update_all(assignment_group_id: @group.id, updated_at: Time.now.utc)
+        tags_to_update += MasterCourses::ChildContentTag.where(content_type: "Quizzes::Quiz", content_id: quiz_ids_to_update).to_a
       end
       tags_to_update.each do |mc_tag|
         unless mc_tag.downstream_changes.include?("assignment_group_id")
@@ -190,10 +198,10 @@ class AssignmentGroupsController < ApplicationController
       @group.assignments.first.update_order(order) unless @group.assignments.empty?
       groups = AssignmentGroup.where(id: group_ids)
       groups.touch_all
-      groups.each{|assignment_group| AssignmentGroup.notify_observers(:assignments_changed, assignment_group)}
+      groups.each { |assignment_group| AssignmentGroup.notify_observers(:assignments_changed, assignment_group) }
       ids = @group.active_assignments.map(&:id)
       @context.recompute_student_scores rescue nil
-      render json: { reorder: true, order: ids}, status: :ok
+      render json: { reorder: true, order: ids }, status: :ok
     end
   end
 
@@ -201,7 +209,7 @@ class AssignmentGroupsController < ApplicationController
     @assignment_group = @context.assignment_groups.find(params[:id])
     if @assignment_group.deleted?
       respond_to do |format|
-        flash[:notice] = t 'notices.deleted', "This group has been deleted"
+        flash[:notice] = t "notices.deleted", "This group has been deleted"
         format.html { redirect_to named_context_url(@context, :assignments_url) }
       end
       return
@@ -209,25 +217,26 @@ class AssignmentGroupsController < ApplicationController
     if authorized_action(@assignment_group, @current_user, :read)
       respond_to do |format|
         format.html { redirect_to(named_context_url(@context, :context_assignments_url, @assignment_group.context_id)) }
-        format.json { render :json => @assignment_group.as_json(:permissions => {:user => @current_user, :session => session}) }
+        format.json { render json: @assignment_group.as_json(permissions: { user: @current_user, session: }) }
       end
     end
   end
 
   def create
     unless valid_integration_data?
-      return render :json => 'Invalid integration data', :status => :bad_request
+      return render json: "Invalid integration data", status: :bad_request
     end
+
     @assignment_group = @context.assignment_groups.temp_record(assignment_group_params)
     if authorized_action(@assignment_group, @current_user, :create)
       respond_to do |format|
         if @assignment_group.save
           @assignment_group.insert_at(1)
-          flash[:notice] = t 'notices.created', 'Assignment Group was successfully created.'
+          flash[:notice] = t "notices.created", "Assignment Group was successfully created."
           format.html { redirect_to named_context_url(@context, :context_assignments_url) }
-          format.json { render :json => @assignment_group.as_json(:permissions => {:user => @current_user, :session => session}), :status => :created}
+          format.json { render json: @assignment_group.as_json(permissions: { user: @current_user, session: }), status: :created }
         else
-          format.json { render :json => @assignment_group.errors, :status => :bad_request }
+          format.json { render json: @assignment_group.errors, status: :bad_request }
         end
       end
     end
@@ -235,19 +244,20 @@ class AssignmentGroupsController < ApplicationController
 
   def update
     unless valid_integration_data?
-      return render :json => 'Invalid integration data', :status => :bad_request
+      return render json: "Invalid integration data", status: :bad_request
     end
+
     @assignment_group = @context.assignment_groups.find(params[:id])
     if authorized_action(@assignment_group, @current_user, :update)
       respond_to do |format|
-        updated = update_assignment_group(@assignment_group, params['assignment_group'])
+        updated = update_assignment_group(@assignment_group, params["assignment_group"])
         if updated.present? && updated.save
           @assignment_group = updated
-          flash[:notice] = t 'notices.updated', 'Assignment Group was successfully updated.'
+          flash[:notice] = t "notices.updated", "Assignment Group was successfully updated."
           format.html { redirect_to named_context_url(@context, :context_assignments_url) }
-          format.json { render :json => @assignment_group.as_json(:permissions => {:user => @current_user, :session => session}), :status => :ok }
+          format.json { render json: @assignment_group.as_json(permissions: { user: @current_user, session: }), status: :ok }
         else
-          format.json { render :json => @assignment_group.errors, :status => :bad_request }
+          format.json { render json: @assignment_group.errors, status: :bad_request }
         end
       end
     end
@@ -257,10 +267,10 @@ class AssignmentGroupsController < ApplicationController
     @assignment_group = AssignmentGroup.find(params[:id])
     if authorized_action(@assignment_group, @current_user, :delete)
       if @assignment_group.has_frozen_assignments?(@current_user)
-        @assignment_group.errors.add('workflow_state', t('errors.cannot_delete_group', "You can not delete a group with a locked assignment.", :att_name => 'workflow_state'))
+        @assignment_group.errors.add("workflow_state", t("errors.cannot_delete_group", "You can not delete a group with a locked assignment.", att_name: "workflow_state"))
         respond_to do |format|
           format.html { redirect_to named_context_url(@context, :context_assignments_url) }
-          format.json { render :json => @assignment_group.errors, :status => :bad_request }
+          format.json { render json: @assignment_group.errors, status: :bad_request }
         end
         return
       end
@@ -272,10 +282,12 @@ class AssignmentGroupsController < ApplicationController
 
       respond_to do |format|
         format.html { redirect_to(named_context_url(@context, :context_assignments_url)) }
-        format.json { render :json => {
-          assignment_group: @assignment_group.as_json(include_root: false, include: :active_assignments),
-          new_assignment_group: @new_group.as_json(include_root: false, include: :active_assignments)
-        }}
+        format.json do
+          render json: {
+            assignment_group: @assignment_group.as_json(include_root: false, include: :active_assignments),
+            new_assignment_group: @new_group.as_json(include_root: false, include: :active_assignments)
+          }
+        end
       end
     end
   end
@@ -283,21 +295,21 @@ class AssignmentGroupsController < ApplicationController
   private
 
   def valid_integration_data?
-    integration_data = assignment_group_params['integration_data']
+    integration_data = assignment_group_params["integration_data"]
     integration_data.is_a?(Hash) || integration_data.nil?
   end
 
   def assignment_group_params
-    result = params.require(:assignment_group).
-      permit(:assignment_weighting_scheme,
-             :default_assignment_name,
-             :group_weight,
-             :name,
-             :position,
-             :rules,
-             :sis_source_id,
-             :integration_data => strong_anything)
-    result[:integration_data] = nil if result[:integration_data] == ''
+    result = params.require(:assignment_group)
+                   .permit(:assignment_weighting_scheme,
+                           :default_assignment_name,
+                           :group_weight,
+                           :name,
+                           :position,
+                           :rules,
+                           :sis_source_id,
+                           integration_data: strong_anything)
+    result[:integration_data] = nil if result[:integration_data] == ""
     result
   end
 
@@ -306,8 +318,8 @@ class AssignmentGroupsController < ApplicationController
   end
 
   def assignment_includes
-    includes = [:context, :external_tool_tag, {:quiz => :context}]
-    includes += [:rubric, :rubric_association] unless assignment_excludes.include?('rubric')
+    includes = [:context, :external_tool_tag, { quiz: :context }]
+    includes += [:rubric, :rubric_association] unless assignment_excludes.include?("rubric")
     includes << :discussion_topic if include_params.include?("discussion_topic")
     includes << :assignment_overrides if include_overrides?
     includes
@@ -322,39 +334,45 @@ class AssignmentGroupsController < ApplicationController
   end
 
   def all_grading_periods_selected?
-    params[:grading_period_id] == '0'
+    params[:grading_period_id] == "0"
   end
 
   def include_overrides?
     override_dates? ||
-      include_params.include?('all_dates') ||
-      include_params.include?('overrides') ||
-      filter_by_grading_period?
+      include_params.include?("all_dates") ||
+      include_params.include?("overrides")
   end
 
   def assignment_visibilities(course, assignments)
     if include_visibility?
       AssignmentStudentVisibility.assignments_with_user_visibilities(course, assignments)
     else
-      params.fetch(:include, []).delete('assignment_visibility')
+      params.fetch(:include, []).delete("assignment_visibility")
       AssignmentStudentVisibility.none
     end
   end
 
   def index_groups_json(context, current_user, groups, assignments, submissions = [])
-    include_overrides = include_params.include?('overrides')
+    current_user_is_student = context.respond_to?(:user_is_student?) && context.user_is_student?(current_user)
+    can_include_assessment_requests = current_user_is_student && context.respond_to?(:feature_enabled?) && context.feature_enabled?(:peer_reviews_for_a2)
+
+    include_overrides = include_params.include?("overrides")
+    include_score_statistics = include_params.include?("score_statistics")
+    include_assessment_requests = can_include_assessment_requests && include_params.include?("assessment_requests")
 
     assignments_by_group = assignments.group_by(&:assignment_group_id)
     preloaded_attachments = user_content_attachments(assignments, context)
 
-    unless assignment_excludes.include?('in_closed_grading_period')
-      closed_grading_period_hash =
-        EffectiveDueDates.for_course(context, assignments).to_hash([:in_closed_grading_period])
+    unless assignment_excludes.include?("in_closed_grading_period")
+      closed_grading_period_hash = in_closed_grading_period_hash(context, assignments)
     end
 
-    if assignments.any? && context.grants_right?(current_user, session, :manage_assignments)
+    if assignments.any? && context.grants_any_right?(current_user, session, *RoleOverride::GRANULAR_MANAGE_ASSIGNMENT_PERMISSIONS)
       mc_status = setup_master_course_restrictions(assignments, context)
     end
+
+    overwritten_includes = Array(params[:include])
+    overwritten_includes -= ["assessment_requests"] unless can_include_assessment_requests
 
     groups.map do |group|
       group.context = context
@@ -367,18 +385,20 @@ class AssignmentGroupsController < ApplicationController
         assignments: group_assignments,
         assignment_visibilities: assignment_visibilities(context, assignments),
         exclude_response_fields: assignment_excludes,
-        include_overrides: include_overrides,
-        submissions: submissions,
-        closed_grading_period_hash: closed_grading_period_hash,
-        master_course_status: mc_status
+        include_overrides:,
+        include_score_statistics:,
+        submissions:,
+        closed_grading_period_hash:,
+        master_course_status: mc_status,
+        include_assessment_requests:
       }
 
-      assignment_group_json(group, current_user, session, params[:include], options)
+      assignment_group_json(group, current_user, session, overwritten_includes, options)
     end
   end
 
   def include_visibility?
-    include_params.include?('assignment_visibility') && @context.grants_any_right?(@current_user, :read_as_admin, :manage_grades, :manage_assignments)
+    include_params.include?("assignment_visibility") && @context.grants_any_right?(@current_user, :read_as_admin, :manage_grades, *RoleOverride::GRANULAR_MANAGE_ASSIGNMENT_PERMISSIONS)
   end
 
   def override_dates?
@@ -386,7 +406,7 @@ class AssignmentGroupsController < ApplicationController
   end
 
   def user_content_attachments(assignments, context)
-    if assignment_excludes.include?('description')
+    if assignment_excludes.include?("description")
       {}
     else
       api_bulk_load_user_content_attachments(assignments.map(&:description), context)
@@ -394,19 +414,30 @@ class AssignmentGroupsController < ApplicationController
   end
 
   def visible_assignments(context, current_user, groups)
-    return Assignment.none unless include_params.include?('assignments')
-    # TODO: possible keyword arguments refactor
+    return Assignment.none unless include_params.include?("assignments")
+
+    assignment_ids = if params[:assignment_ids].is_a?(String)
+                       params[:assignment_ids].split(",")
+                     else
+                       params[:assignment_ids]
+                     end
+
     assignments = AssignmentGroup.visible_assignments(
       current_user,
       context,
       groups,
-      assignment_includes
+      includes: assignment_includes,
+      assignment_ids:
     )
+
+    if value_to_boolean(params[:hide_zero_point_quizzes])
+      assignments = assignments.not_hidden_in_gradebook
+    end
 
     if params[:exclude_assignment_submission_types].present?
       exclude_types = params[:exclude_assignment_submission_types]
       exclude_types = Array.wrap(exclude_types) &
-        %w(online_quiz discussion_topic wiki_page external_tool)
+                      %w[online_quiz discussion_topic wiki_page external_tool]
       assignments = assignments.where.not(submission_types: exclude_types)
     end
 
@@ -430,7 +461,7 @@ class AssignmentGroupsController < ApplicationController
     end
 
     if assignment_includes.include?(:assignment_overrides)
-      assignments.each { |a| a.has_no_overrides = true if a.assignment_overrides.size == 0 }
+      assignments.each { |a| a.has_no_overrides = true if a.assignment_overrides.empty? }
     end
 
     assignments
@@ -441,10 +472,10 @@ class AssignmentGroupsController < ApplicationController
     return assignments unless grading_period
 
     if params[:scope_assignments_to_student] &&
-      course.user_is_student?(@current_user, include_future: true, include_fake_student: true)
-      grading_period.assignments_for_student(assignments, @current_user)
+       course.user_is_student?(@current_user, include_future: true, include_fake_student: true)
+      grading_period.assignments_for_student(course, assignments, @current_user)
     else
-      grading_period.assignments(assignments)
+      grading_period.assignments(course, assignments)
     end
   end
 

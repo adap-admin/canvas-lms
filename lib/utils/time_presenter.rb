@@ -1,5 +1,5 @@
-# encoding: UTF-8
-#
+# frozen_string_literal: true
+
 # Copyright (C) 2014 - present Instructure, Inc.
 #
 # This file is part of Canvas.
@@ -19,27 +19,32 @@
 module Utils
   class TimePresenter
     attr_reader :time, :zone
-    def initialize(time, zone=nil)
+
+    def initialize(time, zone = nil)
       zone ||= ::Time.zone
       @time = time.in_time_zone(zone) rescue time
       @zone = zone
     end
 
-    def as_string(options={})
+    def as_string(options = {})
       return nil unless time
+
       range_time = get_range_time(options[:display_as_range])
       if is_range?(range_time)
         other = TimePresenter.new(range_time, zone)
-        I18n.t('time.ranges.times', "%{start_time} to %{end_time}",
-               start_time: formatted_result, end_time: other.as_string)
+        I18n.t("time.ranges.times",
+               "%{start_time} to %{end_time}",
+               start_time: formatted_result,
+               end_time: other.as_string)
       else
         formatted_result
       end
     end
 
     private
+
     def formatted_result
-      I18n.l(time, format: format)
+      I18n.l(time, format:)&.strip
     end
 
     def get_range_time(raw)
@@ -51,7 +56,7 @@ module Utils
     end
 
     def format
-      time.min == 0 ? :tiny_on_the_hour : :tiny
+      (time.min == 0) ? :tiny_on_the_hour : :tiny
     end
   end
 end

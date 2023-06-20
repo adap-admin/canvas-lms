@@ -1,17 +1,21 @@
-require 'yaml'
+# frozen_string_literal: true
+
+require "yaml"
 
 module TatlTael
   module Linters
     class BaseLinter
       class << self
         def inherited(subclass)
-          Linters.linters << subclass unless subclass.name =~ /SimpleLinter/
+          super
+          Linters.linters << subclass unless subclass.name&.include?("SimpleLinter")
         end
       end
 
       attr_reader :changes
       attr_reader :config
       attr_reader :auto_correct
+
       def initialize(config:, changes:, auto_correct: false)
         @changes = changes
         @config = config
@@ -21,17 +25,17 @@ module TatlTael
       ### core
       def changes_matching(statuses: %w[added modified], # excludes "deleted",
                            include: ["*"], # include everything
-                           whitelist: []) # don't whitelist anything
+                           allowlist: []) # don't allowlist anything
         changes.select do |change|
           statuses.include?(change.status) &&
             include.any? { |pattern| File.fnmatch(pattern, change.path) } &&
-            whitelist.all? { |pattern| !File.fnmatch(pattern, change.path) }
+            allowlist.all? { |pattern| !File.fnmatch(pattern, change.path) }
         end
       end
 
       # convenience
       def changes_exist?(query)
-        !changes_matching(query).empty?
+        !changes_matching(**query).empty?
       end
     end
 
@@ -42,16 +46,20 @@ module TatlTael
 
       DEFAULT_CONFIG_PATH = File.join(File.dirname(__FILE__), "../../config/default.yml")
       def config
-        @config ||= YAML.load_file(DEFAULT_CONFIG_PATH)
+        @config ||= if YAML::VERSION < "4.0"
+                      YAML.load_file(DEFAULT_CONFIG_PATH)
+                    else
+                      YAML.load_file(DEFAULT_CONFIG_PATH, permitted_classes: [Symbol, Regexp])
+                    end
       end
 
       def config_for_linter(linter_class)
         # example linter_class.to_s: "TatlTael::Linters::Simple::CoffeeSpecsLinter"
         # example resulting base_config_key: "Simple/CoffeeSpecsLinter"
         base_config_key = linter_class.to_s
-          .sub(self.to_s, "") # rm "TatlTael::Linters"
-          .sub("::", "")
-          .gsub("::", "/")
+                                      .sub(to_s, "") # rm "TatlTael::Linters"
+                                      .sub("::", "")
+                                      .gsub("::", "/")
         underscore_and_symbolize_keys(config[base_config_key])
       end
 
@@ -59,8 +67,8 @@ module TatlTael
         @comments ||= linters.map do |linter_class|
           linter_class.new(
             config: config_for_linter(linter_class),
-            changes: changes,
-            auto_correct: auto_correct
+            changes:,
+            auto_correct:
           ).run
         end.flatten.compact
       end
@@ -84,9 +92,9 @@ module TatlTael
       def underscore(string)
         # borrowed from AS underscore, since we may not have it
         string.gsub(/([A-Z\d]+)([A-Z][a-z])/, "\\1_\\2")
-          .gsub(/([a-z\d])([A-Z])/, "\\1_\\2")
-          .tr("-", "_")
-          .downcase
+              .gsub(/([a-z\d])([A-Z])/, "\\1_\\2")
+              .tr("-", "_")
+              .downcase
       end
     end
   end

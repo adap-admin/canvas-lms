@@ -19,10 +19,12 @@
 import React from 'react'
 import ReactDOM from 'react-dom'
 import timezone from 'timezone'
+import tzInTest from '@canvas/timezone/specHelpers'
 import newYork from 'timezone/America/New_York'
 
-import AssessmentSummary from 'jsx/speed_grader/AssessmentAuditTray/components/AssessmentSummary'
-import {overallAnonymityStates} from 'jsx/speed_grader/AssessmentAuditTray/AuditTrailHelpers'
+import AssessmentSummary from 'ui/features/speed_grader/react/AssessmentAuditTray/components/AssessmentSummary'
+import {overallAnonymityStates} from 'ui/features/speed_grader/react/AssessmentAuditTray/AuditTrailHelpers'
+import {getI18nFormats} from 'ui/boot/initializers/configureDateTime'
 
 const {FULL, NA, PARTIAL} = overallAnonymityStates
 
@@ -34,27 +36,32 @@ QUnit.module('AssessmentSummary', suiteHooks => {
   suiteHooks.beforeEach(() => {
     $container = document.body.appendChild(document.createElement('div'))
 
-    timezoneSnapshot = timezone.snapshot()
-    timezone.changeZone(newYork, 'America/New_York')
+    tzInTest.configureAndRestoreLater({
+      tz: timezone(newYork, 'America/New_York'),
+      tzData: {
+        'America/New_York': newYork,
+      },
+      formats: getI18nFormats(),
+    })
 
     props = {
       anonymityDate: new Date('2015-04-04T19:00:00.000Z'),
       assignment: {
         gradesPublishedAt: '2015-05-04T16:00:00.000Z',
-        pointsPossible: 10
+        pointsPossible: 10,
       },
       finalGradeDate: new Date('2015-04-18T17:00:00.000Z'),
       overallAnonymity: FULL,
       submission: {
-        score: 9.5
-      }
+        score: 9.5,
+      },
     }
   })
 
   suiteHooks.afterEach(() => {
     ReactDOM.unmountComponentAtNode($container)
     $container.remove()
-    timezone.restore(timezoneSnapshot)
+    tzInTest.restore()
   })
 
   function renderComponent() {

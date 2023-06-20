@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -19,28 +21,28 @@
 module Schemas::Lti
   class PublicJwk < Schemas::Base
     SCHEMA = {
-      'type' => 'object',
-      'required' => %w[kty e n kid alg use].freeze,
-      'properties' => {
-        'kty' => {
-          'type' => 'string',
-          'const' => Lti::RSAKeyPair::KTY
+      "type" => "object",
+      "required" => %w[kty e n kid alg use].freeze,
+      "properties" => {
+        "kty" => {
+          "type" => "string",
+          "const" => CanvasSecurity::RSAKeyPair::KTY
         }.freeze,
-        'alg' => {
-          'type' => 'string',
-          'const' => Lti::RSAKeyPair::ALG
+        "alg" => {
+          "type" => "string",
+          "const" => CanvasSecurity::RSAKeyPair::ALG
         }.freeze,
-        'e' => {
-          'type' => 'string'
+        "e" => {
+          "type" => "string"
         }.freeze,
-        'n' => {
-          'type' => 'string'
+        "n" => {
+          "type" => "string"
         }.freeze,
-        'kid' => {
-          'type' => 'string'
+        "kid" => {
+          "type" => "string"
         }.freeze,
-        'use' => {
-          'type' => 'string'
+        "use" => {
+          "type" => "string"
         }.freeze
       }.freeze
     }.freeze

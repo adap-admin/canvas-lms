@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -16,12 +18,10 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../../spec_helper.rb')
-
 describe Quizzes::QuizQuestion::RawFields do
-
   describe "#fetch_any" do
     let(:fields) { Quizzes::QuizQuestion::RawFields.new(answer_comment: "an answer comment", comments: "another answer comment") }
+
     it "fetches a specified key" do
       expect(fields.fetch_any(:answer_comment)).to eq "an answer comment"
     end
@@ -38,7 +38,6 @@ describe Quizzes::QuizQuestion::RawFields do
   end
 
   describe "#fetch_with_enforced_length" do
-
     it "has no problem with short data" do
       fields = Quizzes::QuizQuestion::RawFields.new(answer_comment: "an answer comment")
       expect(fields.fetch_with_enforced_length(:answer_comment)).to eq "an answer comment"
@@ -52,10 +51,9 @@ describe Quizzes::QuizQuestion::RawFields do
 
       fields = Quizzes::QuizQuestion::RawFields.new(answer_comment: long_data)
 
-      expect {
+      expect do
         fields.fetch_with_enforced_length(:answer_comment)
-      }.to raise_error(Quizzes::QuizQuestion::RawFields::FieldTooLongError)
+      end.to raise_error(Quizzes::QuizQuestion::RawFields::FieldTooLongError)
     end
   end
-
 end

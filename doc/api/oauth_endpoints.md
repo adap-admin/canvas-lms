@@ -85,6 +85,17 @@ wrong person in, as <a href="http://homakov.blogspot.com/2012/07/saferweb-most-c
       <td>Set to the user's username to be populated in the login form in the event
       that the user must authenticate.</td>
     </tr>
+    <tr>
+      <td class="mono">prompt<span class="label optional"></span></td>
+      <td>If set to <code>none</code>, Canvas will immediately redirect to the
+      <code>redirect_uri</code>. If the caller has a valid session with a
+      &quot;remember me&quot; token or a token from a trusted Developer Key,
+      the redirect will contain a <code>code=XYZ</code> param. If the caller
+      has no session, the redirect will contain an
+      <code>error=login_required</code> param. If the caller has a session, but
+      no &quot;remember me&quot; or trusted token, the redirect will contain an
+      <code>error=interaction_required</code> param.</td>
+    </tr>
   </tbody>
 </table>
 </div>
@@ -179,6 +190,10 @@ See <a href="http://tools.ietf.org/html/rfc6749#section-4.1.3">Section 4.1.3</a>
         <td class="mono">expires_in</td>
         <td>Seconds until the access token expires.</td>
       </tr>
+      <tr>
+        <td class="mono">canvas_region</td>
+        <td>For hosted Canvas, the AWS region (e.g. us-east-1) in which the institution that provided this token resides. For local or open source Canvas, this will have a value of "unknown". This field is safe to ignore.</td>
+      </tr>
     </tbody>
   </table>
 
@@ -190,7 +205,8 @@ See <a href="http://tools.ietf.org/html/rfc6749#section-4.1.3">Section 4.1.3</a>
     "token_type": "Bearer",
     "user": {"id":42, "name": "Jimi Hendrix"},
     "refresh_token": "tIh2YBWGiC0GgGRglT9Ylwv2MnTvy8csfGyfK2PqZmkFYYqYZ0wui4tzI7uBwnN2",
-    "expires_in": 3600
+    "expires_in": 3600,
+    "canvas_region": "us-east-1"
   }
   </pre>
   
@@ -206,7 +222,7 @@ See <a href="http://tools.ietf.org/html/rfc6749#section-4.1.3">Section 4.1.3</a>
   }
   </pre>
 
-  <p>If scope=auth/userinfo was specified in the
+  <p>If scope=/auth/userinfo was specified in the
   <a href=oauth_endpoints.html#get-login-oauth2-auth>GET login/oauth2/auth</a> request (ex: when using Canvas as an authentication service)
   then the response that results from
   <a href=oauth_endpoints.html#post-login-oauth2-token>POST login/oauth2/token</a> would be:</p>
@@ -243,7 +259,7 @@ See <a href="http://tools.ietf.org/html/rfc6749#section-4.1.3">Section 4.1.3</a>
   {
     "iss": "https://www.my-tool.com",
     "sub": "&lt;client_id&gt;",
-    "aud": "http://&lt;canvas_domain&gt;/login/oauth2/token",
+    "aud": "https://&lt;canvas_domain&gt;/login/oauth2/token",
     "iat": 1561750031,
     "exp": 1561750631,
     "jti": "dffdbdce-a9f1-427b-8fca-604182198783"
@@ -254,7 +270,7 @@ See <a href="http://tools.ietf.org/html/rfc6749#section-4.1.3">Section 4.1.3</a>
 
 <ul>
  <li> the value of the sub claim should match the client_id of the developer key in Canvas.</li>
- <li> the value of the aud claim should contain the domain of the Canvas account where the desired data resides.</li>
+ <li> the value of the aud claim should contain either the domain of the Canvas account where the desired data resides, or the domain of the LTI 1.3 OIDC Auth endpoint, as described <a href="/doc/api/file.lti_dev_key_config.html#step-2" target="_blank">here</a>.</li>
 </ul>
 
 

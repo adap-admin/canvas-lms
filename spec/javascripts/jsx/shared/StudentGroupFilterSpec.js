@@ -19,7 +19,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom'
 
-import StudentGroupFilter from 'jsx/shared/StudentGroupFilter'
+import StudentGroupFilter from '@canvas/student-group-filter'
 
 QUnit.module('StudentGroupFilter', suiteHooks => {
   let $container
@@ -44,12 +44,12 @@ QUnit.module('StudentGroupFilter', suiteHooks => {
         {
           groups: [{id: '2101', name: 'group 1'}],
           id: '1101',
-          name: 'group category 1'
-        }
+          name: 'group category 1',
+        },
       ],
       label: 'Select a student group',
       onChange: sinon.spy(),
-      value: '2101'
+      value: '2101',
     }
   })
 

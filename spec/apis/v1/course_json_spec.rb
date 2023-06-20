@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -16,12 +18,10 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require_relative '../../spec_helper'
-require_dependency "api/v1/course_json"
+require_relative "../../spec_helper"
 
 module Api
   module V1
-
     describe CourseJson do
       let_once(:course) { ::Course.create! }
       let(:course_json) { CourseJson.new(course, nil, includes, []) }
@@ -29,7 +29,7 @@ module Api
       let(:user) { double(:user) }
 
       describe "#to_hash" do
-        let_once(:student) { course_with_user("StudentEnrollment", course: course, active_all: true).user }
+        let_once(:student) { course_with_user("StudentEnrollment", course:, active_all: true).user }
 
         before(:once) do
           grading_period_group = course.grading_period_groups.create!
@@ -68,7 +68,7 @@ module Api
           let_once(:includes) { [:total_scores] }
 
           context "when user is the student" do
-            let_once(:student_enrollment) { course_with_user("StudentEnrollment", course: course, active_all: true) }
+            let_once(:student_enrollment) { course_with_user("StudentEnrollment", course:, active_all: true) }
             let_once(:student) { student_enrollment.user }
             let(:json_hash) { CourseJson.new(course, student, includes, [student_enrollment]).to_hash }
             let(:json_enrollments) { json_hash.fetch("enrollments") }
@@ -92,6 +92,10 @@ module Api
                   expect(json_enrollment.fetch(:computed_current_score)).to be 99.0
                 end
 
+                it "sets computed_current_letter_grade to the letter grade equivalent of the override score" do
+                  expect(json_enrollment.fetch(:computed_current_letter_grade)).to eq "A"
+                end
+
                 it "sets computed_final_grade to the override grade" do
                   expect(json_enrollment.fetch(:computed_final_grade)).to eq "A"
                 end
@@ -110,7 +114,7 @@ module Api
               end
 
               context "when no grade override exists" do
-                before(:each) { @course_score.update!(override_score: nil) }
+                before { @course_score.update!(override_score: nil) }
 
                 it "sets computed_current_grade to the computed current grade" do
                   expect(json_enrollment.fetch(:computed_current_grade)).to eq "D-"
@@ -118,6 +122,10 @@ module Api
 
                 it "sets computed_current_score to the computed current score" do
                   expect(json_enrollment.fetch(:computed_current_score)).to be 63.0
+                end
+
+                it "sets computed_current_letter_grade to the letter grade equivalent of the computed current score" do
+                  expect(json_enrollment.fetch(:computed_current_letter_grade)).to eq "D-"
                 end
 
                 it "sets computed_final_grade to the computed final grade" do
@@ -131,7 +139,7 @@ module Api
             end
 
             context "when Final Grade Override is not allowed" do
-              before(:each) { course.update!(allow_final_grade_override: false) }
+              before { course.update!(allow_final_grade_override: false) }
 
               it "sets computed_current_grade to the computed current grade" do
                 expect(json_enrollment.fetch(:computed_current_grade)).to eq "D-"
@@ -139,6 +147,10 @@ module Api
 
               it "sets computed_current_score to the computed current score" do
                 expect(json_enrollment.fetch(:computed_current_score)).to be 63.0
+              end
+
+              it "sets computed_current_letter_grade to the letter grade equivalent of the computed current score" do
+                expect(json_enrollment.fetch(:computed_current_letter_grade)).to eq "D-"
               end
 
               it "sets computed_final_grade to the computed final grade" do
@@ -151,7 +163,7 @@ module Api
             end
 
             context "when Final Grade Override is disabled" do
-              before(:each) { course.disable_feature!(:final_grades_override) }
+              before { course.disable_feature!(:final_grades_override) }
 
               it "sets computed_current_grade to the computed current grade" do
                 expect(json_enrollment.fetch(:computed_current_grade)).to eq "D-"
@@ -159,6 +171,10 @@ module Api
 
               it "sets computed_current_score to the computed current score" do
                 expect(json_enrollment.fetch(:computed_current_score)).to be 63.0
+              end
+
+              it "sets computed_current_letter_grade to the letter grade equivalent of the computed current score" do
+                expect(json_enrollment.fetch(:computed_current_letter_grade)).to eq "D-"
               end
 
               it "sets computed_final_grade to the computed final grade" do
@@ -172,9 +188,9 @@ module Api
           end
 
           context "when user is a teacher" do
-            let_once(:student_enrollment) { course_with_user("StudentEnrollment", course: course, active_all: true) }
+            let_once(:student_enrollment) { course_with_user("StudentEnrollment", course:, active_all: true) }
             let_once(:student) { student_enrollment.user }
-            let_once(:teacher) { course_with_user("TeacherEnrollment", course: course, active_all: true).user }
+            let_once(:teacher) { course_with_user("TeacherEnrollment", course:, active_all: true).user }
             let(:json_hash) { CourseJson.new(course, teacher, includes, [student_enrollment]).to_hash }
             let(:json_enrollments) { json_hash.fetch("enrollments") }
             let(:json_enrollment) { json_enrollments.detect { |enrollment| enrollment.fetch(:user_id) == student.id } }
@@ -215,7 +231,7 @@ module Api
               end
 
               context "when no grade override exists" do
-                before(:each) { @course_score.update!(override_score: nil) }
+                before { @course_score.update!(override_score: nil) }
 
                 it "does not include an override_grade key" do
                   expect(json_enrollment).not_to have_key :override_grade
@@ -228,7 +244,7 @@ module Api
             end
 
             context "when Final Grade Override is not allowed" do
-              before(:each) { course.update!(allow_final_grade_override: false) }
+              before { course.update!(allow_final_grade_override: false) }
 
               it "does not include an override_grade key" do
                 expect(json_enrollment).not_to have_key :override_grade
@@ -240,7 +256,7 @@ module Api
             end
 
             context "when Final Grade Override is disabled" do
-              before(:each) { course.disable_feature!(:final_grades_override) }
+              before { course.disable_feature!(:final_grades_override) }
 
               it "does not include an override_grade key" do
                 expect(json_enrollment).not_to have_key :override_grade
@@ -258,7 +274,7 @@ module Api
           let_once(:includes) { [:current_grading_period_scores, :total_scores] }
 
           context "when user is the student" do
-            let_once(:student_enrollment) { course_with_user("StudentEnrollment", course: course, active_all: true) }
+            let_once(:student_enrollment) { course_with_user("StudentEnrollment", course:, active_all: true) }
             let_once(:student) { student_enrollment.user }
             let(:json_hash) { CourseJson.new(course, student, includes, [student_enrollment]).to_hash }
             let(:json_enrollments) { json_hash.fetch("enrollments") }
@@ -306,7 +322,7 @@ module Api
               end
 
               context "when no grade override exists" do
-                before(:each) { @gp_score.update!(override_score: nil) }
+                before { @gp_score.update!(override_score: nil) }
 
                 it "sets current_period_computed_current_grade to the computed current grade" do
                   expect(json_enrollment.fetch(:current_period_computed_current_grade)).to eq "D-"
@@ -327,7 +343,7 @@ module Api
             end
 
             context "when Final Grade Override is not allowed" do
-              before(:each) { course.update!(allow_final_grade_override: false) }
+              before { course.update!(allow_final_grade_override: false) }
 
               it "sets current_period_computed_current_grade to the computed current grade" do
                 expect(json_enrollment.fetch(:current_period_computed_current_grade)).to eq "D-"
@@ -347,7 +363,7 @@ module Api
             end
 
             context "when Final Grade Override is disabled" do
-              before(:each) { course.disable_feature!(:final_grades_override) }
+              before { course.disable_feature!(:final_grades_override) }
 
               it "sets current_period_computed_current_grade to the computed current grade" do
                 expect(json_enrollment.fetch(:current_period_computed_current_grade)).to eq "D-"
@@ -368,9 +384,9 @@ module Api
           end
 
           context "when user is a teacher" do
-            let_once(:student_enrollment) { course_with_user("StudentEnrollment", course: course, active_all: true) }
+            let_once(:student_enrollment) { course_with_user("StudentEnrollment", course:, active_all: true) }
             let_once(:student) { student_enrollment.user }
-            let_once(:teacher) { course_with_user("TeacherEnrollment", course: course, active_all: true).user }
+            let_once(:teacher) { course_with_user("TeacherEnrollment", course:, active_all: true).user }
             let(:json_hash) { CourseJson.new(course, teacher, includes, [student_enrollment]).to_hash }
             let(:json_enrollments) { json_hash.fetch("enrollments") }
             let(:json_enrollment) { json_enrollments.detect { |enrollment| enrollment.fetch(:user_id) == student.id } }
@@ -422,7 +438,7 @@ module Api
               end
 
               context "when no grade override exists" do
-                before(:each) { @gp_score.update!(override_score: nil) }
+                before { @gp_score.update!(override_score: nil) }
 
                 it "does not include a current_period_override_grade key" do
                   expect(json_enrollment).not_to have_key :current_period_override_grade
@@ -435,7 +451,7 @@ module Api
             end
 
             context "when Final Grade Override is not allowed" do
-              before(:each) { course.update!(allow_final_grade_override: false) }
+              before { course.update!(allow_final_grade_override: false) }
 
               it "does not include a current_period_override_grade key" do
                 expect(json_enrollment).not_to have_key :current_period_override_grade
@@ -447,7 +463,7 @@ module Api
             end
 
             context "when Final Grade Override is disabled" do
-              before(:each) { course.disable_feature!(:final_grades_override) }
+              before { course.disable_feature!(:final_grades_override) }
 
               it "does not include a current_period_override_grade key" do
                 expect(json_enrollment).not_to have_key :current_period_override_grade
@@ -461,241 +477,241 @@ module Api
         end
       end
 
-      describe '#include_description' do
-        let(:predicate){ course_json.include_description }
+      describe "#include_description" do
+        let(:predicate) { course_json.include_description }
 
-        it 'affirms when the public_description key is in the includes array' do
-          includes << 'public_description'
+        it "affirms when the public_description key is in the includes array" do
+          includes << "public_description"
           expect(predicate).to be_truthy
         end
 
-        it 'affirms when the public_description key is a symbol' do
+        it "affirms when the public_description key is a symbol" do
           includes << :public_description
           expect(predicate).to be_truthy
         end
 
-        it 'negates when the public_description key is missing' do
+        it "negates when the public_description key is missing" do
           expect(predicate).to be_falsey
         end
       end
 
-
-      describe '#include_total_scores?' do
+      describe "#include_total_scores?" do
         let(:predicate) { course_json.include_total_scores? }
-        let(:course_settings) { Hash.new }
-        let(:course) { double( course_settings ) }
+        let(:course_settings) { {} }
+        let(:course) { double(course_settings) }
 
-        describe 'when total scores key is set' do
+        describe "when total scores key is set" do
           before { includes << :total_scores }
 
-          it 'is false if the final grade is hidden' do
+          it "is false if the final grade is hidden" do
             course_settings[:hide_final_grades?] = true
             expect(predicate).to be_falsey
           end
 
-          it 'is true if the course allows the grade to be seen' do
+          it "is true if the course allows the grade to be seen" do
             course_settings[:hide_final_grades?] = false
             expect(predicate).to be_truthy
           end
         end
 
-        describe 'when total scores key is not set' do
+        describe "when total scores key is not set" do
           before { includes.clear }
 
-          it 'is false if the final grade is hidden' do
+          it "is false if the final grade is hidden" do
             course_settings[:hide_final_grades?] = true
             expect(predicate).to be_falsey
           end
 
-          it 'is false even even if the final grade is NOT hidden' do
+          it "is false even even if the final grade is NOT hidden" do
             course_settings[:hide_final_grades?] = false
             expect(predicate).to be_falsey
           end
         end
       end
 
-
-      describe '#allowed_attributes' do
-        it 'just returns the base attributes when there are no includes' do
+      describe "#allowed_attributes" do
+        it "just returns the base attributes when there are no includes" do
           includes.clear
           expect(course_json.allowed_attributes).to eq CourseJson::BASE_ATTRIBUTES
         end
 
-        it 'tacks on any includes' do
+        it "tacks on any includes" do
           includes << :some << :other << :keys
-          expect(course_json.allowed_attributes).to eq( CourseJson::BASE_ATTRIBUTES + [:some, :other, :keys] )
+          expect(course_json.allowed_attributes).to eq(CourseJson::BASE_ATTRIBUTES + %i[some other keys])
         end
       end
 
-
-      describe '#methods_to_send' do
-        it 'includes the end_at field' do
-          expect(course_json.methods_to_send).to include('end_at')
+      describe "#methods_to_send" do
+        it "includes the end_at field" do
+          expect(course_json.methods_to_send).to include("end_at")
         end
 
-        it 'includes the public_syllabus field' do
-          expect(course_json.methods_to_send).to include('public_syllabus')
+        it "includes the public_syllabus field" do
+          expect(course_json.methods_to_send).to include("public_syllabus")
         end
 
-        it 'includes the public_syllabus_to_auth field' do
-          expect(course_json.methods_to_send).to include('public_syllabus_to_auth')
+        it "includes the public_syllabus_to_auth field" do
+          expect(course_json.methods_to_send).to include("public_syllabus_to_auth")
         end
 
-        it 'includes the storage_quota_mb field' do
-          expect(course_json.methods_to_send).to include('storage_quota_mb')
+        it "includes the storage_quota_mb field" do
+          expect(course_json.methods_to_send).to include("storage_quota_mb")
         end
 
-        it 'includes the hide_final_grades method if its in the includes array' do
+        it "includes the hide_final_grades method if its in the includes array" do
           includes << :hide_final_grades
-          expect(course_json.methods_to_send).to include('hide_final_grades')
+          expect(course_json.methods_to_send).to include("hide_final_grades")
         end
       end
 
+      describe "#clear_unneeded_fields" do
+        let(:hash) { {} }
 
-      describe '#clear_unneeded_fields' do
-        let(:hash){ Hash.new }
+        describe "with an optional field" do
+          before { hash["enrollments"] = [] }
 
-        describe 'with an optional field' do
-          before { hash['enrollments'] = [] }
-
-          it 'kicks the key-value pair out if the value is nil' do
-            hash['enrollments'] = nil
-            expect(course_json.clear_unneeded_fields(hash)).to eq({ })
+          it "kicks the key-value pair out if the value is nil" do
+            hash["enrollments"] = nil
+            expect(course_json.clear_unneeded_fields(hash)).to eq({})
           end
 
-          it 'keeps the key-value pair if the value is not nil' do
-            expect(course_json.clear_unneeded_fields(hash)).to eq({'enrollments' => [] })
-          end
-        end
-
-        describe 'with any other field' do
-          before { hash['some_other_key'] = 'some_value' }
-
-          it 'keeps the key-value pair even if the value is nil' do
-            hash['some_other_key'] = nil
-            expect(course_json.clear_unneeded_fields(hash)).to eq({ 'some_other_key' => nil })
-          end
-
-          it 'keeps the key-value pair if the value is not nil' do
-            expect(course_json.clear_unneeded_fields(hash)).to eq({'some_other_key' => 'some_value' })
+          it "keeps the key-value pair if the value is not nil" do
+            expect(course_json.clear_unneeded_fields(hash)).to eq({ "enrollments" => [] })
           end
         end
 
+        describe "with any other field" do
+          before { hash["some_other_key"] = "some_value" }
+
+          it "keeps the key-value pair even if the value is nil" do
+            hash["some_other_key"] = nil
+            expect(course_json.clear_unneeded_fields(hash)).to eq({ "some_other_key" => nil })
+          end
+
+          it "keeps the key-value pair if the value is not nil" do
+            expect(course_json.clear_unneeded_fields(hash)).to eq({ "some_other_key" => "some_value" })
+          end
+        end
       end
 
-      describe '#description' do
-        let(:course) { double(:public_description => 'an eloquent anecdote' ) }
+      describe "#description" do
+        let(:course) { double(public_description: "an eloquent anecdote") }
 
-        it 'returns the description when its configured for inclusion' do
+        it "returns the description when its configured for inclusion" do
           includes << :public_description
           expect(course_json.include_description).to be_truthy
-          expect(course_json.description(course)).to eq 'an eloquent anecdote'
+          expect(course_json.description(course)).to eq "an eloquent anecdote"
         end
 
-        it 'is nil when configured not to be included' do
+        it "is nil when configured not to be included" do
           includes.clear
           expect(course_json.description(course)).to be_nil
         end
       end
 
-      describe '#initialization' do
-        let(:enrollments) { double(:enrollments) }
-        let(:hash) { {:a => '1', :b => '2'} }
-        let(:includes) { ['these', 'three', 'keys' ] }
+      describe "#initialization" do
+        subject { @json }
 
-        before(:each) do
-          @json = CourseJson.new(course, user, includes, enrollments){ hash }
+        let(:enrollments) { double(:enrollments) }
+        let(:hash) { { a: "1", b: "2" } }
+        let(:includes) { %w[these three keys] }
+
+        before do
+          @json = CourseJson.new(course, user, includes, enrollments) { hash }
         end
 
-        subject{ @json }
-
-        describe '#course' do
+        describe "#course" do
           subject { super().course }
+
           it { is_expected.to eq course }
         end
 
-        describe '#user' do
+        describe "#user" do
           subject { super().user }
+
           it { is_expected.to eq user }
         end
 
-        describe '#includes' do
+        describe "#includes" do
           subject { super().includes }
-          it { is_expected.to eq [:these, :three, :keys] }
+
+          it { is_expected.to eq %i[these three keys] }
         end
 
-        describe '#enrollments' do
+        describe "#enrollments" do
           subject { super().enrollments }
+
           it { is_expected.to eq enrollments }
         end
 
-        describe '#hash' do
+        describe "#hash" do
           subject { super().hash }
+
           it { is_expected.to eq hash }
         end
       end
 
-      describe '#set_sis_course_id' do
-        let(:sis_course) { double(grants_right?: @has_right, sis_source_id: @sis_id, sis_batch_id: @batch, root_account: root_account) }
-        let(:sis_course_json) { CourseJson.new( sis_course, user, includes, [] ) }
-        let(:root_account) { double(grants_right?: @has_right ) }
-        let(:hash) { Hash.new }
+      describe "#set_sis_course_id" do
+        let(:sis_course) { double(grants_right?: @has_right, sis_source_id: @sis_id, sis_batch_id: @batch, root_account:) }
+        let(:sis_course_json) { CourseJson.new(sis_course, user, includes, []) }
+        let(:root_account) { double(grants_right?: @has_right) }
+        let(:hash) { {} }
 
         before do
           @sis_id = 1357
-          @batch = 991357
+          @batch = 991_357
           @has_right = false
         end
 
-        describe 'when appropriate rights are granted' do
+        describe "when appropriate rights are granted" do
           before { @has_right = true }
 
-          it 'adds sis the key-value pair to the hash' do
+          it "adds sis the key-value pair to the hash" do
             sis_course_json.set_sis_course_id(hash)
-            expect(hash['sis_course_id']).to eq 1357
+            expect(hash["sis_course_id"]).to eq 1357
           end
 
-          describe 'with a nil sis_id' do
+          describe "with a nil sis_id" do
             before do
               @sis_id = nil
               @batch = nil
               sis_course_json.set_sis_course_id(hash)
             end
 
-            it 'allows the nil value to go into the has' do
-              expect(hash['sis_course_id']).to eq nil
+            it "allows the nil value to go into the has" do
+              expect(hash["sis_course_id"]).to be_nil
             end
 
-            it 'does not get cleared out before translation to json' do
-              expect(sis_course_json.clear_unneeded_fields( hash )).to eq({ 'sis_course_id' => nil, 'sis_import_id' => nil})
+            it "does not get cleared out before translation to json" do
+              expect(sis_course_json.clear_unneeded_fields(hash)).to eq({ "sis_course_id" => nil, "sis_import_id" => nil })
             end
           end
         end
 
-        it 'doesnt add the sis_course_id key at all if the rights are NOT present' do
+        it "doesnt add the sis_course_id key at all if the rights are NOT present" do
           sis_course_json.set_sis_course_id(hash)
           expect(hash).to eq({})
         end
 
-        it 'uses precalculated permissions if available' do
-          precalculated_permissions = {:read_sis => false, :manage_sis => true}
-          course_json_with_perms = CourseJson.new( sis_course, user, includes, [], precalculated_permissions: precalculated_permissions)
+        it "uses precalculated permissions if available" do
+          precalculated_permissions = { read_sis: false, manage_sis: true }
+          course_json_with_perms = CourseJson.new(sis_course, user, includes, [], precalculated_permissions:)
           expect(sis_course).to_not receive(:grants_right?)
           course_json_with_perms.set_sis_course_id(hash)
-          expect(hash['sis_course_id']).to eq 1357
+          expect(hash["sis_course_id"]).to eq 1357
         end
       end
 
-      describe '#permissions' do
-        let(:course) { double(:public_description => 'an eloquent anecdote' ) }
+      describe "#permissions" do
+        let(:course) { double(public_description: "an eloquent anecdote") }
 
-        it 'returns the permissions when its configured for inclusion' do
+        it "returns the permissions when its configured for inclusion" do
           includes << :permissions
           expect(course_json.include_permissions).to be_truthy
-          expect(course_json.permissions_to_include).to eq [ :create_discussion_topic, :create_announcement ]
+          expect(course_json.permissions_to_include).to eq [:create_discussion_topic, :create_announcement]
         end
 
-        it 'is nil when configured not to be included' do
+        it "is nil when configured not to be included" do
           includes.clear
           expect(course_json.permissions_to_include).to be_nil
         end

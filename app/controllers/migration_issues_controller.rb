@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -92,9 +94,11 @@
 #
 class MigrationIssuesController < ApplicationController
   include Api::V1::ContentMigration
+  include GranularPermissionEnforcement
 
   before_action :require_context
   before_action :require_content_migration
+  before_action :authorize_action
 
   # @API List migration issues
   #
@@ -108,7 +112,7 @@ class MigrationIssuesController < ApplicationController
   # @returns [MigrationIssue]
   def index
     @issues = Api.paginate(@content_migration.migration_issues.by_created_at, self, api_v1_course_content_migration_migration_issue_list_url(@context, @content_migration))
-    render :json => migration_issues_json(@issues, @content_migration, @current_user, session)
+    render json: migration_issues_json(@issues, @content_migration, @current_user, session)
   end
 
   # @API Get a migration issue
@@ -123,7 +127,7 @@ class MigrationIssuesController < ApplicationController
   # @returns MigrationIssue
   def show
     issue = @content_migration.migration_issues.find(params[:id])
-    render :json => migration_issue_json(issue, @content_migration, @current_user, session)
+    render json: migration_issue_json(issue, @content_migration, @current_user, session)
   end
 
   # @API Update a migration issue
@@ -142,23 +146,33 @@ class MigrationIssuesController < ApplicationController
   def update
     issue = @content_migration.migration_issues.find(params[:id])
 
-    if ['active', 'resolved'].member? params[:workflow_state]
+    if ["active", "resolved"].member? params[:workflow_state]
       issue.workflow_state = params[:workflow_state]
       if issue.save
-        render :json => migration_issue_json(issue, @content_migration, @current_user, session)
+        render json: migration_issue_json(issue, @content_migration, @current_user, session)
       else
-        render :json => issue.errors, :status => :bad_request
+        render json: issue.errors, status: :bad_request
       end
     else
-      render(:json => { :message => t('errors.valid_workflow_state', "Must send a valid workflow state") }, :status => 403)
+      render(json: { message: t("errors.valid_workflow_state", "Must send a valid workflow state") }, status: :forbidden)
     end
   end
 
   protected
 
-  def require_content_migration
-    @content_migration = @context.content_migrations.find(params[:content_migration_id])
-    return authorized_action(@context, @current_user, :manage_content)
+  def authorize_action
+    enforce_granular_permissions(
+      @context,
+      overrides: [:manage_content],
+      actions: {
+        index: RoleOverride::GRANULAR_MANAGE_COURSE_CONTENT_PERMISSIONS,
+        show: RoleOverride::GRANULAR_MANAGE_COURSE_CONTENT_PERMISSIONS,
+        update: [:manage_course_content_edit]
+      }
+    )
   end
 
+  def require_content_migration
+    @content_migration = @context.content_migrations.find(params[:content_migration_id])
+  end
 end

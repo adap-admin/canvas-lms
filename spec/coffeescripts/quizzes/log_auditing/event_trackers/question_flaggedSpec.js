@@ -16,21 +16,21 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Subject from 'compiled/quizzes/log_auditing/event_trackers/question_flagged'
-import K from 'compiled/quizzes/log_auditing/constants'
+import Subject from '@canvas/quiz-log-auditing/jquery/event_trackers/question_flagged'
+import K from '@canvas/quiz-log-auditing/jquery/constants'
 import $ from 'jquery'
 
 QUnit.module('Quizzes::LogAuditing::EventTrackers::QuestionFlagged', {
   setup() {},
   teardown() {
     document.getElementById('fixtures').innerHTML = ''
-  }
+  },
 })
 const DEFAULTS = Subject.prototype.options
-const createQuestion = function(id) {
+const createQuestion = function (id) {
   const $question = $('<div />', {
     class: 'question',
-    id: `question_${id}`
+    id: `question_${id}`,
   }).appendTo(document.getElementById('fixtures'))
   $('<a />', {class: 'flag_question'})
     .appendTo($question)
@@ -44,12 +44,12 @@ test('#constructor: it sets up the proper context', () => {
   equal(tracker.priority, K.EVT_PRIORITY_LOW)
 })
 
-test('capturing: it works', function() {
+test('capturing: it works', () => {
   const capture = sinon.stub()
   const tracker = new Subject({
     questionSelector: '.question',
     questionMarkedClass: 'marked',
-    buttonSelector: '.flag_question'
+    buttonSelector: '.flag_question',
   })
   tracker.install(capture)
   const $fakeQuestion = createQuestion('123')
@@ -57,14 +57,14 @@ test('capturing: it works', function() {
   ok(
     capture.calledWith({
       questionId: '123',
-      flagged: true
+      flagged: true,
     })
   )
   $fakeQuestion.find('a.flag_question').click()
   ok(
     capture.calledWith({
       questionId: '123',
-      flagged: false
+      flagged: false,
     })
   )
 })

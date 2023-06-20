@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -17,30 +19,30 @@
 #
 class UserMergeData < ActiveRecord::Base
   belongs_to :user
-  belongs_to :from_user, class_name: 'User'
-  has_many :records, class_name: 'UserMergeDataRecord', inverse_of: :merge_data, autosave: false
-  has_many :items, class_name: 'UserMergeDataItem', inverse_of: :merge_data, autosave: false
+  belongs_to :from_user, class_name: "User"
+  has_many :records, class_name: "UserMergeDataRecord", inverse_of: :merge_data, autosave: false
+  has_many :items, class_name: "UserMergeDataItem", inverse_of: :merge_data, autosave: false
 
-  scope :active, -> { where.not(workflow_state: 'deleted') }
-  scope :splitable, -> { where('created_at > ?', split_time) }
+  scope :active, -> { where.not(workflow_state: %w[deleted failed]) }
+  scope :splitable, -> { where("created_at > ?", split_time) }
 
   def self.split_time
-    Time.zone.now - Setting.get('user_merge_to_split_time', '180').to_i.days
+    Time.zone.now - Setting.get("user_merge_to_split_time", "180").to_i.days
   end
 
   def add_more_data(objects, user: nil, workflow_state: nil, data: [])
-    data = build_more_data(objects, user: user, workflow_state: workflow_state, data: data)
+    data = build_more_data(objects, user:, workflow_state:, data:)
     bulk_insert_merge_data(data)
   end
 
   def build_more_data(objects, user: nil, workflow_state: nil, data: [])
     # to get relative ids in previous_user_id, we need to be on the records shard
-    self.shard.activate do
+    shard.activate do
       objects.each do |o|
         user ||= o.user_id
-        r = self.records.new(context: o, previous_user_id: user)
-        r.previous_workflow_state = o.workflow_state if o.class.columns_hash.key?('workflow_state')
-        r.previous_workflow_state = o.file_state if o.class == Attachment
+        r = records.new(context: o, previous_user_id: user)
+        r.previous_workflow_state = o.workflow_state if o.class.columns_hash.key?("workflow_state")
+        r.previous_workflow_state = o.file_state if o.instance_of?(Attachment)
         r.previous_workflow_state = workflow_state if workflow_state
         data << r
       end
@@ -49,15 +51,14 @@ class UserMergeData < ActiveRecord::Base
   end
 
   def bulk_insert_merge_data(data)
-    self.shard.activate do
-      data.each_slice(1000) {|batch| UserMergeDataRecord.bulk_insert_objects(batch)}
+    shard.activate do
+      data.each_slice(1000) { |batch| UserMergeDataRecord.bulk_insert_objects(batch) }
     end
   end
 
   alias_method :destroy_permanently!, :destroy
   def destroy
-    self.workflow_state = 'deleted'
-    self.save!
+    self.workflow_state = "deleted"
+    save!
   end
-
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -15,24 +17,21 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
-
 describe BrandConfigsApiController do
-  describe '#show' do
-
-    it "should redirect to the default when nothing is set" do
+  describe "#show" do
+    it "redirects to the default when nothing is set" do
       get :show
-      expect(response).to redirect_to("#{Canvas::Cdn.config.host}/#{BrandableCSS.public_default_path('json')}")
+      expect(response).to redirect_to("#{Canvas::Cdn.config.host}/#{BrandableCSS.public_default_path("json")}")
     end
 
-    it "should redirect to the one for @domain_root_account's brand config if set" do
-      brand_config = Account.default.create_brand_config!(variables: {"ic-brand-primary" => "#321"})
+    it "redirects to the one for @domain_root_account's brand config if set" do
+      brand_config = Account.default.create_brand_config!(variables: { "ic-brand-primary" => "#321" })
       get :show
       expect(response).to redirect_to("#{Canvas::Cdn.config.host}/#{brand_config.public_json_path}")
     end
 
-    it "should set CORS headers" do
-      brand_config = Account.default.create_brand_config!(variables: {"ic-brand-primary" => "#321"})
+    it "sets CORS headers" do
+      Account.default.create_brand_config!(variables: { "ic-brand-primary" => "#321" })
       get :show
       expect(response.header["Access-Control-Allow-Origin"]).to eq "*"
     end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -16,17 +18,17 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 module AlignmentsHelper
-  def link_to_outcome_alignment(context, outcome, alignment=nil)
+  def link_to_outcome_alignment(context, outcome, alignment = nil)
     html_class = [
       "title"
     ]
     html_class << "icon-#{alignment.content_type.downcase}" if alignment
     link_to(alignment.try(:title) || nbsp, outcome_alignment_url(context, outcome, alignment), {
-      class: html_class
-    })
+              class: html_class
+            })
   end
 
-  def outcome_alignment_tag(context, outcome, alignment=nil, &block)
+  def outcome_alignment_tag(context, outcome, alignment = nil, &)
     options = {
       id: "alignment_#{alignment.try(:id) || "blank"}",
       class: [
@@ -40,25 +42,28 @@ module AlignmentsHelper
         url: outcome_alignment_url(
           context, outcome, alignment
         )
-      }.delete_if { |_, v|
-        !v.present?
-      }
+      }.compact_blank!
     }
     options[:style] = hidden unless alignment
 
-    content_tag(:li, options, &block)
+    content_tag(:li, options, &)
   end
 
-  def outcome_alignment_url(context, outcome, alignment=nil)
+  def outcome_alignment_url(context, outcome, alignment = nil)
     if alignment.present?
       [
-        context_prefix(alignment.context_code), "outcomes",
-        outcome.id, "alignments", alignment.id
-      ].join('/')
+        context_prefix(alignment.context_code),
+        "outcomes",
+        outcome.id,
+        "alignments",
+        alignment.id
+      ].join("/")
     elsif !context.is_a?(Account)
       context_url(
-        context, :context_outcome_alignment_redirect_url,
-        outcome.id, "{{ id }}"
+        context,
+        :context_outcome_alignment_redirect_url,
+        outcome.id,
+        "{{ id }}"
       )
     else
       nil

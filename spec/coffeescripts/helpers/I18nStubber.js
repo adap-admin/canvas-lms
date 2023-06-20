@@ -16,7 +16,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import I18n from 'i18nObj'
+import I18n, {useTranslations} from '@canvas/i18n'
+import enTranslations from 'translations/en.json'
 
 const frames = []
 
@@ -24,7 +25,7 @@ export default {
   pushFrame() {
     frames.push({
       locale: I18n.locale,
-      translations: I18n.translations
+      translations: I18n.translations,
     })
     I18n.locale = null
     I18n.translations = {en: {}}
@@ -40,35 +41,23 @@ export default {
   clear() {
     while (frames.length > 0) this.popFrame()
   },
+  useInitialTranslations() {
+    this.pushFrame()
+    I18n.locale = 'en'
+    I18n.translations = {en: enTranslations}
+  },
   stub(locale, translations, cb) {
     if (cb) {
       return this.withFrame(() => this.stub(locale, translations), cb)
     }
     if (!frames.length) throw 'I18nStubber: stub without a stored frame'
 
-    I18n.fallbacksMap = null
-
     // don't merge into a given locale, just replace everything wholesale
     if (typeof locale === 'object') {
       I18n.translations = locale
-      return
+    } else {
+      I18n.translations[locale] = translations
     }
-
-    let scope = I18n.translations
-    if (!scope[locale]) scope[locale] = {}
-    locale = scope[locale]
-
-    return Object.keys(translations).map(key => {
-      const value = translations[key]
-      scope = locale
-      const parts = key.split('.')
-      const last = parts.pop()
-      parts.forEach(part => {
-        if (!scope[part]) scope[part] = {}
-        scope = scope[part]
-      })
-      return (scope[last] = value)
-    })
   },
   setLocale(locale, cb) {
     if (!frames.length) throw 'I18nStubber: setLocale without a stored frame'
@@ -78,5 +67,5 @@ export default {
     this.pushFrame()
     cbs.forEach(cb => cb())
     return this.popFrame()
-  }
+  },
 }

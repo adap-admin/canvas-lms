@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -15,166 +17,180 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-if CANVAS_RAILS5_2
-  gem 'rails', '5.2.3'
-    gem 'loofah', '2.2.3'
-else
-  gem 'rails', '6.0.0.rc2'
+# NOTE: Indented gems are meant to indicate optional dependencies of parent gems
+
+gem "bootsnap", "1.13.0", require: false
+gem "rails", "~> 7.0.4"
+gem "tzinfo", "2.0.4"
+gem "switchman", "~> 3.5"
+gem "guardrail", "3.0.2"
+gem "switchman-inst-jobs", "4.0.13"
+gem "irb", "1.4.1"
+
+gem "academic_benchmarks", "1.1.2", require: false
+gem "active_model-better_errors", "1.6.7", require: "active_model/better_errors"
+gem "active_model_serializers",
+    "0.9.0alpha1",
+    github: "rails-api/active_model_serializers",
+    ref: "61882e1e4127facfe92e49057aec71edbe981829"
+gem "activerecord-pg-extensions", "0.4.4"
+gem "addressable", "~> 2.8", require: false
+gem "after_transaction_commit", "2.2.2"
+gem "authlogic", "6.4.2"
+  gem "scrypt", "3.0.7"
+gem "aws-sdk-dynamodb", "~> 1.83"
+gem "aws-sdk-kinesis", "~> 1.45", require: false
+gem "aws-sdk-kms", "~> 1.63", require: false
+gem "aws-sdk-s3", "~> 1.119", require: false
+gem "aws-sdk-sns", "~> 1.60", require: false
+gem "aws-sdk-sqs", "~> 1.53", require: false
+gem "barby", "0.6.8", require: false
+  gem "rqrcode", "1.2.0", require: false
+  gem "chunky_png", "1.4.0", require: false
+gem "bcrypt", "3.1.16"
+gem "bigdecimal", "3.1.3"
+gem "browser", "5.1.0", require: false
+gem "builder", "3.2.4"
+gem "business_time", "0.13.0"
+gem "canvas_connect", "0.3.16"
+gem "canvas_webex", "0.18.2"
+gem "crocodoc-ruby", "0.0.1", require: false
+gem "ddtrace", "0.42.0", require: false
+gem "docx", "0.6.2"
+gem "encrypted_cookie_store-instructure", "1.2.12", require: "encrypted_cookie_store"
+gem "folio-pagination", "0.0.12", require: "folio/rails"
+gem "ffi", "1.14.2", require: false
+gem "gepub", "1.0.15"
+gem "apollo-federation", "1.1.5"
+gem "graphql", "1.12.14"
+gem "graphql-batch", "0.4.3"
+gem "hashery", "2.1.2", require: false
+gem "highline", "2.0.3", require: false
+gem "httparty", "~> 0.21"
+gem "i18n", "~> 1.12"
+gem "i18nliner", "~> 0.2.4"
+gem "icalendar", "2.7.0", require: false
+gem "diplomat", "2.6.3", require: false
+gem "ims-lti", "2.3.3", require: "ims"
+gem "rrule", "0.4.4", require: false
+
+gem "inst_access", "0.1.1"
+gem "inst_statsd", "2.2.0"
+gem "inst-jobs", "~> 3.1"
+gem "inst-jobs-autoscaling", "2.1.1"
+gem "inst-jobs-statsd", "2.2.0"
+# if updating json gem it will need to be hotfixed because if a newer version of
+# the json gem is installed, it will always use that one even before bundler
+# gets activated. Updating the gem in it's own commit will make this easier.
+gem "json", "~> 2.6.1"
+gem "json_schemer", "~> 0.2"
+gem "json-jwt", "1.13.0", require: false
+gem "link_header", "0.0.8"
+gem "mail", "2.7.1", require: false
+gem "marginalia", "1.11.1", require: false
+gem "mime-types", "3.3.1"
+gem "mini_magick", "4.11.0"
+gem "multi_json", "1.15.0"
+gem "net-http", "~> 0.1", require: false
+gem "net-ldap", "0.16.3", require: false
+gem "net-imap", "0.2.3", require: false
+gem "net-pop", "0.1.1", require: false
+gem "net-smtp", "0.3.1", require: false
+gem "nokogiri", "~> 1.13.8", require: false # 1.14 breaks nokogiri-xmlsec
+gem "oauth", "~> 1.1", require: false
+gem "oauth2", "1.4.4", require: false
+gem "oj", "3.10.16"
+gem "outrigger", "3.0.1"
+gem "parallel", "1.22.1", require: false
+gem "pdf-reader", "2.5.0"
+gem "pg_query", "2.2.0"
+gem "prawn-emoji", "~> 5.3", require: false
+gem "prawn-rails", "1.3.0"
+  gem "matrix", "0.4.2" # Used to be a default gem but is no more, but prawn depends on it implicitly
+gem "prosopite", "~> 1.3"
+gem "rack", "~> 2.2"
+gem "rack-brotli", "1.0.0"
+gem "rack-test", "1.1.0"
+gem "rake", "~> 13.0"
+gem "rails-observers", "0.1.5"
+gem "ratom-nokogiri", "0.10.11", require: false
+gem "redcarpet", "~> 3.6", require: false
+gem "regexp_parser", "2.7.0", require: false
+gem "retriable", "1.4.1"
+gem "ritex", "1.0.1", require: false
+gem "rotp", "6.2.0", require: false
+gem "rss", "0.2.9", require: false
+gem "ruby-duration", "3.2.3", require: false
+gem "ruby2_keywords", "0.0.3"
+gem "rubycas-client", "2.3.9", require: false
+gem "ruby-rtf", "0.0.5"
+gem "rubyzip", "2.3.0", require: "zip"
+gem "saml2", "3.1.2"
+gem "sanitize", "~> 6.0", require: false
+gem "sentry-ruby", "5.1.0"
+gem "sentry-rails", "5.1.0"
+gem "sentry-inst_jobs", "1.0.2"
+gem "simple_oauth", "0.3.1", require: false
+gem "twilio-ruby", "5.36.0", require: false
+gem "vault", "0.15.0", require: false
+gem "vericite_api", "1.5.3"
+gem "wcag_color_contrast", "0.1.0"
+gem "week_of_month",
+    "1.2.5",
+    github: "instructure/week-of-month",
+    ref: "b3013639e9474f302b5a6f27e4e45313e8d24902"
+gem "will_paginate", "3.3.0", require: false # required for folio-pagination
+
+gem "faraday", "0.17.4"
+
+path "../gems" do
+  gem "activesupport-suspend_callbacks"
+  gem "acts_as_list"
+  gem "adheres_to_policy"
+  gem "attachment_fu"
+  gem "autoextend"
+  gem "bookmarked_collection"
+  gem "broadcast_policy"
+  gem "canvas_breach_mitigation"
+  gem "canvas_cache"
+  gem "canvas_color"
+  gem "canvas_crummy"
+  gem "canvas_dynamodb"
+  gem "canvas_errors"
+  gem "canvas_ext"
+  gem "canvas_http"
+  gem "canvas_kaltura"
+  gem "canvas_panda_pub"
+  gem "canvas_partman"
+  gem "canvas_mimetype_fu"
+  gem "canvas_quiz_statistics"
+  gem "canvas_sanitize"
+  gem "canvas_security"
+  gem "canvas_slug"
+  gem "canvas_sort"
+  gem "canvas_stringex"
+  gem "canvas_text_helper"
+  gem "canvas_time"
+  gem "canvas_unzip"
+  gem "config_file"
+  gem "csv_diff"
+  gem "diigo"
+  gem "dynamic_settings"
+  gem "event_stream"
+  gem "google_drive"
+  gem "html_text_helper"
+  gem "incoming_mail_processor"
+  gem "json_token"
+  gem "linked_in"
+  gem "live_events"
+  gem "lti-advantage"
+  gem "lti_outbound"
+  gem "multipart"
+  gem "paginated_collection"
+  gem "request_context"
+  gem "stringify_ids"
+  gem "turnitin_api"
+  gem "twitter"
+  gem "utf8_cleaner"
+  gem "workflow"
 end
-
-gem 'rack', '2.0.6'
-
-gem 'oauth2', '1.4.1', require: false
-
-gem 'rails-observers', '0.1.5'
-
-gem 'builder', '3.2.3'
-gem 'tzinfo', '1.2.5'
-
-gem 'encrypted_cookie_store-instructure', '1.2.9', require: 'encrypted_cookie_store'
-gem 'active_model_serializers', '0.9.0alpha1',
-  github: 'rails-api/active_model_serializers', ref: '61882e1e4127facfe92e49057aec71edbe981829'
-gem 'authlogic', '5.0.2'
-  gem 'scrypt', '3.0.6'
-gem 'active_model-better_errors', '1.6.7', require: 'active_model/better_errors'
-gem 'switchman', '1.14.5'
-  gem 'open4', '1.3.4', require: false
-gem 'folio-pagination', '0.0.12', require: 'folio/rails'
-  # for folio, see the folio README
-  gem 'will_paginate', '3.1.7', require: false
-
-gem 'addressable', '2.5.2', require: false
-gem "after_transaction_commit", '2.0.0'
-gem "aws-sdk-dynamodb", "1.34.0"
-gem "aws-sdk-kinesis", '1.18.0', require: false
-gem "aws-sdk-s3", '1.45.0', require: false
-gem "aws-sdk-sns", '1.18.0', require: false
-gem "aws-sdk-sqs", '1.18.0', require: false
-gem "aws-sdk-core", "3.61.1", require: false
-gem "aws-sdk-kms", "1.23.0", require: false
-gem "aws-sigv4", "1.1.0", require: false
-
-gem 'barby', '0.6.8', require: false
-  gem 'rqrcode', '0.10.1', require: false
-  gem 'chunky_png', '1.3.11', require: false
-gem 'bcrypt', '3.1.13'
-gem 'brotli', '0.2.3', require: false
-gem 'canvas_connect', '0.3.11'
-  gem 'adobe_connect', '1.0.8', require: false
-gem 'canvas_webex', '0.17'
-gem 'inst-jobs', '0.15.11'
-  gem 'rufus-scheduler', '3.4.2', require: false
-    gem 'et-orbi', '1.0.8', require: false
-gem 'switchman-inst-jobs', '1.3.5'
-gem 'inst-jobs-autoscaling', '1.0.5'
-  gem 'aws-sdk-autoscaling', '1.25.0', require: false
-# ffi 1.9.2x seem to have issues on RHEL & CentOS causing segfaults
-# check https://github.com/ffi/ffi/issues/621 for resolution prior to bumping version
-gem 'ffi', '1.9.18', require: false
-gem 'hashery', '2.1.2', require: false
-gem 'highline', '1.7.10', require: false
-gem 'httparty', '0.16.1'
-gem 'i18n', '1.0.0'
-gem 'i18nliner', '0.1.0'
-  gem 'ruby2ruby', '2.4.1', require: false
-  gem 'ruby_parser', '3.11.0', require: false
-gem 'icalendar', '2.5.1', require: false
-gem 'ims-lti', '2.2.3', require: 'ims'
-gem 'json_schemer', '0.1.7'
-gem 'simple_oauth', '0.3.1', require: false
-gem 'json', '2.2.0'
-gem 'link_header', '0.0.8'
-gem 'oj', '3.3.9'
-gem 'jwt', '1.5.6', require: false
-gem 'json-jwt', '1.9.4', require: false
-gem 'twilio-ruby', '5.7.2', require: false
-
-gem 'mail', '2.7.1', require: false
-  gem 'mini_mime', '1.0.0', require: false
-gem 'marginalia', '1.5.0', require: false
-gem 'mime-types', '3.2.2'
-gem 'mini_magick', '4.8.0'
-gem 'multi_json', '1.13.1'
-gem 'netaddr', '1.5.1', require: false
-gem 'nokogiri', '1.10.1', require: false
-gem 'oauth', '0.5.4', require: false
-gem 'parallel', '1.12.1', require: false
-  gem 'ruby-progressbar', '1.9.0', require: false # used to show progress of S3Uploader
-gem 'retriable', '1.4.1'
-gem 'rake', '12.3.1'
-gem 'ratom-nokogiri', '0.10.8', require: false
-gem 'rdiscount', '1.6.8', require: false
-gem 'ritex', '1.0.1', require: false
-
-gem 'rotp', '3.3.1', require: false
-gem 'net-ldap', '0.16.1', require: false
-gem 'ruby-duration', '3.2.3', require: false
-gem 'saml2', '3.0.8'
-  gem 'nokogiri-xmlsec-instructure', '0.9.6', require: false
-gem 'rubycas-client', '2.3.9', require: false
-gem 'rubyzip', '1.2.2', require: 'zip'
-gem 'safe_yaml', '1.0.4', require: false
-gem 'sanitize', '2.1.1', require: false
-gem 'shackles', '1.4.2'
-
-gem 'browser', '2.5.3', require: false
-
-gem 'crocodoc-ruby', '0.0.1', require: false
-gem 'sentry-raven', '2.7.2', require: false
-gem 'inst_statsd', '2.1.6'
-  gem 'statsd-ruby', '1.4.0', require: false
-  gem 'aroi', '0.0.7', require: false
-  gem 'dogstatsd-ruby', '4.3.0'
-gem 'inst-jobs-statsd', '1.2.3'
-gem 'gepub', '1.0.1'
-gem 'imperium', '0.5.0', require: false
-gem 'academic_benchmarks', '0.0.11', require: false
-
-gem 'graphql', '1.9.7'
-gem 'graphql-batch', '0.4.1'
-
-gem 'prawn-rails', '1.2.0'
-
-gem 'activesupport-suspend_callbacks', path: 'gems/activesupport-suspend_callbacks'
-gem 'acts_as_list', path: 'gems/acts_as_list'
-gem 'adheres_to_policy', path: 'gems/adheres_to_policy'
-gem 'attachment_fu', path: 'gems/attachment_fu'
-gem 'autoextend', path: 'gems'
-gem 'bookmarked_collection', path: 'gems/bookmarked_collection'
-gem 'broadcast_policy', path: "gems/broadcast_policy"
-gem 'canvas_breach_mitigation', path: 'gems/canvas_breach_mitigation'
-gem 'canvas_color', path: 'gems/canvas_color'
-gem 'canvas_crummy', path: 'gems/canvas_crummy'
-gem "canvas_dynamodb", path: "gems/canvas_dynamodb"
-gem 'canvas_ext', path: 'gems/canvas_ext'
-gem 'canvas_http', path: 'gems/canvas_http'
-gem 'canvas_kaltura', path: 'gems/canvas_kaltura'
-gem 'canvas_panda_pub', path: 'gems/canvas_panda_pub'
-gem 'canvas_partman', path: 'gems/canvas_partman'
-gem 'event_stream', path: 'gems/event_stream'
-gem 'canvas_mimetype_fu', path: 'gems/canvas_mimetype_fu'
-gem 'canvas_quiz_statistics', path: 'gems/canvas_quiz_statistics'
-gem 'canvas_sanitize', path: 'gems/canvas_sanitize'
-gem 'canvas_slug', path: 'gems/canvas_slug'
-gem 'canvas_sort', path: 'gems/canvas_sort'
-gem 'canvas_stringex', path: 'gems/canvas_stringex'
-gem 'canvas_text_helper', path: 'gems/canvas_text_helper'
-gem 'canvas_time', path: 'gems/canvas_time'
-gem 'canvas_unzip', path: 'gems/canvas_unzip'
-gem 'csv_diff', path: 'gems/csv_diff'
-gem 'google_drive', path: 'gems/google_drive'
-gem 'html_text_helper', path: 'gems/html_text_helper'
-gem 'incoming_mail_processor', path: 'gems/incoming_mail_processor'
-gem 'json_token', path: 'gems/json_token'
-gem 'linked_in', path: 'gems/linked_in'
-gem 'live_events', path: 'gems/live_events'
-gem 'diigo', path: 'gems/diigo'
-gem 'lti-advantage', path: 'gems/lti-advantage'
-gem 'lti_outbound', path: 'gems/lti_outbound'
-gem 'multipart', path: 'gems/multipart'
-gem 'paginated_collection', path: 'gems/paginated_collection'
-gem 'stringify_ids', path: 'gems/stringify_ids'
-gem 'twitter', path: 'gems/twitter'
-gem 'vericite_api', '1.5.3'
-gem 'utf8_cleaner', path: 'gems/utf8_cleaner'
-gem 'workflow', path: 'gems/workflow'

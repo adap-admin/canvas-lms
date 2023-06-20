@@ -1,4 +1,6 @@
-#encoding:ASCII-8BIT
+# frozen_string_literal: true
+
+# encoding:ASCII-8BIT
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -21,13 +23,10 @@ Rack::Utils.multipart_part_limit = 256 # default is 128
 
 module EnableRackChunking
   def chunkable_version?(*)
-    if defined?(PactConfig)
-      false
-    elsif ::Rails.env.test? || ::Canvas::DynamicSettings.find(tree: :private)["enable_rack_chunking"]
-      super
-    else
-      false
-    end
+    return false if defined?(PactConfig)
+    return super if ::Rails.env.test? || ::DynamicSettings.find(tree: :private)["enable_rack_chunking", failsafe: true]
+
+    false
   end
 end
 Rack::Chunked.prepend(EnableRackChunking)

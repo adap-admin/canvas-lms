@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -16,29 +18,27 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper')
-
 describe Canvas::Plugins::Validators::AdobeConnectValidator do
-  let(:plugin_setting) { double }
-
   subject { Canvas::Plugins::Validators::AdobeConnectValidator }
 
-  it 'should allow an empty hash' do
-    expect(subject.validate({}, plugin_setting)).to eql Hash.new
+  let(:plugin_setting) { double }
+
+  it "allows an empty hash" do
+    expect(subject.validate({}, plugin_setting)).to eql({})
   end
 
-  it 'should error on missing keys' do
+  it "errors on missing keys" do
     expect(plugin_setting).to receive(:errors).and_return(double(add: true))
-    expect(subject.validate({:domain => 'example.com'}, plugin_setting)).to be_falsey
+    expect(subject.validate({ domain: "example.com" }, plugin_setting)).to be_falsey
   end
 
-  it 'should pass if all keys exist' do
+  it "passes if all keys exist" do
     valid_keys = {
-      :domain => 'example.com',
-      :login => 'username',
-      :password => 'password',
-      :meeting_container => 'folder_name',
-      :use_sis_ids => true
+      domain: "example.com",
+      login: "username",
+      password: "password",
+      meeting_container: "folder_name",
+      use_sis_ids: true
     }
 
     expect(subject.validate(valid_keys, plugin_setting)).to eql valid_keys

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -16,9 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
-
-require 'nokogiri'
+require "nokogiri"
 
 describe AlignmentsHelper do
   include AlignmentsHelper
@@ -30,41 +30,43 @@ describe AlignmentsHelper do
     assignment_model
   end
 
-  let_once(:outcome) {
-    @course.created_learning_outcomes.create!(title: 'outcome')
-  }
+  let_once(:outcome) do
+    @course.created_learning_outcomes.create!(title: "outcome")
+  end
 
-  let_once(:account_outcome) {
-    @account.created_learning_outcomes.create!(title: 'account outcome!')
-  }
+  let_once(:account_outcome) do
+    @account.created_learning_outcomes.create!(title: "account outcome!")
+  end
 
-  let_once(:alignment) {
+  let_once(:alignment) do
     tag = ContentTag.create(
       content: outcome,
       context: outcome.context,
-      tag_type: 'learning_outcome')
+      tag_type: "learning_outcome"
+    )
     outcome.alignments << tag
     tag
-  }
+  end
 
-  let_once(:graded_alignment) {
+  let_once(:graded_alignment) do
     tag = ContentTag.create(
-        content: @assignment,
-        context: outcome.context,
-        tag_type: 'learning_outcome')
+      content: @assignment,
+      context: outcome.context,
+      tag_type: "learning_outcome"
+    )
     outcome.alignments << tag
     tag
-  }
+  end
 
   describe "outcome_alignment_url" do
     context "without an alignment" do
-      it "should return nil if context is an account" do
+      it "returns nil if context is an account" do
         expect(outcome_alignment_url(@account, account_outcome)).to be_nil
       end
     end
 
     context "with an alignment" do
-      it "should return a url path" do
+      it "returns a url path" do
         expect(outcome_alignment_url(@account, account_outcome, alignment)).to be_truthy
       end
     end
@@ -74,27 +76,27 @@ describe AlignmentsHelper do
     context "without an alignment" do
       let(:string) { link_to_outcome_alignment(@course, outcome) }
 
-      it "should not include an icon-* html class" do
-        expect(string.match(/icon\-/)).to be_falsey
+      it "does not include an icon-* html class" do
+        expect(string.include?("icon-")).to be_falsey
       end
 
-      it "should be a blank link tag" do
-        html = Nokogiri::HTML.fragment(string)
+      it "is a blank link tag" do
+        html = Nokogiri::HTML5.fragment(string)
         expect(html.text).to be_blank
       end
     end
 
     context "with an alignment" do
-      let(:string) {
+      let(:string) do
         link_to_outcome_alignment(@course, outcome, alignment)
-      }
-
-      it "should not include an icon-* html class" do
-        expect(string.match(/icon\-/)).to be_truthy
       end
 
-      it "should be a blank link tag" do
-        html = Nokogiri::HTML.fragment(string)
+      it "does not include an icon-* html class" do
+        expect(string.include?("icon-")).to be_truthy
+      end
+
+      it "is a blank link tag" do
+        html = Nokogiri::HTML5.fragment(string)
         expect(html.text).to eq(alignment.title)
       end
     end
@@ -102,75 +104,76 @@ describe AlignmentsHelper do
 
   describe "outcome_alignment_tag" do
     context "without an alignment" do
-      let(:string) { outcome_alignment_tag(@course, outcome) {} }
-      let(:html) { Nokogiri::HTML.fragment(string).children[0] }
+      let(:string) { outcome_alignment_tag(@course, outcome) { nil } }
+      let(:html) { Nokogiri::HTML5.fragment(string).children[0] }
 
-      it "should include an id of 'alignment_blank'" do
-        expect(string.match(/alignment\_blank/)).to be_truthy
+      it "includes an id of 'alignment_blank'" do
+        expect(string.include?("alignment_blank")).to be_truthy
       end
 
-      it "should include class alignment" do
-        expect(html['class'].split(' ')).to include('alignment')
+      it "includes class alignment" do
+        expect(html["class"].split).to include("alignment")
       end
 
-      it "should include 1 data-* attribute" do
-        expect(html.keys.select { |k|
-          k.match(/data\-/)
-        }).to include('data-url')
+      it "includes 1 data-* attribute" do
+        expect(html.keys.select do |k|
+          k.include?("data-")
+        end).to include("data-url")
       end
 
-      it "should be hidden" do
-        expect(html['style']).to match(/display\:\ none/)
+      it "is hidden" do
+        expect(html["style"]).to match(/display:\ none/)
       end
     end
 
     context "with an alignment" do
-      let(:string) { outcome_alignment_tag(@course, outcome, alignment) {} }
-      let(:html) { Nokogiri::HTML.fragment(string).children[0] }
+      let(:string) { outcome_alignment_tag(@course, outcome, alignment) { nil } }
+      let(:html) { Nokogiri::HTML5.fragment(string).children[0] }
 
-      it "should include an id of 'alignment_{id}'" do
-        expect(string.match(/alignment\_#{alignment.id}/)).to be_truthy
+      it "includes an id of 'alignment_{id}'" do
+        expect(string.match(/alignment_#{alignment.id}/)).to be_truthy
       end
 
-      it "should have classes alignment & its content_type_class" do
-        classes = html['class'].split(' ')
-        expect(classes).to include('alignment', alignment.content_type_class)
+      it "has classes alignment & its content_type_class" do
+        classes = html["class"].split
+        expect(classes).to include("alignment", alignment.content_type_class)
       end
 
-      it "should data-id & data-url attributes" do
-        expect(html.keys.select { |k|
-          k.match(/data\-/)
-        }).to include('data-id', 'data-url')
+      it "data-ids & data-url attributes" do
+        expect(html.keys.select do |k|
+          k.include?("data-")
+        end).to include("data-id", "data-url")
       end
 
-      it "should not be hidden" do
-        expect(html['style']).not_to match(/display\:\ none/)
+      it "is not hidden" do
+        expect(html["style"]).not_to match(/display:\ none/)
       end
     end
 
     context "with a graded alignment" do
-      let(:string) { outcome_alignment_tag(@course, outcome, graded_alignment) {} }
-      let(:html) { Nokogiri::HTML.fragment(string).children[0] }
+      let(:string) { outcome_alignment_tag(@course, outcome, graded_alignment) { nil } }
+      let(:html) { Nokogiri::HTML5.fragment(string).children[0] }
 
-      it "should include html class 'also_assignment'" do
-        classes = html['class'].split(' ')
-        expect(classes).to include('also_assignment')
+      it "includes html class 'also_assignment'" do
+        classes = html["class"].split
+        expect(classes).to include("also_assignment")
       end
     end
 
     context "with a rubric association" do
-      before(:once) {
+      before(:once) do
         rubric_association_model({
-          purpose: "grading"
-        })
-      }
-      let(:string) { outcome_alignment_tag(@course, outcome, graded_alignment) {} }
-      let(:html) { Nokogiri::HTML.fragment(string).children[0] }
+                                   purpose: "grading"
+                                 })
+      end
 
-      it "should have html 'data-has-rubric-association' data attritbute" do
-        expect(html.keys.find { |k|
-          k.match(/data\-has\-rubric\-association/)
-        }).to be_truthy
+      let(:string) { outcome_alignment_tag(@course, outcome, graded_alignment) { nil } }
+      let(:html) { Nokogiri::HTML5.fragment(string).children[0] }
+
+      it "has html 'data-has-rubric-association' data attritbute" do
+        expect(html.keys.find do |k|
+          k.include?("data-has-rubric-association")
+        end).to be_truthy
       end
     end
   end

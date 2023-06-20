@@ -20,16 +20,11 @@ import React from 'react'
 import ReactDOM from 'react-dom'
 
 import bridge from '../../../../bridge'
+import {asImageEmbed} from '../../shared/ContentSelection'
+import {renderLink, updateImage} from '../../../contentRendering'
 import ImageOptionsTray from '.'
 
 export const CONTAINER_ID = 'instructure-image-options-tray-container'
-
-function imageOptionsFromElement($image) {
-  return {
-    altText: $image.alt || '',
-    isDecorativeImage: $image.getAttribute('data-is-decorative') === 'true'
-  }
-}
 
 export default class TrayController {
   constructor() {
@@ -37,6 +32,7 @@ export default class TrayController {
     this._isOpen = false
     this._shouldOpen = false
     this._renderId = 0
+    this._isIconMaker = false
   }
 
   get $container() {
@@ -53,9 +49,18 @@ export default class TrayController {
     return this._isOpen
   }
 
-  showTrayForEditor(editor) {
+  // Tray may be called to edit an Icon Maker icon alt text
+  showTrayForEditor(editor, isIconMaker = false) {
     this._editor = editor
+    this.$img = editor.selection.getNode()
     this._shouldOpen = true
+    this._isIconMaker = isIconMaker
+
+    if (bridge.focusedEditor) {
+      // Dismiss any content trays that may already be open
+      bridge.hideTrays()
+    }
+
     this._renderTray()
   }
 
@@ -67,29 +72,58 @@ export default class TrayController {
 
   _applyImageOptions(imageOptions) {
     const editor = this._editor
-    const $img = editor.selection.getNode()
+    const {$img} = this
 
-    if (imageOptions.displayAs === 'embed') {
-      $img.alt = imageOptions.altText
-      $img.setAttribute('data-is-decorative', imageOptions.isDecorativeImage)
-      this._dismissTray()
-    } else {
-      const link = `<a href="${$img.src}" target="_blank">${$img.src}</a>`
-      editor.selection.setContent(link)
+    if (this._isIconMaker) {
+      this._applyIconAltTextChanges($img, editor, imageOptions)
       this._dismissTray()
       editor.focus()
+      return
     }
+
+    if (imageOptions.displayAs === 'embed') {
+      updateImage(editor, $img, imageOptions)
+      // tell tinymce so the context toolbar resets
+      editor.fire('ObjectResized', {
+        target: $img,
+        width: imageOptions.appliedWidth,
+        height: imageOptions.appliedHeight,
+      })
+    } else {
+      const link = renderLink({
+        href: $img.src,
+        text: imageOptions.altText || $img.src,
+        target: '_blank',
+      })
+      editor.selection.setContent(link)
+    }
+    this._dismissTray()
+    editor.focus()
+  }
+
+  _applyIconAltTextChanges($img, editor, imageOptions) {
+    // Workaround: When passing empty string to editor.dom.setAttribs it removes the attribute
+    $img.setAttribute('alt', imageOptions.altText)
+    editor.dom.setAttribs($img, {
+      role: imageOptions.isDecorativeImage ? 'presentation' : null,
+    })
+
+    // tell tinymce so the context toolbar resets
+    editor.fire('ObjectResized', {
+      target: $img,
+      width: imageOptions.appliedWidth,
+      height: imageOptions.appliedHeight,
+    })
   }
 
   _dismissTray() {
     this._shouldOpen = false
     this._renderTray()
+    this.$img = null
     this._editor = null
   }
 
   _renderTray() {
-    const $img = this._editor.selection.getNode()
-
     if (this._shouldOpen) {
       /*
        * When the tray is being opened again, it should be rendered fresh
@@ -98,11 +132,13 @@ export default class TrayController {
        */
       this._renderId++
     }
+    const io = asImageEmbed(this.$img)
+    io.isLinked = this._editor?.selection?.getSel().anchorNode.tagName === 'A'
 
     const element = (
       <ImageOptionsTray
         key={this._renderId}
-        imageOptions={imageOptionsFromElement($img)}
+        imageOptions={io}
         onEntered={() => {
           this._isOpen = true
         }}
@@ -115,6 +151,7 @@ export default class TrayController {
         }}
         onRequestClose={() => this._dismissTray()}
         open={this._shouldOpen}
+        isIconMaker={this._isIconMaker}
       />
     )
     ReactDOM.render(element, this.$container)

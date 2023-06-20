@@ -16,23 +16,22 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import $ from 'jquery'
-import GoogleDocsTreeView from 'compiled/views/GoogleDocsTreeView'
+import GoogleDocsTreeView from 'ui/features/submit_assignment/backbone/views/GoogleDocsTreeView'
 
 const file1 = {
   name: 'File 1',
   extension: 'tst',
   document_id: '12345',
-  alternate_url: {href: '#'}
+  alternate_url: {href: '#'},
 }
 const fileData = {files: [file1]}
 const folderData = {
   folders: [
     {
       name: 'Folder 1',
-      files: [file1]
-    }
-  ]
+      files: [file1],
+    },
+  ],
 }
 
 QUnit.module('GoogleDocsTreeView')
@@ -69,7 +68,6 @@ test('activateFile triggers an event', () => {
 })
 
 test('activateFolder delegates through to clicking the sign', () => {
-  expect(1)
   const tree = new GoogleDocsTreeView({model: folderData})
   tree.render()
   tree.$('.sign').on('click', () => ok('got clicked'))

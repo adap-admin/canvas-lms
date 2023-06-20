@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,12 +18,10 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'spec_helper'
-
 describe Latex do
-  describe '.to_math_ml' do
-    it 'is blank if latex: is blank or nil' do
-      expect(Latex.to_math_ml(latex: '')).to be_blank
+  describe ".to_math_ml" do
+    it "is blank if latex: is blank or nil" do
+      expect(Latex.to_math_ml(latex: "")).to be_blank
       expect(Latex.to_math_ml(latex: nil)).to be_blank
     end
   end

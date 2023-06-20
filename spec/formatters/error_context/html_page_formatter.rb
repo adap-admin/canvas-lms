@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -17,7 +19,6 @@
 
 require_relative "./base_formatter"
 require "escape_code"
-require "forwardable"
 
 module ErrorContext
   class HTMLPageFormatter < BaseFormatter
@@ -27,7 +28,7 @@ module ErrorContext
       super
       write_error_page if summary.example.exception
     rescue
-      $stderr.puts "There was an error generating the error page, sadlol: #{$ERROR_INFO}"
+      warn "There was an error generating the error page, sadlol: #{$ERROR_INFO}"
     end
 
     def escape_code(code)
@@ -38,20 +39,20 @@ module ErrorContext
       EscapeCode::HtmlFormatter.new("").generate_stylesheet
     end
 
+    # make a nice little html file for jenkins
     def write_error_page
-      # make a nice little html file for jenkins
-      File.open(File.join(errors_path, "index.html"), "w") do |file|
-        file.write error_page_content
-      end
+      return if summary.discard?
+
+      File.write(File.join(errors_path, "index.html"), error_page_content)
     end
 
     def error_page_content
-      return if summary.discard?
-
-      output_buffer = nil
+      # these seemingly unused local and instance vars are necessary preambles
+      # to the `error_template.src` that gets eval'd below
+      @output_buffer = ActionView::OutputBuffer.new
       example = summary.example
       formatted_exception = ::RSpec::Core::Formatters::ExceptionPresenter.new(example.exception, example).fully_formatted(nil)
-      eval(error_template.src, binding, error_template_path)
+      eval(error_template.src, binding, error_template_path) # rubocop:disable Security/Eval
     end
 
     def recent_spec_runs
@@ -60,13 +61,14 @@ module ErrorContext
       base_path = "../" + ("../" * summary.spec_path.count("/"))
       errors = ErrorSummary.recent_spec_runs.reverse.map do |run|
         location = ERB::Util.html_escape(run[:location])
-        if run[:pending]
-          "bin/rspec #{location} (pending)"
-        elsif run[:exception]
-          "bin/rspec <a href=\"#{base_path + location}/index.html\">#{location}</a> (failed)"
-        else
-          "bin/rspec #{location}"
-        end
+        contents = if run[:pending]
+                     "bin/rspec #{location} (pending)"
+                   elsif run[:exception]
+                     "bin/rspec <a href=\"#{base_path + location}/index.html\">#{location}</a> (failed)"
+                   else
+                     "bin/rspec #{location}"
+                   end
+        "#{run[:recorded_at]}: #{contents}"
       end.join("<br>")
 
       "(newest)<br>#{errors}<br>(oldest)".html_safe
@@ -77,9 +79,7 @@ module ErrorContext
     end
 
     def error_template
-      @error_template ||= begin
-        ActionView::Template::Handlers::ERB::Erubi.new(File.read(error_template_path))
-      end
+      @error_template ||= ActionView::Template::Handlers::ERB::Erubi.new(File.read(error_template_path))
     end
   end
 end

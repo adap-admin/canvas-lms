@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -22,8 +24,5 @@ class PopulateContextOnWikiPages < ActiveRecord::Migration[5.0]
 
   def up
     DataFixup::PopulateContextOnWikiPages.run
-  end
-
-  def down
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -23,13 +25,13 @@ class Loaders::CurrentGradingPeriodLoader < GraphQL::Batch::Loader
   # (if someone wants to modify the grading period stuff for batching then
   # thank you)
   def perform(courses)
-    ActiveRecord::Associations::Preloader.new.preload(courses, :enrollment_term)
-    courses.each { |course|
+    ActiveRecord::Associations.preload(courses, :enrollment_term)
+    courses.each do |course|
       grading_periods = GradingPeriod.for(course)
       current_grading_period = grading_periods.find(&:current?)
 
       fulfill course, [current_grading_period, grading_periods.any?]
-    }
+    end
   end
 
   # this makes sure we only do the work once (even for different instances of

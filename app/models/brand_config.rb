@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -18,32 +20,48 @@
 class BrandConfig < ActiveRecord::Base
   include BrandableCSS
 
-  self.primary_key = 'md5'
+  self.primary_key = "md5"
   serialize :variables, Hash
 
-  OVERRIDE_TYPES = [:js_overrides, :css_overrides, :mobile_js_overrides, :mobile_css_overrides].freeze
+  OVERRIDE_TYPES = %i[js_overrides css_overrides mobile_js_overrides mobile_css_overrides].freeze
   ATTRS_TO_INCLUDE_IN_MD5 = ([:variables, :parent_md5] + OVERRIDE_TYPES).freeze
 
   validates :variables, presence: true, unless: :overrides?
-  validates :md5, length: {is: 32}
+  validates :md5, length: { is: 32 }
 
   before_validation :generate_md5
   before_update do
-    raise 'BrandConfigs are a key-value mapping of config variables and an md5 digest '\
-          'of those variables, so they are immutable. You do not update them, you just '\
-          'save a new one and it will generate the new md5 for you'
+    raise "BrandConfigs are a key-value mapping of config variables and an md5 digest " \
+          "of those variables, so they are immutable. You do not update them, you just " \
+          "save a new one and it will generate the new md5 for you"
   end
 
-  belongs_to :parent, class_name: 'BrandConfig', foreign_key: 'parent_md5'
-  has_many :accounts, foreign_key: 'brand_config_md5'
-  has_many :shared_brand_configs, foreign_key: 'brand_config_md5'
+  after_save :clear_cache
 
+  has_many :accounts, foreign_key: "brand_config_md5"
+  has_many :shared_brand_configs, foreign_key: "brand_config_md5"
+
+  # belongs_to :parent, class_name: "BrandConfig", foreign_key: "parent_md5"
+  def parent
+    return nil unless parent_md5
+
+    BrandConfig.shard(parent_shard).find_by(md5: local_parent_md5)
+  end
+
+  def parent_shard
+    parent_md5.include?("~") ? Shard.lookup(parent_md5.split("~")[0].to_i) : shard
+  end
+
+  def local_parent_md5
+    parent_md5.split("~").last
+  end
 
   def self.for(attrs)
     attrs = attrs.with_indifferent_access.slice(*ATTRS_TO_INCLUDE_IN_MD5)
-    return default if attrs.values.all?(&:blank?)
-
     new_config = new(attrs)
+
+    return default if new_config.default?
+
     new_config.parent_md5 = attrs[:parent_md5]
     existing_config = where(md5: new_config.generate_md5).first
     existing_config || new_config
@@ -53,13 +71,31 @@ class BrandConfig < ActiveRecord::Base
     new
   end
 
-  MD5_OF_K12_CONFIG = 'a1f113321fa024e7a14cb0948597a2a4'
+  MD5_OF_K12_CONFIG = "a1f113321fa024e7a14cb0948597a2a4"
   def self.k12_config
     find(MD5_OF_K12_CONFIG)
   end
 
+  def self.cache_key_for_md5(shard_id, md5)
+    ["brand_configs", shard_id, md5].cache_key
+  end
+
+  def self.find_cached_by_md5(shard_id, md5)
+    MultiCache.fetch(cache_key_for_md5(shard_id, md5)) do
+      BrandConfig.shard(Shard.lookup(shard_id)).find_by(md5:)
+    end
+  end
+
+  def clear_cache
+    shard.activate do
+      self.class.connection.after_transaction_commit do
+        MultiCache.delete(self.class.cache_key_for_md5(shard.id, md5))
+      end
+    end
+  end
+
   def default?
-    ([:variables] + OVERRIDE_TYPES).all? {|a| self[a].blank? }
+    ([:variables] + OVERRIDE_TYPES).all? { |a| self[a].blank? }
   end
 
   def generate_md5
@@ -87,22 +123,26 @@ class BrandConfig < ActiveRecord::Base
     @ancestor_configs ||= [self] + (parent && parent.chain_of_ancestor_configs).to_a
   end
 
-  def clone_with_new_parent(new_parent_md5)
-    attrs = self.attributes.with_indifferent_access.slice(*BrandConfig::ATTRS_TO_INCLUDE_IN_MD5)
-    attrs[:parent_md5] = new_parent_md5
+  def clone_with_new_parent(new_parent)
+    attrs = attributes.with_indifferent_access.slice(*BrandConfig::ATTRS_TO_INCLUDE_IN_MD5)
+    attrs[:parent_md5] = if new_parent
+                           (new_parent.shard.id == shard.id) ? new_parent.md5 : "#{new_parent.shard.id}~#{new_parent.md5}"
+                         else
+                           nil
+                         end
     BrandConfig.for(attrs)
   end
 
   def dup?
-    BrandConfig.where(md5: self.md5).exists?
+    BrandConfig.where(md5:).exists?
   end
 
   def save_unless_dup!
-    self.save! unless dup?
+    save! unless dup?
   end
 
-  def to_json
-    BrandableCSS.all_brand_variable_values(self).to_json
+  def to_json(*args)
+    BrandableCSS.all_brand_variable_values(self).to_json(*args)
   end
 
   def to_js
@@ -121,7 +161,7 @@ class BrandConfig < ActiveRecord::Base
     "dist/brandable_css/#{md5}"
   end
 
-  [:json, :js, :css].each do |type|
+  %i[json js css].each do |type|
     define_method :"public_#{type}_path" do
       "#{public_folder}/variables-#{BrandableCSS.default_variables_md5}.#{type}"
     end
@@ -140,10 +180,12 @@ class BrandConfig < ActiveRecord::Base
 
     define_method :"move_#{type}_to_s3_if_enabled!" do
       return unless Canvas::Cdn.enabled?
+
       s3_uploader.upload_file(send(:"public_#{type}_path"))
       begin
         File.delete(send(:"#{type}_file"))
-      rescue Errno::ENOENT # continue if something else deleted it in another process
+      rescue Errno::ENOENT
+        # continue if something else deleted it in another process
       end
     end
   end
@@ -160,7 +202,7 @@ class BrandConfig < ActiveRecord::Base
 
   def css_and_js_overrides
     shard.activate do
-      @css_and_js_overrides ||= Rails.cache.fetch([self, 'css_and_js_overrides'].cache_key) do
+      @css_and_js_overrides ||= Rails.cache.fetch([self, "css_and_js_overrides"].cache_key) do
         chain_of_ancestor_configs.each_with_object({}) do |brand_config, includes|
           BrandConfig::OVERRIDE_TYPES.each do |override_type|
             if brand_config[override_type].present?
@@ -173,51 +215,54 @@ class BrandConfig < ActiveRecord::Base
     end
   end
 
-  def sync_to_s3_and_save_to_account!(progress, account_id)
+  def sync_to_s3_and_save_to_account!(progress, account_or_id)
     save_and_sync_to_s3!(progress)
-    account = Account.find(account_id)
+    account = account_or_id.is_a?(Account) ? account_or_id : Account.find(account_or_id)
     old_md5 = account.brand_config_md5
     account.brand_config_md5 = md5
     account.save!
     BrandConfig.destroy_if_unused(old_md5)
+    progress&.increment_completion!(1)
   end
 
-  def sync_to_s3_and_save_to_shared_brand_config!(progress, shared_brand_config_id)
+  def sync_to_s3_and_save_to_shared_brand_config!(progress, shared_brand_config_or_id)
     save_and_sync_to_s3!(progress)
-    shared_brand_config = SharedBrandConfig.find(shared_brand_config_id)
+    shared_brand_config = if shared_brand_config_or_id.is_a?(SharedBrandConfig)
+                            shared_brand_config_or_id
+                          else
+                            SharedBrandConfig.find(shared_brand_config_or_id)
+                          end
     old_md5 = shared_brand_config.brand_config_md5
     shared_brand_config.brand_config_md5 = md5
     shared_brand_config.save!
     BrandConfig.destroy_if_unused(old_md5)
+    progress&.increment_completion!(1)
   end
 
-  def save_and_sync_to_s3!(progress=nil)
-    progress.update_completion!(5) if progress
+  def save_and_sync_to_s3!(progress = nil)
     save_all_files!
-    progress.update_completion!(80) if progress
+    progress.increment_completion!(4) if progress&.total
   end
 
   def self.destroy_if_unused(md5)
     return unless md5
-    unused_brand_config = BrandConfig.
-      where(md5: md5).
-      where("NOT EXISTS (?)", Account.where("brand_config_md5=brand_configs.md5")).
-      where("NOT EXISTS (?)", SharedBrandConfig.where("brand_config_md5=brand_configs.md5")).
-      first
-    if unused_brand_config
-      unused_brand_config.destroy
-    end
+
+    unused_brand_config = BrandConfig
+                          .where(md5:)
+                          .where.not(Account.where("brand_config_md5=brand_configs.md5").arel.exists)
+                          .where.not(SharedBrandConfig.where("brand_config_md5=brand_configs.md5").arel.exists)
+                          .first
+    unused_brand_config&.destroy
   end
 
   def self.clean_unused_from_db!
-    BrandConfig.
-      where("NOT EXISTS (?)", Account.where("brand_config_md5=brand_configs.md5")).
-      where("NOT EXISTS (?)", SharedBrandConfig.where("brand_config_md5=brand_configs.md5")).
+    BrandConfig
       # When someone is actively working in the theme editor, it just saves one
       # in their session, so only delete stuff that is more than a week old,
       # to not clear out a theme someone was working on.
-      where(["created_at < ?", 1.week.ago]).
-      delete_all
+      .where(["created_at < ?", 1.week.ago])
+      .where.not(Account.where("brand_config_md5=brand_configs.md5").arel.exists)
+      .where.not(SharedBrandConfig.where("brand_config_md5=brand_configs.md5").arel.exists)
+      .delete_all
   end
-
 end

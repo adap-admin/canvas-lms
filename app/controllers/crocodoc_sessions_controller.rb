@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -21,21 +23,24 @@ class CrocodocSessionsController < ApplicationController
   include HmacHelper
 
   def show
-    blob = extract_blob(params[:hmac], params[:blob],
+    blob = extract_blob(params[:hmac],
+                        params[:blob],
                         "user_id" => @current_user.global_id,
                         "type" => "crocodoc")
     attachment = Attachment.find(blob["attachment_id"])
 
     if attachment.crocodoc_available?
-      annotations = params[:annotations] ?
-        value_to_boolean(params[:annotations]) :
-        true
+      annotations = if params[:annotations]
+                      value_to_boolean(params[:annotations])
+                    else
+                      true
+                    end
 
       crocodoc = attachment.crocodoc_document
-      url = crocodoc.session_url(:user => @current_user,
-                                 :annotations => annotations,
-                                 :enable_annotations => blob["enable_annotations"],
-                                 :moderated_grading_whitelist => blob["moderated_grading_whitelist"])
+      url = crocodoc.session_url(user: @current_user,
+                                 annotations:,
+                                 enable_annotations: blob["enable_annotations"],
+                                 moderated_grading_allow_list: blob["moderated_grading_allow_list"])
 
       # For the purposes of reporting student viewership, we only
       # care if the original attachment owner is looking
@@ -47,13 +52,12 @@ class CrocodocSessionsController < ApplicationController
 
       redirect_to url
     else
-      render :plain => "Not found", :status => :not_found
+      render plain: "Not found", status: :not_found
     end
-
   rescue HmacHelper::Error
-    render :plain => 'unauthorized', :status => :unauthorized
+    render plain: "unauthorized", status: :unauthorized
   rescue Timeout::Error
-    render :plain => "Service is currently unavailable. Try again later.",
-           :status => :service_unavailable
+    render plain: "Service is currently unavailable. Try again later.",
+           status: :service_unavailable
   end
 end

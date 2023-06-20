@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -20,5 +22,5 @@ class AssessmentQuestionBankUser < ActiveRecord::Base
   belongs_to :assessment_question_bank
   belongs_to :user
 
-  validates_presence_of :assessment_question_bank_id, :user_id
+  validates :assessment_question_bank_id, :user_id, presence: true
 end

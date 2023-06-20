@@ -16,9 +16,9 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Backbone from 'Backbone'
-import Module from 'compiled/models/Module'
-import ModuleItemCollection from 'compiled/collections/ModuleItemCollection'
+import Backbone from '@canvas/backbone'
+import Module from '@canvas/modules/backbone/models/Module'
+import ModuleItemCollection from '@canvas/modules/backbone/collections/ModuleItemCollection'
 
 QUnit.module('Module', {
   setup() {
@@ -26,33 +26,33 @@ QUnit.module('Module', {
   },
   teardown() {
     return this.server.restore()
-  }
+  },
 })
 
 test('should build an itemCollection from items', 2, () => {
   const mod = new Module({
     id: 3,
     course_id: 4,
-    items: [{id: 1}, {id: 2}]
+    items: [{id: 1}, {id: 2}],
   })
   ok(mod.itemCollection instanceof ModuleItemCollection, 'itemCollection is not built')
   equal(mod.itemCollection.length, 2, 'incorrect item length')
 })
 
-test('should build an itemCollection and fetch if items are not passed', 1, function() {
+test('should build an itemCollection and fetch if items are not passed', 1, function () {
   const mod = new Module({
     id: 3,
-    course_id: 4
+    course_id: 4,
   })
   ok(mod.itemCollection instanceof ModuleItemCollection, 'itemCollection is not built')
   mod.itemCollection.fetch({
     success() {
       equal(mod.itemCollection.length, 1, 'incorrect item length')
-    }
+    },
   })
   return this.server.respond('GET', mod.itemCollection.url(), [
     200,
     {'Content-Type': 'application/json'},
-    JSON.stringify({id: 2})
+    JSON.stringify({id: 2}),
   ])
 })

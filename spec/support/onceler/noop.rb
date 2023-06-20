@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -23,25 +25,26 @@ module Onceler
     end
 
     module ClassMethods
-      def onceler!
-      end
+      def onceler!; end
 
-      def before(scope = nil, &block)
+      def before(scope = nil, &)
         scope = :each if scope == :once || scope.nil?
         return if scope == :record || scope == :replay
-        super(scope, &block)
+
+        super(scope, &)
       end
 
-      def after(scope = nil, &block)
+      def after(scope = nil, &)
         scope = :each if scope.nil?
         return if scope == :record || scope == :replay
-        super(scope, &block)
+
+        super(scope, &)
       end
 
-      %w{let_once subject_once let_each let_each! subject_each subject_each!}.each do |method|
+      %w[let_once subject_once let_each let_each! subject_each subject_each!].each do |method|
         define_method(method) do |*args, &block|
           # make _once behave like !, because that's essentially what onceler is doing
-          frd_method = method.sub(/_each!?\z/, '').sub(/_once!?\z/, '!')
+          frd_method = method.sub(/_each!?\z/, "").sub(/_once!?\z/, "!")
           send frd_method, args.first, &block
         end
       end

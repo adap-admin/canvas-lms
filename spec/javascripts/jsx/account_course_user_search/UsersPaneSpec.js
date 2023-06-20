@@ -16,12 +16,14 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React from 'react';
-import { shallow } from 'enzyme';
-import UsersPane, { SEARCH_DEBOUNCE_TIME } from 'jsx/account_course_user_search/components/UsersPane';
-import UserActions from 'jsx/account_course_user_search/actions/UserActions';
+import React from 'react'
+import {shallow} from 'enzyme'
+import UsersPane, {
+  SEARCH_DEBOUNCE_TIME,
+} from 'ui/features/account_course_user_search/react/components/UsersPane'
+import UserActions from 'ui/features/account_course_user_search/react/actions/UserActions'
 
-QUnit.module('Account Course User Search UsersPane View');
+QUnit.module('Account Course User Search UsersPane View')
 
 const fakeStore = () => ({
   state: {
@@ -32,36 +34,32 @@ const fakeStore = () => ({
       next: undefined,
       searchFilter: {search_term: ''},
       permissions: {},
-      accountId: 1
-    }
+      accountId: 1,
+    },
   },
-  dispatch () {},
-  getState () {
+  dispatch() {},
+  getState() {
     return this.state
   },
-  subscribe () {}
-});
+  subscribe() {},
+})
 
-const wrapper = store => shallow(
-  <UsersPane
-    store={store}
-    roles={['a']}
-    queryParams={{}}
-    onUpdateQueryParams={function(){}}
-  />
-);
+const wrapper = store =>
+  shallow(
+    <UsersPane store={store} roles={['a']} queryParams={{}} onUpdateQueryParams={function () {}} />
+  )
 
-test('handleUpdateSearchFilter dispatches applySearchFilter action', (assert) => {
-  const done = assert.async();
-  const spy = sinon.spy(UserActions, 'applySearchFilter');
+test('handleUpdateSearchFilter dispatches applySearchFilter action', assert => {
+  const done = assert.async()
+  const spy = sinon.spy(UserActions, 'applySearchFilter')
   const store = fakeStore()
-  const instance = wrapper(store).instance();
-  instance.handleUpdateSearchFilter();
+  const instance = wrapper(store).instance()
+  instance.handleUpdateSearchFilter()
   setTimeout(() => {
-    ok(spy.called);
-    done();
-  }, SEARCH_DEBOUNCE_TIME);
-});
+    ok(spy.called)
+    done()
+  }, SEARCH_DEBOUNCE_TIME)
+})
 
 test('have an h1 on the page', () => {
   const store = fakeStore()

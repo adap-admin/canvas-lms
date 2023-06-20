@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -16,7 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 module Canvas::Plugins::TicketingSystem
-
   # This isn't a class intended to be used on it's own.  It's an abstract
   # base class for all ticketing system connectors to inherit from.
   #
@@ -57,21 +58,20 @@ module Canvas::Plugins::TicketingSystem
     # recieves is a Canvas ErrorReport decorated with
     # a CustomError from this same module (Canvas::Plugins::TicketingSystem).
     def export_error(report, conf)
-      raise "MUST OVERRIDE WITH THE CALLBACK FOR ERROR REPORT"
+      raise NotImplementedError
     end
 
     # When overriding, this should just provide the String which is
     # the unique name of this plugin to use in the canvas plugin registry
     def plugin_id
-      raise "MUST OVERRIDE WITH THE PLUGIN ID TO REGISTER WITH"
+      raise NotImplementedError
     end
 
     # When overriding, this method should return a hash very similar to
     # all the hashes found for plugin registration in
     # lib/canvas/plugins/default_plugins.rb
     def settings
-      raise "MUST OVERRIDE WITH A SETTINGS HASH FOR PLUGIN REGISTRATION"
+      raise NotImplementedError
     end
   end
-
 end

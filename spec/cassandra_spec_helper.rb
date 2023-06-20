@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 Instructure, Inc.
 #
@@ -16,22 +18,21 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/spec_helper')
+def truncate_cassandra(config)
+  db = CanvasCassandra::DatabaseBuilder.from_config(config)
 
-shared_examples_for "cassandra page views" do
-  before do
-    if Canvas::Cassandra::DatabaseBuilder.configured?('page_views')
-      Setting.set('enable_page_views', 'cassandra')
-    else
-      skip "needs cassandra page_views configuration"
-    end
+  db.tables.each do |table|
+    db.execute("TRUNCATE #{table}")
   end
 end
 
-shared_examples_for "cassandra audit logs" do
+shared_examples_for "cassandra page views" do
   before do
-    unless Canvas::Cassandra::DatabaseBuilder.configured?('auditors')
-      skip "needs cassandra auditors configuration"
+    if CanvasCassandra::DatabaseBuilder.configured?("page_views")
+      Setting.set("enable_page_views", "cassandra")
+    else
+      skip "needs cassandra page_views configuration"
     end
+    truncate_cassandra(:page_views)
   end
 end

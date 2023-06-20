@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -15,15 +17,15 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'securerandom'
+require "securerandom"
 
 module Multipart
   class Post
     def header(boundary)
-      {"Content-type" => "multipart/form-data; boundary=#{boundary}"}
+      { "Content-type" => "multipart/form-data; boundary=#{boundary}" }
     end
 
-    def prepare_query_stream(params, field_priority=[])
+    def prepare_query_stream(params, field_priority = [])
       params.delete(:basic_auth)
 
       parts = []
@@ -31,23 +33,25 @@ module Multipart
       field_priority.each do |k|
         next if completed_fields.key?(k)
         next unless params.key?(k)
+
         parts << Param.from(k, params[k])
         completed_fields[k] = true
       end
 
       params.each do |k, v|
         next if completed_fields.key?(k)
+
         parts << Param.from(k, v)
       end
 
       parts << TERMINATOR
 
       boundary = ::SecureRandom.hex(32)
-      streams = parts.map{ |part| part.to_multipart_stream(boundary) }
+      streams = parts.map { |part| part.to_multipart_stream(boundary) }
       [SequencedStream.new(streams), header(boundary)]
     end
 
-    def prepare_query(params, field_priority=[])
+    def prepare_query(params, field_priority = [])
       stream, header = prepare_query_stream(params, field_priority)
       [stream.read, header]
     end

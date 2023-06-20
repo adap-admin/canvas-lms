@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -19,7 +21,7 @@
 module Api::V1::QuizSubmissionQuestion
   include Api::V1::QuizQuestion
 
-  INCLUDABLES = %w[ quiz_question ]
+  INCLUDABLES = %w[quiz_question].freeze
 
   # @param [Array<QuizQuestion>] quiz_questions
   # @param [Hash] submission_data
@@ -30,7 +32,7 @@ module Api::V1::QuizSubmissionQuestion
   # @param [Boolean] meta[:censored] if answer correctness should be censored out
   def quiz_submission_questions_json(quiz_questions, quiz_submission, meta = {})
     meta[:censored] ||= true
-    quiz_questions = Array(quiz_questions) unless quiz_questions.kind_of?(Array)
+    quiz_questions = Array(quiz_questions) unless quiz_questions.is_a?(Array)
     includes = (meta[:includes] || []) & INCLUDABLES
 
     data = {}
@@ -38,18 +40,19 @@ module Api::V1::QuizSubmissionQuestion
       quiz_submission_question_json(qq, quiz_submission, meta)
     end
 
-    if includes.include?('quiz_question')
+    if includes.include?("quiz_question")
       data[:quiz_questions] = questions_json(quiz_questions,
                                              meta[:user],
                                              meta[:session],
-                                             nil, [],
+                                             nil,
+                                             [],
                                              meta[:censored],
                                              quiz_submission.quiz_data,
                                              shuffle_answers: meta[:shuffle_answers])
     end
 
     unless includes.empty?
-      data[:meta] = { primaryCollection: 'quiz_submission_questions' }
+      data[:meta] = { primaryCollection: "quiz_submission_questions" }
     end
 
     data
@@ -82,33 +85,33 @@ module Api::V1::QuizSubmissionQuestion
   #     flagged: true,
   #     answer: 123
   #   }
-  def quiz_submission_question_json(qq, qs, meta={})
+  def quiz_submission_question_json(qq, qs, meta = {})
     answer_serializer = Quizzes::QuizQuestion::AnswerSerializers.serializer_for(qq)
     meta[:includes] ||= []
     data = question_json(qq,
-      meta[:user],
-      meta[:session],
-      nil,
-      meta[:includes],
-      meta[:censored],
-      qs[:quiz_data],
-      shuffle_answers: meta[:shuffle_answers]
-    )
+                         meta[:user],
+                         meta[:session],
+                         nil,
+                         meta[:includes],
+                         meta[:censored],
+                         qs[:quiz_data],
+                         shuffle_answers: meta[:shuffle_answers])
 
-    if qs.submission_data.is_a? Hash #ungraded
+    if qs.submission_data.is_a? Hash # ungraded
       data[:flagged] = to_boolean(qs.submission_data["question_#{qq.id}_marked"])
-      data[:answer] = answer_serializer.deserialize(qs.submission_data, true)
+      data[:answer] = answer_serializer.deserialize(qs.submission_data, full: true)
     else
-      question_data = qs.submission_data.select {|h| h[:question_id] == qq.id}
+      question_data = qs.submission_data.select { |h| h[:question_id] == qq.id }
       return data if question_data.empty?
+
       data[:flagged] = false
       data[:correct] = question_data.first[:correct]
     end
     data
   end
 
-
   private
+
   def to_boolean(v)
     Canvas::Plugin.value_to_boolean(v)
   end

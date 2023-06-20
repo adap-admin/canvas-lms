@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -15,13 +17,16 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'gergich/capture'
-
 module DrDiff
   class CommandCapture
     def self.run(format, command)
-      _, comments = Gergich::Capture.run(format, command, add_comments: false, suppress_output: true)
-      comments
+      require "bundler"
+      require "gergich/capture"
+
+      Bundler.with_unbundled_env do
+        _, comments = Gergich::Capture.run(format, command, add_comments: false, suppress_output: true)
+        comments
+      end
     end
   end
 end

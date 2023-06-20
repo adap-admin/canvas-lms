@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -30,14 +32,14 @@ module Services
 
     # which of the users does the sender know, and what contexts do they and
     # the sender have in common?
-    def self.common_contexts(sender, users, ignore_result=false)
-      recipients(sender: sender, user_ids: users, ignore_result: ignore_result).common_contexts
+    def self.common_contexts(sender, users, ignore_result = false)
+      recipients(sender:, user_ids: users, ignore_result:).common_contexts
     end
 
     # which of the users have roles in the context and what are those roles?
-    def self.roles_in_context(context, users, ignore_result=false)
+    def self.roles_in_context(context, users, ignore_result = false)
       context = context.course if context.is_a?(CourseSection)
-      recipients(context: context, user_ids: users, ignore_result: ignore_result).common_contexts
+      recipients(context:, user_ids: users, ignore_result:).common_contexts
     end
 
     # which users:
@@ -50,16 +52,16 @@ module Services
     #  - have roles in the context and what are those roles? (sender absent;
     #    admin view)
     #
-    def self.known_in_context(sender, context, user_ids=nil, ignore_result=false)
-      params = { sender: sender, context: context, ignore_result: ignore_result }
+    def self.known_in_context(sender, context, user_ids = nil, ignore_result = false)
+      params = { sender:, context:, ignore_result: }
       params[:user_ids] = user_ids if user_ids
       response = recipients(params)
       [response.user_ids, response.common_contexts]
     end
 
     # how many users does the sender know in each of the contexts?
-    def self.count_in_contexts(sender, contexts, ignore_result=false)
-      counts = count_recipients(sender: sender, contexts: contexts, ignore_result: ignore_result)
+    def self.count_in_contexts(sender, contexts, ignore_result = false)
+      counts = count_recipients(sender:, contexts:, ignore_result:)
       # map back from normalized to argument
       contexts.each do |ctx|
         serialized = serialize_context(ctx)
@@ -84,7 +86,7 @@ module Services
     #  - have roles in the context and what are those roles? (context provided
     #    without sender; admin view)
     #
-    def self.search_users(sender, options, service_options, ignore_result=false)
+    def self.search_users(sender, options, service_options, ignore_result = false)
       params = options.slice(:search, :context, :exclude_ids, :weak_checks)
       params[:ignore_result] = ignore_result
       params[:sender] = sender
@@ -106,23 +108,22 @@ module Services
 
     def self.count_recipients(params)
       return {} if params[:contexts].blank?
-      fetch("/recipients/counts", query_params(params))['counts'] || {}
+
+      fetch("/recipients/counts", query_params(params))["counts"] || {}
     end
 
     def self.jwt # public only for testing, should not be used directly
       Canvas::Security.create_jwt({ iat: Time.now.to_i }, nil, jwt_secret, :HS512)
-    rescue StandardError => e
+    rescue => e
       Canvas::Errors.capture_exception(:address_book, e)
       nil
     end
 
     class << self
       private
+
       def setting(key)
-        Canvas::DynamicSettings.find("address-book", default_ttl: 5.minutes)[key]
-      rescue Imperium::TimeoutError => e
-        Canvas::Errors.capture_exception(:address_book, e)
-        nil
+        DynamicSettings.find("address-book", default_ttl: 5.minutes)[key, failsafe: nil]
       end
 
       def app_host
@@ -134,20 +135,24 @@ module Services
       end
 
       # generic retrieve, parse
-      def fetch(path, params={})
+      def fetch(path, params = {})
         url = app_host + path
-        url += '?' + params.to_query unless params.empty?
+        url += "?" + params.to_query unless params.empty?
         fallback = { "records" => [] }
-        timeout_service_name = params[:ignore_result] == 1 ?
-          "address_book_performance_tap" :
-          "address_book"
+        timeout_service_name = if params[:ignore_result] == 1
+                                 "address_book_performance_tap"
+                               else
+                                 "address_book"
+                               end
         Canvas.timeout_protection(timeout_service_name) do
-          response = CanvasHttp.get(url, 'Authorization' => "Bearer #{jwt}")
+          response = CanvasHttp.get(url, { "Authorization" => "Bearer #{jwt}" })
           if ![200, 202].include?(response.code.to_i)
-            Canvas::Errors.capture(CanvasHttp::InvalidResponseCodeError.new(response.code.to_i), {
-              extra: { url: url, response: response.body },
-              tags: { type: 'address_book_fault' }
-            })
+            err = CanvasHttp::InvalidResponseCodeError.new(response.code.to_i)
+            data = {
+              extra: { url:, response: response.body },
+              tags: { type: "address_book_fault" }
+            }
+            Canvas::Errors.capture(err, data, :warn)
             return fallback
           elsif params[:ignore_result] == 1
             return fallback
@@ -158,7 +163,7 @@ module Services
       end
 
       # serialize logical params into query string values
-      def query_params(params={})
+      def query_params(params = {})
         query_params = {}
         query_params[:cursor] = params[:cursor] if params[:cursor]
         query_params[:per_page] = params[:per_page] if params[:per_page]
@@ -166,16 +171,16 @@ module Services
         if params[:sender]
           sender = params[:sender]
           sender = User.find(sender) unless sender.is_a?(User)
-          visible_accounts = sender.associated_accounts.select{ |account| account.grants_right?(sender, :read_roster) }
-          restricted_courses = sender.all_courses.reject{ |course| course.grants_right?(sender, :send_messages) }
+          visible_accounts = sender.associated_accounts.select { |account| account.grants_right?(sender, :read_roster) }
+          restricted_courses = sender.all_courses.reject { |course| course.grants_right?(sender, :send_messages) }
           query_params[:for_sender] = serialize_item(sender)
           query_params[:visible_account_ids] = serialize_list(visible_accounts) unless visible_accounts.empty?
           query_params[:restricted_course_ids] = serialize_list(restricted_courses) unless restricted_courses.empty?
         end
         query_params[:in_context] = serialize_context(params[:context]) if params[:context]
         if params[:contexts]
-          contexts = params[:contexts].map{ |ctx| serialize_context(ctx) }
-          query_params[:in_contexts] = contexts.join(',')
+          contexts = params[:contexts].map { |ctx| serialize_context(ctx) }
+          query_params[:in_contexts] = contexts.join(",")
         end
         query_params[:user_ids] = serialize_list(params[:user_ids]) if params[:user_ids]
         query_params[:exclude_ids] = serialize_list(params[:exclude_ids]) if params[:exclude_ids]
@@ -189,14 +194,14 @@ module Services
       end
 
       def serialize_list(list) # can be either IDs or objects (e.g. User)
-        list.map{ |item| serialize_item(item) }.join(',')
+        list.map { |item| serialize_item(item) }.join(",")
       end
 
       def serialize_context(context)
         if context.respond_to?(:global_asset_string)
           context.global_asset_string
         else
-          context_type, context_id, scope = context.split('_', 3)
+          context_type, context_id, scope = context.split("_", 3)
           global_context_id = serialize_item(context_id)
           asset_string = "#{context_type}_#{global_context_id}"
           asset_string += "_#{scope}" if scope
@@ -243,7 +248,7 @@ module Services
 
       # extract just the user IDs from the response, as an ordered list
       def user_ids
-        @response['records'].map{ |record| record['user_id'].to_i }
+        @response["records"].map { |record| record["user_id"].to_i }
       end
 
       # reshape the records into a ruby hash with integers instead of strings
@@ -264,15 +269,16 @@ module Services
       #
       def common_contexts
         common_contexts = {}
-        @response['records'].each do |recipient|
-          global_user_id = recipient['user_id'].to_i
-          contexts = recipient['contexts']
+        @response["records"].each do |recipient|
+          global_user_id = recipient["user_id"].to_i
+          contexts = recipient["contexts"]
           common_contexts[global_user_id] ||= { courses: {}, groups: {} }
           contexts.each do |context|
-            context_type = context['context_type'].pluralize.to_sym
+            context_type = context["context_type"].pluralize.to_sym
             next unless common_contexts[global_user_id].key?(context_type)
-            global_context_id = context['context_id'].to_i
-            common_contexts[global_user_id][context_type][global_context_id] = context['roles']
+
+            global_context_id = context["context_id"].to_i
+            common_contexts[global_user_id][context_type][global_context_id] = context["roles"]
           end
         end
         common_contexts
@@ -280,7 +286,7 @@ module Services
 
       # extract the next page cursor from the response
       def cursors
-        @response['records'].map{ |record| record['cursor'] }
+        @response["records"].pluck("cursor")
       end
     end
   end

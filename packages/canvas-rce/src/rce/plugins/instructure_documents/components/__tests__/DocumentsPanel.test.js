@@ -16,23 +16,35 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-
 import React from 'react'
 import {render} from '@testing-library/react'
 import DocumentsPanel from '../DocumentsPanel'
 
-function renderComponent(props) {
-  return render(
-    <DocumentsPanel
-      documents={{
-        bookmark: "http://next.docs/",
+function getDocumentProps(contextType, docprops) {
+  return {
+    documents: {
+      [contextType]: {
         files: [],
-        hasMore: true,
+        bookmark: null,
         isLoading: false,
-      }}
+        hasMore: false,
+        ...docprops,
+      },
+    },
+    contextType,
+  }
+}
+
+function renderComponent(props, renderer = render) {
+  return renderer(
+    <DocumentsPanel
+      {...getDocumentProps('course', {bookmark: 'http://next.docs'})}
+      sortBy={{sort: 'alphabetical', order: 'asc'}}
+      searchString="Waldo"
       fetchInitialDocs={() => {}}
       fetchNextDocs={() => {}}
       onLinkClick={() => {}}
+      contextType="course"
       {...props}
     />
   )
@@ -40,7 +52,7 @@ function renderComponent(props) {
 
 function makeDocuments(override) {
   return {
-    files: [1,2].map(i => {
+    files: [1, 2].map(i => {
       return {
         id: i,
         filename: `file${i}.txt`,
@@ -53,25 +65,23 @@ function makeDocuments(override) {
     bookmark: null,
     hasMore: false,
     isLoading: false,
-    ...override
+    ...override,
   }
 }
 
 describe('RCE "Documents" Plugin > DocumentsPanel', () => {
   it('renders empty notice', () => {
-    const {getByText} = renderComponent({documents: {files: [], isLoading: false, hasMore: false}})
+    const {getByText} = renderComponent(getDocumentProps())
     expect(getByText('No results.')).toBeInTheDocument()
   })
 
   it('renders loading spinner', () => {
-    const {getByText} = renderComponent({documents: {files: [], isLoading: true}})
+    const {getByText} = renderComponent(getDocumentProps('course', {isLoading: true}))
     expect(getByText('Loading')).toBeInTheDocument()
   })
 
   it('renders documents', () => {
-    const {getByText, getAllByTestId} = renderComponent({
-      documents: makeDocuments()
-    })
+    const {getByText, getAllByTestId} = renderComponent(getDocumentProps('course', makeDocuments()))
 
     expect(getAllByTestId('instructure_links-Link')).toHaveLength(2)
     expect(getByText('file1')).toBeInTheDocument()
@@ -79,9 +89,9 @@ describe('RCE "Documents" Plugin > DocumentsPanel', () => {
   })
 
   it('renders load more button if there is more', () => {
-    const {getByText} = renderComponent({
-      documents: makeDocuments({hasMore: true, bookmark: 'next.docs'})
-    })
+    const {getByText} = renderComponent(
+      getDocumentProps('course', makeDocuments({hasMore: true, bookmark: 'next.docs'}))
+    )
 
     expect(getByText('Load More')).toBeInTheDocument()
   })
@@ -89,29 +99,30 @@ describe('RCE "Documents" Plugin > DocumentsPanel', () => {
   it('fetches initial data when mounted', () => {
     const fetchInitialDocs = jest.fn()
     renderComponent({
-      fetchInitialDocs
+      fetchInitialDocs,
     })
 
-    expect(fetchInitialDocs).toHaveBeenCalled()
+    expect(fetchInitialDocs).toHaveBeenCalledTimes(1)
+    expect(fetchInitialDocs).toHaveBeenCalledWith()
   })
 
   it('fetches more when the load more button is clicked', () => {
     const fetchNextDocs = jest.fn()
     const {getByText} = renderComponent({
-      documents: makeDocuments({hasMore: true, bookmark: 'more.docs'}),
-      fetchNextDocs
+      ...getDocumentProps('course', makeDocuments({hasMore: true, bookmark: 'more.docs'})),
+      fetchNextDocs,
     })
 
     const loadMoreBtn = getByText('Load More')
     loadMoreBtn.click()
-    expect(fetchNextDocs).toHaveBeenCalled()
+    expect(fetchNextDocs).toHaveBeenCalledWith()
   })
 
   it('shows an error message if the fetch failed', () => {
     const fetchNextDocs = jest.fn()
     const {getByText} = renderComponent({
-      documents: makeDocuments({error: 'whoops'}),
-      fetchNextDocs
+      ...getDocumentProps('course', makeDocuments({error: 'whoops'})),
+      fetchNextDocs,
     })
 
     expect(getByText('Loading failed.')).toBeInTheDocument()
@@ -120,21 +131,32 @@ describe('RCE "Documents" Plugin > DocumentsPanel', () => {
   it('shows spinner during initial load', () => {
     const fetchInitialDocs = jest.fn()
     const {getByText} = renderComponent({
-      documents: makeDocuments({files: [], isLoading: true}),
-      fetchInitialDocs
+      ...getDocumentProps('course', makeDocuments({files: [], isLoading: true})),
+      fetchInitialDocs,
     })
 
     expect(getByText('Loading')).toBeInTheDocument()
   })
 
-
   it('shows spinner while loading more', () => {
-    const fetchNextDocs = jest.fn()
-    const {getByText} = renderComponent({
-      documents: makeDocuments({isLoading: true, hasMore: true}),
-      fetchNextDocs
-    })
+    const {getByText} = renderComponent(
+      getDocumentProps('course', makeDocuments({isLoading: true, hasMore: true}))
+    )
 
     expect(getByText('Loading')).toBeInTheDocument()
+  })
+
+  it('refetches initial docs when sorting changes', () => {
+    const fetchInitialDocs = jest.fn()
+    const {rerender} = renderComponent({
+      fetchInitialDocs,
+    })
+    expect(fetchInitialDocs).toHaveBeenCalledTimes(1)
+
+    renderComponent({fetchInitialDocs}, rerender)
+    expect(fetchInitialDocs).toHaveBeenCalledTimes(1)
+
+    renderComponent({fetchInitialDocs, sortBy: {sort: 'date_added', order: 'desc'}}, rerender)
+    expect(fetchInitialDocs).toHaveBeenCalledTimes(2)
   })
 })

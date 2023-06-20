@@ -1,4 +1,6 @@
-require 'spec_helper'
+# frozen_string_literal: true
+
+require "spec_helper"
 require_relative "./shared_constants"
 
 describe TatlTael::Linters::SimpleLinter do
@@ -10,18 +12,18 @@ describe TatlTael::Linters::SimpleLinter do
       "Precondition" => {
         "Statuses" => %w[added deleted],
         "Include" => ["**/yarg/**"],
-        "Whitelist" => ["**/yarg/blargh/**"],
+        "Allowlist" => ["**/yarg/blargh/**"],
       }
     }
   end
   let(:pretty_config) { TatlTael::Linters.underscore_and_symbolize_keys(config) }
   let(:changes) { double }
 
-  let(:simple_linter) { described_class.new(config: pretty_config, changes: changes) }
+  let(:simple_linter) { described_class.new(config: pretty_config, changes:) }
 
   describe "#run" do
     context "precondition NOT met" do
-      before :each do
+      before do
         allow(simple_linter).to receive(:precondition_met?).and_return(false)
       end
 
@@ -31,12 +33,12 @@ describe TatlTael::Linters::SimpleLinter do
     end
 
     context "precondition met" do
-      before :each do
+      before do
         allow(simple_linter).to receive(:precondition_met?).and_return(true)
       end
 
       context "requirement met" do
-        before :each do
+        before do
           allow(simple_linter).to receive(:requirement_met?).and_return(true)
         end
 
@@ -54,7 +56,7 @@ describe TatlTael::Linters::SimpleLinter do
           }
         end
 
-        before :each do
+        before do
           allow(simple_linter).to receive(:requirement_met?).and_return(false)
         end
 
@@ -67,7 +69,7 @@ describe TatlTael::Linters::SimpleLinter do
 
   describe "#precondition_met?" do
     context "changes exist for the precondition query" do
-      before :each do
+      before do
         allow(simple_linter).to receive(:changes_exist?)
           .with(pretty_config[:precondition])
           .and_return(true)
@@ -79,7 +81,7 @@ describe TatlTael::Linters::SimpleLinter do
     end
 
     context "changes DO NOT exist for the precondition query" do
-      before :each do
+      before do
         allow(simple_linter).to receive(:changes_exist?)
           .with(pretty_config[:precondition])
           .and_return(false)
@@ -103,7 +105,7 @@ describe TatlTael::Linters::SimpleLinter do
         {
           "Statuses" => %w[modified deleted],
           "Include" => ["**/reeee/**"],
-          "Whitelist" => ["**/reeee/blarghy/**"],
+          "Allowlist" => ["**/reeee/blarghy/**"],
         }
       end
       let(:config_with_requirement) { config.merge("Requirement" => requirement) }
@@ -112,11 +114,11 @@ describe TatlTael::Linters::SimpleLinter do
       end
       let(:simple_linter) do
         described_class.new(config: config_with_pretty_requirement,
-                                                changes: changes)
+                            changes:)
       end
 
       context "changes exist for the requirement query" do
-        before :each do
+        before do
           allow(simple_linter).to receive(:changes_exist?)
             .with(config_with_pretty_requirement[:requirement])
             .and_return(true)
@@ -128,7 +130,7 @@ describe TatlTael::Linters::SimpleLinter do
       end
 
       context "changes DO NOT exist for the requirement query" do
-        before :each do
+        before do
           allow(simple_linter).to receive(:changes_exist?)
             .with(config_with_pretty_requirement[:requirement])
             .and_return(false)

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -20,8 +22,8 @@ class Csp::Domain < ActiveRecord::Base
 
   belongs_to :account
 
-  validates_presence_of :account_id, :domain
-  validates_length_of :domain, :maximum => maximum_string_length
+  validates :account_id, :domain, presence: true
+  validates :domain, length: { maximum: maximum_string_length }
 
   validate :validate_domain
 
@@ -31,20 +33,18 @@ class Csp::Domain < ActiveRecord::Base
   after_save :invalidate_domain_list_cache
 
   def validate_domain
-    begin
-      URI.parse(self.domain)
-    rescue
-      self.errors.add(:domain, "Invalid domain")
-      return false
-    end
+    URI.parse(domain)
+  rescue
+    errors.add(:domain, "Invalid domain")
+    false
   end
 
   def downcase_domain
-    self.domain = self.domain.downcase
+    self.domain = domain.downcase
   end
 
   def invalidate_domain_list_cache
-    self.class.clear_cached_domains(self.global_account_id)
+    self.class.clear_cached_domains(global_account_id)
   end
 
   def self.get_cached_domains_for_account(global_account_id)
@@ -53,11 +53,11 @@ class Csp::Domain < ActiveRecord::Base
     end
   end
 
-  # get explicitly whitelisted domains for the enabled account
+  # get explicitly allowed domains for the enabled account
   def self.domains_for_account(global_account_id)
     local_id, shard = Shard.local_id_for(global_account_id)
     (shard || Shard.current).activate do
-      self.where(:account_id => local_id).active.pluck(:domain).sort
+      where(account_id: local_id).active.pluck(:domain).sort
     end
   end
 
@@ -69,9 +69,18 @@ class Csp::Domain < ActiveRecord::Base
     ["csp_whitelisted_domains", global_account_id].cache_key
   end
 
-  def self.domains_for_tools(tool_scope)
-    tool_scope.except(:order).distinct.pluck(:domain, :url).map do |domain, url|
-      domain || (Addressable::URI.parse(url).normalize.host rescue nil)
-    end.compact.map(&:downcase).sort
+  def self.domains_for_tool(tool)
+    # some tools stick a URL into the `domain` field, so deal with that first
+    base_domain = domain_from_url(tool.domain)
+    base_domain ||= tool.domain
+    base_domain ||= domain_from_url(tool.url)
+    return [] unless base_domain
+
+    base_domain = base_domain.downcase
+    [base_domain, "*.#{base_domain}"]
+  end
+
+  def self.domain_from_url(url)
+    Addressable::URI.parse(url).normalize.host rescue nil
   end
 end

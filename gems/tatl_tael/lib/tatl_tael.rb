@@ -1,1 +1,3 @@
-require_relative 'tatl_tael/linters'
+# frozen_string_literal: true
+
+require_relative "tatl_tael/linters"

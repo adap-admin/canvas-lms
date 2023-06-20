@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -15,18 +17,18 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_relative '../../common'
+require_relative "../../common"
 
 class GlobalGrades
   class << self
     include SeleniumDependencies
 
     def score(course)
-      f('.percent', course_row(course))
+      f(".percent", course_row(course))
     end
 
     def grading_period_dropdown(course)
-      f('.grading_periods_selector', course)
+      f(".grading_periods_selector", course)
     end
 
     def course_link(course)
@@ -34,7 +36,7 @@ class GlobalGrades
     end
 
     def course_details
-      f('.course_details')
+      f(".course_details")
     end
 
     def select_grading_period(course, grading_period)
@@ -47,15 +49,19 @@ class GlobalGrades
       score(course).text[/\d+\.*\d*+%/]
     end
 
+    def get_raw_grade_for_course(course)
+      score(course).text
+    end
+
     def get_score_for_course_no_percent(course)
       get_score_for_course(course).delete!("%").to_f
     end
 
     def course_row(course)
-      f('.course_details')
-      courses = ff('tr')
+      f(".course_details")
+      courses = ff("tr")
       courses.each do |single_course|
-        if f('.course a', single_course).text == course.name
+        if f(".course a", single_course).text == course.name
           return single_course
         end
       end
@@ -63,7 +69,7 @@ class GlobalGrades
     end
 
     def visit
-      get '/grades'
+      get "/grades"
     end
 
     def click_course_link(course)
@@ -71,7 +77,7 @@ class GlobalGrades
     end
 
     def report(course)
-      f('.report',course_row(course))
+      f(".report", course_row(course))
     end
 
     def click_report_link(course)

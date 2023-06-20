@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -20,14 +22,14 @@ module Lti
     KEY_REGEX = /\Alti_(?<id>\d+)\z/
 
     def self.enabled?
-      Setting.get('enable_lti_content_migration', 'false') == 'true'
+      Setting.get("enable_lti_content_migration", "false") == "true"
     end
 
     def self.begin_exports(course, options = {})
       # Select tools with proper configs
       configured_tools = []
-      Shackles.activate(:slave) do
-        ContextExternalTool.all_tools_for(course).find_each do |tool|
+      GuardRail.activate(:secondary) do
+        Lti::ContextToolFinder.all_tools_for(course).find_each do |tool|
           configured_tools << tool if tool.content_migration_configured?
         end
       end
@@ -35,13 +37,11 @@ module Lti
       exports = {}
 
       configured_tools.each do |tool|
-        begin
-          migrator = Lti::ContentMigrationService::Exporter.new(course, tool, options)
-          migrator.start!
-          exports["lti_#{tool.id}"] = migrator if migrator.successfully_started?
-        rescue => e
-          Canvas::Errors.capture_exception(:external_content_migration, e)
-        end
+        migrator = Lti::ContentMigrationService::Exporter.new(course, tool, options)
+        migrator.start!
+        exports["lti_#{tool.id}"] = migrator if migrator.successfully_started?
+      rescue => e
+        Canvas::Errors.capture_exception(:external_content_migration, e)
       end
 
       exports
@@ -50,6 +50,7 @@ module Lti
     def self.importer_for(key)
       match = KEY_REGEX.match(key)
       return unless match
+
       Lti::ContentMigrationService::Importer.new(match[:id].to_i)
     end
   end

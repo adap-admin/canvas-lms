@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -26,6 +28,7 @@ class GradingPeriodGroup < ActiveRecord::Base
 
   validate :associated_with_course_or_root_account, if: :active?
 
+  before_save :set_root_account_id
   after_save :recompute_course_scores, if: :weighted_actually_changed?
   after_save :recache_grading_period, if: :saved_change_to_course_id?
   after_destroy :cleanup_associations_and_recompute_scores_later
@@ -37,8 +40,7 @@ class GradingPeriodGroup < ActiveRecord::Base
     can :read
 
     given do |user|
-      root_account &&
-      root_account.associated_user?(user)
+      root_account&.associated_user?(user)
     end
     can :read
 
@@ -48,14 +50,14 @@ class GradingPeriodGroup < ActiveRecord::Base
     can :update and can :delete
 
     given do |user|
-      root_account &&
-      root_account.grants_right?(user, :manage)
+      root_account&.grants_right?(user, :manage)
     end
     can :create
   end
 
   def self.for(account)
-    raise ArgumentError.new("argument is not an Account") unless account.is_a?(Account)
+    raise ArgumentError, "argument is not an Account" unless account.is_a?(Account)
+
     root_account = account.root_account? ? account : account.root_account
     root_account.grading_period_groups.active
   end
@@ -65,7 +67,7 @@ class GradingPeriodGroup < ActiveRecord::Base
     return course_group if course_group.present?
 
     account_group = context.enrollment_term.grading_period_group
-    account_group.nil? || account_group.deleted? ? nil : account_group
+    (account_group.nil? || account_group.deleted?) ? nil : account_group
   end
 
   def recompute_scores_for_each_term(update_all_grading_period_scores, term_ids: nil)
@@ -73,7 +75,7 @@ class GradingPeriodGroup < ActiveRecord::Base
 
     terms.find_each do |term|
       term.recompute_course_scores_later(
-        update_all_grading_period_scores: update_all_grading_period_scores,
+        update_all_grading_period_scores:,
         strand_identifier: "GradingPeriodGroup:#{global_id}"
       )
     end
@@ -87,13 +89,13 @@ class GradingPeriodGroup < ActiveRecord::Base
     recompute_scores_for_each_term(false)
   end
 
-  handle_asynchronously_if_production(
-    :recompute_course_scores,
-    singleton: proc { |g| "grading_period_group:recompute:GradingPeriodGroup:#{g.global_id}" }
-  )
+  if Rails.env.production?
+    handle_asynchronously :recompute_course_scores,
+                          singleton: proc { |g| "grading_period_group:recompute:GradingPeriodGroup:#{g.global_id}" }
+  end
 
   def weighted_actually_changed?
-    !self.new_record? && saved_change_to_weighted?
+    !new_record? && saved_change_to_weighted?
   end
 
   def recache_grading_period
@@ -110,24 +112,18 @@ class GradingPeriodGroup < ActiveRecord::Base
       errors.add(:account_id, t("cannot be present when course_id is present"))
     elsif root_account && !root_account.root_account?
       errors.add(:account_id, t("must belong to a root account"))
-    elsif root_account && root_account.deleted?
+    elsif root_account&.deleted?
       errors.add(:account_id, t("must belong to an active root account"))
-    elsif course && course.deleted?
+    elsif course&.deleted?
       errors.add(:course_id, t("must belong to an active course"))
     end
   end
 
   def cleanup_associations_and_recompute_scores_later(updating_user: nil)
     root_account_id = course_id ? course.root_account.global_id : root_account.global_id
-    send_later_if_production_enqueue_args(
-      :cleanup_associations_and_recompute_scores,
-      {
-        strand: "GradingPeriodGroup#cleanup_associations_and_recompute_scores:Account#{root_account_id}",
-        max_attempts: 1,
-        priority: Delayed::LOW_PRIORITY
-      },
-      updating_user: updating_user
-    )
+    delay_if_production(strand: "GradingPeriodGroup#cleanup_associations_and_recompute_scores:Account#{root_account_id}",
+                        priority: Delayed::LOW_PRIORITY)
+      .cleanup_associations_and_recompute_scores(updating_user:)
   end
 
   def cleanup_associations_and_recompute_scores(updating_user: nil)
@@ -144,7 +140,7 @@ class GradingPeriodGroup < ActiveRecord::Base
     else
       term_ids = enrollment_terms.pluck(:id)
       update_in_batches(enrollment_terms, grading_period_group_id: nil)
-      recompute_scores_for_each_term(true, term_ids: term_ids)
+      recompute_scores_for_each_term(true, term_ids:)
     end
   end
 
@@ -152,5 +148,9 @@ class GradingPeriodGroup < ActiveRecord::Base
     scope.find_ids_in_ranges(batch_size: 1000) do |min_id, max_id|
       scope.where(id: min_id..max_id).update_all(updates.reverse_merge({ updated_at: Time.zone.now }))
     end
+  end
+
+  def set_root_account_id
+    self.root_account_id ||= account_id || course&.root_account_id
   end
 end

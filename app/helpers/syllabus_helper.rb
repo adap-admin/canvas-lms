@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -22,7 +24,7 @@ module SyllabusHelper
       @context
     ]
     unless @context.grants_right?(@current_user, session, :read)
-      args += [ nil, true ]
+      args += [nil, true]
     end
     public_user_content(*args)
   end

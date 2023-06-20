@@ -16,16 +16,17 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import QuizCollection from 'compiled/collections/QuizCollection'
-import IndexView from 'compiled/views/quizzes/IndexView'
-import QuizItemGroupView from 'compiled/views/quizzes/QuizItemGroupView'
-import NoQuizzesView from 'compiled/views/quizzes/NoQuizzesView'
+import QuizCollection from 'ui/features/quizzes_index/backbone/collections/QuizCollection'
+import IndexView from 'ui/features/quizzes_index/backbone/views/IndexView'
+import QuizItemGroupView from 'ui/features/quizzes_index/backbone/views/QuizItemGroupView'
+import NoQuizzesView from 'ui/features/quizzes_index/backbone/views/NoQuizzesView'
 import $ from 'jquery'
 import fakeENV from 'helpers/fakeENV'
 import 'helpers/jquery.simulate'
+import ReactDOM from 'react-dom'
 
 let fixtures = null
-const indexView = function(assignments, open, surveys) {
+const indexView = function (assignments, open, surveys) {
   $('<div id="content"></div>').appendTo(fixtures)
   if (assignments == null) {
     assignments = new QuizCollection([])
@@ -40,29 +41,33 @@ const indexView = function(assignments, open, surveys) {
     collection: assignments,
     title: 'Assignment Quizzes',
     listId: 'assignment-quizzes',
-    isSurvey: false
+    isSurvey: false,
   })
   const openView = new QuizItemGroupView({
     collection: open,
     title: 'Practice Quizzes',
     listId: 'open-quizzes',
-    isSurvey: false
+    isSurvey: false,
   })
   const surveyView = new QuizItemGroupView({
     collection: surveys,
     title: 'Surveys',
     listId: 'surveys-quizzes',
-    isSurvey: true
+    isSurvey: true,
   })
   const noQuizzesView = new NoQuizzesView()
   const permissions = {
     create: true,
-    manage: true
+    manage: true,
   }
-  const flags = {question_banks: true}
+  const flags = {
+    question_banks: true,
+    quiz_lti_enabled: false || ENV.flags.quiz_lti_enabled,
+  }
   const urls = {
     new_quiz_url: '/courses/1/quizzes/new?fresh=1',
-    question_banks_url: '/courses/1/question_banks'
+    new_assignment_url: '/courses/1/assignments/new',
+    question_banks_url: '/courses/1/question_banks',
   }
   const view = new IndexView({
     assignmentView,
@@ -71,7 +76,7 @@ const indexView = function(assignments, open, surveys) {
     noQuizzesView,
     permissions,
     flags,
-    urls
+    urls,
   })
   view.$el.appendTo(fixtures)
   return view.render()
@@ -79,97 +84,138 @@ const indexView = function(assignments, open, surveys) {
 QUnit.module('IndexView', {
   setup() {
     fixtures = $('#fixtures')
-    fakeENV.setup()
+    fakeENV.setup({
+      permissions: {
+        create: true,
+        manage: true,
+      },
+      flags: {
+        question_banks: true,
+      },
+      urls: {
+        new_quiz_url: '/courses/1/quizzes/new?fresh=1',
+        new_assignment_url: '/courses/1/assignments/new',
+        question_banks_url: '/courses/1/question_banks',
+      },
+    })
   },
   teardown() {
     fakeENV.teardown()
     fixtures.empty()
-  }
+  },
 })
-test('#hasNoQuizzes if assignment and open quizzes are empty', function() {
+test('#hasNoQuizzes if assignment and open quizzes are empty', () => {
   const assignments = new QuizCollection([])
   const open = new QuizCollection([])
   const view = indexView(assignments, open)
   ok(view.options.hasNoQuizzes)
 })
-test('#hasNoQuizzes to false if has assignement quizzes', function() {
-  const assignments = new QuizCollection([{id: 1}])
+test('#hasNoQuizzes to false if has assignment quizzes', () => {
+  const assignments = new QuizCollection([{id: 1, permissions: {delete: true}}])
   const open = new QuizCollection([])
   const view = indexView(assignments, open)
   ok(!view.options.hasNoQuizzes)
 })
-test('#hasNoQuizzes to false if has open quizzes', function() {
+test('#hasNoQuizzes to false if has open quizzes', () => {
   const assignments = new QuizCollection([])
-  const open = new QuizCollection([{id: 1}])
+  const open = new QuizCollection([{id: 1, permissions: {delete: true}}])
   const view = indexView(assignments, open)
   ok(!view.options.hasNoQuizzes)
 })
-test('#hasAssignmentQuizzes if has assignment quizzes', function() {
-  const assignments = new QuizCollection([{id: 1}])
+test('#hasAssignmentQuizzes if has assignment quizzes', () => {
+  const assignments = new QuizCollection([{id: 1, permissions: {delete: true}}])
   const view = indexView(assignments, null, null)
   ok(view.options.hasAssignmentQuizzes)
 })
-test('#hasOpenQuizzes if has open quizzes', function() {
-  const open = new QuizCollection([{id: 1}])
+test('#hasOpenQuizzes if has open quizzes', () => {
+  const open = new QuizCollection([{id: 1, permissions: {delete: true}}])
   const view = indexView(null, open, null)
   ok(view.options.hasOpenQuizzes)
 })
-test('#hasSurveys if has surveys', function() {
-  const surveys = new QuizCollection([{id: 1}])
+test('#hasSurveys if has surveys', () => {
+  const surveys = new QuizCollection([{id: 1, permissions: {delete: true}}])
   const view = indexView(null, null, surveys)
   ok(view.options.hasSurveys)
 })
-test('should render the view', function() {
+test("shows modified '+ Quiz' button if quiz lti enabled", () => {
+  ENV.flags.quiz_lti_enabled = true
+  const view = indexView(null, null, null)
+  const $button = view.$('.choose-quiz-engine')
+  equal($button.length, 1)
+})
+test("does not show modified '+ Quiz' button when quiz lti disabled", () => {
+  ENV.flags.quiz_lti_enabled = false
+  const view = indexView(null, null, null)
+  equal(view.$('.choose-quiz-engine').length, 0)
+})
+test('renders choose quiz engine modal', () => {
+  ENV.flags.quiz_lti_enabled = true
+  sinon.stub(ReactDOM, 'render')
+  const view = indexView(null, null, null)
+  view.$('.choose-quiz-engine').simulate('click')
+  const args = ReactDOM.render.firstCall.args
+  equal(args[0].props.setOpen, true)
+  ReactDOM.render.restore()
+})
+test('should render the view', () => {
   const assignments = new QuizCollection([
     {
       id: 1,
-      title: 'Foo Title'
+      title: 'Foo Title',
+      permissions: {delete: true},
     },
     {
       id: 2,
-      title: 'Bar Title'
-    }
+      title: 'Bar Title',
+      permissions: {delete: true},
+    },
   ])
   const open = new QuizCollection([
     {
       id: 3,
-      title: 'Foo Title'
+      title: 'Foo Title',
+      permissions: {delete: true},
     },
     {
       id: 4,
-      title: 'Bar Title'
-    }
+      title: 'Bar Title',
+      permissions: {delete: true},
+    },
   ])
   const view = indexView(assignments, open)
-  equal(view.$el.find('.collectionViewItems li').length, 4)
+  equal(view.$el.find('.collectionViewItems li.quiz').length, 4)
 })
-test('should filter by search term', function() {
+test('should filter by search term', () => {
   const assignments = new QuizCollection([
     {
       id: 1,
-      title: 'Foo Name'
+      title: 'Foo Name',
+      permissions: {delete: true},
     },
     {
       id: 2,
-      title: 'Bar Title'
-    }
+      title: 'Bar Title',
+      permissions: {delete: true},
+    },
   ])
   const open = new QuizCollection([
     {
       id: 3,
-      title: 'Baz Title'
+      title: 'Baz Title',
+      permissions: {delete: true},
     },
     {
       id: 4,
-      title: 'Qux Name'
-    }
+      title: 'Qux Name',
+      permissions: {delete: true},
+    },
   ])
   let view = indexView(assignments, open)
   $('#searchTerm').val('foo')
   view.filterResults()
-  equal(view.$el.find('.collectionViewItems li').length, 1)
+  equal(view.$el.find('.collectionViewItems li.quiz').length, 1)
   view = indexView(assignments, open)
   $('#searchTerm').val('name')
   view.filterResults()
-  equal(view.$el.find('.collectionViewItems li').length, 2)
+  equal(view.$el.find('.collectionViewItems li.quiz').length, 2)
 })

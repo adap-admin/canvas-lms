@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -20,17 +22,17 @@ module Api::V1::QuizQuestion
   include Api::V1::Json
 
   API_ALLOWED_QUESTION_OUTPUT_FIELDS = {
-    :only => %w(
+    only: %w[
       id
       quiz_id
       position
       regrade_option
       assessment_question_id
       quiz_group_id
-    )
-  }
+    ]
+  }.freeze
 
-  API_ALLOWED_QUESTION_DATA_OUTPUT_FIELDS = %w(
+  API_ALLOWED_QUESTION_DATA_OUTPUT_FIELDS = %w[
     question_name
     question_type
     question_text
@@ -49,24 +51,24 @@ module Api::V1::QuizQuestion
     formula_decimal_places
     matches
     matching_answer_incorrect_matches
-  )
+  ].freeze
 
   # @param [Quizzes::Quiz#quiz_data] quiz_data
   #   If you specify a quiz_data construct from a submission (or a quiz), then
   #   the questions will be modified to use the fields found in that
   #   data. This is needed if you're rendering questions for a submission
   #   as each submission might have differen data.
-  def questions_json(questions, user, session, context=nil, includes=[], censored=false, quiz_data=nil, opts={})
+  def questions_json(questions, user, session, context = nil, includes = [], censored = false, quiz_data = nil, opts = {})
     questions.map do |question|
       question_json(question, user, session, context, includes, censored, quiz_data, opts)
     end
   end
 
-  def question_json(question, user, session, _context=nil, includes=[], censored=false, quiz_data=nil, opts={})
-    hsh = api_json(question, user, session, API_ALLOWED_QUESTION_OUTPUT_FIELDS) do |json, q|
+  def question_json(question, user, session, _context = nil, includes = [], censored = false, quiz_data = nil, opts = {})
+    hsh = api_json(question, user, session, API_ALLOWED_QUESTION_OUTPUT_FIELDS).tap do |json|
       API_ALLOWED_QUESTION_DATA_OUTPUT_FIELDS.each do |field|
-        question_data = quiz_data&.find { |data_question| data_question[:id] == q[:id] } || q.question_data
-        json.send("#{field}=", question_data[field])
+        question_data = quiz_data&.find { |data_question| data_question[:id] == question[:id] } || question.question_data
+        json[field] = question_data[field]
       end
     end
 
@@ -103,6 +105,7 @@ module Api::V1::QuizQuestion
 
     question_hash["answers"].each do |a|
       next unless a["html"].present?
+
       a["html"] = api_user_content(a["html"], context, user)
     end
 
@@ -119,22 +122,34 @@ module Api::V1::QuizQuestion
     question_data = question_data.with_indifferent_access
 
     # whitelist question details for students
-    attr_whitelist = %w(
-      id position quiz_group_id quiz_id assessment_question_id
-      assessment_question question_name question_type question_text answers matches
-      formulas variables answer_tolerance formula_decimal_places
-    )
-    question_data.keep_if {|k, _v| attr_whitelist.include?(k.to_s) }
+    attr_whitelist = %w[
+      id
+      position
+      quiz_group_id
+      quiz_id
+      assessment_question_id
+      assessment_question
+      question_name
+      question_type
+      question_text
+      answers
+      matches
+      formulas
+      variables
+      answer_tolerance
+      formula_decimal_places
+    ]
+    question_data.keep_if { |k, _v| attr_whitelist.include?(k.to_s) }
 
     # only include answers for types that need it to show choices
-    allow_answer_whitelist = %w(
+    allow_answer_whitelist = %w[
       multiple_choice_question
       true_false_question
       multiple_answers_question
       matching_question
       multiple_dropdowns_question
       calculated_question
-    )
+    ]
 
     unless allow_answer_whitelist.include?(question_data[:question_type])
       question_data.delete(:answers)
@@ -143,13 +158,10 @@ module Api::V1::QuizQuestion
     # need the answer text for multiple choice - only info necessary though
     # multiple_dropdown needs blank_id
     # formula questions need variables
-    if question_data[:answers]
-      question_data[:answers].each do |record|
-        record.keep_if {|k, _| %w(id text html blank_id variables).include?(k.to_s) }
-      end
+    question_data[:answers]&.each do |record|
+      record.keep_if { |k, _| %w[id text html blank_id variables].include?(k.to_s) }
     end
 
     question_data
   end
-
 end

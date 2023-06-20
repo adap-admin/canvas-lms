@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -15,12 +17,19 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'active_support/callbacks/suspension/registry'
-require 'active_support/core_ext/array' # extract_options!
-require 'active_support/version'
+require "active_support/callbacks/suspension/registry"
+require "active_support/core_ext/array" # extract_options!
+require "active_support/version"
 
 module ActiveSupport::Callbacks
   module Suspension
+    def self.included(base)
+      # use extend to avoid this callback being called again
+      base.extend(self)
+      base.singleton_class.include(ClassMethods)
+      base.include(InstanceMethods)
+    end
+
     # Ignores the specified callbacks for the duration of the block.
     #
     # suspend_callbacks{ ... }
@@ -51,6 +60,7 @@ module ActiveSupport::Callbacks
     end
 
     protected
+
     # checks whether a specific callback combination (e.g. :validate, :save,
     # :before) is currently suspended, whether by the receiver or the
     # receiver's ancestor (its class for an instance, its superclass for a
@@ -78,12 +88,15 @@ module ActiveSupport::Callbacks
     #     @student.send(:suspended_callback?, :validate, :save, :before) #=> true
     #   end
     #
-    def suspended_callback?(callback, kind, type=nil)
-      val = suspended_callbacks_defined? &&
-        suspended_callbacks.include?(callback, kind, type) ||
-      suspended_callback_ancestor&.suspended_callback?(callback, kind, type)
+    def suspended_callback?(callback, kind, type = nil)
+      (suspended_callbacks_defined? &&
+            suspended_callbacks.include?(callback, kind, type)) ||
+        suspended_callback_ancestor&.suspended_callback?(callback, kind, type)
+    end
 
-      val
+    def any_suspensions_active?(kind)
+      (suspended_callbacks_defined? && suspended_callbacks.any_registered?(kind)) ||
+        suspended_callback_ancestor&.any_suspensions_active?(kind)
     end
 
     def suspended_callback_ancestor
@@ -120,81 +133,63 @@ module ActiveSupport::Callbacks
       end
 
       def filter_callbacks(callbacks)
+        # common case, we can skip a bunch of tests
+        return callbacks if callbacks.empty?
+        # short-circuit re-allocating the chain if no suspensions are active
+        return callbacks unless any_suspensions_active?(callbacks.name)
+
         filtered = ActiveSupport::Callbacks::CallbackChain.new(callbacks.name, callbacks.config)
-        callbacks.each{ |cb| filtered.insert(-1, cb) unless suspended_callback?(cb.filter, callbacks.name, cb.kind) }
+        callbacks.each { |cb| filtered.insert(-1, cb) unless suspended_callback?(cb.filter, callbacks.name, cb.kind) }
         filtered
       end
 
-      # these are copy/paste, except wrapping in a filter_callbacks
-      if ActiveSupport::VERSION::STRING < '5.1'
-        # [ActiveSupport 4.2 and 5.0]
-        def __run_callbacks__(callbacks, &block)
-          callbacks = filter_callbacks(callbacks)
+      # this are copy/paste, except wrapping in a filter_callbacks
+      def run_callbacks(kind)
+        callbacks = filter_callbacks(__callbacks[kind.to_sym])
 
-          if callbacks.empty?
-            yield if block_given?
-          else
-            runner = callbacks.compile
-            e = Filters::Environment.new(self, false, nil, block)
-            runner.call(e).value
-          end
-        end
-      else
-        # [ActiveSupport 5.1]
-        def run_callbacks(kind)
-          callbacks = filter_callbacks(__callbacks[kind.to_sym])
+        if callbacks.empty?
+          yield if block_given?
+        else
+          env = Filters::Environment.new(self, false, nil)
+          next_sequence = callbacks.compile
 
-          if callbacks.empty?
-            yield if block_given?
-          else
-            env = Filters::Environment.new(self, false, nil)
-            next_sequence = callbacks.compile
-
-            invoke_sequence = Proc.new do
-              skipped = nil
-              while true
-                current = next_sequence
-                current.invoke_before(env)
-                if current.final?
-                  env.value = !env.halted && (!block_given? || yield)
-                elsif current.skip?(env)
-                  (skipped ||= []) << current
-                  next_sequence = next_sequence.nested
-                  next
-                else
-                  next_sequence = next_sequence.nested
-                  begin
-                    target, block, method, *arguments = current.expand_call_template(env, invoke_sequence)
-                    target.send(method, *arguments, &block)
-                  ensure
-                    next_sequence = current
-                  end
+          invoke_sequence = proc do
+            skipped = nil
+            while true
+              current = next_sequence
+              current.invoke_before(env)
+              if current.final?
+                env.value = !env.halted && (!block_given? || yield)
+              elsif current.skip?(env)
+                (skipped ||= []) << current
+                next_sequence = next_sequence.nested
+                next
+              else
+                next_sequence = next_sequence.nested
+                begin
+                  target, block, method, *arguments = current.expand_call_template(env, invoke_sequence)
+                  target.send(method, *arguments, &block)
+                ensure
+                  next_sequence = current
                 end
-                current.invoke_after(env)
-                skipped.pop.invoke_after(env) while skipped && skipped.first
-                break env.value
               end
+              current.invoke_after(env)
+              skipped.pop.invoke_after(env) while skipped&.first
+              break env.value
             end
+          end
 
-            # Common case: no 'around' callbacks defined
-            if next_sequence.final?
-              next_sequence.invoke_before(env)
-              env.value = !env.halted && (!block_given? || yield)
-              next_sequence.invoke_after(env)
-              env.value
-            else
-              invoke_sequence.call
-            end
+          # Common case: no 'around' callbacks defined
+          if next_sequence.final?
+            next_sequence.invoke_before(env)
+            env.value = !env.halted && (!block_given? || yield)
+            next_sequence.invoke_after(env)
+            env.value
+          else
+            invoke_sequence.call
           end
         end
       end
-    end
-
-    def self.included(base)
-      # use extend to avoid this callback being called again
-      base.extend(self)
-      base.singleton_class.include(ClassMethods)
-      base.include(InstanceMethods)
     end
   end
 end

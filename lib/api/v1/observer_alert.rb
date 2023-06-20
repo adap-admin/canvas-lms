@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -21,7 +23,7 @@ module Api::V1::ObserverAlert
   include ApplicationHelper
 
   API_ALLOWED_OUTPUT_FIELDS = {
-    :only => %w(
+    only: %w[
       id
       title
       user_id
@@ -32,25 +34,27 @@ module Api::V1::ObserverAlert
       context_id
       workflow_state
       action_date
-    ).freeze
+    ].freeze
   }.freeze
 
   def observer_alert_json(alert, user, session, _opts = {})
     hash = api_json(alert, user, session, API_ALLOWED_OUTPUT_FIELDS)
 
     url = case alert.context_type
-          when 'DiscussionTopic'
+          when "DiscussionTopic"
             course_discussion_topic_url(alert.context.context_id, alert.context)
-          when 'Assignment'
+          when "Assignment"
             course_assignment_url(alert.context.context_id, alert.context)
-          when 'Course'
+          when "Course"
             course_url(alert.context)
-          when 'Submission'
+          when "Submission"
             assignment = alert.context.assignment
             course_assignment_url(assignment.context_id, assignment)
           end
 
-    hash['html_url'] = url
+    hash["locked_for_user"] = !(alert.context.nil? || alert.context_type == "AccountNotification" || alert.context.grants_right?(user, session, :read))
+
+    hash["html_url"] = url
     hash
   end
 end

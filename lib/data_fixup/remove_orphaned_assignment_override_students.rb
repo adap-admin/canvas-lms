@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -17,11 +19,11 @@
 
 module DataFixup::RemoveOrphanedAssignmentOverrideStudents
   def self.run
-    bad_aos = AssignmentOverrideStudent.active.joins(:assignment_override).
-      where(:assignment_overrides => {:workflow_state => 'deleted'})
+    bad_aos = AssignmentOverrideStudent.active.joins(:assignment_override)
+                                       .where(assignment_overrides: { workflow_state: "deleted" })
 
     bad_aos.find_ids_in_batches do |ids|
-      AssignmentOverrideStudent.where(id: ids).update_all(workflow_state: 'deleted')
+      AssignmentOverrideStudent.where(id: ids).update_all(workflow_state: "deleted")
     end
   end
 end

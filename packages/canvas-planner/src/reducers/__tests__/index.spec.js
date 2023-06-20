@@ -15,11 +15,11 @@
  * You should have received a copy of the GNU Affero General Public License along
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-import moment from 'moment-timezone';
-import rootReducer from '../index';
+import moment from 'moment-timezone'
+import rootReducer from '../index'
 
 it('sets the default state for all properties empty initial state', () => {
-  const newState = rootReducer({}, { type: 'FAKE_ACTION' });
+  const newState = rootReducer({}, {type: 'FAKE_ACTION'})
   expect(newState).toMatchObject({
     courses: [],
     groups: [],
@@ -30,15 +30,16 @@ it('sets the default state for all properties empty initial state', () => {
       isLoading: false
     },
     firstNewActivityDate: null,
-  });
-});
+    selectedObservee: null
+  })
+})
 
 it('clones the first new activity date moment', () => {
-  const initialState = rootReducer({}, { type: 'blah' });
-  const mockMoment = moment();
+  const initialState = rootReducer({}, {type: 'blah'})
+  const mockMoment = moment()
   const nextState = rootReducer(initialState, {
     type: 'FOUND_FIRST_NEW_ACTIVITY_DATE',
-    payload: mockMoment,
-  });
-  expect(nextState.firstNewActivityDate).not.toBe(mockMoment);
-});
+    payload: mockMoment
+  })
+  expect(nextState.firstNewActivityDate).not.toBe(mockMoment)
+})

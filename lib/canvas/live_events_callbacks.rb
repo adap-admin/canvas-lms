@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -16,12 +18,16 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 module Canvas::LiveEventsCallbacks
-  ELIGIBLE_ATTACHMENT_CONTEXTS = ['Course', 'Group', 'User'].freeze
+  ELIGIBLE_ATTACHMENT_CONTEXTS = %w[Course Group User].freeze
 
   def self.after_create(obj)
     case obj
     when Course
       Canvas::LiveEvents.course_created(obj)
+    when Conversation
+      Canvas::LiveEvents.conversation_created(obj)
+    when ConversationMessage
+      Canvas::LiveEvents.conversation_message_created(obj) unless ConversationBatch.created_as_template?(message: obj)
     when DiscussionEntry
       Canvas::LiveEvents.discussion_entry_created(obj)
     when DiscussionTopic
@@ -42,8 +48,10 @@ module Canvas::LiveEventsCallbacks
       Canvas::LiveEvents.assignment_created(obj)
     when AssignmentGroup
       Canvas::LiveEvents.assignment_group_created(obj)
+    when AssignmentOverride
+      Canvas::LiveEvents.assignment_override_created(obj)
     when Submission
-      Canvas::LiveEvents.submission_created(obj)
+      Canvas::LiveEvents.submission_created(obj) if obj.just_submitted?
     when SubmissionComment
       Canvas::LiveEvents.submission_comment_created(obj)
     when UserAccountAssociation
@@ -61,19 +69,38 @@ module Canvas::LiveEventsCallbacks
     when ContextModule
       Canvas::LiveEvents.module_created(obj)
     when ContentTag
-      Canvas::LiveEvents.module_item_created(obj) if obj.tag_type == "context_module"
+      case obj.tag_type
+      when "context_module"
+        Canvas::LiveEvents.module_item_created(obj)
+      when "learning_outcome_association"
+        Canvas::LiveEvents.learning_outcome_link_created(obj)
+      end
     when LearningOutcomeResult
       Canvas::LiveEvents.learning_outcome_result_created(obj)
+    when LearningOutcome
+      Canvas::LiveEvents.learning_outcome_created(obj)
+    when LearningOutcomeGroup
+      Canvas::LiveEvents.learning_outcome_group_created(obj)
+    when SisBatch
+      Canvas::LiveEvents.sis_batch_created(obj)
+    when OutcomeProficiency
+      Canvas::LiveEvents.outcome_proficiency_created(obj)
+    when OutcomeCalculationMethod
+      Canvas::LiveEvents.outcome_calculation_method_created(obj)
+    when OutcomeFriendlyDescription
+      Canvas::LiveEvents.outcome_friendly_description_created(obj)
+    when MasterCourses::MasterTemplate
+      Canvas::LiveEvents.master_template_created(obj)
+    when MasterCourses::ChildSubscription
+      Canvas::LiveEvents.blueprint_subscription_created(obj)
     end
   end
 
   def self.after_update(obj, changes)
     case obj
     when ContentExport
-      if obj.quizzes2_export? && changes["workflow_state"]
-        if obj.workflow_state == "exported"
-          Canvas::LiveEvents.quiz_export_complete(obj)
-        end
+      if obj.quizzes2_export? && changes["workflow_state"] && obj.workflow_state == "exported"
+        Canvas::LiveEvents.quiz_export_complete(obj)
       end
     when ContentMigration
       if changes["workflow_state"] && obj.workflow_state == "imported"
@@ -89,7 +116,7 @@ module Canvas::LiveEventsCallbacks
     when Enrollment
       Canvas::LiveEvents.enrollment_updated(obj)
     when EnrollmentState
-      if (changes.keys - ["state_is_current", "lock_version", "access_is_current"]).any?
+      if (changes.keys - %w[state_is_current lock_version access_is_current]).any?
         Canvas::LiveEvents.enrollment_state_updated(obj)
       end
     when GroupCategory
@@ -100,18 +127,21 @@ module Canvas::LiveEventsCallbacks
       Canvas::LiveEvents.group_membership_updated(obj)
     when WikiPage
       if changes["title"] || changes["body"]
-        Canvas::LiveEvents.wiki_page_updated(obj, changes["title"] ? changes["title"].first : nil,
-                                                  changes["body"] ? changes["body"].first : nil)
+        Canvas::LiveEvents.wiki_page_updated(obj,
+                                             changes["title"]&.first,
+                                             changes["body"]&.first)
       end
     when Assignment
       Canvas::LiveEvents.assignment_updated(obj)
     when AssignmentGroup
       Canvas::LiveEvents.assignment_group_updated(obj)
+    when AssignmentOverride
+      Canvas::LiveEvents.assignment_override_updated(obj)
     when Attachment
       if attachment_eligible?(obj)
-        if changes["display_name"]
-          Canvas::LiveEvents.attachment_updated(obj, changes["display_name"].first)
-        elsif changes["file_state"] && obj.file_state == 'deleted'
+        if %w[display_name lock_at unlock_at folder_id].any? { |field| changes[field] }
+          Canvas::LiveEvents.attachment_updated(obj, changes["display_name"]&.first)
+        elsif changes["file_state"] && obj.file_state == "deleted"
           # Attachments are often soft deleted rather than destroyed
           Canvas::LiveEvents.attachment_deleted(obj)
         end
@@ -129,17 +159,54 @@ module Canvas::LiveEventsCallbacks
     when ContextModule
       Canvas::LiveEvents.module_updated(obj)
     when ContextModuleProgression
-      if changes["completed_at"]
-        if CourseProgress.new(obj.context_module.course, obj.user, read_only: true).completed?
-          Canvas::LiveEvents.course_completed(obj)
-        else
-          Canvas::LiveEvents.course_progress(obj)
-        end
+      if changes["requirements_met"] && changes["requirements_met"].second.length > changes["requirements_met"].first.length
+        singleton_key = "course_progress_course_#{obj.context_module.global_context_id}_user_#{obj.global_user_id}"
+        CourseProgress.delay_if_production(
+          singleton: singleton_key,
+          run_at: Setting.get("course_progress_live_event_delay_seconds", "120").to_i.seconds.from_now,
+          on_conflict: :overwrite,
+          priority: 15
+        ).dispatch_live_event(obj)
       end
     when ContentTag
-      Canvas::LiveEvents.module_item_updated(obj) if obj.tag_type == "context_module"
+      case obj.tag_type
+      when "context_module"
+        Canvas::LiveEvents.module_item_updated(obj)
+      when "learning_outcome_association"
+        Canvas::LiveEvents.learning_outcome_link_updated(obj)
+      end
     when LearningOutcomeResult
       Canvas::LiveEvents.learning_outcome_result_updated(obj)
+    when LearningOutcome
+      Canvas::LiveEvents.learning_outcome_updated(obj)
+    when LearningOutcomeGroup
+      Canvas::LiveEvents.learning_outcome_group_updated(obj)
+    when SisBatch
+      if changes[:workflow_state].present?
+        Canvas::LiveEvents.sis_batch_updated(obj)
+      end
+    when OutcomeProficiency
+      Canvas::LiveEvents.outcome_proficiency_updated(obj)
+    when OutcomeCalculationMethod
+      Canvas::LiveEvents.outcome_calculation_method_updated(obj)
+    when OutcomeFriendlyDescription
+      Canvas::LiveEvents.outcome_friendly_description_updated(obj)
+    when MasterCourses::MasterMigration
+      if changes["workflow_state"] && obj.workflow_state == "completed"
+        Canvas::LiveEvents.master_migration_completed(obj)
+      end
+    when MasterCourses::MasterTemplate
+      if %w[default_restrictions use_default_restrictions_by_type default_restrictions_by_type].any? { |field| changes[field] }
+        Canvas::LiveEvents.default_blueprint_restrictions_updated(obj)
+      end
+    when MasterCourses::MasterContentTag
+      if %w[restrictions use_default_restrictions].any? { |f| changes[f] } && obj.quiz_lti_content?
+        Canvas::LiveEvents.blueprint_restrictions_updated(obj)
+      end
+    when MasterCourses::ChildSubscription
+      if changes["workflow_state"] && obj.workflow_state == "active"
+        Canvas::LiveEvents.blueprint_subscription_created(obj)
+      end
     end
   end
 
@@ -151,6 +218,8 @@ module Canvas::LiveEventsCallbacks
       end
     when WikiPage
       Canvas::LiveEvents.wiki_page_deleted(obj)
+    when MasterCourses::ChildSubscription
+      Canvas::LiveEvents.blueprint_subscription_deleted(obj)
     end
   end
 

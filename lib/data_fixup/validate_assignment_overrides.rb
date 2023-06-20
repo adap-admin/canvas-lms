@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -17,7 +19,7 @@
 
 module DataFixup::ValidateAssignmentOverrides
   def self.run(start_at, end_at)
-    Assignment.find_ids_in_ranges(:start_at => start_at, :end_at => end_at) do |min_id, max_id|
+    Assignment.find_ids_in_ranges(start_at:, end_at:) do |min_id, max_id|
       Assignment.where(id: min_id..max_id).each(&:validate_assignment_overrides)
     end
   end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -18,25 +20,27 @@
 module Lti
   class Asset
     def self.opaque_identifier_for(asset, context: nil)
+      return if asset.blank?
+
       shard = asset.shard
       shard.activate do
         lti_context_id = context_id_for(asset, shard)
-        set_asset_context_id(asset, lti_context_id, context: context)
+        set_asset_context_id(asset, lti_context_id, context:)
       end
     end
 
     def self.set_asset_context_id(asset, lti_context_id, context: nil)
-      if asset.respond_to?('lti_context_id')
+      if asset.respond_to?(:lti_context_id)
         global_context_id = global_context_id_for(asset)
         if asset.new_record?
           asset.lti_context_id = global_context_id
         elsif asset.lti_context_id?
           lti_context_id = (old_id = old_id_for_user_in_context(asset, context)) ? old_id : asset.lti_context_id
         else
-          Shackles.activate(:master) {asset.reload}
+          GuardRail.activate(:primary) { asset.reload }
           unless asset.lti_context_id
             asset.lti_context_id = global_context_id
-            Shackles.activate(:master) {asset.save!}
+            GuardRail.activate(:primary) { asset.save! }
           end
           lti_context_id = asset.lti_context_id
         end
@@ -47,7 +51,13 @@ module Lti
     def self.old_id_for_user_in_context(asset, context)
       if asset.is_a?(User) && context
         context.shard.activate do
-          asset.past_lti_ids.where(context: context).take&.user_lti_context_id
+          if asset.association(:past_lti_ids).loaded?
+            asset.past_lti_ids.find do |id|
+              id.context_id == context.id && id.context_type == context.class_name
+            end&.user_lti_context_id
+          else
+            asset.past_lti_ids.shard(context.shard).where(context:).pluck(:user_lti_context_id).first
+          end
         end
       end
     end
@@ -56,12 +66,14 @@ module Lti
       shard ||= asset.shard
       str = asset.asset_string.to_s
       raise "Empty value" if str.blank?
+
       Canvas::Security.hmac_sha1(str, shard.settings[:encryption_key])
     end
 
     def self.global_context_id_for(asset)
       str = asset.global_asset_string.to_s
       raise "Empty value" if str.blank?
+
       Canvas::Security.hmac_sha1(str, asset.shard.settings[:encryption_key])
     end
   end

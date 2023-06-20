@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -28,6 +30,7 @@ module Submissions
       )
 
       return render_unauthorized_action if anonymize_students?
+
       super
     end
   end

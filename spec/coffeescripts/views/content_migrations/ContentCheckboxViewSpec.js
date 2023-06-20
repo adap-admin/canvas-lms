@@ -16,29 +16,26 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import CheckboxCollection from 'compiled/collections/content_migrations/ContentCheckboxCollection'
-import CheckboxView from 'compiled/views/content_migrations/ContentCheckboxView'
-import CheckboxModel from 'compiled/models/content_migrations/ContentCheckbox'
+import CheckboxCollection from 'ui/features/content_migrations/backbone/collections/ContentCheckboxCollection'
+import CheckboxView from 'ui/features/content_migrations/backbone/views/ContentCheckboxView'
+import CheckboxModel from 'ui/features/content_migrations/backbone/models/ContentCheckbox'
 import $ from 'jquery'
 import fakeENV from 'helpers/fakeENV'
 import 'helpers/jquery.simulate'
-import 'helpers/fakeENV'
 
 class CheckboxHelper {
   static initClass() {
     this.$fixtures = $('#fixtures')
     this.checkboxView = undefined
     this.$sublevelCheckboxes = scope => {
-      let $boxes = this.checkboxView.$el
-        .find('.collectionViewItems')
-        .last()
-        .find('[type=checkbox]')
+      let $boxes = this.checkboxView.$el.find('.collectionViewItems').last().find('[type=checkbox]')
       if (scope) {
         $boxes = $boxes.filter(scope)
       }
       return $boxes
     }
   }
+
   static renderView(options) {
     if (!options) {
       options = {}
@@ -57,15 +54,19 @@ class CheckboxHelper {
     this.checkboxView = new CheckboxView({model: checkboxModel})
     return this.$fixtures.html(this.checkboxView.render().el)
   }
+
   static teardown() {
     return this.checkboxView.remove()
   }
+
   static $checkbox() {
     return this.$fixtures.find('[type=checkbox]').first()
   }
+
   static $carrot() {
     return this.$fixtures.find('.checkbox-carrot').first()
   }
+
   static serverResponse() {
     return [
       200,
@@ -81,13 +82,13 @@ class CheckboxHelper {
               type: 'assignments',
               property: 'copy[assignments][id_i1a139fc4cbf94f961973c63bd90fc1c7]',
               title: 'Assignment 1',
-              migration_id: 'i1a139fc4cbf94f961973c63bd90fc1c7'
+              migration_id: 'i1a139fc4cbf94f961973c63bd90fc1c7',
             },
             {
               type: 'assignments',
               property: 'copy[assignments][id_i7af74171d7c7207f1578328d8bbf9dae]',
               title: 'Unnamed Quiz',
-              migration_id: 'i7af74171d7c7207f1578328d8bbf9dae'
+              migration_id: 'i7af74171d7c7207f1578328d8bbf9dae',
             },
             {
               type: 'assignments',
@@ -96,12 +97,12 @@ class CheckboxHelper {
               migration_id: 'i4af043da2399a5ec221f666b38714fa8',
               linked_resource: {
                 type: 'assignments',
-                migration_id: 'i7af74171d7c7207f1578328d8bbf9dae'
-              }
-            }
-          ]
-        }
-      ])
+                migration_id: 'i7af74171d7c7207f1578328d8bbf9dae',
+              },
+            },
+          ],
+        },
+      ]),
     ]
   }
 }
@@ -110,7 +111,7 @@ CheckboxHelper.initClass()
 QUnit.module('Content Checkbox Behaviors', {
   teardown() {
     return CheckboxHelper.teardown()
-  }
+  },
 })
 
 test('renders a checkbox with name set from model property', () => {
@@ -122,7 +123,7 @@ test('renders a checkbox with name set from model property', () => {
 QUnit.module('#getIconClass', {
   teardown() {
     return CheckboxHelper.teardown()
-  }
+  },
 })
 
 test('returns lti icon class for tool profiles', () => {
@@ -149,7 +150,7 @@ QUnit.module('Sublevel Content Checkbox and Carrot Behaviors', {
     this.server.restore()
     this.clock.restore()
     return CheckboxHelper.teardown()
-  }
+  },
 })
 
 test('renders sublevel checkboxes', () =>

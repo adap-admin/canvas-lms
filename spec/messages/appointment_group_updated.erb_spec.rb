@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -16,16 +18,15 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/messages_helper')
+require_relative "messages_helper"
 
-describe 'appointment_group_updated' do
+describe "appointment_group_updated" do
   include MessagesCommon
 
   before :once do
-    course_with_student(:active_all => true)
-    @cat = @course.group_categories.create(:name => 'teh category')
-    appointment_group_model(:contexts => [@course], :sub_context => @cat)
+    course_with_student(active_all: true)
+    @cat = @course.group_categories.create(name: "teh category")
+    appointment_group_model(contexts: [@course], sub_context: @cat)
   end
 
   let(:notification_name) { :appointment_group_updated }
@@ -34,15 +35,16 @@ describe 'appointment_group_updated' do
 
   context ".email" do
     let(:path_type) { :email }
-    it "should render" do
+
+    it "renders" do
       msg = generate_message(notification_name, path_type, asset, message_data)
-      expect(msg.subject).to include('some title')
-      expect(msg.body).to include('some title')
+      expect(msg.subject).to include("some title")
+      expect(msg.body).to include("some title")
       expect(msg.body).to include(@course.name)
       expect(msg.body).to include("/appointment_groups/#{@appointment_group.id}")
     end
 
-    it "should render for groups" do
+    it "renders for groups" do
       msg = generate_message(notification_name, path_type, asset, message_data)
       expect(msg.body).to include(@cat.name)
     end
@@ -50,26 +52,29 @@ describe 'appointment_group_updated' do
 
   context ".sms" do
     let(:path_type) { :sms }
-    it "should render" do
+
+    it "renders" do
       msg = generate_message(notification_name, path_type, asset)
-      expect(msg.body).to include('some title')
+      expect(msg.body).to include("some title")
     end
   end
 
   context ".summary" do
     let(:path_type) { :summary }
-    it "should render" do
+
+    it "renders" do
       msg = generate_message(notification_name, path_type, asset)
-      expect(msg.subject).to include('some title')
-      expect(msg.body).to include('some title')
+      expect(msg.subject).to include("some title")
+      expect(msg.body).to include("some title")
     end
   end
 
   context ".twitter" do
     let(:path_type) { :twitter }
-    it "should render" do
+
+    it "renders" do
       msg = generate_message(notification_name, path_type, asset)
-      expect(msg.body).to include('some title')
+      expect(msg.body).to include("some title")
     end
   end
 end

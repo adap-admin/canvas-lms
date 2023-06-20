@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -16,16 +18,16 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'aws-sdk-sqs'
+require "aws-sdk-sqs"
 
 class ConfigurationMissingError < StandardError; end
 
 class NotificationFailureProcessor
   attr_reader :config
 
-  POLL_PARAMS = %i(idle_timeout wait_time_seconds visibility_timeout).freeze
+  POLL_PARAMS = %i[idle_timeout wait_time_seconds visibility_timeout].freeze
   DEFAULT_CONFIG = {
-    notification_failure_queue_name: 'notification-service-failures',
+    notification_failure_queue_name: "notification-service-failures",
     # stop the loop if no message received for 10s
     idle_timeout: 10,
     # stop the loop (and wait for it to process the job again) if we've been running
@@ -34,15 +36,15 @@ class NotificationFailureProcessor
   }.freeze
 
   def self.config
-    ConfigFile.load('notification_failures').try(:symbolize_keys).try(:freeze)
+    ConfigFile.load("notification_failures").try(:symbolize_keys).try(:freeze)
   end
 
   def self.enabled?
-    !!self.config
+    !!config
   end
 
   def self.process
-    self.new.process
+    new.process
   end
 
   def initialize
@@ -51,6 +53,7 @@ class NotificationFailureProcessor
 
   def process
     return nil unless self.class.enabled?
+
     start_time = Time.now
     notification_failure_queue.before_request do |_stats|
       throw :stop_polling if Time.now - start_time > config[:iteration_high_water]
@@ -71,13 +74,13 @@ class NotificationFailureProcessor
   end
 
   def process_failure_summary(summary)
-    global_id = summary['global_id']
-    error_message = summary['error']
-    is_disabled_endpoint = error_message.include? "EndpointDisabled"
-    error_context = summary['error_context']
+    global_id = summary["global_id"]
+    error_message = summary["error"]
+    is_disabled_endpoint = error_message&.include? "EndpointDisabled"
+    error_context = summary["error_context"]
 
     message_id, timestamp = Message.parse_notification_service_id(global_id)
-    scope = Message.where(:id => message_id)
+    scope = Message.where(id: message_id)
     scope = scope.at_timestamp(timestamp) if timestamp
     message = scope.take
     if message
@@ -95,13 +98,15 @@ class NotificationFailureProcessor
 
   def notification_failure_queue
     return @notification_failure_queue if defined?(@notification_failure_queue)
-    conf = Canvas::AWS.validate_v2_config(config, 'notification_failures.yml').dup
-    conf.except!(*POLL_PARAMS)
+
+    conf = Canvas::AWS.validate_v2_config(config, "notification_failures.yml").dup
+    conf[:credentials] ||= Canvas::AwsCredentialProvider.new("notification_failures_creds", conf[:vault_credential_path])
+    conf.except!(*POLL_PARAMS, :vault_credential_path)
     conf.delete(:iteration_high_water)
     conf.delete(:initial_timeout) # old, no longer supported poll param
     queue_name = conf.delete(:notification_failure_queue_name)
     sqs = Aws::SQS::Client.new(conf)
-    queue_url = sqs.get_queue_url(queue_name: queue_name).queue_url
+    queue_url = sqs.get_queue_url(queue_name:).queue_url
     @notification_failure_queue = Aws::SQS::QueuePoller.new(queue_url, client: sqs)
   end
 end

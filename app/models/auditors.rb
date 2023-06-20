@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -17,22 +19,23 @@
 #
 
 module Auditors
-  def self.stream(&block)
-    ::EventStream::Stream.new(&block).tap do |stream|
-      stream.raise_on_error = Rails.env.test?
+  class << self
+    def stream(&)
+      ::EventStream::Stream.new(&).tap do |stream|
+        stream.raise_on_error ||= Rails.env.test?
 
-      stream.on_insert do |record|
-        Canvas::EventStreamLogger.info('AUDITOR', identifier, 'insert', record.to_json)
-      end
+        stream.on_insert do |record|
+          EventStream::Logger.info("AUDITOR", identifier, "insert", record.to_json)
+        end
 
-      stream.on_error do |operation, record, exception|
-        next unless Canvas::Cassandra::DatabaseBuilder.configured?(:auditors)
-        Canvas::EventStreamLogger.error('AUDITOR', identifier, operation, record.to_json, exception.message.to_s)
+        stream.on_error do |operation, record, exception|
+          EventStream::Logger.error("AUDITOR", identifier, operation, record.to_json, exception.message.to_s)
+        end
       end
     end
-  end
 
-  def self.logger
-    Rails.logger
+    def logger
+      Rails.logger
+    end
   end
 end

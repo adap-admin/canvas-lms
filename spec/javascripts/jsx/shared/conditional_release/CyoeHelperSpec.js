@@ -18,27 +18,27 @@
 
 import fakeENV from 'helpers/fakeENV'
 
-import CyoeHelper from 'jsx/shared/conditional_release/CyoeHelper'
+import CyoeHelper from '@canvas/conditional-release-cyoe-helper'
 
 const cyoeEnv = () => ({
   CONDITIONAL_RELEASE_SERVICE_ENABLED: true,
   CONDITIONAL_RELEASE_ENV: {
     active_rules: [
       {
-        trigger_assignment: '1',
+        trigger_assignment_id: '1',
         trigger_assignment_model: {
-          grading_type: 'percentage'
+          grading_type: 'percentage',
         },
         scoring_ranges: [
           {
             upper_bound: 1,
             lower_bound: 0.7,
-            assignment_sets: [{assignments: [{assignment_id: '2'}]}]
-          }
-        ]
-      }
-    ]
-  }
+            assignment_sets: [{assignment_set_associations: [{assignment_id: '2'}]}],
+          },
+        ],
+      },
+    ],
+  },
 })
 
 const setEnv = env => {
@@ -50,12 +50,12 @@ const testSetup = {
   setup() {
     setEnv({
       CONDITIONAL_RELEASE_SERVICE_ENABLED: false,
-      CONDITIONAL_RELEASE_ENV: null
+      CONDITIONAL_RELEASE_ENV: null,
     })
   },
   teardown() {
     fakeENV.teardown()
-  }
+  },
 }
 
 QUnit.module('CYOE Helper', () => {
@@ -122,7 +122,7 @@ QUnit.module('CYOE Helper', () => {
 
   test('return correct "Multiple" for releasedLabel if item is released by a multiple rules', () => {
     const env = cyoeEnv()
-    const newRule = Object.assign({}, env.CONDITIONAL_RELEASE_ENV.active_rules[0])
+    const newRule = {...env.CONDITIONAL_RELEASE_ENV.active_rules[0]}
     newRule.trigger_assignment = '3'
     env.CONDITIONAL_RELEASE_ENV.active_rules.push(newRule)
     setEnv(env)
@@ -138,7 +138,7 @@ QUnit.module('CYOE Helper', () => {
     let itemData = CyoeHelper.getItemData('1')
     ok(itemData.isTrigger)
 
-    env.CONDITIONAL_RELEASE_ENV.active_rules[0].trigger_assignment = '2'
+    env.CONDITIONAL_RELEASE_ENV.active_rules[0].trigger_assignment_id = '2'
     setEnv(env)
 
     itemData = CyoeHelper.getItemData('1')

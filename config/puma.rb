@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -16,4 +18,4 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-threads 0,1
+threads 0, 1

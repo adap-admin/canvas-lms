@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -20,54 +22,61 @@ class ConversationBatch < ActiveRecord::Base
   include Workflow
 
   belongs_to :user
-  belongs_to :root_conversation_message, :class_name => 'ConversationMessage'
-  belongs_to :context, polymorphic: [:account, :course, { context_group: 'Group' }]
+  belongs_to :root_conversation_message, class_name: "ConversationMessage"
+  belongs_to :context, polymorphic: [:account, :course, { context_group: "Group" }]
 
   before_save :serialize_conversation_message_ids
   after_create :queue_delivery
 
-  validates_presence_of :user_id, :workflow_state, :root_conversation_message_id
-  validates_length_of :subject, :maximum => maximum_string_length, :allow_nil => true
+  validates :user_id, :workflow_state, :root_conversation_message_id, presence: true
+  validates :subject, length: { maximum: maximum_string_length, allow_nil: true }
 
-  scope :in_progress, -> { where(:workflow_state => ['created', 'sending']) }
+  scope :in_progress, -> { where(workflow_state: ["created", "sending"]) }
 
   attr_accessor :mode
 
   attr_reader :conversations
+
   def deliver(update_progress = true)
-    chunk_size = 25
+    shard.activate do
+      chunk_size = 25
 
-    @conversations = []
-    self.user = user_map[user_id]
-    existing_conversations = Conversation.find_all_private_conversations(self.user, recipient_ids.map { |id| user_map[id] },
-      context_type: self.context_type, context_id: self.context_id)
-    update_attribute :workflow_state, 'sending'
+      @conversations = []
+      self.user = user_map[user_id]
+      existing_conversations = Conversation.find_all_private_conversations(user,
+                                                                           recipient_ids.map { |id| user_map[id] },
+                                                                           context_type:,
+                                                                           context_id:)
+      update_attribute :workflow_state, "sending"
 
-    ModelCache.with_cache(:conversations => existing_conversations, :users => {:id => user_map}) do
+      ModelCache.with_cache(conversations: existing_conversations, users: { id: user_map }) do
+        should_cc_author = true
 
-      should_cc_author = true
+        recipient_ids.each_slice(chunk_size) do |ids|
+          ids.each do |id|
+            is_group = group?
+            conversation = user.initiate_conversation([user_map[id]],
+                                                      !is_group,
+                                                      subject:,
+                                                      context_type:,
+                                                      context_id:)
+            @conversations << conversation
+            message = root_conversation_message.clone
+            message.generate_user_note = generate_user_note
+            conversation.add_message(message, update_for_sender: false, tags:, cc_author: should_cc_author)
+            conversation_message_ids << message.id
 
-      recipient_ids.each_slice(chunk_size) do |ids|
-        ids.each do |id|
-          is_group = self.group?
-          conversation = user.initiate_conversation([user_map[id]], !is_group,
-            subject: subject, context_type: context_type, context_id: context_id)
-          @conversations << conversation
-          message = root_conversation_message.clone
-          message.generate_user_note = self.generate_user_note
-          conversation.add_message(message, update_for_sender: false, tags: tags, cc_author: should_cc_author)
-          conversation_message_ids << message.id
-
-          should_cc_author = false
+            should_cc_author = false
+          end
+          # update it in chunks, not on every message
+          save! if update_progress
         end
-        # update it in chunks, not on every message
-        save! if update_progress
       end
-    end
 
-    update_attribute :workflow_state, 'sent'
-  rescue StandardError => e
-    self.workflow_state = 'error'
+      update_attribute :workflow_state, "sent"
+    end
+  rescue
+    self.workflow_state = "error"
     save!
   end
 
@@ -78,33 +87,34 @@ class ConversationBatch < ActiveRecord::Base
     job_start_factor = 20.0 / (recipient_ids.size + 20)
 
     case workflow_state
-      when 'sent'
-        1
-      when 'created'
-        # the first part of the progress bar is while we wait for the job
-        # to start. ideally this will just take a couple seconds. if jobs
-        # are backed up, we still want to make it seem like we are making
-        # headway. every minute we will advance half of the remainder of
-        # job_start_factor.
-        minutes = (Time.zone.now - created_at).to_i / 60.0
-        job_start_factor * (1 - (1 / 2**minutes))
-      else
-        # the rest of the progress bar is nice and linear
-        job_start_factor + ((1 - job_start_factor) * conversation_message_ids.size / recipient_ids.size)
+    when "sent"
+      1
+    when "created"
+      # the first part of the progress bar is while we wait for the job
+      # to start. ideally this will just take a couple seconds. if jobs
+      # are backed up, we still want to make it seem like we are making
+      # headway. every minute we will advance half of the remainder of
+      # job_start_factor.
+      minutes = (Time.zone.now - created_at).to_i / 60.0
+      job_start_factor * (1 - (1 / (2**minutes)))
+    else
+      # the rest of the progress bar is nice and linear
+      job_start_factor + ((1 - job_start_factor) * conversation_message_ids.size / recipient_ids.size)
     end
   end
 
   attr_writer :user_map
+
   def user_map
-    @user_map ||= User.where(id: recipient_ids + [user_id]).index_by(&:id)
+    @user_map ||= shard.activate { User.where(id: recipient_ids + [user_id]).index_by(&:id) }
   end
 
   def recipient_ids
-    @recipient_ids ||= read_attribute(:recipient_ids).split(',').map(&:to_i)
+    @recipient_ids ||= read_attribute(:recipient_ids).split(",").map(&:to_i)
   end
 
   def recipient_ids=(ids)
-    write_attribute(:recipient_ids, ids.join(','))
+    write_attribute(:recipient_ids, ids.join(","))
   end
 
   def recipient_count
@@ -112,19 +122,16 @@ class ConversationBatch < ActiveRecord::Base
   end
 
   def conversation_message_ids
-    @conversation_message_ids ||= (read_attribute(:conversation_message_ids) || '').split(',').map(&:to_i)
+    @conversation_message_ids ||= (read_attribute(:conversation_message_ids) || "").split(",").map(&:to_i)
   end
 
   def serialize_conversation_message_ids
-    write_attribute :conversation_message_ids, conversation_message_ids.join(',')
+    write_attribute :conversation_message_ids, conversation_message_ids.join(",")
   end
 
   def queue_delivery
-    if mode == :async
-      send_later :deliver
-    else
-      deliver(false)
-    end
+    sync = (mode != :async)
+    delay(synchronous: sync).deliver(!sync)
   end
 
   workflow do
@@ -136,6 +143,10 @@ class ConversationBatch < ActiveRecord::Base
 
   def local_tags
     tags
+  end
+
+  def self.created_as_template?(message:)
+    message.conversation_id.blank?
   end
 
   def self.generate(root_message, recipients, mode = :async, options = {})

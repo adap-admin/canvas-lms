@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -16,40 +18,39 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../sharding_spec_helper.rb')
-require File.expand_path(File.dirname(__FILE__) + '/../../cassandra_spec_helper')
+require_relative "../../cassandra_spec_helper"
 
 describe Auditors::Course do
-  include_examples "cassandra audit logs"
-
   let(:request_id) { 42 }
 
   before do
-    allow(RequestContextGenerator).to receive_messages( :request_id => request_id )
+    allow(RequestContextGenerator).to receive_messages(request_id:)
 
     @account = Account.default
-    @sub_account = Account.create!(:parent_account => @account)
-    @sub_sub_account = Account.create!(:parent_account => @sub_account)
+    @sub_account = Account.create!(parent_account: @account)
+    @sub_sub_account = Account.create!(parent_account: @sub_account)
 
     course_with_teacher(course_name: "Course 1", account: @sub_sub_account)
 
     @course.name = "Course 2"
-    @course.start_at = Date.today
-    @course.conclude_at = Date.today + 7.days
+    @course.start_at = Time.zone.today
+    @course.conclude_at = Time.zone.today + 7.days
   end
 
   context "nominal cases" do
-    it "should include event" do
-      @event = Auditors::Course.record_updated(@course, @teacher, @course.changes)
-      expect(Auditors::Course.for_course(@course).paginate(:per_page => 5)).to include(@event)
+    it "includes event" do
+      @raw_event = Auditors::Course.record_updated(@course, @teacher, @course.changes)
+      @event = Auditors::ActiveRecord::CourseRecord.where(uuid: @raw_event.id).first
+      expect(Auditors::Course.for_course(@course).paginate(per_page: 5)).to include(@event)
+      expect(Auditors::Course.for_account(@course.account).paginate(per_page: 5)).to include(@event)
     end
 
-    it "should set request_id" do
+    it "sets request_id" do
       @event = Auditors::Course.record_updated(@course, @teacher, @course.changes)
       expect(@event.request_id).to eq request_id.to_s
     end
 
-    it "should truncate super long changes" do
+    it "truncates super long changes" do
       @course.syllabus_body = "ohnoes" * 10_000
       @event = Auditors::Course.record_updated(@course, @teacher, @course.changes)
       expect(@event.attributes["data"].length < 3_000).to be_truthy
@@ -57,127 +58,137 @@ describe Auditors::Course do
   end
 
   context "event source" do
-    it "should default event source to :manual" do
+    it "defaults event source to :manual" do
       @event = Auditors::Course.record_created(@course, @teacher, @course.changes)
       expect(@event.event_source).to eq :manual
     end
 
-    it "should log event with api source" do
+    it "logs event with api source" do
       @event = Auditors::Course.record_created(@course, @teacher, @course.changes, source: :api)
       expect(@event.event_source).to eq :api
     end
 
-    it "should log event with sis_batch_id and event source of sis" do
+    it "logs event with sis_batch_id and event source of sis" do
       sis_batch = @account.root_account.sis_batches.create
-      @event = Auditors::Course.record_created(@course, @teacher, @course.changes, source: :sis, sis_batch: sis_batch)
+      @event = Auditors::Course.record_created(@course, @teacher, @course.changes, source: :sis, sis_batch:)
       expect(@event.event_source).to eq :sis
-      expect(@event.sis_batch_id).to eq sis_batch.id
+      expect(@event.sis_batch_id).to eq sis_batch.global_id
     end
   end
 
   context "type specific" do
-    it "should log created event" do
+    it "logs created event" do
       @event = Auditors::Course.record_created(@course, @teacher, @course.changes)
       expect(@event.course).to eq @course
       expect(@event.event_type).to eq "created"
       expect(@event.event_data).to eq @course.changes
     end
 
-    it "should log updated event" do
+    it "logs updated event" do
       @event = Auditors::Course.record_updated(@course, @teacher, @course.changes)
       expect(@event.course).to eq @course
       expect(@event.event_type).to eq "updated"
       expect(@event.event_data).to eq @course.changes
     end
 
-    it "should log concluded event" do
+    it "logs concluded event" do
       @event = Auditors::Course.record_concluded(@course, @teacher)
       expect(@event.course).to eq @course
       expect(@event.event_type).to eq "concluded"
       expect(@event.event_data).to eq({})
     end
 
-    it "should log unconcluded event" do
+    it "logs unconcluded event" do
       @event = Auditors::Course.record_unconcluded(@course, @teacher)
       expect(@event.course).to eq @course
       expect(@event.event_type).to eq "unconcluded"
       expect(@event.event_data).to eq({})
     end
 
-    it "should log published event" do
+    it "logs published event" do
       @event = Auditors::Course.record_published(@course, @teacher)
       expect(@event.course).to eq @course
       expect(@event.event_type).to eq "published"
       expect(@event.event_data).to eq({})
     end
 
-    it "should log deleted event" do
+    it "logs deleted event" do
       @event = Auditors::Course.record_deleted(@course, @teacher)
       expect(@event.course).to eq @course
       expect(@event.event_type).to eq "deleted"
       expect(@event.event_data).to eq({})
     end
 
-    it "should log restored event" do
+    it "logs restored event" do
       @event = Auditors::Course.record_restored(@course, @teacher)
       expect(@event.course).to eq @course
       expect(@event.event_type).to eq "restored"
       expect(@event.event_data).to eq({})
     end
 
-    it "should log copied event" do
+    it "logs copied event" do
       @course, @copy_course = @course, course_factory(active_all: true)
       @from_event, @to_event = Auditors::Course.record_copied(@course, @copy_course, @teacher, source: :api)
 
       expect(@from_event.course).to eq @copy_course
       expect(@from_event.event_type).to eq "copied_from"
-      expect(@from_event.event_data).to eq({ :"copied_from" => Shard.global_id_for(@course) })
+      expect(@from_event.event_data[:copied_from]).to eq(Shard.global_id_for(@course))
 
       expect(@to_event.course).to eq @course
       expect(@to_event.event_type).to eq "copied_to"
-      expect(@to_event.event_data).to eq({ :"copied_to" => Shard.global_id_for(@copy_course) })
+      expect(@to_event.event_data[:copied_to]).to eq(Shard.global_id_for(@copy_course))
     end
 
-    it "should log reset event" do
+    it "logs reset event" do
       @course, @new_course = @course, course_factory(active_all: true)
       @from_event, @to_event = Auditors::Course.record_reset(@course, @new_course, @teacher, source: :api)
 
       expect(@from_event.course).to eq @new_course
       expect(@from_event.event_type).to eq "reset_from"
-      expect(@from_event.event_data).to eq({ :"reset_from" => Shard.global_id_for(@course) })
+      expect(@from_event.event_data[:reset_from]).to eq(Shard.global_id_for(@course))
 
       expect(@to_event.course).to eq @course
       expect(@to_event.event_type).to eq "reset_to"
-      expect(@to_event.event_data).to eq({ :"reset_to" => Shard.global_id_for(@new_course) })
+      expect(@to_event.event_data[:reset_to]).to eq(Shard.global_id_for(@new_course))
     end
- end
+  end
 
   describe "options forwarding" do
     before do
-      @event = Auditors::Course.record_updated(@course, @teacher, @course.changes)
+      @raw_event = Auditors::Course.record_updated(@course, @teacher, @course.changes)
+      @event = Auditors::ActiveRecord::CourseRecord.where(uuid: @raw_event.id).first
 
       record = Auditors::Course::Record.new(
-        'course' => @course,
-        'user' => @teacher,
-        'event_type' => 'updated',
-        'event_data' => @course.changes,
-        'event_source' => 'manual',
-        'sis_batch_id' => nil,
-        'created_at' => 1.day.ago
+        "course" => @course,
+        "user" => @teacher,
+        "event_type" => "updated",
+        "event_data" => @course.changes,
+        "event_source" => "manual",
+        "sis_batch_id" => nil,
+        "created_at" => 1.day.ago
       )
-      @event2 = Auditors::Course::Stream.insert(record)
+      @raw_event2 = Auditors::Course::Stream.insert(record)
+      @event2 = Auditors::ActiveRecord::CourseRecord.where(uuid: @raw_event2.id).first
     end
 
-    it "should recognize :oldest" do
-      page = Auditors::Course.for_course(@course, oldest: 12.hours.ago).paginate(:per_page => 2)
+    it "recognizes :oldest" do
+      page = Auditors::Course.for_course(@course, oldest: 12.hours.ago).paginate(per_page: 2)
       expect(page).to include(@event)
       expect(page).not_to include(@event2)
+
+      acct_page = Auditors::Course.for_account(@course.account, oldest: 12.hours.ago).paginate(per_page: 2)
+      expect(acct_page).to include(@event)
+      expect(acct_page).not_to include(@event2)
     end
 
-    it "should recognize :newest" do
-      page = Auditors::Course.for_course(@course, newest: 12.hours.ago).paginate(:per_page => 2)
+    it "recognizes :newest" do
+      page = Auditors::Course.for_course(@course, newest: 12.hours.ago).paginate(per_page: 2)
       expect(page).to include(@event2)
       expect(page).not_to include(@event)
+
+      acct_page = Auditors::Course.for_account(@course.account, newest: 12.hours.ago).paginate(per_page: 2)
+      expect(acct_page).to include(@event2)
+      expect(acct_page).not_to include(@event)
     end
   end
 end

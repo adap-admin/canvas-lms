@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -25,7 +27,7 @@
 #       "description": "",
 #       "properties": {
 #         "type": {
-#           "description": "one of 'must_view', 'must_submit', 'must_contribute', 'min_score'",
+#           "description": "one of 'must_view', 'must_submit', 'must_contribute', 'min_score', 'must_mark_done'",
 #           "example": "min_score",
 #           "type": "string",
 #           "allowableValues": {
@@ -33,7 +35,8 @@
 #               "must_view",
 #               "must_submit",
 #               "must_contribute",
-#               "min_score"
+#               "min_score",
+#               "must_mark_done"
 #             ]
 #           }
 #         },
@@ -233,10 +236,10 @@
 #
 class ContextModuleItemsApiController < ApplicationController
   before_action :require_context
-  before_action :require_user, :only => [:select_mastery_path]
-  before_action :find_student, :only => [:index, :show, :select_mastery_path]
-  before_action :disable_escape_html_entities, :only => [:index, :show]
-  after_action :enable_escape_html_entities, :only => [:index, :show]
+  before_action :require_user, only: [:select_mastery_path]
+  before_action :find_student, only: %i[index show select_mastery_path]
+  before_action :disable_escape_html_entities, only: [:index, :show]
+  after_action :enable_escape_html_entities, only: [:index, :show]
   include Api::V1::ContextModule
   include PlannerApiHelper
 
@@ -264,7 +267,7 @@ class ContextModuleItemsApiController < ApplicationController
   def index
     if authorized_action(@context, @current_user, :read)
       mod = @context.modules_visible_to(@student || @current_user).find(params[:module_id])
-      ActiveRecord::Associations::Preloader.new.preload(mod, content_tags: :content)
+      ActiveRecord::Associations.preload(mod, content_tags: :content)
       route = polymorphic_url([:api_v1, @context, mod, :items])
       scope = mod.content_tags_visible_to(@student || @current_user)
       scope = ContentTag.search_by_attribute(scope, :title, params[:search_term])
@@ -276,9 +279,10 @@ class ContextModuleItemsApiController < ApplicationController
       # Get conditionally released objects if requested
       # TODO: Document in API when out of beta
       if includes.include?("mastery_paths")
-        opts[:conditional_release_rules] = ConditionalRelease::Service.rules_for(@context, @student, items, session)
+        opts[:conditional_release_rules] = ConditionalRelease::Service.rules_for(@context, @student, session)
       end
-      render :json => items.map { |item| module_item_json(item, @student || @current_user, session, mod, prog, includes, opts) }
+      opts[:can_view_published] = @context.grants_right?((@student || @current_user), session, :read_as_admin)
+      render json: items.map { |item| module_item_json(item, @student || @current_user, session, mod, prog, includes, opts) }
     end
   end
 
@@ -304,7 +308,8 @@ class ContextModuleItemsApiController < ApplicationController
     if authorized_action(@context, @current_user, :read)
       get_module_item
       prog = @student ? @module.evaluate_for(@student) : nil
-      render :json => module_item_json(@item, @student || @current_user, session, @module, prog, Array(params[:include]))
+      opts = { can_view_published: @context.grants_right?((@student || @current_user), session, :read_as_admin) }
+      render json: module_item_json(@item, @student || @current_user, session, @module, prog, Array(params[:include]), opts)
     end
   end
 
@@ -315,11 +320,11 @@ class ContextModuleItemsApiController < ApplicationController
     if authorized_action(@context, @current_user, :read)
       @tag = @context.context_module_tags.not_deleted.find(params[:id])
       if !(@tag.unpublished? || @tag.context_module.unpublished?) || authorized_action(@tag.context_module, @current_user, :update)
-        if @tag.content_type == 'ExternalUrl'
+        if @tag.content_type == "ExternalUrl"
           @tag.context_module_action(@current_user, :read)
           redirect_to @tag.url
         else
-          return render(:status => 400, :json => { :message => "incorrect module item type" })
+          render(status: :bad_request, json: { message: "incorrect module item type" })
         end
       end
     end
@@ -357,16 +362,23 @@ class ContextModuleItemsApiController < ApplicationController
   #   Whether the external tool opens in a new tab. Only applies to
   #   'ExternalTool' type.
   #
-  # @argument module_item[completion_requirement][type] [String, "must_view"|"must_contribute"|"must_submit"]
+  # @argument module_item[completion_requirement][type] [String, "must_view"|"must_contribute"|"must_submit"|"must_mark_done"]
   #   Completion requirement for this module item.
   #   "must_view": Applies to all item types
   #   "must_contribute": Only applies to "Assignment", "Discussion", and "Page" types
   #   "must_submit", "min_score": Only apply to "Assignment" and "Quiz" types
+  #   "must_mark_done": Only applies to "Assignment" and "Page" types
   #   Inapplicable types will be ignored
   #
   # @argument module_item[completion_requirement][min_score] [Integer]
   #   Minimum score required to complete. Required for completion_requirement
   #   type 'min_score'.
+  #
+  # @argument module_item[iframe][width] [Integer]
+  #   Width of the ExternalTool on launch
+  #
+  # @argument module_item[iframe][height] [Integer]
+  #   Height of the ExternalTool on launch
   #
   # @example_request
   #
@@ -378,37 +390,43 @@ class ContextModuleItemsApiController < ApplicationController
   #       -d 'module_item[content_id]=10' \
   #       -d 'module_item[position]=2' \
   #       -d 'module_item[indent]=1' \
-  #       -d 'module_item[new_tab]=true'
+  #       -d 'module_item[new_tab]=true' \
+  #       -d 'module_item[iframe][width]=300' \
+  #       -d 'module_item[iframe][height]=200'
   #
   # @returns ModuleItem
   def create
     @module = @context.context_modules.not_deleted.find(params[:module_id])
     if authorized_action(@module, @current_user, :update)
-      return render :json => {:message => "missing module item parameter"}, :status => :bad_request unless params[:module_item]
+      return render json: { message: "missing module item parameter" }, status: :bad_request unless params[:module_item]
 
       item_params = params[:module_item].slice(:title, :type, :indent, :new_tab)
       item_params[:id] = params[:module_item][:content_id]
-      if ['Page', 'WikiPage'].include?(item_params[:type])
-        if page_url = params[:module_item][:page_url]
-          if wiki_page = @context.wiki_pages.not_deleted.where(url: page_url).first
+      if ["Page", "WikiPage"].include?(item_params[:type])
+        if (page_url = params[:module_item][:page_url])
+          if (wiki_page = @context.wiki_pages.not_deleted.where(url: page_url).first)
             item_params[:id] = wiki_page.id
           else
-            return render :json => {:message => "invalid page_url parameter"}, :status => :bad_request
+            return render json: { message: "invalid page_url parameter" }, status: :bad_request
           end
         else
-          return render :json => {:message => "missing page_url parameter"}, :status => :bad_request
+          return render json: { message: "missing page_url parameter" }, status: :bad_request
         end
       end
 
       item_params[:url] = params[:module_item][:external_url]
 
+      if (iframe = params[:module_item][:iframe])
+        item_params[:link_settings] = { selection_width: iframe[:width], selection_height: iframe[:height] }
+      end
+
       if (@tag = @module.add_item(item_params)) && set_position && set_completion_requirement
         @module.touch
-        render :json => module_item_json(@tag, @current_user, session, @module, nil)
+        render json: module_item_json(@tag, @current_user, session, @module, nil)
       elsif @tag
-        render :json => @tag.errors, :status => :bad_request
+        render json: @tag.errors, status: :bad_request
       else
-        render :status => 400, :json => { :message => t(:invalid_content, "Could not find content") }
+        render status: :bad_request, json: { message: t(:invalid_content, "Could not find content") }
       end
     end
   end
@@ -433,11 +451,12 @@ class ContextModuleItemsApiController < ApplicationController
   #   Whether the external tool opens in a new tab. Only applies to
   #   'ExternalTool' type.
   #
-  # @argument module_item[completion_requirement][type] [String, "must_view"|"must_contribute"|"must_submit"]
+  # @argument module_item[completion_requirement][type] [String, "must_view"|"must_contribute"|"must_submit"|"must_mark_done"]
   #   Completion requirement for this module item.
   #   "must_view": Applies to all item types
   #   "must_contribute": Only applies to "Assignment", "Discussion", and "Page" types
   #   "must_submit", "min_score": Only apply to "Assignment" and "Quiz" types
+  #   "must_mark_done": Only applies to "Assignment" and "Page" types
   #   Inapplicable types will be ignored
   #
   # @argument module_item[completion_requirement][min_score] [Integer]
@@ -464,19 +483,20 @@ class ContextModuleItemsApiController < ApplicationController
   def update
     @tag = @context.context_module_tags.not_deleted.find(params[:id])
     if authorized_action(@tag.context_module, @current_user, :update)
-      return render :json => {:message => "missing module item parameter"}, :status => :bad_request unless params[:module_item]
+      return render json: { message: "missing module item parameter" }, status: :bad_request unless params[:module_item]
 
       @tag.title = params[:module_item][:title] if params[:module_item][:title]
-      @tag.url = params[:module_item][:external_url] if %w(ExternalUrl ContextExternalTool).include?(@tag.content_type) && params[:module_item][:external_url]
+      @tag.url = params[:module_item][:external_url] if %w[ExternalUrl ContextExternalTool].include?(@tag.content_type) && params[:module_item][:external_url]
       @tag.indent = params[:module_item][:indent] if params[:module_item][:indent]
       @tag.new_tab = value_to_boolean(params[:module_item][:new_tab]) if params[:module_item][:new_tab]
       if (target_module_id = params[:module_item][:module_id]) && target_module_id.to_i != @tag.context_module_id
         target_module = @context.context_modules.where(id: target_module_id).first
-        return render :json => {:message => "invalid module_id"}, :status => :bad_request unless target_module
+        return render json: { message: "invalid module_id" }, status: :bad_request unless target_module
+
         old_module = @context.context_modules.find(@tag.context_module_id)
         @tag.remove_from_list
         @tag.context_module = target_module
-        if req_index = old_module.completion_requirements.find_index { |req| req[:id] == @tag.id }
+        if (req_index = old_module.completion_requirements.find_index { |req| req[:id] == @tag.id })
           old_module.completion_requirements_will_change!
           req = old_module.completion_requirements.delete_at(req_index)
           old_module.save!
@@ -486,11 +506,17 @@ class ContextModuleItemsApiController < ApplicationController
         end
       end
 
-      if params[:module_item].has_key?(:published)
+      if params[:module_item].key?(:published)
         if value_to_boolean(params[:module_item][:published])
-          @tag.publish
-        else
+          if module_item_publishable?(@tag)
+            @tag.publish
+          else
+            return render json: { message: "item can't be published" }, status: :unprocessable_entity
+          end
+        elsif module_item_unpublishable?(@tag)
           @tag.unpublish
+        else
+          return render json: { message: "item can't be unpublished" }, status: :forbidden
         end
         @tag.save
         @tag.update_asset_workflow_state!
@@ -499,9 +525,9 @@ class ContextModuleItemsApiController < ApplicationController
 
       if @tag.save && set_position && set_completion_requirement
         @tag.update_asset_name!(@current_user) if params[:module_item][:title]
-        render :json => module_item_json(@tag, @current_user, session, @tag.context_module, nil)
+        render json: module_item_json(@tag, @current_user, session, @tag.context_module, nil)
       else
-        render :json => @tag.errors, :status => :bad_request
+        render json: @tag.errors, status: :bad_request
       end
     end
   end
@@ -530,44 +556,33 @@ class ContextModuleItemsApiController < ApplicationController
   #
   def select_mastery_path
     return unless authorized_action(@context, @current_user, :read)
-    return unless @student == @current_user || authorized_action(@context, @current_user, :manage_assignments)
-    return render json: { message: 'mastery paths not enabled' }, status: :bad_request unless cyoe_enabled?(@context)
-    return render json: { message: 'assignment_set_id required' }, status: :bad_request unless params[:assignment_set_id]
+    return unless @student == @current_user || authorized_action(@context, @current_user, [:manage_assignments, :manage_assignments_edit])
+    return render json: { message: "mastery paths not enabled" }, status: :bad_request unless cyoe_enabled?(@context)
+    return render json: { message: "assignment_set_id required" }, status: :bad_request unless params[:assignment_set_id]
 
     get_module_item
     assignment = @item.assignment
-    return render json: { message: 'requested item is not an assignment' }, status: :bad_request unless assignment
+    return render json: { message: "requested item is not an assignment" }, status: :bad_request unless assignment
 
-    response = ConditionalRelease::Service.select_mastery_path(
-      @context,
-      @current_user,
-      @student,
-      assignment,
-      params[:assignment_set_id],
-      session)
+    assignment_ids = ConditionalRelease::OverrideHandler.handle_assignment_set_selection(@student, assignment, params[:assignment_set_id])
 
-    if response[:code] != '200'
-      render json: response[:body], status: response[:code]
-    else
-      assignment_ids = response[:body]['assignments'].map {|a| a['assignment_id'].try(&:to_i) }
-      # assignment occurs in delayed job, may not be fully visible to user until job completes
-      assignments = @context.assignments.published.where(id: assignment_ids).
-        preload(Api::V1::Assignment::PRELOADS)
+    # assignment occurs in delayed job, may not be fully visible to user until job completes
+    assignments = @context.assignments.published.where(id: assignment_ids)
+                          .preload(Api::V1::Assignment::PRELOADS)
 
-      Assignment.preload_context_module_tags(assignments)
+    Assignment.preload_context_module_tags(assignments)
 
-      # match cyoe order, omit unpublished or deleted assignments
-      assignments = assignments.index_by(&:id).values_at(*assignment_ids).compact
+    # match cyoe order, omit unpublished or deleted assignments
+    assignments = assignments.index_by(&:id).values_at(*assignment_ids).compact
 
-      # grab locally relevant module items
-      items = assignments.map(&:all_context_module_tags).flatten.select{|a| a.context_module_id == @module.id}
+    # grab locally relevant module items
+    items = assignments.map(&:all_context_module_tags).flatten.select { |a| a.context_module_id == @module.id }
 
-      render json: {
-        meta: { primaryCollection: 'assignments' },
-        items: items.map { |item| module_item_json(item, @student || @current_user, session, @module) },
-        assignments: assignments_json(assignments, @current_user, session)
-      }
-    end
+    render json: {
+      meta: { primaryCollection: "assignments" },
+      items: items.map { |item| module_item_json(item, @student || @current_user, session, @module) },
+      assignments: assignments_json(assignments, @current_user, session)
+    }
   end
 
   # @API Delete module item
@@ -587,10 +602,9 @@ class ContextModuleItemsApiController < ApplicationController
       @module = @tag.context_module
       @tag.destroy
       @module.touch
-      render :json => module_item_json(@tag, @current_user, session, @module, nil)
+      render json: module_item_json(@tag, @current_user, session, @module, nil)
     end
   end
-
 
   # @API Mark module item as done/not done
   #
@@ -607,7 +621,7 @@ class ContextModuleItemsApiController < ApplicationController
       get_module_item
       @item.context_module_action(@current_user, :done)
       sync_planner_completion(@item.content, @current_user, true) if planner_enabled?
-      render :json => { :message => t('OK') }
+      render json: { message: t("OK") }
     end
   end
 
@@ -619,7 +633,7 @@ class ContextModuleItemsApiController < ApplicationController
         progression.evaluate
         sync_planner_completion(@item.content, @current_user, false) if planner_enabled?
       end
-      render :json => { :message => t('OK') }
+      render json: { message: t("OK") }
     end
   end
 
@@ -627,7 +641,7 @@ class ContextModuleItemsApiController < ApplicationController
     user = @student || @current_user
     @module = @context.modules_visible_to(user).find(params[:module_id])
     @item = @module.content_tags.find(params[:id])
-    raise ActiveRecord::RecordNotFound unless @item && @item.visible_to_user?(user)
+    raise ActiveRecord::RecordNotFound unless @item&.visible_to_user?(user, nil, session)
   end
 
   # @API Get module item sequence
@@ -652,11 +666,13 @@ class ContextModuleItemsApiController < ApplicationController
   def item_sequence
     if authorized_action(@context, @current_user, :read)
       asset_type = Api.api_type_to_canvas_name(params[:asset_type])
-      return render :json => { :message => 'invalid asset_type'}, :status => :bad_request unless asset_type
+      return render json: { message: "invalid asset_type" }, status: :bad_request unless asset_type
+
       asset_id = params[:asset_id]
-      return render :json => { :message => 'missing asset_id' }, :status => :bad_request unless asset_id
+      return render json: { message: "missing asset_id" }, status: :bad_request unless asset_id
+
       result = context_module_sequence_items_by_asset_id(asset_id, asset_type)
-      render :json => result
+      render json: result
     end
   end
 
@@ -677,11 +693,11 @@ class ContextModuleItemsApiController < ApplicationController
   def mark_item_read
     if authorized_action(@context, @current_user, :read)
       get_module_item
-      content = (@item.content && @item.content.respond_to?(:locked_for?)) ? @item.content : @item
-      return render :json => { :message => t('The module item is locked.') }, :status => :forbidden if content.locked_for?(@current_user)
+      content = @item.content.respond_to?(:locked_for?) ? @item.content : @item
+      return render json: { message: t("The module item is locked.") }, status: :forbidden if content.locked_for?(@current_user)
 
       @item.context_module_action(@current_user, :read)
-      render :json => { :message => t('OK') }
+      render json: { message: t("OK") }
     end
   end
 
@@ -704,28 +720,29 @@ class ContextModuleItemsApiController < ApplicationController
         new_content = original_tag.content.duplicate
         new_content.save!
         new_tag = original_tag.context_module.add_item({
-          type: original_tag.content_type,
-          indent: original_tag.indent,
-          id: new_content.id,
-        })
+                                                         type: original_tag.content_type,
+                                                         indent: original_tag.indent,
+                                                         id: new_content.id,
+                                                       })
 
         new_tag.insert_at(original_tag.position + 1)
 
         json = new_tag.as_json
-        json['new_positions'] = new_tag.context_module.content_tags.select(:id, :position)
-        json['content_tag'].merge!(
+        json["new_positions"] = new_tag.context_module.content_tags.select(:id, :position)
+        json["content_tag"].merge!(
           publishable: module_item_publishable?(new_tag),
           published: new_tag.published?,
           publishable_id: module_item_publishable_id(new_tag),
           unpublishable: module_item_unpublishable?(new_tag),
+          publish_at: module_item_publish_at(new_tag),
           graded: new_tag.graded?,
           content_details: content_details(new_tag, @current_user),
           assignment_id: new_tag.assignment.try(:id),
-          is_duplicate_able: new_tag.duplicate_able?,
+          is_duplicate_able: new_tag.duplicate_able?
         )
-        render json: json
+        render json:
       else
-        render :status => 400, :json => { :message => t("Item cannot be duplicated") }
+        render status: :bad_request, json: { message: t("Item cannot be duplicated") }
       end
     end
   end
@@ -751,10 +768,10 @@ class ContextModuleItemsApiController < ApplicationController
       @context.touch
 
       @tag.reload
-      return true
+      true
     else
       @tag.errors.add(:position, t(:invalid_position, "Invalid position"))
-      return false
+      false
     end
   end
   protected :set_position
@@ -764,11 +781,11 @@ class ContextModuleItemsApiController < ApplicationController
 
     reqs = {}
     @module ||= @tag.context_module
-    @module.completion_requirements.each{|i| reqs[i[:id]] = i }
+    @module.completion_requirements.each { |i| reqs[i[:id]] = i }
 
     if params[:module_item][:completion_requirement].blank?
       reqs[@tag.id] = {}
-    elsif ["must_view", "must_submit", "must_contribute", "min_score"].include?(params[:module_item][:completion_requirement][:type])
+    elsif %w[must_view must_submit must_contribute min_score must_mark_done].include?(params[:module_item][:completion_requirement][:type])
       reqs[@tag.id] = params[:module_item][:completion_requirement].to_unsafe_h
     else
       @tag.errors.add(:completion_requirement, t(:invalid_requirement_type, "Invalid completion requirement type"))
@@ -783,12 +800,13 @@ class ContextModuleItemsApiController < ApplicationController
   def find_student
     if params[:student_id]
       student_enrollments = @context.student_enrollments.for_user(params[:student_id])
-      return render_unauthorized_action unless student_enrollments.any?{|e| e.grants_right?(@current_user, session, :read_grades)}
+      return render_unauthorized_action unless student_enrollments.any? { |e| e.grants_right?(@current_user, session, :read_grades) }
+
       @student = student_enrollments.first.user
     elsif @context.grants_right?(@current_user, session, :participate_as_student)
       @student = @current_user
     else
-      return true
+      true
     end
   end
   protected :find_student

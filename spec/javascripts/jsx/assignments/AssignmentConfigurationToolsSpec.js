@@ -19,7 +19,7 @@
 import $ from 'jquery'
 import React from 'react'
 import {mount} from 'enzyme'
-import AssignmentConfigurationTools from 'jsx/assignments/AssignmentConfigurationTools'
+import AssignmentConfigurationTools from 'ui/features/assignment_edit/react/AssignmentConfigurationTools'
 
 let toolDefinitions = null
 let secureParams = null
@@ -38,9 +38,9 @@ QUnit.module('AssignmentConfigurationsTools', {
           similarity_detection: {
             message_type: 'basic-lti-launch-request',
             url: 'https://lti-tool-provider-example.herokuapp.com/messages/blti',
-            title: 'similarity_detection Text'
-          }
-        }
+            title: 'similarity_detection Text',
+          },
+        },
       },
       {
         definition_type: 'ContextExternalTool',
@@ -52,9 +52,9 @@ QUnit.module('AssignmentConfigurationsTools', {
           similarity_detection: {
             message_type: 'basic-lti-launch-request',
             url: 'http://my-lti.docker/course-navigation',
-            title: 'My LTI'
-          }
-        }
+            title: 'My LTI',
+          },
+        },
       },
       {
         definition_type: 'ContextExternalTool',
@@ -67,9 +67,9 @@ QUnit.module('AssignmentConfigurationsTools', {
           similarity_detection: {
             message_type: 'basic-lti-launch-request',
             url: 'https://www.edu-apps.org/redirect',
-            title: 'Redirect Tool'
-          }
-        }
+            title: 'Redirect Tool',
+          },
+        },
       },
       {
         definition_type: 'Lti::MessageHandler',
@@ -81,9 +81,9 @@ QUnit.module('AssignmentConfigurationsTools', {
           similarity_detection: {
             message_type: 'basic-lti-launch-request',
             url: 'http://localhost:3000/messages/blti',
-            title: 'Lti2Example'
-          }
-        }
+            title: 'Lti2Example',
+          },
+        },
       },
       {
         definition_type: 'ContextExternalTool',
@@ -96,25 +96,22 @@ QUnit.module('AssignmentConfigurationsTools', {
           similarity_detection: {
             message_type: 'basic-lti-launch-request',
             url: 'https://www.edu-apps.org/redirect',
-            title: 'Redirect Tool'
-          }
-        }
-      }
+            title: 'Redirect Tool',
+          },
+        },
+      },
     ]
     sandbox.stub($, 'ajax').returns({status: 200, data: toolDefinitions})
     ENV.LTI_LAUNCH_FRAME_ALLOWANCES = ['midi', 'media']
   },
   teardown() {
     ENV.LTI_LAUNCH_FRAME_ALLOWANCES = undefined
-  }
+  },
 })
 
 test('it renders', () => {
   const wrapper = mount(
-    <AssignmentConfigurationTools.configTools
-      courseId={1}
-      secureParams={secureParams}
-    />
+    <AssignmentConfigurationTools.configTools courseId={1} secureParams={secureParams} />
   )
   ok(wrapper.exists())
 })
@@ -123,20 +120,14 @@ test('it uses the correct tool definitions URL', () => {
   const courseId = 1
   const correctUrl = `/api/v1/courses/${courseId}/lti_apps/launch_definitions`
   const wrapper = mount(
-    <AssignmentConfigurationTools.configTools
-      courseId={courseId}
-      secureParams={secureParams}
-    />
+    <AssignmentConfigurationTools.configTools courseId={courseId} secureParams={secureParams} />
   )
   equal(wrapper.instance().getDefinitionsUrl(), correctUrl)
 })
 
 test('it renders a "none" option', () => {
   const wrapper = mount(
-    <AssignmentConfigurationTools.configTools
-      courseId={1}
-      secureParams={secureParams}
-    />
+    <AssignmentConfigurationTools.configTools courseId={1} secureParams={secureParams} />
   )
   wrapper.setState({tools: toolDefinitions})
 
@@ -145,10 +136,7 @@ test('it renders a "none" option', () => {
 
 test('it renders "none" for tool type when no tool is selected', () => {
   const wrapper = mount(
-    <AssignmentConfigurationTools.configTools
-      courseId={1}
-      secureParams={secureParams}
-    />
+    <AssignmentConfigurationTools.configTools courseId={1} secureParams={secureParams} />
   )
   wrapper.setState({tools: toolDefinitions})
   const toolType = wrapper.find('#configuration-tool-type').instance()
@@ -157,10 +145,7 @@ test('it renders "none" for tool type when no tool is selected', () => {
 
 test('it renders each tool', () => {
   const wrapper = mount(
-    <AssignmentConfigurationTools.configTools
-      courseId={1}
-      secureParams={secureParams}
-    />
+    <AssignmentConfigurationTools.configTools courseId={1} secureParams={secureParams} />
   )
   wrapper.setState({tools: toolDefinitions})
   equal(wrapper.find('#similarity_detection_tool option').length, toolDefinitions.length + 1)
@@ -168,24 +153,20 @@ test('it renders each tool', () => {
 
 test('it builds the correct Launch URL for LTI 1 tools', () => {
   const wrapper = mount(
-    <AssignmentConfigurationTools.configTools
-      courseId={1}
-      secureParams={secureParams}
-    />
+    <AssignmentConfigurationTools.configTools courseId={1} secureParams={secureParams} />
   )
   const tool = toolDefinitions[0]
-  const correctUrl = `${'/courses/1/external_tools/retrieve?borderless=true&' +
-    'url=https%3A%2F%2Flti-tool-provider-example.herokuapp.com%2Fmessages%2Fblti&secure_params='}${secureParams}`
+  const correctUrl = `${
+    '/courses/1/external_tools/retrieve?borderless=true&' +
+    'url=https%3A%2F%2Flti-tool-provider-example.herokuapp.com%2Fmessages%2Fblti&secure_params='
+  }${secureParams}`
   const computedUrl = wrapper.instance().getLaunch(tool)
   equal(computedUrl, correctUrl)
 })
 
 test('it builds the correct Launch URL for LTI 2 tools', () => {
   const wrapper = mount(
-    <AssignmentConfigurationTools.configTools
-      courseId={1}
-      secureParams={secureParams}
-    />
+    <AssignmentConfigurationTools.configTools courseId={1} secureParams={secureParams} />
   )
   const tool = toolDefinitions[3]
   const correctUrl = `/courses/1/lti/basic_lti_launch_request/5?display=borderless&secure_params=${secureParams}`
@@ -195,10 +176,7 @@ test('it builds the correct Launch URL for LTI 2 tools', () => {
 
 test('it renders the proper tool type for LTI 1.x tools', () => {
   const wrapper = mount(
-    <AssignmentConfigurationTools.configTools
-      courseId={1}
-      secureParams={secureParams}
-    />
+    <AssignmentConfigurationTools.configTools courseId={1} secureParams={secureParams} />
   )
   wrapper.setState({tools: toolDefinitions})
   const toolSelect = wrapper.find('#similarity_detection_tool')
@@ -211,10 +189,7 @@ test('it renders the proper tool type for LTI 1.x tools', () => {
 
 test('it renders the proper tool type for LTI 2 tools', () => {
   const wrapper = mount(
-    <AssignmentConfigurationTools.configTools
-      courseId={1}
-      secureParams={secureParams}
-    />
+    <AssignmentConfigurationTools.configTools courseId={1} secureParams={secureParams} />
   )
   wrapper.setState({tools: toolDefinitions})
   const toolSelect = wrapper.find('#similarity_detection_tool')
@@ -240,36 +215,27 @@ test('it renders proper tool when duplicate IDs but unique tool types are presen
 
 test('shows beginning info alert and adds styles to iframe', () => {
   const wrapper = mount(
-    <AssignmentConfigurationTools.configTools
-      courseId={1}
-      secureParams={secureParams}
-    />
+    <AssignmentConfigurationTools.configTools courseId={1} secureParams={secureParams} />
   )
   wrapper.setState({toolLaunchUrl: 'http://localhost:3000/messages/blti'})
   wrapper.find('.before_external_content_info_alert').simulate('focus')
   equal(wrapper.state().beforeExternalContentAlertClass, '')
-  deepEqual(wrapper.state().iframeStyle, {border: '2px solid #008EE2', width: '-4px'})
+  deepEqual(wrapper.state().iframeStyle, {border: '2px solid #0374B5', width: '-4px'})
 })
 
 test('shows ending info alert and adds styles to iframe', () => {
   const wrapper = mount(
-    <AssignmentConfigurationTools.configTools
-      courseId={1}
-      secureParams={secureParams}
-    />
+    <AssignmentConfigurationTools.configTools courseId={1} secureParams={secureParams} />
   )
   wrapper.setState({toolLaunchUrl: 'http://localhost:3000/messages/blti'})
   wrapper.find('.after_external_content_info_alert').simulate('focus')
   equal(wrapper.state().afterExternalContentAlertClass, '')
-  deepEqual(wrapper.state().iframeStyle, {border: '2px solid #008EE2', width: '-4px'})
+  deepEqual(wrapper.state().iframeStyle, {border: '2px solid #0374B5', width: '-4px'})
 })
 
 test('hides beginning info alert and adds styles to iframe', () => {
   const wrapper = mount(
-    <AssignmentConfigurationTools.configTools
-      courseId={1}
-      secureParams={secureParams}
-    />
+    <AssignmentConfigurationTools.configTools courseId={1} secureParams={secureParams} />
   )
   wrapper.setState({toolLaunchUrl: 'http://localhost:3000/messages/blti'})
   wrapper.find('.before_external_content_info_alert').simulate('focus')
@@ -280,10 +246,7 @@ test('hides beginning info alert and adds styles to iframe', () => {
 
 test('hides ending info alert and adds styles to iframe', () => {
   const wrapper = mount(
-    <AssignmentConfigurationTools.configTools
-      courseId={1}
-      secureParams={secureParams}
-    />
+    <AssignmentConfigurationTools.configTools courseId={1} secureParams={secureParams} />
   )
   wrapper.setState({toolLaunchUrl: 'http://localhost:3000/messages/blti'})
   wrapper.find('.after_external_content_info_alert').simulate('focus')
@@ -294,10 +257,7 @@ test('hides ending info alert and adds styles to iframe', () => {
 
 test("doesn't show alerts or add border to iframe by default", () => {
   const wrapper = mount(
-    <AssignmentConfigurationTools.configTools
-      courseId={1}
-      secureParams={secureParams}
-    />
+    <AssignmentConfigurationTools.configTools courseId={1} secureParams={secureParams} />
   )
   wrapper.setState({toolLaunchUrl: 'http://localhost:3000/messages/blti'})
   equal(wrapper.state().beforeExternalContentAlertClass, 'screenreader-only')
@@ -342,10 +302,20 @@ test('sets the iframe allowances', () => {
   )
 
   equal(
-    wrapper
-      .find('.tool_launch')
-      .instance()
-      .getAttribute('allow'),
+    wrapper.find('.tool_launch').instance().getAttribute('allow'),
     ENV.LTI_LAUNCH_FRAME_ALLOWANCES.join('; ')
   )
+})
+
+test('sets the iframe "data-lti-launch" attribute', () => {
+  const wrapper = mount(
+    <AssignmentConfigurationTools.configTools
+      courseId={1}
+      secureParams={secureParams}
+      selectedTool={5}
+      selectedToolType="ContextExternalTool"
+    />
+  )
+
+  equal(wrapper.find('.tool_launch').instance().getAttribute('data-lti-launch'), 'true')
 })

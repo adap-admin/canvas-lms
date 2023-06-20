@@ -1,5 +1,5 @@
 #!/bin/bash
 
-export COMPOSE_FILE=docker-compose.new-jenkins.yml
+set -x -o errexit -o errtrace -o nounset -o pipefail
 
-docker-compose run --rm web bundle exec rspec -f doc --format html --out results.html --tag xbrowser spec/selenium/
+docker-compose exec -T canvas bundle exec rspec --options spec/spec.opts --tag xbrowser spec/selenium/

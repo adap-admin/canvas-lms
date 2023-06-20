@@ -16,18 +16,18 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import CheckboxCollection from 'compiled/collections/content_migrations/ContentCheckboxCollection'
-import CheckboxModel from 'compiled/models/content_migrations/ContentCheckbox'
+import CheckboxCollection from 'ui/features/content_migrations/backbone/collections/ContentCheckboxCollection'
+import CheckboxModel from 'ui/features/content_migrations/backbone/models/ContentCheckbox'
 
 QUnit.module('ContentCheckboxCollectionSpec')
-const createCheckboxCollection = function(properties) {
+const createCheckboxCollection = function (properties) {
   if (!properties) {
     properties = {}
   }
   const models = properties.models || new CheckboxModel({id: 42})
   const options = properties.options || {
     migrationID: 1,
-    courseID: 2
+    courseID: 2,
   }
   return new CheckboxCollection(models, options)
 }
@@ -37,8 +37,8 @@ test('url is going to the correct api endpoint', () => {
   const checkboxCollection = createCheckboxCollection({
     options: {
       migrationID,
-      courseID
-    }
+      courseID,
+    },
   })
   const endpointURL = `/api/v1/courses/${courseID}/content_migrations/${migrationID}/selective_data`
   equal(checkboxCollection.url(), endpointURL, 'Endpoint url is correct')

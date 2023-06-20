@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -19,7 +21,7 @@ module DataFixup
   class FixDiscussionTopicMaterializedViews
     def self.run
       topic_ids = nil
-      Shackles.activate(:slave) do
+      GuardRail.activate(:secondary) do
         result = ActiveRecord::Base.connection.execute(
           "with entries as (
             select count(*) as c, discussion_topic_id
@@ -36,14 +38,15 @@ module DataFixup
                , matview.c as mat
             from matview,entries
            where matview.discussion_topic_id=entries.discussion_topic_id
-             and matview.c != entries.c;")
+             and matview.c != entries.c;"
+        )
 
-         topic_ids = result.map{|d| d['topic']}
+        topic_ids = result.pluck("topic")
       end
 
-      Shackles.activate(:master) do
+      GuardRail.activate(:primary) do
         DiscussionTopic.where(id: topic_ids).find_each do |dt|
-          DiscussionTopic::MaterializedView.for(dt).update_materialized_view_without_send_later
+          DiscussionTopic::MaterializedView.for(dt).update_materialized_view(synchronous: true)
         end
       end
     end

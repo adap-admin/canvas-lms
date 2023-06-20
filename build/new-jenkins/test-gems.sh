@@ -1,7 +1,5 @@
 #!/bin/bash
 
-docker-compose build
-docker-compose up -d
-docker-compose run web bundle exec rails db:create
+set -x -o errexit -o errtrace -o nounset -o pipefail
 
-docker-compose run -T web ./gems/test-all-gems-new-jenkins.sh
+docker-compose exec -T canvas ./gems/test_all_gems.sh

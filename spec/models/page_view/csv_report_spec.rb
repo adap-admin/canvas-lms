@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -16,12 +18,14 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require_relative '../../spec_helper.rb'
+require_relative "../../spec_helper"
 
-describe PageView::CsvReport do
-  class PaginationStub < Array
-    def next_page
-      true
+describe PageView::CSVReport do
+  let(:pagination_stub) do
+    Class.new(Array) do
+      def next_page
+        true
+      end
     end
   end
 
@@ -34,28 +38,28 @@ describe PageView::CsvReport do
       pv1 = page_view_model
       pv2 = page_view_model
 
-      report = PageView::CsvReport.new(@user)
+      report = PageView::CSVReport.new(@user)
 
       expect(report.records.map(&:id).sort).to eq [pv1.id, pv2.id].sort
     end
 
     it "accumulates until it has enough" do
-      Setting.set('page_views_csv_export_rows', 2)
+      Setting.set("page_views_csv_export_rows", 2)
       pv1 = page_view_model
 
-      report = PageView::CsvReport.new(@user)
-      allow(report).to receive(:page_views).and_return(PaginationStub.new([pv1]))
+      report = PageView::CSVReport.new(@user)
+      allow(report).to receive(:page_views).and_return(pagination_stub.new([pv1]))
 
       expect(report.records.map(&:id).sort).to eq [pv1.id, pv1.id].sort
     end
 
     it "returns the exact amount" do
-      Setting.set('page_views_csv_export_rows', 3)
+      Setting.set("page_views_csv_export_rows", 3)
       pv1 = page_view_model
       pv2 = page_view_model
 
-      report = PageView::CsvReport.new(@user)
-      allow(report).to receive(:page_views).and_return(PaginationStub.new([pv1, pv2]))
+      report = PageView::CSVReport.new(@user)
+      allow(report).to receive(:page_views).and_return(pagination_stub.new([pv1, pv2]))
 
       expect(report.records.map(&:id).sort).to eq [pv1.id, pv2.id, pv1.id].sort
     end
@@ -66,10 +70,10 @@ describe PageView::CsvReport do
       pv1 = page_view_model
       pv2 = page_view_model
 
-      csv = PageView::CsvReport.new(@user).generate
+      csv = PageView::CSVReport.new(@user).generate
       rows = CSV.parse(csv, headers: true)
       expect(rows.length).to eq 2
-      expect(rows.map{|x| x['request_id']}.sort).to eq [pv1.id, pv2.id].sort
+      expect(rows.pluck("request_id").sort).to eq [pv1.id, pv2.id].sort
     end
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -29,6 +31,6 @@ class DropScribdMimeType < ActiveRecord::Migration[5.1]
       t.string :name, limit: 255
       t.timestamps
     end
-    add_index :scribd_mime_types, :extension, name: 'index_scribd_mime_types_on_extension'
+    add_index :scribd_mime_types, :extension, name: "index_scribd_mime_types_on_extension"
   end
 end

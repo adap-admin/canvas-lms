@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -83,7 +85,8 @@
 #               "decaying_average",
 #               "n_mastery",
 #               "latest",
-#               "highest"
+#               "highest",
+#               "average"
 #             ]
 #           }
 #         },
@@ -161,6 +164,7 @@
 class OutcomesApiController < ApplicationController
   include Api::V1::Outcome
   include Outcomes::Enrollments
+  include CanvasOutcomesHelper
 
   before_action :require_user
   before_action :get_outcome, except: :outcome_alignments
@@ -170,11 +174,16 @@ class OutcomesApiController < ApplicationController
   #
   # Returns the details of the outcome with the given id.
   #
+  # @argument add_defaults [Boolean]
+  #   If defaults are requested, then color and mastery level defaults will be
+  #   added to outcome ratings in the result. This will only take effect if
+  #   the Account Level Mastery Scales FF is DISABLED
+  #
   # @returns Outcome
   #
   def show
     if authorized_action(@outcome, @current_user, :read)
-      render :json => outcome_json(@outcome, @current_user, session)
+      render json: outcome_json(@outcome, @current_user, session)
     end
   end
 
@@ -216,11 +225,16 @@ class OutcomesApiController < ApplicationController
   #   The points corresponding to a new rating level for the embedded rubric
   #   criterion.
   #
-  # @argument calculation_method [String, "decaying_average"|"n_mastery"|"latest"|"highest"]
+  # @argument calculation_method [String, "decaying_average"|"n_mastery"|"latest"|"highest"|"average"]
   #   The new calculation method.
   #
   # @argument calculation_int [Integer]
   #   The new calculation int.  Only applies if the calculation_method is "decaying_average" or "n_mastery"
+  #
+  # @argument add_defaults [Boolean]
+  #   If defaults are requested, then color and mastery level defaults will be
+  #   added to outcome ratings in the result. This will only take effect if
+  #   the Account Level Mastery Scales FF is DISABLED
   #
   # @returns Outcome
   #
@@ -266,12 +280,93 @@ class OutcomesApiController < ApplicationController
   def update
     return unless authorized_action(@outcome, @current_user, :update)
 
-    update_outcome_criterion(@outcome) if params[:mastery_points] || params[:ratings]
-    if @outcome.update_attributes(params.permit(*DIRECT_PARAMS))
-      render :json => outcome_json(@outcome, @current_user, session)
-    else
-      render :json => @outcome.errors, :status => :bad_request
+    if @domain_root_account.feature_enabled?(:account_level_mastery_scales)
+      error_msg = nil
+      if params[:mastery_points]
+        error_msg = t("Individual outcome mastery points cannot be modified.")
+      elsif params[:ratings]
+        error_msg = t("Individual outcome ratings cannot be modified.")
+      elsif params[:calculation_method] || params[:calculation_int]
+        error_msg = t("Individual outcome calculation values cannot be modified.")
+      end
+      if error_msg
+        render json: { error: error_msg }, status: :forbidden
+        return
+      end
     end
+
+    update_outcome_criterion(@outcome) if params[:mastery_points] || params[:ratings]
+    if @outcome.update(params.permit(*DIRECT_PARAMS))
+      render json: outcome_json(@outcome, @current_user, session)
+    else
+      render json: @outcome.errors, status: :bad_request
+    end
+  end
+
+  def add_alignment(course, assignment, outcome_id, associated_asset_id)
+    {
+      learning_outcome_id: outcome_id,
+      title: assignment.title,
+      assignment_id: associated_asset_id,
+      submission_types: assignment.submission_types,
+      url: "#{polymorphic_url([course, :assignments])}/#{associated_asset_id}"
+    }
+  end
+
+  def find_outcomes_service_assignment_alignments(course, student_id)
+    outcomes = ContentTag.active.where(context:).learning_outcome_links
+    student_uuid = User.find(student_id).uuid
+    assignments = Assignment.active.where(context:).quiz_lti
+    return if assignments.nil? || outcomes.nil?
+
+    os_alignments = get_outcome_alignments(context, outcomes.pluck(:content_id).join(","), { includes: "alignments", list_groups: false })
+    os_results = get_lmgb_results(context, assignments.pluck(:id).join(","), "canvas.assignment.quizzes", outcomes.pluck(:content_id).join(","), student_uuid)
+
+    # collecting known alignments from results to fill in if asset information
+    # is missing from get_outcome_alignments using a composite key of
+    # outcomeId_artifactId_artifactType
+    os_alignments_from_results = {}
+    os_results&.each do |r|
+      next if r[:associated_asset_id].nil?
+
+      # using latest attempt to find the aligning question & quiz metadata
+      attempt = r[:attempts]&.max_by { |a| a[:submitted_at] || a[:created_at] }
+      next if attempt.nil? || attempt[:metadata].blank?
+
+      # capturing artifact alignment
+      os_alignments_from_results["#{r[:external_outcome_id]}_#{r[:artifact_id]}_#{r[:artifact_type]}"] = r
+
+      # capturing question alignment(s)
+      question_metadata = attempt[:metadata][:question_metadata]
+      unless question_metadata.blank?
+        question_metadata&.each do |question|
+          os_alignments_from_results["#{r[:external_outcome_id]}_#{question[:quiz_item_id]}_quizzes.item"] = r
+        end
+      end
+    end
+
+    outcome_assignment_alignments = []
+    os_alignments&.each do |o|
+      next if o[:alignments].nil?
+
+      o[:alignments].each do |a|
+        # for those artifacts that do not have associated_asset_id (aka Canvas assignment id)
+        # populated, try looking for in the lmgb results from outcome service
+        if a[:associated_asset_id].nil? && os_alignments_from_results.present?
+          alignment_from_results = os_alignments_from_results["#{o[:external_id]}_#{a[:artifact_id]}_#{a[:artifact_type]}"]
+          next if alignment_from_results.nil?
+
+          assignment = assignments.find_by(id: alignment_from_results[:associated_asset_id])
+          outcome_assignment_alignments.push(add_alignment(course, assignment, o[:external_id], alignment_from_results[:associated_asset_id]))
+        else
+          assignment = assignments.find_by(id: a[:associated_asset_id])
+          next if assignment.nil?
+
+          outcome_assignment_alignments.push(add_alignment(course, assignment, o[:external_id], a[:associated_asset_id]))
+        end
+      end
+    end
+    outcome_assignment_alignments.uniq
   end
 
   # @API Get aligned assignments for an outcome in a course for a particular student
@@ -285,63 +380,68 @@ class OutcomesApiController < ApplicationController
   # @returns [OutcomeAlignment]
 
   def outcome_alignments
-    if !params[:student_id]
-      render json: { message: "student_id is required" }, status: :bad_request
-    else
+    if params[:student_id]
       course = Course.find(params[:course_id])
       can_manage = course.grants_any_right?(@current_user, session, :manage_grades, :view_all_grades)
       student_id = params[:student_id].to_i
       verify_readable_grade_enrollments([student_id]) unless can_manage
 
-      assignment_states = ['deleted']
-      assignment_states << 'unpublished' unless can_manage
-      alignments = ActiveRecord::Base.connection.exec_query(ContentTag.active.for_context(course).learning_outcome_alignments.
-        select("content_tags.learning_outcome_id, content_tags.title, content_tags.content_id as assignment_id, assignments.submission_types").
-        joins("INNER JOIN #{Assignment.quoted_table_name} assignments ON assignments.id = content_tags.content_id AND content_tags.content_type = 'Assignment'").
-        joins("INNER JOIN #{Submission.quoted_table_name} submissions ON submissions.assignment_id = assignments.id AND submissions.user_id = #{student_id} AND submissions.workflow_state <> 'deleted'").
-        where('assignments.workflow_state NOT IN (?)', assignment_states).
-        to_sql).to_hash
-      alignments.each{|a| a[:url] = "#{polymorphic_url([course, :assignments])}/#{a['assignment_id']}"}
+      assignment_states = ["deleted"]
+      assignment_states << "unpublished" unless can_manage
+      alignments = ActiveRecord::Base.connection.exec_query(ContentTag.active.for_context(course).learning_outcome_alignments
+        .select("content_tags.learning_outcome_id, content_tags.title, content_tags.content_id as assignment_id, assignments.submission_types")
+        .joins("INNER JOIN #{Assignment.quoted_table_name} assignments ON assignments.id = content_tags.content_id AND content_tags.content_type = 'Assignment'")
+        .joins("INNER JOIN #{Submission.quoted_table_name} submissions ON submissions.assignment_id = assignments.id AND submissions.user_id = #{student_id} AND submissions.workflow_state <> 'deleted'")
+        .where.not(assignments: { workflow_state: assignment_states })
+        .to_sql).to_a
+      alignments.each { |a| a[:url] = "#{polymorphic_url([course, :assignments])}/#{a["assignment_id"]}" }
 
       quizzes = Quizzes::Quiz.active
       quizzes = quizzes.where("quizzes.workflow_state IN ('active', 'available')") unless can_manage
-      quizzes = quizzes.
-        select(:title, :id, :assignment_id).preload(:quiz_questions).
-        joins(assignment: :submissions).
-        where(context: course).
-        where("submissions.user_id = ?", student_id).
-        where("submissions.workflow_state <> 'deleted'")
+      quizzes = quizzes
+                .select(:title, :id, :assignment_id).preload(:quiz_questions)
+                .joins(assignment: :submissions)
+                .where(context: course)
+                .where(submissions: { user_id: student_id })
+                .where("submissions.workflow_state <> 'deleted'")
       quiz_alignments = quizzes.map do |quiz|
-        bank_ids = quiz.quiz_questions.map{ |qq| qq.assessment_question.try(:assessment_question_bank_id) }.compact.uniq
+        bank_ids = quiz.quiz_questions.filter_map { |qq| qq.assessment_question.try(:assessment_question_bank_id) }.uniq
         outcome_ids = ContentTag.active.where(content_id: bank_ids, content_type: "AssessmentQuestionBank", tag: "explicit_mastery").pluck(:learning_outcome_id)
         outcome_ids.map do |id|
           {
             learning_outcome_id: id,
             title: quiz.title,
             assignment_id: quiz.assignment_id,
-            submission_types: 'online_quiz',
+            submission_types: "online_quiz",
             url: "#{polymorphic_url([course, :quizzes])}/#{quiz.id}"
           }
         end
       end.flatten
 
-      live_assessments = LiveAssessments::Assessment.for_context(context).
-        joins(:submissions).
-        preload(:learning_outcome_alignments).
-        where(live_assessments_submissions: {user_id: student_id})
+      live_assessments = LiveAssessments::Assessment.for_context(context)
+                                                    .joins(:submissions)
+                                                    .preload(:learning_outcome_alignments)
+                                                    .where(live_assessments_submissions: { user_id: student_id })
       magic_marker_alignments = live_assessments.map do |la|
         la.learning_outcome_alignments.map do |loa|
           {
             learning_outcome_id: loa.learning_outcome_id,
             title: loa.title,
-            submission_types: 'magic_marker',
+            submission_types: "magic_marker",
             assessment_id: la.id
           }
         end
       end.flatten
-      alignments.concat(quiz_alignments, magic_marker_alignments)
 
-      render :json => alignments
+      # find_outcomes_service_assignment_alignments
+      # Returns outcome service aligned assignments for a given course
+      # if the outcome_service_results_to_canvas FF is enabled
+      os_alignments = find_outcomes_service_assignment_alignments(course, student_id)
+      alignments.concat(quiz_alignments, magic_marker_alignments, os_alignments)
+
+      render json: alignments
+    else
+      render json: { message: "student_id is required" }, status: :bad_request
     end
   rescue ActiveRecord::RecordNotFound => e
     render json: { message: e.message }, status: :not_found

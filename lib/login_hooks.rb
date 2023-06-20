@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -19,6 +21,7 @@
 class LoginHooks
   def self.on_login(&block)
     raise ArgumentError unless block.arity == 1
+
     @hooks ||= []
     @hooks << block
   end

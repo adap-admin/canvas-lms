@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -34,7 +36,7 @@ class ProvisionalGradesBaseController < ApplicationController
       return render json: { message: "Assignment grades have already been published" }, status: :bad_request
     end
 
-    json = {needs_provisional_grade: @assignment.can_be_moderated_grader?(@current_user)}
+    json = { needs_provisional_grade: @assignment.can_be_moderated_grader?(@current_user) }
 
     return render json: json unless submission_updated?
 
@@ -56,11 +58,11 @@ class ProvisionalGradesBaseController < ApplicationController
       pg_json = provisional_grade_json(
         course: @context,
         assignment: @assignment,
-        submission: submission,
+        submission:,
         provisional_grade: pg,
         current_user: @current_user,
         avatars: service_enabled?(:avatars) && !@assignment.grade_as_group?,
-        includes: %w(submission_comments rubric_assessment)
+        includes: %w[submission_comments rubric_assessment]
       )
       pg_json[:selected] = !!(selection && selection.selected_provisional_grade_id == pg.id)
       pg_json[:readonly] = !pg.final && (pg.scorer_id != @current_user.id)
@@ -73,7 +75,7 @@ class ProvisionalGradesBaseController < ApplicationController
       end
     end
 
-    render json: json
+    render json:
   end
 
   private

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -15,8 +17,6 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
-
 describe "differentiated_assignments" do
   def course_with_differentiated_assignments_enabled
     @course = Course.create!
@@ -25,31 +25,31 @@ describe "differentiated_assignments" do
     @course.save!
   end
 
-  def make_quiz(opts={})
+  def make_quiz(opts = {})
     @quiz = Quizzes::Quiz.create!({
-      context: @course,
-      description: 'descript foo',
-      only_visible_to_overrides: opts[:ovto],
-      points_possible: rand(1000),
-      title: "I am a quiz"
-    })
+                                    context: @course,
+                                    description: "descript foo",
+                                    only_visible_to_overrides: opts[:ovto],
+                                    points_possible: rand(1000),
+                                    title: "I am a quiz"
+                                  })
     @quiz.publish
     @quiz.save!
     @assignment = @quiz.assignment
   end
 
   def quiz_with_true_only_visible_to_overrides
-    make_quiz({date: nil, ovto: true})
+    make_quiz({ date: nil, ovto: true })
   end
 
   def quiz_with_false_only_visible_to_overrides
-    make_quiz({date: Time.now, ovto: false})
+    make_quiz({ date: Time.now, ovto: false })
   end
 
-  def student_in_course_with_adhoc_override(quiz, opts={})
+  def student_in_course_with_adhoc_override(quiz, opts = {})
     @user = opts[:user] || user_model
-    StudentEnrollment.create!(:user => @user, :course => @course)
-    ao = AssignmentOverride.new()
+    StudentEnrollment.create!(user: @user, course: @course)
+    ao = AssignmentOverride.new
     ao.quiz = quiz
     ao.title = "ADHOC OVERRIDE"
     ao.workflow_state = "active"
@@ -62,29 +62,29 @@ describe "differentiated_assignments" do
     @user
   end
 
-  def enroller_user_in_section(section, opts={})
+  def enroller_user_in_section(section, opts = {})
     @user = opts[:user] || user_model
-    StudentEnrollment.create!(:user => @user, :course => @course, :course_section => section)
+    StudentEnrollment.create!(user: @user, course: @course, course_section: section)
   end
 
   def enroller_user_in_both_sections
     @user = user_model
-    StudentEnrollment.create!(:user => @user, :course => @course, :course_section => @section_foo)
-    StudentEnrollment.create!(:user => @user, :course => @course, :course_section => @section_bar)
+    StudentEnrollment.create!(user: @user, course: @course, course_section: @section_foo)
+    StudentEnrollment.create!(user: @user, course: @course, course_section: @section_bar)
   end
 
   def add_multiple_sections
     @default_section = @course.default_section
-    @section_foo = @course.course_sections.create!(:name => 'foo')
-    @section_bar = @course.course_sections.create!(:name => 'bar')
+    @section_foo = @course.course_sections.create!(name: "foo")
+    @section_bar = @course.course_sections.create!(name: "bar")
   end
 
-  def create_override_for_quiz(quiz, &block)
-    ao = AssignmentOverride.new()
+  def create_override_for_quiz(quiz)
+    ao = AssignmentOverride.new
     ao.quiz = quiz
     ao.title = "Lorem"
     ao.workflow_state = "active"
-    block.call(ao)
+    yield(ao)
     ao.save!
     quiz.reload
   end
@@ -125,21 +125,20 @@ describe "differentiated_assignments" do
 
     it "doesnt allow updates" do
       @visibility_object.user_id = @visibility_object.user_id + 1
-      expect {@visibility_object.save!}.to raise_error(ActiveRecord::ReadOnlyRecord)
+      expect { @visibility_object.save! }.to raise_error(ActiveRecord::ReadOnlyRecord)
     end
 
     it "doesnt allow new records" do
-      expect {
+      expect do
         Quizzes::QuizStudentVisibility.create!(user_id: @user.id,
-                                            quiz_id: @quiz_id,
-                                            course_id: @course.id)
-        }.to raise_error(ActiveRecord::ReadOnlyRecord)
+                                               quiz_id: @quiz_id,
+                                               course_id: @course.id)
+      end.to raise_error(ActiveRecord::ReadOnlyRecord)
     end
 
     it "doesnt allow deletion" do
-      expect {@visibility_object.destroy}.to raise_error(ActiveRecord::ReadOnlyRecord)
+      expect { @visibility_object.destroy }.to raise_error(ActiveRecord::ReadOnlyRecord)
     end
-
   end
 
   context "course_with_differentiated_assignments_enabled" do
@@ -147,6 +146,7 @@ describe "differentiated_assignments" do
       course_with_differentiated_assignments_enabled
       add_multiple_sections
     end
+
     context "quiz only visible to overrides" do
       before do
         quiz_with_true_only_visible_to_overrides
@@ -156,12 +156,12 @@ describe "differentiated_assignments" do
       context "ADHOC overrides" do
         before { quiz_with_true_only_visible_to_overrides }
 
-        it "should return a visibility for a student with an ADHOC override" do
+        it "returns a visibility for a student with an ADHOC override" do
           student_in_course_with_adhoc_override(@quiz)
           ensure_user_sees_quiz
         end
 
-        it "should work with course section and return a single visibility" do
+        it "works with course section and return a single visibility" do
           student_in_course_with_adhoc_override(@quiz)
           give_section_foo_due_date(@quiz)
           enroller_user_in_section(@section_foo)
@@ -169,12 +169,12 @@ describe "differentiated_assignments" do
           expect(Quizzes::QuizStudentVisibility.where(user_id: @user.id, course_id: @course.id, quiz_id: @quiz.id).count).to eq 1
         end
 
-        it "should not return a visibility for a student without an ADHOC override" do
+        it "does not return a visibility for a student without an ADHOC override" do
           @user = user_model
           ensure_user_does_not_see_quiz
         end
 
-        it "should not return a visibility if ADHOC override is deleted" do
+        it "does not return a visibility if ADHOC override is deleted" do
           student_in_course_with_adhoc_override(@quiz)
           @quiz.assignment_overrides.to_a.each(&:destroy)
           ensure_user_does_not_see_quiz
@@ -187,98 +187,115 @@ describe "differentiated_assignments" do
           @student = @user
           teacher_in_course(course: @course)
         end
-        it "should not keep the quiz visible even if there is a grade" do
+
+        it "does not keep the quiz visible even if there is a grade" do
           @quiz.assignment.grade_student(@student, grade: 10, grader: @teacher)
           Score.where(enrollment_id: @student.enrollments).each(&:destroy_permanently!)
           @student.enrollments.each(&:destroy_permanently!)
-          enroller_user_in_section(@section_bar, {user: @student})
+          enroller_user_in_section(@section_bar, { user: @student })
           ensure_user_does_not_see_quiz
         end
 
-        it "should not keep the quiz visible if there is no score, even if it has a grade" do
+        it "does not keep the quiz visible if there is no score, even if it has a grade" do
           @quiz.assignment.grade_student(@student, grade: 10, grader: @teacher)
           @quiz.assignment.submissions.last.update_attribute("score", nil)
           @quiz.assignment.submissions.last.update_attribute("grade", 10)
           Score.where(enrollment_id: @student.enrollments).each(&:destroy_permanently!)
           @student.enrollments.each(&:destroy_permanently!)
-          enroller_user_in_section(@section_bar, {user: @student})
+          enroller_user_in_section(@section_bar, { user: @student })
           ensure_user_does_not_see_quiz
         end
 
-        it "should not keep the quiz visible even if the grade is zero" do
+        it "does not keep the quiz visible even if the grade is zero" do
           @quiz.assignment.grade_student(@student, grade: 0, grader: @teacher)
           Score.where(enrollment_id: @student.enrollments).each(&:destroy_permanently!)
           @student.enrollments.each(&:destroy_permanently!)
-          enroller_user_in_section(@section_bar, {user: @student})
+          enroller_user_in_section(@section_bar, { user: @student })
           ensure_user_does_not_see_quiz
         end
       end
 
       context "user in default section" do
-        it "should hide the quiz from the user" do
+        it "hides the quiz from the user" do
           ensure_user_does_not_see_quiz
         end
       end
+
       context "user in section with override" do
-        before{enroller_user_in_section(@section_foo)}
-        it "should show the quiz to the user" do
+        before { enroller_user_in_section(@section_foo) }
+
+        it "shows the quiz to the user" do
           ensure_user_sees_quiz
         end
-        it "should update when enrollments change" do
+
+        it "updates when enrollments change" do
           ensure_user_sees_quiz
-          enrollments = StudentEnrollment.where(:user_id => @user.id, :course_id => @course.id, :course_section_id => @section_foo.id)
+          enrollments = StudentEnrollment.where(user_id: @user.id, course_id: @course.id, course_section_id: @section_foo.id)
           Score.where(enrollment_id: enrollments).each(&:destroy_permanently!)
           enrollments.each(&:destroy_permanently!)
           ensure_user_does_not_see_quiz
         end
-        it "should update when the override is deleted" do
+
+        it "updates when the override is deleted" do
           ensure_user_sees_quiz
           @quiz.assignment_overrides.to_a.each(&:destroy!)
           ensure_user_does_not_see_quiz
         end
       end
+
       context "user in section with no override" do
-        before{enroller_user_in_section(@section_bar)}
-        it "should hide the quiz from the user" do
+        before { enroller_user_in_section(@section_bar) }
+
+        it "hides the quiz from the user" do
           ensure_user_does_not_see_quiz
         end
       end
+
       context "user in section with override and one without override" do
         before do
           enroller_user_in_both_sections
         end
-        it "should show the quiz to the user" do
+
+        it "shows the quiz to the user" do
           ensure_user_sees_quiz
         end
       end
     end
+
     context "quiz with false only_visible_to_overrides" do
       before do
         quiz_with_false_only_visible_to_overrides
         give_section_foo_due_date(@quiz)
       end
+
       context "user in default section" do
-        it "should show the quiz to the user" do
+        it "shows the quiz to the user" do
           ensure_user_sees_quiz
         end
       end
+
       context "user in section with override" do
-        before{enroller_user_in_section(@section_foo)}
-        it "should show the quiz to the user" do
+        before { enroller_user_in_section(@section_foo) }
+
+        it "shows the quiz to the user" do
           ensure_user_sees_quiz
         end
       end
+
       context "user in section with no override" do
-        before{enroller_user_in_section(@section_bar)}
-        it "should show the quiz to the user" do
+        before { enroller_user_in_section(@section_bar) }
+
+        it "shows the quiz to the user" do
           ensure_user_sees_quiz
         end
       end
+
       context "user in section with override and one without override" do
         before do
           enroller_user_in_both_sections
         end
-        it "should show the quiz to the user" do
+
+        it "shows the quiz to the user" do
           ensure_user_sees_quiz
         end
       end

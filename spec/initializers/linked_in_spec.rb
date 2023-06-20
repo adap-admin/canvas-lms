@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -15,19 +17,17 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_relative '../spec_helper'
-require_relative '../../config/initializers/linked_in'
+require_relative "../spec_helper"
+require_relative "../../config/initializers/linked_in"
 
 describe CanvasLinkedInConfig do
-
   describe ".call" do
     it "returns a config with indifferent access" do
-      plugin = double(settings: {client_id: "abcdefg", client_secret_dec: "12345"})
+      plugin = double(settings: { client_id: "abcdefg", client_secret_dec: "12345" })
       allow(Canvas::Plugin).to receive(:find).with(:linked_in).and_return(plugin)
       output = described_class.call
-      expect(output['api_key']).to eq("abcdefg")
+      expect(output["api_key"]).to eq("abcdefg")
       expect(output[:api_key]).to eq("abcdefg")
     end
   end
-
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -95,7 +97,7 @@ class OutcomeProficiencyApiController < ApplicationController
   #        -F 'ratings[][mastery]=false' \
   #        -F 'ratings[][description]=Mastery' \
   #        -F 'ratings[][points]=3' \
-  #        -F 'ratings[][color]=00AC18' \
+  #        -F 'ratings[][color]=0B874B' \
   #        -F 'ratings[][mastery]=true' \
   #        -F 'ratings[][description]=Near Mastery' \
   #        -F 'ratings[][points]=2' \
@@ -107,18 +109,15 @@ class OutcomeProficiencyApiController < ApplicationController
   #        -F 'ratings[][mastery]=false' \
   #        -F 'ratings[][description]=Well Below Mastery' \
   #        -F 'ratings[][points]=0' \
-  #        -F 'ratings[][color]=EE0612' \
+  #        -F 'ratings[][color]=E0061F' \
   #        -F 'ratings[][mastery]=false' \
   #        -H "Authorization: Bearer <token>"
   #
   def create
-    if authorized_action(@context, @current_user, :manage_outcomes)
-      if @account.outcome_proficiency
-        update_ratings(@account.outcome_proficiency)
-      else
-        update_ratings(OutcomeProficiency.new, @account)
-      end
-      render json: outcome_proficiency_json(@account.outcome_proficiency, @current_user, session)
+    if authorized_action(@context, @current_user, :manage_proficiency_scales)
+      proficiency = @context.outcome_proficiency.presence || OutcomeProficiency.new
+      proficiency = update_ratings(proficiency, @context)
+      render json: outcome_proficiency_json(proficiency, @current_user, session)
     end
   end
 
@@ -134,7 +133,9 @@ class OutcomeProficiencyApiController < ApplicationController
   #
   # @returns Proficiency
   def show
-    proficiency = @account.resolved_outcome_proficiency or raise ActiveRecord::RecordNotFound
+    return unless authorized_action(@context, @current_user, :read)
+
+    proficiency = @context.resolved_outcome_proficiency or raise ActiveRecord::RecordNotFound
     render json: outcome_proficiency_json(proficiency, @current_user, session)
   rescue ActiveRecord::RecordNotFound => e
     render json: { message: e.message }, status: :not_found
@@ -142,23 +143,15 @@ class OutcomeProficiencyApiController < ApplicationController
 
   private
 
-  def update_ratings(proficiency, account = nil)
-    # update existing ratings & create any new ratings
-    proficiency_params['ratings'].each_with_index do |val, idx|
-      if idx <= proficiency.outcome_proficiency_ratings.count - 1
-        proficiency.outcome_proficiency_ratings[idx].assign_attributes(val.to_hash.symbolize_keys)
-      else
-        proficiency.outcome_proficiency_ratings.build(val)
-      end
-    end
-    # delete unused ratings
-    proficiency.outcome_proficiency_ratings[proficiency_params['ratings'].length..-1].each(&:mark_for_destruction)
-    proficiency.account = account if account
+  def update_ratings(proficiency, context = nil)
+    proficiency.replace_ratings(proficiency_params["ratings"])
+    proficiency.context = context if context
+    proficiency.workflow_state = "active"
     proficiency.save!
     proficiency
   end
 
   def proficiency_params
-    params.permit(ratings: [:description, :points, :mastery, :color])
+    params.permit(ratings: %i[description points mastery color])
   end
 end

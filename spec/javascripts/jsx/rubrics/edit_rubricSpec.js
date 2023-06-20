@@ -16,35 +16,38 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 import $ from 'jquery'
-import rubricEditing from 'edit_rubric'
+import rubricEditing from '@canvas/rubrics/jquery/edit_rubric'
 
 QUnit.module('edit_rubric', {
   teardown: () => {
     $('.edit_rubric_test').remove()
-  }
+  },
 })
 
 test('hidePoints hides elements marked with class toggle_for_hide_points', () => {
-  $(document.body).append($(
-    '<div class="edit_rubric_test">' +
-    ' <div class="rubric">' +
-    '   <span class="toggle_for_hide_points">Hello</span>' +
-    ' </div>' +
-    '</div>'
-  ))
+  $(document.body).append(
+    $(
+      '<div class="edit_rubric_test">' +
+        ' <div class="rubric">' +
+        '   <span class="toggle_for_hide_points">Hello</span>' +
+        ' </div>' +
+        '</div>'
+    )
+  )
   rubricEditing.hidePoints($('.rubric'))
   ok($('.toggle_for_hide_points').hasClass('hidden'))
 })
 
-
 test('showPoints shows elements marked with class toggle_for_hide_points', () => {
-  $(document.body).append($(
-    '<div class="edit_rubric_test">' +
-    ' <div class="rubric">' +
-    '   <span class="toggle_for_hide_points hidden">Hello</span>' +
-    ' </div>' +
-    '</div>'
-  ))
+  $(document.body).append(
+    $(
+      '<div class="edit_rubric_test">' +
+        ' <div class="rubric">' +
+        '   <span class="toggle_for_hide_points hidden">Hello</span>' +
+        ' </div>' +
+        '</div>'
+    )
+  )
   rubricEditing.showPoints($('.rubric'))
   notOk($('.toggle_for_hide_points').hasClass('hidden'))
 })
@@ -62,7 +65,7 @@ const rubricHtml =
   '   </div>' +
   '  </form>' +
   ' </div>' +
-  '</div>';
+  '</div>'
 
 test('clicking hide_points checkbox hides grading_rubric checkbox', () => {
   $(document.body).append($(rubricHtml))
@@ -104,8 +107,8 @@ test('clicking hidden hide_points checkbox does not hide grading_rubric and tota
   $('.hide_points_checkbox').hide()
   $('.hide_points_checkbox').prop('checked', true)
   $('.hide_points_checkbox').triggerHandler('change')
-  notOk($('.rubric_grading').is(":hidden"))
-  notOk($('.totalling_rubric').is(":hidden"))
+  notOk($('.rubric_grading').is(':hidden'))
+  notOk($('.totalling_rubric').is(':hidden'))
 })
 
 test('clicking hidden grading_rubric checkbox does not hide totalling_rubric checkbox', () => {
@@ -115,4 +118,57 @@ test('clicking hidden grading_rubric checkbox does not hide totalling_rubric che
   $('.grading_rubric_checkbox').prop('checked', true)
   $('.grading_rubric_checkbox').triggerHandler('change')
   notStrictEqual($('.totalling_rubric').css('visibility'), 'hidden')
+})
+
+const criterionHtml =
+  '<tr id="criterion_blank" class="criterion">' +
+  '  <td style="padding: 0;">' +
+  '    <table class="ratings">' +
+  '      <tbody>' +
+  '        <tr>' +
+  '          <td class="rating">' +
+  '            <div class="container">' +
+  '              <div class="rating-main">' +
+  '                <span class="points">4</span>' +
+  '                <div class="description rating_description_value">Full Marks</div>' +
+  '                <span class="rating_id" style="display: none;">58_3952</span>' +
+  '              </div>' +
+  '            </div>' +
+  '          </td>' +
+  '          <td class="rating">' +
+  '            <div class="container">' +
+  '              <div class="rating-main">' +
+  '                <span class="points">2</span>' +
+  '                <div class="description rating_description_value">Partial Marks</div>' +
+  '                <span class="rating_id" style="display: none;">58_4365</span>' +
+  '              </div>' +
+  '            </div>' +
+  '          </td>' +
+  '          <td class="rating">' +
+  '            <div class="container">' +
+  '              <div class="rating-main">' +
+  '                <span class="points">0</span>' +
+  '                <div class="description rating_description_value">No Marks</div>' +
+  '                <span class="rating_id" style="display: none;">58_4372</span>' +
+  '              </div>' +
+  '            </div>' +
+  '          </td>' +
+  '        </tr>' +
+  '      </tbody>' +
+  '    </table>' +
+  '  </td>' +
+  '  <td class="nobr points_form toggle_for_hide_points">' +
+  '    <div class="editing" style="white-space: normal">' +
+  '      <input type="text" aria-label="Points" value="4" class="criterion_points span1 no-margin-bottom">' +
+  '      pts' +
+  '      </span><br>' +
+  '    </div>' +
+  '  </td>' +
+  '</tr>'
+
+test('sets the first rating value to the points input initially when a criterion id is "blank"', () => {
+  $(document.body).append($(rubricHtml))
+  $(document.body).append($(criterionHtml))
+  rubricEditing.init()
+  equal($('.criterion_points').val(), '4')
 })

@@ -26,14 +26,8 @@ body {
   background: $ic-color-light;
   font-weight: 300;
 
-  @if not $use_responsive_layout {
-    &:not(.is-inside-submission-frame):not(.embedded):not(.dashboard-is-planner) {
-      min-width: 768px;
-    }
-  }
-
   &.no-headers, &.embedded {
-    #header, #topbar, #left-side, #breadcrumbs { display: none !important; }
+    #header, #mobile-header, #masquerade_bar, #topbar, #left-side, #breadcrumbs { display: none !important; }
     .ic-app-nav-toggle-and-crumbs { display: none; }
     #footer { display: none; }
   }
@@ -124,7 +118,13 @@ div.content_notice {
 }
 
 iframe.info_alert_outline {
-  border: 2px solid #008EE2 !important;
+  border: 2px solid #0374B5 !important;
+}
+
+body.ic-full-screen-lti-tool iframe.tool_launch {
+  // gets the height of the parent element (div.tool_content_wrapper) which is calculated in
+  // ui/features/external_tools_show/jquery/tool_inline.js
+  min-height: 100%;
 }
 
 iframe.tool_launch {
@@ -169,6 +169,7 @@ iframe.tool_launch {
   #left-side, #header, .ic-app-nav-toggle-and-crumbs{
     display: none !important;
   }
+  .bcs__trigger{ display: none !important; }
 }
 
 

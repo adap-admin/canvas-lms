@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -20,11 +22,13 @@ class BookmarkedCollection::CompositeProxy < BookmarkedCollection::Proxy
   attr_reader :collections
 
   def initialize(collections)
+    super(nil, nil)
+
     @labels = collections.map(&:first)
-    @depth = collections.map{ |(_,coll)| coll.depth }.max + 1
-    @collections = collections.map do |(label,coll)|
+    @depth = collections.map { |(_, coll)| coll.depth }.max + 1
+    @collections = collections.map do |(label, coll)|
       adjustment = @depth - 1 - coll.depth
-      adjustment.times.inject(coll) { |c,i| BookmarkedCollection.concat([label, c]) }
+      adjustment.times.inject(coll) { |c, _i| BookmarkedCollection.concat([label, c]) }
     end
   end
 

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -20,6 +22,7 @@ class AddDeveloperKeyVisibilityColumn < ActiveRecord::Migration[5.0]
   tag :predeploy
   def change
     return if column_exists? :developer_keys, :visible
+
     add_column :developer_keys, :visible, :boolean, default: false, null: false
   end
 end

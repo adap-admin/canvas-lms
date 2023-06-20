@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -16,45 +18,43 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + "/../../spec_helper")
-
 describe Schemas::Lti::PublicJwk do
   describe "valid?" do
-    subject{ Schemas::Lti::PublicJwk.new.valid?(json_hash) }
+    subject { Schemas::Lti::PublicJwk.new.valid?(json_hash) }
 
     let(:valid_json_hash) do
       {
-        "kty"=>"RSA",
-        "e"=>"AQAB",
-        "n"=>"mt8fDBX7hZ3Qn29UzRyHns9vUOH...",
-        "kid"=>"2018-09-25T18:02:38Z",
-        "alg"=>"RS256",
-        "use"=>"sig"
+        "kty" => "RSA",
+        "e" => "AQAB",
+        "n" => "mt8fDBX7hZ3Qn29UzRyHns9vUOH...",
+        "kid" => "2018-09-25T18:02:38Z",
+        "alg" => "RS256",
+        "use" => "sig"
       }
     end
 
-    context 'when the json is valid' do
+    context "when the json is valid" do
       let(:json_hash) { valid_json_hash }
 
-      it { is_expected.to eq true }
+      it { is_expected.to be true }
     end
 
     context "when required properties are missing" do
       let(:json_hash) { {} }
 
-      it { is_expected.to eq false }
+      it { is_expected.to be false }
     end
 
     context "when 'kty' is not 'RSA'" do
-      let(:json_hash) { valid_json_hash.merge({"kty" => "bad value"}) }
+      let(:json_hash) { valid_json_hash.merge({ "kty" => "bad value" }) }
 
-      it { is_expected.to eq false }
+      it { is_expected.to be false }
     end
 
     context "when 'alg' is not 'RS256'" do
-      let(:json_hash) { valid_json_hash.merge({"alg" => "bad value"}) }
+      let(:json_hash) { valid_json_hash.merge({ "alg" => "bad value" }) }
 
-      it { is_expected.to eq false }
+      it { is_expected.to be false }
     end
   end
 end

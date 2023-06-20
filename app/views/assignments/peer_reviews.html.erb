@@ -39,15 +39,15 @@
       <% end %>
       <%= t :reviews_per_user, "%{count} reviews per user", :count => %{<input type="text" name="peer_review_count" value="#{@assignment.peer_review_count || 1}" style="width: 25px;"/>}.html_safe %>
       <div class='button-container button-container-right-aligned'>
-        <button type="submit" class="btn btn-large"><%= t 'buttons.assign_peer_reviews', "Assign Peer Reviews" %></button>
+        <button type="submit" class="btn btn-large" <%= "disabled" if @assignment.current_submissions_and_assessors[:submissions]&.count&.zero? %>><%= t 'buttons.assign_peer_reviews', "Assign Peer Reviews" %></button>
       </div>
     <% end %>
   <% end %>
 <% end %>
-<% js_bundle 'legacy/assignments_peer_reviews' %>
+<% js_bundle 'assignments_peer_reviews' %>
 
 <h1><%= t :title, "%{assignment} Peer Reviews", :assignment => @assignment.title %></h1>
-  <% if @assignment.rubric_association %>
+  <% if @assignment.active_rubric_association? %>
     <%= t :overview_with_rubric, "Student peer reviews will be considered complete when students have commented
       at least once on the page and filled out the rubric form for the assignment." %>
   <% else %>
@@ -60,13 +60,13 @@
     <% submission = @submissions.to_a.find{|s| s.user_id == student.id} %>
     <li style="font-size: 1.2em; margin-bottom: 10px;" class="student_reviews">
       <a <%= submission && submission.has_submission? ? "class='icon-warning person' title='#{h(t(:submitted, "submitted"))}'" : "class='person_gray' title='#{h(t(:not_yet_submitted, "not yet submitted"))}'" %> href="<%= context_url(@context, :context_assignment_submission_url, @assignment.id, student.id) %>">
-        <span class="assessor_name"><%= student.last_name_first %></span>
+        <span class="assessor_name"><%= student.last_name_first %> <% if student.pronouns %><i>(<%= student.pronouns %>)</i><% end %></span>
         <span class="user_id student_review_id" style="display: none;"><%= student.id %></span>
       </a>
       <ul class="unstyled_list peer_reviews" style="padding-<%= direction('left') %>: 21px; font-size: 0.8em; width: 50%;">
-        <li class="peer_review no_requests_message" style="<%= hidden unless !submission || submission.assigned_assessments.empty? %>"><%= t :none_assigned, "None Assigned" %></li>
+        <li class="peer_review no_requests_message" style="<%= hidden unless !submission || submission.assigned_assessments.for_active_users(@context).empty? %>"><%= t :none_assigned, "None Assigned" %></li>
         <% if submission %>
-        <% Canvas::ICU.collate_by(submission.assigned_assessments) {|r| r.asset.user.sortable_name }.each do |request| %>
+        <% Canvas::ICU.collate_by(submission.assigned_assessments.for_active_users(@context)) {|r| r.asset.user.sortable_name }.each do |request| %>
           <% if (request && request.asset && request.asset.user) %>
             <%= render :partial => 'peer_review_assignment', :locals => {:request => request} %>
           <% end %>
@@ -74,7 +74,7 @@
         <% end %>
       </ul>
       <div style="margin-<%= direction('left') %>: 25px; font-size: 0.7em;" class="assign_box">
-        <a href="#" class="assign_peer_review_link"><%= t 'links.assign_peer_review', "Give %{student} another submission to assess", :student => student.name %>
+        <a href="#" class="assign_peer_review_link"><%= t 'links.assign_peer_review', "Give %{student} another submission to assess", :student => student.name %> 
           <i class="icon-add" role="presentation"></i>
         </a>
         <div class="form_content">

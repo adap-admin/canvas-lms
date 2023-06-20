@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -17,16 +19,15 @@
 #
 module Quizzes
   module QuizUserMessagerSpecHelper
-
     def conversation(recipients)
       {
         subject: "Do you want ants?",
         body: "Because that's how you get ants",
-        recipients: recipients
+        recipients:
       }
     end
 
-    def send_message(recipients='all')
+    def send_message(recipients = "all")
       options = {
         quiz: @quiz,
         sender: @teacher,
@@ -39,8 +40,7 @@ module Quizzes
 
     def recipient_messages(target_group)
       recipients = @finder.send("#{target_group}_students")
-      recipients.map(&:all_conversations).map(&:size).reduce(:+) || 0
+      recipients.map(&:all_conversations).sum(&:size)
     end
-
   end
 end

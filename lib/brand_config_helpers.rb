@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -21,26 +23,29 @@ module BrandConfigHelpers
   end
 
   def effective_brand_config
-    first_config_in_chain(
-      brand_config_chain(include_self: true).select(&:branding_allowed?)
-    )
+    shard_id, md5 = Rails.cache.fetch_with_batched_keys("effective_brand_config_ids", batch_object: self, batched_keys: [:account_chain, :brand_config]) do
+      branded_account = brand_config_chain(include_self: true).select(&:branding_allowed?).find(&:brand_config_md5)
+      [branded_account&.shard&.id, branded_account&.brand_config_md5]
+    end
+    return nil unless md5
+
+    BrandConfig.find_cached_by_md5(shard_id, md5)
   end
 
   def first_parent_brand_config
-    first_config_in_chain(brand_config_chain(include_self: false))
+    brand_config_chain(include_self: false).find(&:brand_config_md5).try(:brand_config)
   end
+
+  private
 
   def brand_config_chain(include_self:)
-    chain = self.account_chain(include_site_admin: true)
+    # It would be surprising to legacy consortia to have theme settings inherit
+    # even though that would be the more correct behavior given the general
+    # conecept of account chains, so explicitly tack site admin onto the chain
+    # so we always inherit from siteadmin even if we don't want consortia parents
+    chain = account_chain(include_federated_parent: !root_account.primary_settings_root_account?).dup
+    chain << Account.site_admin unless chain.include?(Account.site_admin)
     chain.shift unless include_self
-    chain.select!{ |a| a.shard == self.shard }
-    ActiveRecord::Associations::Preloader.new.preload(chain, :root_account)
     chain
   end
-  private :brand_config_chain
-
-  def first_config_in_chain(chain)
-    chain.find(&:brand_config_md5).try(:brand_config)
-  end
-  private :first_config_in_chain
 end

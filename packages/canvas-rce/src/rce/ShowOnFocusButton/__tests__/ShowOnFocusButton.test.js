@@ -16,46 +16,52 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React from 'react';
+import React from 'react'
 import {render} from '@testing-library/react'
-import ShowOnFocusButton from '../index';
+import ShowOnFocusButton from '../index'
 
 function renderComponent() {
   return render(
     <div>
-      <ShowOnFocusButton>I am a button</ShowOnFocusButton>
+      <ShowOnFocusButton id="show-on-focus-btn-1" screenReaderLabel="read me">
+        I am a button
+      </ShowOnFocusButton>
       <input id="focusme" />
     </div>
   )
 }
 
 describe('ShowOnFocusButton', () => {
-  it('renders only ScreenReaderContent by default',  () => {
-    const {getByText, getByTestId} = renderComponent()
+  it('renders the button regardless of focus', () => {
+    const {container, getByText, getByTestId} = renderComponent()
 
     expect(getByText('I am a button')).toBeInTheDocument()
-    expect(getByTestId('ShowOnFocusButton__sronly')).toBeInTheDocument()
     expect(getByTestId('ShowOnFocusButton__button')).toBeInTheDocument()
-  });
-
-  it('renders a Button when it has focus', () => {
-    const {container, getByTestId, queryAllByTestId} = renderComponent()
 
     const button = container.querySelector('button')
     button.focus()
-
-    expect(queryAllByTestId('ShowOnFocusButton__sronly')).toHaveLength(0)
     expect(getByTestId('ShowOnFocusButton__button')).toBeInTheDocument()
-  });
-
-  it('renders ScreeenReaderContent after blur', async () => {
-    const {container, queryAllByTestId} = renderComponent()
-
-    const button = container.querySelector('button')
-    button.focus()
-    expect(queryAllByTestId('ShowOnFocusButton__sronly')).toHaveLength(0)
 
     container.querySelector('#focusme').focus()
-    expect(queryAllByTestId('ShowOnFocusButton__sronly')).toHaveLength(1)
-  });
+    expect(getByTestId('ShowOnFocusButton__button')).toBeInTheDocument()
+  })
+
+  it('renders off screen when not focused', () => {
+    const {getByTestId} = renderComponent()
+
+    const wrapper = getByTestId('ShowOnFocusButton__wrapper')
+    expect(wrapper.style.position).toEqual('absolute')
+    expect(wrapper.style.left).toEqual('-9999px')
+  })
+
+  it('renders visibly on screen when focused', () => {
+    const {container, getByTestId} = renderComponent()
+
+    const wrapper = getByTestId('ShowOnFocusButton__wrapper')
+    const button = container.querySelector('button')
+    button.focus()
+
+    expect(wrapper.style.position).toEqual('')
+    expect(wrapper.style.left).toEqual('')
+  })
 })

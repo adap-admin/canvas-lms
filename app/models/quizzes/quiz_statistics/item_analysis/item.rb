@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -24,6 +26,7 @@ class Quizzes::QuizStatistics::ItemAnalysis::Item
 
   def self.from(summary, question)
     return unless allowed_types.include?(question[:question_type])
+
     new summary, question
   end
 
@@ -35,10 +38,10 @@ class Quizzes::QuizStatistics::ItemAnalysis::Item
     @summary = summary
     @question = question
     # put the correct answer first
-    @answers = question[:answers].
-      each_with_index.
-      sort_by { |answer, i| [-answer[:weight], i] }.
-      map { |answer, i| answer[:id] }
+    @answers = question[:answers]
+               .each_with_index
+               .sort_by { |answer, i| [-answer[:weight], i] }
+               .map { |answer, _i| answer[:id] }
     @respondent_ids = []
     @respondent_map = Hash.new { |hash, key| hash[key] = [] }
     @scores = []
@@ -46,8 +49,9 @@ class Quizzes::QuizStatistics::ItemAnalysis::Item
 
   def add_response(answer, respondent_id)
     return unless answer[:answer_id] # blanks don't count for item stats
+
     answer_id = answer[:answer_id]
-    @scores << (answer_id == @answers.first ? question[:points_possible] : 0)
+    @scores << ((answer_id == @answers.first) ? question[:points_possible] : 0)
     @respondent_ids << respondent_id
     @respondent_map[answer_id] << respondent_id
   end
@@ -91,9 +95,9 @@ class Quizzes::QuizStatistics::ItemAnalysis::Item
   end
 
   def point_biserials
-    @answers.map { |answer|
+    @answers.map do |answer|
       point_biserial_for(answer)
-    }
+    end
   end
 
   def ratio_for(answer)
@@ -106,7 +110,7 @@ class Quizzes::QuizStatistics::ItemAnalysis::Item
   end
 
   def sort_key
-    [question[:position] || 10000, question_text, question[:id], -all_respondents.size]
+    [question[:position] || 10_000, question_text, question[:id], -all_respondents.size]
   end
 
   private
@@ -135,14 +139,14 @@ class Quizzes::QuizStatistics::ItemAnalysis::Item
   def point_biserial_for(answer)
     @point_biserials ||= {}
     @point_biserials[answer] ||= begin
-                                   mean, mean_other = mean_score_split(answer)
-                                   if mean && mean_other
-                                     ratio = ratio_for(answer)
-                                     sd = @summary.standard_deviation(all_respondents)
-                                     resp = (mean - mean_other) / sd * Math.sqrt(ratio * (1 - ratio))
-                                     resp.nan? ? nil : resp
-                                   end
-                                 end
+      mean, mean_other = mean_score_split(answer)
+      if mean && mean_other
+        ratio = ratio_for(answer)
+        sd = @summary.standard_deviation(all_respondents)
+        resp = (mean - mean_other) / sd * Math.sqrt(ratio * (1 - ratio))
+        resp.nan? ? nil : resp
+      end
+    end
   end
 
   # calculate:

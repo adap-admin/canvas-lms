@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -15,5 +17,6 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-$LOAD_PATH.unshift File.expand_path('../../lib', __FILE__)
-require 'dr_diff'
+require "dr_diff"
+
+require "byebug"

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -24,14 +26,15 @@ module RuboCop
       class EnsureSpecExtension < Cop
         include RuboCop::Cop::FileMeta
 
-        MSG = "Spec files need to end with \"_spec.rb\""\
-              " for rspec  to find and run them."
+        MSG = "Spec files need to end with \"_spec.rb\" " \
+              "for rspec  to find and run them."
 
         METHODS = [:context, :describe].freeze
 
         def on_send(node)
           return if named_as_spec?
           return unless top_level_describe?(node)
+
           add_offense node, message: MSG, severity: :warning
         end
 
@@ -40,6 +43,7 @@ module RuboCop
         def top_level_describe?(node)
           _receiver, method_name, *_args = *node
           return false unless METHODS.include?(method_name)
+
           top_level_nodes.include?(node)
         end
 

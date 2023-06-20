@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -90,7 +92,6 @@ class PlannerNotesController < ApplicationController
   include Api::V1::PlannerNote
 
   before_action :require_user
-  before_action :require_planner_enabled
 
   # @API List planner notes
   #
@@ -148,8 +149,7 @@ class PlannerNotesController < ApplicationController
       context_codes = Array(context_codes)
 
       # Append to our notes scope to include the context codes for courses
-      course_codes = context_codes.select{|c| c =~ /course_\d+/}
-      contexts = Context.from_context_codes(course_codes)
+      contexts = Course.find_all_by_asset_string(context_codes, ["Course"])
       accessible_courses = contexts.select { |c| c.grants_right?(@current_user, :read) }
 
       # include course-less events if the current user is passed in as a context
@@ -158,14 +158,14 @@ class PlannerNotesController < ApplicationController
       notes = accessible_courses.any? ? notes.for_course(accessible_courses) : PlannerNote.none
     end
 
-    start_at = formatted_planner_date('start_date', params.delete(:start_date))
-    end_at = formatted_planner_date('end_date', params.delete(:end_date), end_of_day: true)
+    start_at = formatted_planner_date("start_date", params.delete(:start_date))
+    end_at = formatted_planner_date("end_date", params.delete(:end_date), end_of_day: true)
     notes = notes.after(start_at) if start_at
     notes = notes.before(end_at) if end_at
 
-    render :json => planner_notes_json(notes, @current_user, session)
+    render json: planner_notes_json(notes, @current_user, session)
   rescue InvalidDates => e
-    render json: {errors: e.message.as_json}, status: :bad_request
+    render json: { errors: e.message.as_json }, status: :bad_request
   end
 
   # @API Show a planner note
@@ -200,17 +200,19 @@ class PlannerNotesController < ApplicationController
     if update_params.key?(:course_id)
       course_id = update_params.delete(:course_id)
       if note.linked_object_id.present? && note.course_id != course_id
-        return render json: { message: 'course_id cannot be changed for linked planner notes' }, status: :bad_request
+        return render json: { message: "course_id cannot be changed for linked planner notes" }, status: :bad_request
       end
+
       if course_id.present?
         course = Course.find(course_id)
         return unless authorized_action(course, @current_user, :read)
+
         update_params[:course] = course
       else
         update_params[:course] = nil
       end
     end
-    if note.update_attributes(update_params)
+    if note.update(update_params)
       Rails.cache.delete(planner_meta_cache_key)
       render json: planner_note_json(note, @current_user, session), status: :ok
     else
@@ -246,17 +248,21 @@ class PlannerNotesController < ApplicationController
     if (course_id = create_params.delete(:course_id))
       course = Course.find(course_id)
       return unless authorized_action(course, @current_user, :read)
+
       create_params[:course] = course
     end
 
     asset_id = create_params.delete(:linked_object_id)
     asset_type = create_params.delete(:linked_object_type)
     if asset_id.present? && asset_type.present?
-      return render(json: { message: 'must specify course_id' }, status: :bad_request) unless course_id
+      return render(json: { message: "must specify course_id" }, status: :bad_request) unless course_id
+
       asset_klass = LINKED_OBJECT_TYPES[asset_type]&.constantize
-      return render(json: { message: 'invalid linked_object_type' }, status: :bad_request) unless asset_klass
-      asset = asset_klass.find_by!(id: asset_id, context_id: course_id, context_type: 'Course')
+      return render(json: { message: "invalid linked_object_type" }, status: :bad_request) unless asset_klass
+
+      asset = asset_klass.find_by!(id: asset_id, context_id: course_id, context_type: "Course")
       return unless authorized_action(asset, @current_user, :read)
+
       create_params[:linked_object] = asset
       create_params[:title] ||= Context.asset_name(asset)
     end
@@ -270,7 +276,7 @@ class PlannerNotesController < ApplicationController
         render json: note.errors, status: :bad_request
       end
     rescue ActiveRecord::RecordNotUnique
-      render json: { message: 'a planner note linked to that object already exists' }, status: :bad_request
+      render json: { message: "a planner note linked to that object already exists" }, status: :bad_request
     end
   end
 

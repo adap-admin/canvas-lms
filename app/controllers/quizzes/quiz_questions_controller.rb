@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -101,7 +103,7 @@
 #         "type": "string"
 #       },
 #       "answer_weight": {
-#         "description": "An integer to determine correctness of the answer. Incorrect answers should be 0, correct answers should be non-negative.",
+#         "description": "An integer to determine correctness of the answer. Incorrect answers should be 0, correct answers should be 100.",
 #         "example": 100,
 #         "type": "integer",
 #         "format": "int64"
@@ -187,7 +189,7 @@ class Quizzes::QuizQuestionsController < ApplicationController
   include ::Filters::QuizSubmissions
 
   before_action :require_context, :require_quiz
-  before_action :require_question, :only => [:show]
+  before_action :require_question, only: [:show]
 
   # @API List questions in a quiz or a submission
   #
@@ -225,12 +227,12 @@ class Quizzes::QuizQuestionsController < ApplicationController
   # @returns QuizQuestion
   def show
     if authorized_action(@quiz, @current_user, :update)
-      render :json => question_json(@question,
-        @current_user,
-        session,
-        @context,
-        parse_includes,
-        censored?)
+      render json: question_json(@question,
+                                 @current_user,
+                                 session,
+                                 @context,
+                                 parse_includes,
+                                 censored?)
     end
   end
 
@@ -284,9 +286,10 @@ class Quizzes::QuizQuestionsController < ApplicationController
       if question_data[:quiz_group_id]
         @group = @quiz.quiz_groups.find(question_data[:quiz_group_id])
       end
+      process_answer_html_content(question_data)
 
       guard_against_big_fields do
-        @question = @quiz.quiz_questions.create(:quiz_group => @group, :question_data => question_data)
+        @question = @quiz.quiz_questions.create(quiz_group: @group, question_data:)
         @quiz.did_edit if @quiz.created?
         render json: question_json(@question, @current_user, session, @context, [:assessment_question, :plain_html])
       end
@@ -355,6 +358,7 @@ class Quizzes::QuizQuestionsController < ApplicationController
       question_data = params[:question].to_unsafe_h
       question_data[:regrade_user] = @current_user
       question_data[:question_text] = process_incoming_html_content(question_data[:question_text])
+      process_answer_html_content(question_data)
 
       if question_data[:quiz_group_id]
         @group = @quiz.quiz_groups.find(question_data[:quiz_group_id])
@@ -365,6 +369,7 @@ class Quizzes::QuizQuestionsController < ApplicationController
       end
 
       guard_against_big_fields do
+        @question.create_assessment_question if @question.assessment_question.nil? && !@question.generated?
         @question.question_data = question_data
         @question.save
         @quiz.did_edit if @quiz.created?
@@ -395,17 +400,16 @@ class Quizzes::QuizQuestionsController < ApplicationController
   private
 
   def guard_against_big_fields
-    begin
-      yield
-    rescue Quizzes::QuizQuestion::RawFields::FieldTooLongError => ex
-      raise ex unless request.xhr?
-      render_xhr_exception(ex, ex.message)
-    end
+    yield
+  rescue Quizzes::QuizQuestion::RawFields::FieldTooLongError => e
+    raise e unless request.xhr?
+
+    render_xhr_exception(e, e.message)
   end
 
   def require_question
-    unless @question = @quiz.quiz_questions.active.find(params[:id])
-      raise ActiveRecord::RecordNotFound.new('Quiz Question not found')
+    unless (@question = @quiz.quiz_questions.active.find(params[:id]))
+      raise ActiveRecord::RecordNotFound, "Quiz Question not found"
     end
   end
 
@@ -438,8 +442,8 @@ class Quizzes::QuizQuestionsController < ApplicationController
       retrieve_quiz_submission_attempt!(params[:quiz_submission_attempt])
 
       scope = Quizzes::QuizQuestion.where({
-        id: @quiz_submission.quiz_data.map { |question| question['id'] }
-      })
+                                            id: @quiz_submission.quiz_data.pluck("id")
+                                          })
 
       results_visible = @quiz_submission.results_visible?(user: @current_user)
       reject! "Cannot view questions due to quiz settings", 401 unless results_visible
@@ -448,18 +452,27 @@ class Quizzes::QuizQuestionsController < ApplicationController
     end
   end
 
-  def render_question_set(scope, quiz_data=nil)
-    api_route = polymorphic_url([:api, :v1, @context, :quiz_questions], {:quiz_id => @quiz})
+  def render_question_set(scope, quiz_data = nil)
+    api_route = polymorphic_url([:api, :v1, @context, :quiz_questions], { quiz_id: @quiz })
     questions = Api.paginate(scope, self, api_route)
 
-    render :json => questions_json(questions,
-      @current_user,
-      session,
-      @context,
-      parse_includes,
-      censored?,
-      quiz_data,
-      shuffle_answers: @quiz.shuffle_answers_for_user?(@current_user)
-    )
+    render json: questions_json(questions,
+                                @current_user,
+                                session,
+                                @context,
+                                parse_includes,
+                                censored?,
+                                quiz_data,
+                                shuffle_answers: @quiz.shuffle_answers_for_user?(@current_user))
+  end
+
+  def process_answer_html_content(question_data)
+    answers = question_data[:answers]
+    answers = answers.values if answers.is_a?(Hash)
+    answers&.each do |answer|
+      %i[answer_html answer_comment_html].each do |key|
+        answer[key] = process_incoming_html_content(answer[key]) if answer[key]&.present?
+      end
+    end
   end
 end

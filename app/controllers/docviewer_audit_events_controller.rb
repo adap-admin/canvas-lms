@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -27,30 +29,30 @@ class DocviewerAuditEventsController < ApplicationController
     user = User.find(params[:canvas_user_id])
 
     unless assignment.moderated_grading? || assignment.anonymous_grading?
-      return render json: {message: 'Assignment is neither anonymous nor moderated'}, status: :not_acceptable
+      return render json: { message: "Assignment is neither anonymous nor moderated" }, status: :not_acceptable
     end
 
     if assignment.moderated_grading? && !assignment.grades_published? && !admin_or_student(user, assignment.course)
       begin
         assignment.ensure_grader_can_adjudicate(grader: user, provisional: true, occupy_slot: true)
       rescue Assignment::MaxGradersReachedError
-        return render json: {message: 'Reached maximum number of graders for assignment'}, status: :forbidden
+        return render json: { message: "Reached maximum number of graders for assignment" }, status: :forbidden
       end
     end
 
     event_params = docviewer_audit_event_params
     event = AnonymousOrModerationEvent.new(
-      assignment: assignment,
-      canvadoc: canvadoc,
+      assignment:,
+      canvadoc:,
       event_type: "docviewer_#{event_params[:event_type]}",
-      submission: submission,
-      user: user,
+      submission:,
+      user:,
       payload: {
         annotation_body: event_params[:annotation_body],
         annotation_id: event_params[:annotation_id],
         context: event_params[:context],
         related_annotation_id: event_params[:related_annotation_id]
-      },
+      }
     )
 
     respond_to do |format|
@@ -66,14 +68,15 @@ class DocviewerAuditEventsController < ApplicationController
 
   def admin_or_student(user, course)
     return true if course.account_membership_allows(user)
-    enrollment = user.enrollments.find_by!(course: course)
+
+    enrollment = user.enrollments.find_by!(course:)
     enrollment.student_or_fake_student?
   end
 
   def check_jwt_token
     Canvas::Security.decode_jwt(params[:token], [Canvadoc.jwt_secret])
   rescue
-    return render json: {message: 'JWT signature invalid'}, status: :unauthorized
+    render json: { message: "JWT signature invalid" }, status: :unauthorized
   end
 
   def docviewer_audit_event_params
@@ -87,15 +90,26 @@ class DocviewerAuditEventsController < ApplicationController
   end
 
   def canvadoc_from_submission(submission, document_id)
-    submission.submission_history.reverse_each do |versioned_submission|
-      attachments = versioned_submission.versioned_attachments
+    if submission.assignment.annotated_document?
+      canvadoc = submission.assignment.annotatable_attachment.canvadoc
+      return canvadoc if canvadoc.document_id == document_id
+    end
 
-      attachments.each do |attachment|
-        canvadoc = attachment.canvadoc
-        return canvadoc if canvadoc&.document_id == document_id
+    submission.submission_history.reverse_each do |versioned_submission|
+      if versioned_submission.submission_type == "student_annotation"
+        annotation_context = versioned_submission.annotation_context(attempt: versioned_submission.attempt)
+        attachment = annotation_context.attachment
+
+        return attachment.canvadoc if attachment.canvadoc&.document_id == document_id
+      else
+        attachments = versioned_submission.versioned_attachments
+
+        attachments.each do |a|
+          return a.canvadoc if a.canvadoc&.document_id == document_id
+        end
       end
     end
 
-    raise ActiveRecord::RecordNotFound, 'No canvadoc with given document id was found for this submission'
+    raise ActiveRecord::RecordNotFound, "No canvadoc with given document id was found for this submission"
   end
 end

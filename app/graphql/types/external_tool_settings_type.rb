@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -18,7 +20,7 @@
 
 module Types
   class ExternalToolSettingsType < ApplicationObjectType
-    graphql_name 'ExternalToolSettings'
+    graphql_name "ExternalToolSettings"
 
     field :icon_url, Types::UrlType, null: true
 

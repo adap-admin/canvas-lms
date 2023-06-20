@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -31,23 +33,29 @@ class Quizzes::QuizQuestion::Base
   def self.inherited(klass)
     type_name = klass.question_type
     raise("question type #{type_name} already exists") if question_types.key?(type_name)
+
+    super
+
+    # because this is where subclass registration happens, we need this to be populated
+    # before we start trying to load any question data.
+    # This is taken care of by the Quizzes::Preloader
     question_types[type_name] = klass
   end
 
   # override to change the name of the question type, defaults to the underscore-ized class name
   def self.question_type
-    self.name.demodulize.underscore
+    name.demodulize.underscore
   end
 
   def initialize(question_data)
     # currently all the attributes are synthesized from @question_data
     # since questions are stored in this format anyway, it prevents us from
     # having to do a bunch of translation to some other format
-    unless question_data.is_a? Quizzes::QuizQuestion::QuestionData
-      @question_data = Quizzes::QuizQuestion::QuestionData.new(question_data)
-    else
-      @question_data = question_data
-    end
+    @question_data = if question_data.is_a? Quizzes::QuizQuestion::QuestionData
+                       question_data
+                     else
+                       Quizzes::QuizQuestion::QuestionData.new(question_data)
+                     end
   end
 
   def question_id
@@ -90,9 +98,7 @@ class Quizzes::QuizQuestion::Base
   # if no answer is given at all, return nil
   #
   # (note this means nil != false in this return value)
-  def correct_answer_parts(user_answer)
-    nil
-  end
+  def correct_answer_parts(user_answer); end
 
   # Return the number of explicitly incorrect answer parts
   #
@@ -102,17 +108,17 @@ class Quizzes::QuizQuestion::Base
   # If this is > 0, the user will be docked for each answer part that they got
   # incorrect. Most question types leave this at 0, so the user isn't punished
   # extra for wrong answers.
-  def incorrect_answer_parts(user_answer)
+  def incorrect_answer_parts(_user_answer)
     0
   end
 
   # override and return true if the answer can't be auto-scored
-  def requires_manual_scoring?(user_answer)
+  def requires_manual_scoring?(_user_answer)
     false
   end
 
-  def score_question(answer_data, user_answer=nil)
-    user_answer ||= Quizzes::QuizQuestion::UserAnswer.new(self.question_id, self.points_possible, answer_data)
+  def score_question(answer_data, user_answer = nil)
+    user_answer ||= Quizzes::QuizQuestion::UserAnswer.new(question_id, points_possible, answer_data)
     user_answer.total_parts = total_answer_parts
     correct_parts = correct_answer_parts(user_answer)
     if !correct_parts.nil?
@@ -142,26 +148,23 @@ class Quizzes::QuizQuestion::Base
       end
 
       answers.each do |answer|
-        if answer[:id] == response[:answer_id] || answer[:id] == answer_md5
-          found = true
-          answer[:responses] += 1
-          answer[:user_ids] << response[:user_id]
-        end
+        next unless answer[:id] == response[:answer_id] || answer[:id] == answer_md5
+
+        found = true
+        answer[:responses] += 1
+        answer[:user_ids] << response[:user_id]
       end
 
-      if !found && answer_md5 && (@question_data.is_type?(:numerical) || @question_data.is_type?(:short_answer))
-        answers << {
-          :id => answer_md5,
-          :responses => 1,
-          :user_ids => [response[:user_id]],
-          :text => response[:text]
-        }
-      end
+      next unless !found && answer_md5 && (@question_data.is_type?(:numerical) || @question_data.is_type?(:short_answer))
 
+      answers << {
+        id: answer_md5,
+        responses: 1,
+        user_ids: [response[:user_id]],
+        text: response[:text]
+      }
     end
     @question_data.answers = answers
     @question_data.to_hash
   end
 end
-
-Dir[Rails.root + "app/models/quizzes/quiz_question/*_question.rb"].each { |f| require_dependency f }

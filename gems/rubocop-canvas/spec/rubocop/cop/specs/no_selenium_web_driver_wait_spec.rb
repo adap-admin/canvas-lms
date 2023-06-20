@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -17,9 +19,10 @@
 
 describe RuboCop::Cop::Specs::NoSeleniumWebDriverWait do
   subject(:cop) { described_class.new }
+
   let(:msg_regex) { /Avoid using Selenium::WebDriver::Wait/ }
 
-  it 'disallows Selenium::WebDriver::Wait' do
+  it "disallows Selenium::WebDriver::Wait" do
     inspect_source(%{
       describe "breaks all the things" do
         wait = Selenium::WebDriver::Wait.new(timeout: 5)

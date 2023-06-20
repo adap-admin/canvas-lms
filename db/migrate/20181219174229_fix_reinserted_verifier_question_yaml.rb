@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -15,15 +17,10 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-class FixReinsertedVerifierQuestionYaml  < ActiveRecord::Migration[5.1]
+class FixReinsertedVerifierQuestionYaml < ActiveRecord::Migration[5.1]
   tag :postdeploy
 
   def up
-    DataFixup::FixReinsertedVerifierQuestionYaml.send_later_if_production_enqueue_args(
-      :run,
-      priority: Delayed::LOW_PRIORITY,
-      max_attempts: 1,
-      n_strand: 'long_datafixups'
-    )
+    DataFixup::FixReinsertedVerifierQuestionYaml.delay_if_production(priority: Delayed::LOW_PRIORITY, n_strand: "long_datafixups").run
   end
 end

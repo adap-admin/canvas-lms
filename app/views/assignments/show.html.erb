@@ -46,15 +46,12 @@
         </h1>
       </div>
       <div class='assignment-buttons'>
-        <% if @context.feature_enabled?(:assignments_2) %>
-          <a id="toggle_assignments_2" class="btn" href="<%= course_assignment_path(@context, @assignment)%>"><%= t("Assignments 2") %></a>
-        <% end %>
         <button
           id="assignment_publish_button"
           data-id='<%= @assignment.id %>'
           class='btn <%= "published" if @assignment.published? %> <%= "disabled" unless assignment_publishing_enabled?(@assignment, @current_user) %>'>
         </button>
-        <% if @context.grants_right?(@current_user, :manage_assignments) %>
+        <% if @context.grants_any_right?(@current_user, :manage_assignments, :manage_assignments_edit) %>
           <a href="<%= edit_polymorphic_path([@context, @assignment]) %>" class='btn edit_assignment_link<%= ' disabled' unless can_do(@assignment, @current_user, :update) %>'>
             <i class='icon-edit'></i> <%= t('links.edit', 'Edit') %>
             <% unless can_do(@assignment, @current_user, :update) %>
@@ -62,7 +59,7 @@
             <% end %>
           </a>
         <% end %>
-        <%= assignment_submission_button(@assignment, @current_user, @current_user_submission) %>
+        <%= assignment_submission_button(@assignment, @current_user, @current_user_submission, @first_annotation_submission) %>
         <% if show_moderation_link %>
           <a
             href='<%= course_assignment_moderate_url(@context, @assignment) %>'
@@ -74,19 +71,38 @@
           </a>
         <% end %>
 
-        <% if @assignment_menu_tools.present? %>
-          <a class="al-trigger btn" role="button" aria-haspopup="true" aria-owns="toolbar-1" href="#">
+        <% if @assignment_menu_tools.present? || @can_direct_share %>
+          <button class="al-trigger btn" aria-haspopup="true" aria-owns="toolbar-1">
             <i class="icon-more" aria-hidden="true"></i>
             <span class="screenreader-only"><%= t('manage', 'Manage') %></span>
-          </a>
+          </button>
           <ul id="toolbar-1" class="al-options" role="menu" tabindex="0" aria-hidden="true" aria-expanded="false">
+            <% if @can_link_to_speed_grader %>
+              <li id="speed-grader-link-container" role="presentation" class='<%= "hidden" unless @assignment.published? %>'>
+                <a href="<%= context_url(@context, :speed_grader_context_gradebook_url, :assignment_id => @assignment.id) %>" class="speed-grader-link-assignment icon-speed-grader">
+                  <%= t(:speed_grader, "SpeedGrader™") %>
+                </a>
+              </li>
+            <% end %>
+            <% if @can_direct_share %>
+              <li role="presentation">
+                <a href="#" class="icon-user direct-share-send-to-menu-item"><%= t("Send To...") %></a>
+              </li>
+              <li role="presentation">
+                <a href="#" class="icon-duplicate direct-share-copy-to-menu-item"><%= t("Copy To...") %></a>
+              </li>
+            <% end %>
             <%= external_tools_menu_items(@assignment_menu_tools, {link_class: "menu_tool_link", settings_key: :assignment_menu, in_list: true, url_params: {:assignments => [@assignment.id]}}) %>
           </ul>
         <% end %>
       </div>
     </div>
+    <div id="direct-share-mount-point"></div>
   <% else %>
     <!--Student View-->
+    <% if show_confetti %>
+      <%= render partial: "confetti" %>
+    <% end %>
     <div class='assignment-title'>
       <div class='title-content'>
         <h1 class="title">
@@ -94,61 +110,11 @@
         </h1>
       </div>
       <div class='assignment-buttons'>
-        <% if @context.feature_enabled?(:assignments_2) %>
-          <a id="toggle_assignments_2" class="btn" href="<%= course_assignment_path(@context, @assignment)%>"><%= t("Assignments 2") %></a>
-        <% end %>
         <%= render "shared/mark_as_done" %>
-        <%= assignment_submission_button(@assignment, @current_user, @current_user_submission) %>
+        <%= assignment_submission_button(@assignment, @current_user, @current_user_submission, @first_annotation_submission) %>
       </div>
     </div>
-    <ul class='student-assignment-overview'>
-      <li>
-        <span class='title'><%= t :due_at, 'Due' %></span>
-        <span class='value'>
-          <span class="date_text">
-            <% if @assignment.multiple_due_dates? %>
-              <%= multiple_due_date_tooltip(@assignment, @current_user) %>
-            <% elsif @assignment.due_at %>
-              <% ot(:date_time_by, "%{date} by %{time}", :date => capture { %>
-                <span class="display_date"><%= date_string(@assignment.due_at) rescue '' %></span><% }, :time => capture { %>
-                <span class="display_time"><%= time_string(@assignment.due_at) rescue '' %></span><% }) %>
-            <% else %>
-              <%= t :no_due_date, 'No Due Date' %>
-            <% end %>
-          </span>
-        </span>
-      </li>
-      <li>
-        <span class='title'><%= t :points, 'Points' %></span>
-        <span class='value'><%= n(round_if_whole(@assignment.points_possible)) || t(:no_points, 'None') %></span>
-      </li>
-      <% if @assignment.expects_submission? || @assignment.expects_external_submission? %>
-        <% turnitin_text = turnitin_active? ? ' ' + t(:turnitin_enabled_short, '(Turnitin enabled)') : '' %>
-        <% vericite_text = vericite_active? ? ' ' + t(:vericite_enabled_short, '(VeriCite enabled)') : '' %>
-        <li>
-          <span class='title'><%= t :submitting, 'Submitting' %></span>
-          <span class='value'><%= @assignment.readable_submission_types + turnitin_text %></span>
-        </li>
-        <% if @assignment.submission_types =~ /online_upload/ && !@assignment.allowed_extensions.blank? -%>
-          <li>
-            <span class='title'><%= t :submission_types, 'File Types' %></span>
-            <span class='value'><%= @assignment.allowed_extensions.to_sentence %></span>
-          </li>
-        <% end %>
-      <% end %>
-      <% if @assignment.allowed_attempts&.> 0 %>
-        <li>
-          <span class='title'><%= t :attempts, 'Attempts' %></span>
-          <span class='value'><%= @current_user_submission&.attempt || 0 %></span>
-        </li>
-        <li>
-          <span class='title'><%= t :allowed_attempts, 'Allowed Attempts' %></span>
-          <span class='value'><%= @assignment.allowed_attempts + (@current_user_submission&.extra_attempts || 0) %></span>
-        </li>
-      <% end %>
-      <%= render :partial => "shared/available_dates", :locals => {:association => @assignment} %>
-      <div class="clear"></div>
-    </ul>
+    <%= render "student_assignment_overview" %>
   <% end %>
 
   <div class="clear"></div>
@@ -159,20 +125,31 @@
 
   <div class="clear"></div>
 
-  <% description = !@assignment.description.blank? ? public_user_content(@assignment.description) : t('defaults.no_content', "No Content") %>
-  <div class="description user_content <%= can_do(@context, @current_user, :read_as_admin) ? "teacher-version" : "student-version" %>"><%= description %></div>
+  <% description = @assignment.description.present? ? public_user_content(@assignment.description) : t("No additional details were added for this assignment.") %>
+
+  <% if @assignment.annotated_document? %>
+    <div class="accessibility_warning">
+      <span id="accessibility_warning" class="screenreader-only" tabindex="0">
+        <%= I18n.t('Warning: For improved accessibility with Annotated Assignments, please use File Upload or Text Entry to leave comments.') %>
+      </span>
+    </div>
+  <% end %>
+
+  <div class="description user_content <%= can_do(@context, @current_user, :read_as_admin) ? "teacher-version" : "" %>"><%= description %></div>
 
   <% if can_do(@context, @current_user, :read_as_admin) %>
     <!--Teacher view-->
 
     <form class="form-horizontal bootstrap-form display-only" style="margin-top:18px;">
       <fieldset>
+      <% if !@assignment.restrict_quantitative_data?(@current_user, check_extra_permissions: true)%>
         <div class="control-group">
           <div class="control-label"><%= t(:points, 'Points') %></div>
           <div class="controls">
             <span class="value points_possible"><%= n(round_if_whole(@assignment.points_possible)) || t(:no_points, 'None') %></span>
           </div>
         </div>
+        <%end%>
         <div class="control-group">
           <div class="control-label"><%= t :submitting, 'Submitting' %></div>
           <div class="controls">
@@ -214,28 +191,31 @@
       </fieldset>
     </form>
 
-    <table class="ic-Table assignment_dates">
-      <thead>
-        <tr>
-          <th scope="col"><%= t(:due, 'Due') %></th>
-          <th scope="col"><%= t(:for, 'For') %></th>
-          <th scope="col"><%= t(:available_from, 'Available from') %></th>
-          <th scope="col"><%= t(:until, 'Until') %></th>
-        </tr>
-      </thead>
+    <% if @context.enable_course_paces? && @assignment.context_module_tags.length > 0 %>
+      <div id="course_paces_due_date_notice"></div>
+    <% else %>
+      <table class="ic-Table assignment_dates">
+        <thead>
+          <tr>
+            <th scope="col"><%= t(:due, 'Due') %></th>
+            <th scope="col"><%= t(:for, 'For') %></th>
+            <th scope="col"><%= t(:available_from, 'Available from') %></th>
+            <th scope="col"><%= t(:until, 'Until') %></th>
+          </tr>
+        </thead>
 
-      <%= render 'shared/override_list', :assignment => @assignment,
-        :user => @current_user %>
+        <%= render 'shared/override_list', :assignment => @assignment,
+          :user => @current_user %>
 
-    </table>
+      </table>
+    <% end %>
 
     <% if can_do(@assignment, @current_user, :update) %>
       <div class="content-box">
         <a
           href="<%= context_url(@context, :context_rubrics_url) %>"
           class="add_rubric_link Button icon-plus"
-          style="<%= hidden if @assignment.rubric_association %>"
-          role="button"
+          style="<%= hidden if @assignment.active_rubric_association? %>"
         >
           <span aria-hidden="true"><%= t 'links.add_rubric', "Rubric" %></span>
           <span class="screenreader-only"><%= t('Add Rubric') %></span>

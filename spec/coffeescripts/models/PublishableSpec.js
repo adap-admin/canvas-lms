@@ -16,23 +16,23 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Publishable from 'compiled/models/Publishable'
+import Publishable from '@canvas/context-modules/backbone/models/Publishable'
 
 const buildModule = published => new Publishable({published}, {url: '/api/1/2/3'})
 
 QUnit.module('Publishable:', {
   setup() {},
-  teardown() {}
+  teardown() {},
 })
 
 test('publish updates the state of the model', () => {
   const cModule = buildModule(false)
-  cModule.save = function() {}
+  cModule.save = function () {}
   cModule.publish()
   equal(cModule.get('published'), true)
 })
 
-test('publish saves to the server', function() {
+test('publish saves to the server', () => {
   const cModule = buildModule(true)
   const saveStub = sandbox.stub(cModule, 'save')
   cModule.publish()
@@ -41,12 +41,12 @@ test('publish saves to the server', function() {
 
 test('unpublish updates the state of the model', () => {
   const cModule = buildModule(true)
-  cModule.save = function() {}
+  cModule.save = function () {}
   cModule.unpublish()
   equal(cModule.get('published'), false)
 })
 
-test('unpublish saves to the server', function() {
+test('unpublish saves to the server', () => {
   const cModule = buildModule(true)
   const saveStub = sandbox.stub(cModule, 'save')
   cModule.unpublish()

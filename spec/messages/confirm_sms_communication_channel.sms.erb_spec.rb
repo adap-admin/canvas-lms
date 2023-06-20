@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,17 +18,18 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/messages_helper')
+require_relative "messages_helper"
 
-describe 'confirm_sms_communication_channel.sms' do
+describe "confirm_sms_communication_channel.sms" do
   include MessagesCommon
 
-  it "should render" do
+  it "renders" do
     user_factory
-    @pseudonym = @user.pseudonyms.create!(:unique_id => 'unique@example.com', :password => 'password', :password_confirmation => 'password')
-    @object = @user.communication_channels.create!(:path_type => 'email', :path => 'bob@example.com', :user => @user)
-    generate_message(:confirm_sms_communication_channel, :sms, @object,
+    @pseudonym = @user.pseudonyms.create!(unique_id: "unique@example.com", password: "password", password_confirmation: "password")
+    @object = communication_channel(@user, { username: "bob@example.com" })
+    generate_message(:confirm_sms_communication_channel,
+                     :sms,
+                     @object,
                      data: { root_account_id: @pseudonym.account.global_id,
                              from_host: HostUrl.context_host(@pseudonym.account) })
   end

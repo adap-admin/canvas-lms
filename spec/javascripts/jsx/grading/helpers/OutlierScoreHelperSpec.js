@@ -16,9 +16,9 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import OutlierScoreHelper, {isUnusuallyHigh} from 'jsx/grading/helpers/OutlierScoreHelper'
+import OutlierScoreHelper, {isUnusuallyHigh} from '@canvas/grading/OutlierScoreHelper'
 
-import GRADEBOOK_TRANSLATIONS from 'compiled/gradebook/GradebookTranslations'
+import GRADEBOOK_TRANSLATIONS from '@canvas/grading/GradebookTranslations'
 
 QUnit.module('#hasWarning', () => {
   test('returns true for exacty 1.5 times points possible', () => {
@@ -104,20 +104,20 @@ QUnit.module('#warningMessage', {
   setup() {
     this.tooManyPointsWarning = GRADEBOOK_TRANSLATIONS.submission_too_many_points_warning
     this.negativePointsWarning = GRADEBOOK_TRANSLATIONS.submission_negative_points_warning
-  }
+  },
 })
 
-test('positive score outside 1.5 multipler returns too many points warning', function() {
+test('positive score outside 1.5 multipler returns too many points warning', function () {
   const outlierScore = new OutlierScoreHelper(150, 100)
   equal(outlierScore.warningMessage(), this.tooManyPointsWarning)
 })
 
-test('negative score returns negative points warning', function() {
+test('negative score returns negative points warning', function () {
   const outlierScore = new OutlierScoreHelper(-1, 100)
   equal(outlierScore.warningMessage(), this.negativePointsWarning)
 })
 
-test('score within range returns null', function() {
+test('score within range returns null', () => {
   const outlierScore = new OutlierScoreHelper(100, 100)
   equal(outlierScore.warningMessage(), null)
 })

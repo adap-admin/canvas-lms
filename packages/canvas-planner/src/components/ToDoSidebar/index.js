@@ -16,18 +16,23 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React, { Component } from 'react';
-import { connect } from 'react-redux';
-import { func, arrayOf, object, bool, string } from 'prop-types';
-import moment from 'moment-timezone';
+import React, {Component} from 'react'
+import {connect} from 'react-redux'
+import {func, arrayOf, object, bool, string} from 'prop-types'
+import moment from 'moment-timezone'
 
-import formatMessage from '../../format-message';
-import {List, Spinner, Text} from '@instructure/ui-elements'
-import {View} from '@instructure/ui-layout'
-import {Button} from '@instructure/ui-buttons'
+import {List} from '@instructure/ui-list'
+import {Text} from '@instructure/ui-text'
+import {Spinner} from '@instructure/ui-spinner'
+import {View} from '@instructure/ui-view'
+import {Link} from '@instructure/ui-link'
+import {IconWarningLine} from '@instructure/ui-icons'
+import {Flex} from '@instructure/ui-flex'
+import formatMessage from '../../format-message'
+import {observedUserId} from '../../utilities/apiUtils'
 
-import { sidebarLoadInitialItems, sidebarCompleteItem } from '../../actions';
-import ToDoItem from './ToDoItem';
+import {sidebarLoadInitialItems, sidebarCompleteItem} from '../../actions'
+import ToDoItem from './ToDoItem'
 
 export class ToDoSidebar extends Component {
   static propTypes = {
@@ -40,132 +45,173 @@ export class ToDoSidebar extends Component {
     locale: string,
     changeDashboardView: func,
     forCourse: string,
-  };
+    isObserving: bool,
+    loadingError: string,
+    additionalTitleContext: bool,
+  }
 
   static defaultProps = {
     loaded: false,
     timeZone: moment.tz.guess(),
     locale: 'en',
     forCourse: undefined,
+    additionalTitleContext: false,
   }
 
-  constructor (props) {
-    super(props);
-    this.dismissedItemIndex = null;
-    this.titleFocus = null;
+  constructor(props) {
+    super(props)
+    this.dismissedItemIndex = null
+    this.titleFocus = null
 
     this.state = {
       visibleToDos: this.getVisibleItems(props.items),
-    };
+    }
   }
 
-  componentDidMount () {
-    this.props.sidebarLoadInitialItems(moment.tz(this.props.timeZone).startOf('day'), this.props.forCourse);
+  componentDidMount() {
+    this.props.sidebarLoadInitialItems(
+      moment.tz(this.props.timeZone).startOf('day'),
+      this.props.forCourse
+    )
   }
 
-  componentWillReceiveProps (nextProps) {
-    const visibleToDos = this.getVisibleItems(nextProps.items);
-    this.setState({
-      visibleToDos,
-    });
+  UNSAFE_componentWillReceiveProps(nextProps) {
+    const visibleToDos = this.getVisibleItems(nextProps.items)
+    this.setState({visibleToDos})
   }
 
-  componentDidUpdate () {
+  componentDidUpdate() {
     if (this.dismissedItemIndex != null) {
-      const previousIndex = this.dismissedItemIndex - 1;
-      this.dismissedItemIndex = null;
+      const previousIndex = this.dismissedItemIndex - 1
+      this.dismissedItemIndex = null
       if (previousIndex >= 0) {
-        this.todoItemComponents[previousIndex].focus();
+        this.todoItemComponents[previousIndex].focus()
       } else {
-        this.titleFocus.focus();
+        this.titleFocus.focus()
       }
     }
   }
 
-  getVisibleItems (items) {
-    const incompletedFilter = (item) => {
-      if (!item) return false;
-      return !item.completed;
-    };
-    return items.filter(incompletedFilter).slice(0, 7);
+  getVisibleItems(items) {
+    const incompletedFilter = item => {
+      if (!item) return false
+      return !item.completed
+    }
+    return items.filter(incompletedFilter).slice(0, 7)
   }
 
-  handleDismissClick (itemIndex, item) {
-    this.dismissedItemIndex = itemIndex;
-    this.props.sidebarCompleteItem(item)
-      .catch(() => {this.dismissedItemIndex = null;});
+  handleDismissClick(itemIndex, item) {
+    this.dismissedItemIndex = itemIndex
+    this.props.sidebarCompleteItem(item).catch(() => {
+      this.dismissedItemIndex = null
+    })
   }
 
-  renderShowAll () {
+  renderShowAll() {
     if (this.props.changeDashboardView && this.state.visibleToDos.length > 0) {
       return (
         <View as="div" textAlign="center">
-          <Button variant="link" onClick={() => this.props.changeDashboardView('planner')}>
+          <Link
+            isWithinText={false}
+            as="button"
+            onClick={() => this.props.changeDashboardView('planner')}
+          >
             {formatMessage('Show All')}
-          </Button>
+          </Link>
         </View>
-      );
+      )
     }
-    return null;
+    return null
   }
 
-  renderItems () {
-    this.todoItemComponents = [];
+  renderItems() {
+    this.todoItemComponents = []
 
     if (this.state.visibleToDos.length === 0) {
       return <Text size="small">{formatMessage('Nothing for now')}</Text>
     }
 
     return (
-      <List id="planner-todosidebar-item-list" variant="unstyled">
-        {
-          this.state.visibleToDos.map((item, itemIndex) => (
-            <List.Item key={item.uniqueId}>
-              <ToDoItem
-                ref={component => {this.todoItemComponents[itemIndex] = component;}}
-                item={item}
-                courses={this.props.courses}
-                handleDismissClick={(...args) => this.handleDismissClick(itemIndex, item)}
-                locale={this.props.locale}
-                timeZone={this.props.timeZone}
-              />
-            </List.Item>
-          ))
-        }
+      <List id="planner-todosidebar-item-list" isUnstyled={true}>
+        {this.state.visibleToDos.map((item, itemIndex) => (
+          <List.Item key={item.uniqueId}>
+            <ToDoItem
+              ref={component => {
+                this.todoItemComponents[itemIndex] = component
+              }}
+              item={item}
+              courses={this.props.courses}
+              handleDismissClick={() => this.handleDismissClick(itemIndex, item)}
+              locale={this.props.locale}
+              timeZone={this.props.timeZone}
+              isObserving={this.props.isObserving}
+            />
+          </List.Item>
+        ))}
       </List>
-    );
+    )
   }
 
-  render () {
-    if (!this.props.loaded) {
+  renderTitle() {
+    if (this.props.additionalTitleContext) {
+      return formatMessage('Student To Do')
+    }
+    return formatMessage('To Do')
+  }
+
+  render() {
+    if (!this.props.loaded && !this.props.loadingError) {
       return (
-        <div>
-          <h2 className="todo-list-header">
-            {formatMessage('To Do')}
-          </h2>
+        <div data-testid="ToDoSidebar">
+          <h2 className="todo-list-header">{this.renderTitle()}</h2>
           <View as="div" textAlign="center">
             <Spinner renderTitle={() => formatMessage('To Do Items Loading')} size="small" />
           </View>
         </div>
-      );
+      )
+    }
+    if (this.props.loadingError) {
+      return (
+        <div data-testid="ToDoSidebar">
+          <h2 className="todo-list-header">{this.renderTitle()}</h2>
+          <Flex justifyItems="start">
+            <Flex.Item>
+              <IconWarningLine color="error" />
+            </Flex.Item>
+            <Flex.Item margin="xx-small none none xx-small">
+              <Text color="danger">{formatMessage('Failure loading the To Do list')}</Text>
+            </Flex.Item>
+          </Flex>
+        </div>
+      )
     }
 
     return (
-      <div>
+      <div data-testid="ToDoSidebar">
         <h2 className="todo-list-header">
-          <span tabIndex="-1" ref={elt => {this.titleFocus = elt;}}>{formatMessage('To Do')}</span>
+          <span
+            tabIndex="-1"
+            ref={elt => {
+              this.titleFocus = elt
+            }}
+          >
+            {this.renderTitle()}
+          </span>
         </h2>
-        { this.renderItems() }
-        { this.renderShowAll() }
+        {this.renderItems()}
+        {this.renderShowAll()}
       </div>
-    );
+    )
   }
 }
 
 const mapStateToProps = state => ({
+  courses: state.courses,
   items: state.sidebar.items,
   loaded: state.sidebar.loaded,
-});
-const mapDispatchToProps = { sidebarLoadInitialItems, sidebarCompleteItem };
+  isObserving: !!observedUserId(state),
+  loadingError: state.sidebar.loadingError,
+})
+const mapDispatchToProps = {sidebarLoadInitialItems, sidebarCompleteItem}
 
-export default connect(mapStateToProps, mapDispatchToProps)(ToDoSidebar);
+export default connect(mapStateToProps, mapDispatchToProps)(ToDoSidebar)

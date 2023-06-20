@@ -16,31 +16,29 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React from 'react';
-import {bool, func, string} from 'prop-types';
-import formatMessage from '../../../../format-message';
+import React from 'react'
+import {bool, func, string} from 'prop-types'
+import formatMessage from '../../../../format-message'
 
 import {collectionsShape} from './propTypes'
-import NavigationPanel from './NavigationPanel';
+import NavigationPanel from './NavigationPanel'
 import CollectionPanel from './CollectionPanel'
 
-import {View} from '@instructure/ui-layout'
+import {View} from '@instructure/ui-view'
 import {pickProps} from '@instructure/ui-react-utils'
 
 function LinksPanel(props) {
-  const isCourse = props.contextType === "course";
-  const isGroup = props.contextType === "group";
+  const isCourse = props.contextType === 'course'
+  const isGroup = props.contextType === 'group'
 
   const collectionProps = pickProps(props, CollectionPanel.propTypes)
-
   return (
-    <View
-      as="div"
-      data-testid="instructure_links-LinksPanel"
-    >
+    <View as="div" data-testid="instructure_links-LinksPanel">
       {(isCourse || isGroup) && (
         <CollectionPanel
           {...collectionProps}
+          editing={props.editing}
+          onEditClick={props.onEditClick}
           collection="wikiPages"
           label={formatMessage('Pages')}
         />
@@ -49,40 +47,50 @@ function LinksPanel(props) {
       {isCourse && (
         <CollectionPanel
           {...collectionProps}
+          editing={props.editing}
+          onEditClick={props.onEditClick}
           collection="assignments"
-          label={formatMessage("Assignments")}
+          label={formatMessage('Assignments')}
         />
       )}
 
       {isCourse && (
         <CollectionPanel
           {...collectionProps}
+          editing={props.editing}
+          onEditClick={props.onEditClick}
           collection="quizzes"
-          label={formatMessage("Quizzes")}
+          label={formatMessage('Quizzes')}
         />
       )}
 
       {(isCourse || isGroup) && (
         <CollectionPanel
           {...collectionProps}
+          editing={props.editing}
+          onEditClick={props.onEditClick}
           collection="announcements"
-          label={formatMessage("Announcements")}
+          label={formatMessage('Announcements')}
         />
       )}
 
       {(isCourse || isGroup) && (
         <CollectionPanel
           {...collectionProps}
+          editing={props.editing}
+          onEditClick={props.onEditClick}
           collection="discussions"
-          label={formatMessage("Discussions")}
+          label={formatMessage('Discussions')}
         />
       )}
 
       {isCourse && (
         <CollectionPanel
           {...collectionProps}
+          editing={props.editing}
+          onEditClick={props.onEditClick}
           collection="modules"
-          label={formatMessage("Modules")}
+          label={formatMessage('Modules')}
         />
       )}
 
@@ -92,9 +100,11 @@ function LinksPanel(props) {
         onLinkClick={props.onLinkClick}
         onChangeAccordion={props.onChangeAccordion}
         selectedAccordionIndex={props.selectedAccordionIndex}
+        editing={props.editing}
+        onEditClick={props.onEditClick}
       />
     </View>
-  );
+  )
 }
 
 LinksPanel.propTypes = {
@@ -102,15 +112,19 @@ LinksPanel.propTypes = {
   onChangeAccordion: func,
   contextType: string.isRequired,
   contextId: string.isRequired,
+  searchString: string,
   collections: collectionsShape.isRequired,
   fetchInitialPage: func,
   fetchNextPage: func,
   onLinkClick: func,
-  canCreatePages: bool
-};
+  canCreatePages: bool,
+  editing: bool,
+  onEditClick: func,
+}
 
 LinksPanel.defaultProps = {
-  selectedAccordionIndex: ""
-};
+  selectedAccordionIndex: '',
+  editing: false,
+}
 
-export default LinksPanel;
+export default LinksPanel

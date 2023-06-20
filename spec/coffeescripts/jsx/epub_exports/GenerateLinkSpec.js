@@ -21,22 +21,24 @@ import React from 'react'
 import {mount} from 'enzyme'
 import ReactDOM from 'react-dom'
 import TestUtils from 'react-dom/test-utils'
-import GenerateLink from 'jsx/epub_exports/GenerateLink'
-import CourseEpubExportStore from 'jsx/epub_exports/CourseStore'
-import I18n from 'i18n!epub_exports'
+import GenerateLink from 'ui/features/epub_exports/react/GenerateLink'
+import CourseEpubExportStore from 'ui/features/epub_exports/react/CourseStore'
+import {useScope as useI18nScope} from '@canvas/i18n'
+
+const I18n = useI18nScope('epub_exports')
 
 QUnit.module('GenerateLink', {
   setup() {
     this.props = {
       course: {
         name: 'Maths 101',
-        id: 1
-      }
+        id: 1,
+      },
     }
-  }
+  },
 })
 
-test('showGenerateLink', function() {
+test('showGenerateLink', function () {
   let wrapper = mount(<GenerateLink {...this.props} />)
   ok(wrapper.instance().showGenerateLink(), 'should be true without epub_export object')
 
@@ -49,7 +51,7 @@ test('showGenerateLink', function() {
   ok(wrapper.instance().showGenerateLink(), 'should be true with permissions to rengenerate')
 })
 
-test('state triggered', function() {
+test('state triggered', function () {
   const clock = sinon.useFakeTimers()
   sinon.stub(CourseEpubExportStore, 'create')
   const GenerateLinkElement = <GenerateLink {...this.props} />
@@ -64,13 +66,13 @@ test('state triggered', function() {
   ReactDOM.unmountComponentAtNode(ReactDOM.findDOMNode(component).parentNode)
 })
 
-test('render', function() {
+test('render', function () {
   const clock = sinon.useFakeTimers()
   sinon.stub(CourseEpubExportStore, 'create')
 
   let wrapper = mount(<GenerateLink {...this.props} />)
   equal(wrapper.children().type(), 'button', 'tag should be a button')
-  ok(wrapper.text().match(I18n.t('Generate ePub')),'should show generate text')
+  ok(wrapper.text().match(I18n.t('Generate ePub')), 'should show generate text')
 
   wrapper.simulate('click')
   equal(wrapper.children().type(), 'span', 'tag should be span')

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -16,35 +18,35 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-class AuthenticationProvider::LinkedIn < AuthenticationProvider::Oauth2
+class AuthenticationProvider::LinkedIn < AuthenticationProvider::OAuth2
   include AuthenticationProvider::PluginSettings
   self.plugin = :linked_in
   plugin_settings :client_id, client_secret: :client_secret_dec
 
   def self.sti_name
-    'linkedin'.freeze
+    "linkedin"
   end
 
   def self.recognized_params
-    [ :login_attribute, :jit_provisioning ].freeze
+    super + [:login_attribute, :jit_provisioning].freeze
   end
 
   def self.login_attributes
-    ['id'.freeze, 'emailAddress'.freeze].freeze
+    ["id", "emailAddress"].freeze
   end
   validates :login_attribute, inclusion: login_attributes
 
   def self.recognized_federated_attributes
-    [
-      'emailAddress'.freeze,
-      'firstName'.freeze,
-      'id'.freeze,
-      'lastName'.freeze,
+    %w[
+      emailAddress
+      firstName
+      id
+      lastName
     ].freeze
   end
 
   def login_attribute
-    super || 'id'.freeze
+    super || "id"
   end
 
   def unique_id(token)
@@ -67,45 +69,43 @@ class AuthenticationProvider::LinkedIn < AuthenticationProvider::Oauth2
     token.options[:me] ||= begin
       data = token.get("/v2/me").parsed
       {
-        'id' => data['id'],
-        'firstName' => get_localized_field(data['firstName']),
-        'lastName' => get_localized_field(data['lastName'])
+        "id" => data["id"],
+        "firstName" => get_localized_field(data["firstName"]),
+        "lastName" => get_localized_field(data["lastName"])
       }
     end
   end
 
   def get_localized_field(localized_field)
-    localized_field['localized'].first.last
+    localized_field["localized"].first.last
   end
 
   def email(token)
-    token.options[:emailAddress] ||= begin
-      token.get("/v2/emailAddress?q=members&projection=(elements*(handle~))").parsed["elements"].first["handle~"]
-    end
+    token.options[:emailAddress] ||= token.get("/v2/emailAddress?q=members&projection=(elements*(handle~))").parsed["elements"].first["handle~"]
   end
 
   def email_required?
-    login_attribute == 'emailAddress'.freeze ||
-      federated_attributes.any? { |(_k, v)| v['attribute'] == 'emailAddress' }
+    login_attribute == "emailAddress" ||
+      federated_attributes.any? { |(_k, v)| v["attribute"] == "emailAddress" }
   end
 
   def client_options
     {
-      site: 'https://api.linkedin.com'.freeze,
-      authorize_url: 'https://www.linkedin.com/uas/oauth2/authorization',
-      token_url: 'https://www.linkedin.com/uas/oauth2/accessToken'
+      site: "https://api.linkedin.com",
+      authorize_url: "https://www.linkedin.com/uas/oauth2/authorization",
+      token_url: "https://www.linkedin.com/uas/oauth2/accessToken"
     }
   end
 
   def authorize_options
-    { scope: scope }
+    { scope: }
   end
 
   def scope
     if email_required?
-      'r_liteprofile r_emailaddress'.freeze
+      "r_liteprofile r_emailaddress"
     else
-      'r_liteprofile'.freeze
+      "r_liteprofile"
     end
   end
 end

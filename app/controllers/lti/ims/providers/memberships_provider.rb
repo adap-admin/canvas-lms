@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -15,14 +17,16 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-module Lti::Ims::Providers
+module Lti::IMS::Providers
   class MembershipsProvider
     include Api::V1::User
+
+    MAX_PAGE_SIZE = 50
 
     attr_reader :context, :controller, :tool
 
     def self.unwrap(wrapped)
-      wrapped&.respond_to?(:unwrap) ? wrapped.unwrap : wrapped
+      wrapped.respond_to?(:unwrap) ? wrapped.unwrap : wrapped
     end
 
     def initialize(context, controller, tool)
@@ -39,17 +43,17 @@ module Lti::Ims::Providers
       # in case response serialization should ever need it. E.g. in NRPS v1, pagination
       # links went in the response body.
       {
-          memberships: memberships,
-          context: context,
-          assignment: assignment,
-          api_metadata: api_metadata,
-          controller: controller,
-          tool: tool,
-          opts: {
-            rlid: rlid,
-            role: role,
-            limit: limit
-          }.compact
+        memberships:,
+        context:,
+        assignment:,
+        api_metadata:,
+        controller:,
+        tool:,
+        opts: {
+          rlid:,
+          role:,
+          limit:
+        }.compact
       }
     end
 
@@ -60,16 +64,16 @@ module Lti::Ims::Providers
     end
 
     def base_users_scope
-      raise 'Abstract Method'
+      raise "Abstract Method"
     end
 
     def rlid_users_scope
-      raise 'Abstract Method'
+      raise "Abstract Method"
     end
 
     # rubocop:disable Lint/UnusedMethodArgument
     def apply_role_filter(scope)
-      raise 'Abstract Method'
+      raise "Abstract Method"
     end
     # rubocop:enable Lint/UnusedMethodArgument
 
@@ -79,30 +83,42 @@ module Lti::Ims::Providers
 
     def validate!
       return if !rlid? || (rlid == course_rlid)
-      validate_tool_for_assignment!
+
+      validate_tool!
     end
 
     def rlid
       controller.params[:rlid]
     end
 
+    def rlid?
+      rlid.present?
+    end
+
     def resource_link
       return nil unless rlid?
+
       @resource_link ||= begin
-        rl = Lti::ResourceLink.find_by(resource_link_id: rlid)
+        rl = Lti::ResourceLink.find_by(resource_link_uuid: rlid)
         # context here is a decorated context, we want the original
-        if rl.present? && rl.current_external_tool(Lti::Ims::Providers::MembershipsProvider.unwrap(context))&.id != tool.id
-          raise Lti::Ims::AdvantageErrors::InvalidResourceLinkIdFilter.new(
-            "Tool does not have acess to rlid #{rlid}",
-            api_message: 'Tool does not have acess to rlid or rlid does not exist'
+        if rl.present? && rl.current_external_tool(Lti::IMS::Providers::MembershipsProvider.unwrap(context))&.id != tool.id
+          raise Lti::IMS::AdvantageErrors::InvalidResourceLinkIdFilter.new(
+            "Tool does not have access to rlid #{rlid}",
+            api_message: "Tool does not have access to rlid or rlid does not exist"
           )
         end
         rl
       end
     end
 
-    def rlid?
-      rlid.present?
+    def resource_link?
+      resource_link&.present?
+    end
+
+    def content_tag
+      return nil unless resource_link?
+
+      ContentTag.find_by(associated_asset_id: resource_link&.id)
     end
 
     def role
@@ -124,53 +140,52 @@ module Lti::Ims::Providers
     end
 
     def assignment
-      @_assignment ||= begin
-        return nil unless rlid?
-        Assignment.active.for_course(course.id).
-          joins(line_items: :resource_link).
-          where(lti_resource_links: { id: resource_link&.id }).
-          distinct.
-          take
-      end
+      return nil unless rlid?
+
+      @assignment ||= Assignment.active.for_course(course.id)
+                                .joins(line_items: :resource_link)
+                                .where(lti_resource_links: { id: resource_link&.id })
+                                .distinct
+                                .take
     end
 
     def assignment?
-      assignment.present?
+      assignment&.present?
     end
 
-    def validate_tool_for_assignment!
-      raise Lti::Ims::AdvantageErrors::InvalidResourceLinkIdFilter unless assignment?
+    def validate_tool!
+      raise Lti::IMS::AdvantageErrors::InvalidResourceLinkIdFilter unless resource_link?
 
-      unless assignment.external_tool?
-        raise Lti::Ims::AdvantageErrors::InvalidResourceLinkIdFilter.new(
-          "Assignment (id: #{assignment.id}, rlid: #{rlid}) is not configured for submissions via external tool",
-          api_message: 'Requested assignment not configured for external tool launches'
+      if assignment? && !assignment.external_tool?
+        raise Lti::IMS::AdvantageErrors::InvalidResourceLinkIdFilter.new(
+          "Assignment (id: #{assignment&.id}, rlid: #{rlid}) is not configured for submissions via external tool",
+          api_message: "Requested assignment not configured for external tool launches"
         )
       end
 
-      tool_tag = assignment.external_tool_tag
+      tool_tag = assignment&.external_tool_tag || content_tag
       if tool_tag.blank?
-        raise Lti::Ims::AdvantageErrors::InvalidResourceLinkIdFilter.new(
-          "Assignment (id: #{assignment.id}, rlid: #{rlid}) is not bound to an external tool",
-          api_message: 'Requested assignment not bound to an external tool'
+        raise Lti::IMS::AdvantageErrors::InvalidResourceLinkIdFilter.new(
+          "ContentTag (rlid: #{rlid}) not found",
+          api_message: "Requested ResourceLink was not found"
         )
       end
       if tool_tag.content_type != "ContextExternalTool"
-        raise Lti::Ims::AdvantageErrors::InvalidResourceLinkIdFilter.new(
-          "Assignment (id: #{assignment.id}, rlid: #{rlid}) needs content tag type 'ContextExternalTool' but found #{tool_tag.content_type}",
-          api_message: 'Requested assignment has unexpected content type'
+        raise Lti::IMS::AdvantageErrors::InvalidResourceLinkIdFilter.new(
+          "ResourceLink (rlid: #{rlid}) needs content tag type 'ContextExternalTool' but found #{tool_tag.content_type}",
+          api_message: "Requested ResourceLink has an unexpected content type"
         )
       end
       if tool_tag.content_id != tool.id
-        raise Lti::Ims::AdvantageErrors::InvalidResourceLinkIdFilter.new(
-          "Assignment (id: #{assignment.id}, rlid: #{rlid}) needs binding to external tool #{tool.id} but found #{tool_tag.content_id}",
-          api_message: 'Requested assignment bound to unexpected external tool'
+        raise Lti::IMS::AdvantageErrors::InvalidResourceLinkIdFilter.new(
+          "ResourceLink (rlid: #{rlid}) needs binding to external tool #{tool.id} but found #{tool_tag.content_id}",
+          api_message: "Requested ResourceLink bound to unexpected external tool"
         )
       end
     end
 
     def course
-      raise 'Abstract Method'
+      raise "Abstract Method"
     end
 
     def course_rlid
@@ -178,7 +193,7 @@ module Lti::Ims::Providers
     end
 
     def find_memberships
-      throw 'Abstract Method'
+      throw "Abstract Method"
     end
 
     def base_url
@@ -205,10 +220,13 @@ module Lti::Ims::Providers
     end
 
     def pagination_args
+      # Set a default page size to use if no page size is given in the request
+      pagination_args = { default_per_page: MAX_PAGE_SIZE }
+
       # Treat LTI's `limit` param as override of std `per_page` API pagination param. Is no LTI override for `page`.
-      pagination_args = {}
       if limit > 0
-        pagination_args[:per_page] = [limit, Api.max_per_page].min
+        pagination_args[:per_page] = [limit, MAX_PAGE_SIZE].min
+
         # Ensure page size reset isn't accidentally clobbered by other pagination API params
         clear_request_param :per_page
       end

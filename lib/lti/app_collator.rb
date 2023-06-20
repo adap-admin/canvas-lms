@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -17,26 +19,25 @@
 #
 module Lti
   class AppCollator
-
     def initialize(context, reregistration_url_builder = nil)
       @context = context
       @reregistration_url_builder = reregistration_url_builder
     end
 
     def bookmarked_collection
-      external_tools_scope = ContextExternalTool.all_tools_for(@context)
+      external_tools_scope = Lti::ContextToolFinder.all_tools_for(@context)
       external_tools_collection = BookmarkedCollection.wrap(ExternalToolNameBookmarker, external_tools_scope)
       tool_proxy_scope = ToolProxy.find_installed_proxies_for_context(@context)
       tool_proxy_collection = BookmarkedCollection.wrap(ToolProxyNameBookmarker, tool_proxy_scope)
 
       BookmarkedCollection.merge(
-        ['external_tools', external_tools_collection],
-        ['message_handlers', tool_proxy_collection]
+        ["external_tools", external_tools_collection],
+        ["message_handlers", tool_proxy_collection]
       )
     end
 
-    def app_definitions(collection, opts={})
-      collection.map do |o|
+    def app_definitions(collection, opts = {})
+      collection.filter_map do |o|
         case o
         when ContextExternalTool
           hash = external_tool_definition(o)
@@ -47,14 +48,14 @@ module Lti
         when ToolProxy
           tool_proxy_definition(o)
         end
-      end.compact
+      end
     end
 
     private
 
     def external_tool_definition(external_tool)
-      {
-        app_type: 'ContextExternalTool',
+      result = {
+        app_type: "ContextExternalTool",
         app_id: external_tool.id,
         name: external_tool.name,
         description: external_tool.description,
@@ -65,9 +66,12 @@ module Lti
         context_id: external_tool.context.id,
         reregistration_url: nil,
         has_update: nil,
-        lti_version: external_tool.use_1_3? ? '1.3' : '1.1',
-        deployment_id: external_tool.deployment_id
+        lti_version: external_tool.use_1_3? ? "1.3" : "1.1",
+        deployment_id: external_tool.deployment_id,
+        editor_button_settings: external_tool.editor_button
       }
+      result[:is_rce_favorite] = external_tool.is_rce_favorite_in_context?(@context) if external_tool.can_be_rce_favorite?
+      result
     end
 
     def tool_proxy_definition(tool_proxy)
@@ -77,13 +81,13 @@ module Lti
         name: tool_proxy.name,
         description: tool_proxy.description,
         installed_locally: tool_proxy.context == @context,
-        enabled: tool_proxy.workflow_state == 'active',
+        enabled: tool_proxy.workflow_state == "active",
         tool_configuration: nil,
         context: tool_proxy.context_type,
         context_id: tool_proxy.context.id,
         reregistration_url: build_reregistration_url(tool_proxy),
         has_update: root_account.feature_enabled?(:lti2_rereg) ? tool_proxy.update? : nil,
-        lti_version: '2.0'
+        lti_version: "2.0"
       }
     end
 
@@ -97,7 +101,7 @@ module Lti
 
     def build_reregistration_url(tool_proxy)
       if root_account.feature_enabled?(:lti2_rereg) && @reregistration_url_builder &&
-          tool_proxy.reregistration_message_handler
+         tool_proxy.reregistration_message_handler
 
         @reregistration_url_builder.call(@context, tool_proxy.id)
       end

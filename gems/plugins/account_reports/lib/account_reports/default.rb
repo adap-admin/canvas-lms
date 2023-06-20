@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -18,7 +20,6 @@
 
 module AccountReports
   module Default
-
     # when adding new reports to this file make sure to add a migration to
     # enable the new report for all accounts with DataFixup::AddNewDefaultReport
 
@@ -38,16 +39,24 @@ module AccountReports
       GradeReports.new(account_report).grade_export
     end
 
+    def self.parallel_grade_export_csv(account_report, runner)
+      GradeReports.new(account_report, runner).grade_export_runner(runner)
+    end
+
     def self.mgp_grade_export_csv(account_report)
       GradeReports.new(account_report).mgp_grade_export
     end
 
+    def self.parallel_mgp_grade_export_csv(account_report, runner)
+      GradeReports.new(account_report, runner).mgp_grade_export_runner(runner)
+    end
+
     def self.sis_export_csv(account_report)
-      SisExporter.new(account_report, {:sis_format => true}).csv
+      SisExporter.new(account_report, { sis_format: true }).csv
     end
 
     def self.provisioning_csv(account_report)
-      SisExporter.new(account_report, {:sis_format => false}).csv
+      SisExporter.new(account_report, { sis_format: false }).csv
     end
 
     def self.unpublished_courses_csv(account_report)
@@ -92,6 +101,14 @@ module AccountReports
 
     def self.lti_report_csv(account_report)
       LtiReports.new(account_report).lti_report
+    end
+
+    def self.eportfolio_report_csv(account_report)
+      EportfolioReports.new(account_report).eportfolio_report
+    end
+
+    def self.developer_key_report_csv(account_report)
+      DeveloperKeyReports.new(account_report).dev_key_report
     end
   end
 end

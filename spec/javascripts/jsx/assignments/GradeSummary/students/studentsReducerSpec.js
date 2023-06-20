@@ -21,9 +21,9 @@ import {
   STARTED,
   SUCCESS,
   addStudents,
-  setLoadStudentsStatus
-} from 'jsx/assignments/GradeSummary/students/StudentActions'
-import configureStore from 'jsx/assignments/GradeSummary/configureStore'
+  setLoadStudentsStatus,
+} from 'ui/features/assignment_grade_summary/react/students/StudentActions'
+import configureStore from 'ui/features/assignment_grade_summary/react/configureStore'
 
 QUnit.module('GradeSummary studentsReducer()', suiteHooks => {
   let store
@@ -34,16 +34,16 @@ QUnit.module('GradeSummary studentsReducer()', suiteHooks => {
       assignment: {
         courseId: '1201',
         id: '2301',
-        title: 'Example Assignment'
+        title: 'Example Assignment',
       },
-      graders: [{graderId: '1101'}, {graderId: '1102'}]
+      graders: [{graderId: '1101'}, {graderId: '1102'}],
     })
 
     students = [
       {id: '1111', displayName: 'Adam Jones'},
       {id: '1112', displayName: 'Betty Ford'},
       {id: '1113', displayName: 'Charlie Xi'},
-      {id: '1114', displayName: 'Dana Young'}
+      {id: '1114', displayName: 'Dana Young'},
     ]
   })
 
@@ -65,7 +65,10 @@ QUnit.module('GradeSummary studentsReducer()', suiteHooks => {
       store.dispatch(addStudents(students.slice(2)))
       store.dispatch(addStudents(students.slice(0, 2)))
       const storedStudents = store.getState().students.list
-      deepEqual(storedStudents.map(student => student.id), ['1113', '1114', '1111', '1112'])
+      deepEqual(
+        storedStudents.map(student => student.id),
+        ['1113', '1114', '1111', '1112']
+      )
     })
   })
 

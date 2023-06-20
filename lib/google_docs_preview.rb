@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -17,7 +19,7 @@
 #
 
 module GoogleDocsPreview
-  PREVIEWABLE_TYPES = %w{
+  PREVIEWABLE_TYPES = %w[
     application/vnd.openxmlformats-officedocument.wordprocessingml.template
     application/vnd.oasis.opendocument.spreadsheet
     application/vnd.sun.xml.writer
@@ -41,16 +43,16 @@ module GoogleDocsPreview
     application/postscript
     application/pdf
     application/vnd.ms-powerpoint
-  }.freeze
+  ].freeze
 
   def self.previewable?(account, attachment)
     account&.service_enabled?(:google_docs_previews) &&
-    PREVIEWABLE_TYPES.include?(attachment.content_type) &&
-    attachment.downloadable?
+      PREVIEWABLE_TYPES.include?(attachment.content_type) &&
+      attachment.downloadable?
   end
 
   def self.url_for(attachment)
-    expires_in = Setting.get('google_docs_previews.link_duration_minutes', '5').to_i.minutes
-    attachment.public_url(expires_in: expires_in)
+    expires_in = Setting.get("google_docs_previews.link_duration_minutes", "5").to_i.minutes
+    attachment.public_url(expires_in:)
   end
 end

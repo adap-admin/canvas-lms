@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -15,18 +17,16 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'spec_helper'
+require "spec_helper"
 
 describe CanvasQuizStatistics::Analyzers do
-  Analyzers = CanvasQuizStatistics::Analyzers
-
-  describe '[]' do
-    it 'should locate an analyzer' do
-      expect(subject['essay_question']).to eq(Analyzers::Essay)
+  describe "[]" do
+    it "locates an analyzer" do
+      expect(subject["essay_question"]).to eq(CanvasQuizStatistics::Analyzers::Essay)
     end
 
-    it 'should return the generic analyzer for questions of unsupported types' do
-      expect(subject['text_only_question']).to eq(Analyzers::Base)
+    it "returns the generic analyzer for questions of unsupported types" do
+      expect(subject["text_only_question"]).to eq(CanvasQuizStatistics::Analyzers::Base)
     end
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -20,15 +22,24 @@
 class ContentImportsController < ApplicationController
   before_action :require_context
   before_action { |c| c.active_tab = "home" }
-  prepend_around_action :load_pseudonym_from_policy, :only => :migrate_content_upload
 
   include Api::V1::Course
   include ContentImportsHelper
 
-  COPY_TYPES = %w{assignment_groups assignments context_modules
-                  learning_outcomes quizzes assessment_question_banks folders
-                  attachments wiki_pages discussion_topics calendar_events
-                  context_external_tools learning_outcome_groups rubrics}.freeze
+  COPY_TYPES = %w[assignment_groups
+                  assignments
+                  context_modules
+                  learning_outcomes
+                  quizzes
+                  assessment_question_banks
+                  folders
+                  attachments
+                  wiki_pages
+                  discussion_topics
+                  calendar_events
+                  context_external_tools
+                  learning_outcome_groups
+                  rubrics].freeze
 
   # these are deprecated, but leaving them for a while so existing links get redirected
   def index
@@ -41,9 +52,16 @@ class ContentImportsController < ApplicationController
 
   # current files UI uses this page for .zip uploads
   def files
-    authorized_action(@context, @current_user, [:manage_content, :manage_files])
-    js_env(return_or_context_url: return_or_context_url,
-           return_to: params[:return_to])
+    authorized_action(
+      @context,
+      @current_user,
+      [
+        *RoleOverride::GRANULAR_FILE_PERMISSIONS,
+        :manage_content,
+        *RoleOverride::GRANULAR_MANAGE_COURSE_CONTENT_PERMISSIONS
+      ]
+    )
+    js_env(return_or_context_url:, return_to: params[:return_to])
   end
 
   # @API Get course copy status
@@ -68,16 +86,15 @@ class ContentImportsController < ApplicationController
     if api_request?
       @context = api_find(Course, params[:course_id])
     end
-    if authorized_action(@context, @current_user, :manage_content)
+    if authorized_action(@context, @current_user, [:manage_content, :manage_course_content_add])
       cm = ContentMigration.where(context_id: @context, id: params[:id]).first
       raise ActiveRecord::RecordNotFound unless cm
 
       respond_to do |format|
-        format.json { render :json => copy_status_json(cm, @context, @current_user, session)}
+        format.json { render json: copy_status_json(cm, @context, @current_user, session) }
       end
     end
   end
-
 
   # @API Copy course content
   #
@@ -105,18 +122,18 @@ class ContentImportsController < ApplicationController
       @context = api_find(Course, params[:course_id])
     end
 
-    if authorized_action(@context, @current_user, :manage_content)
+    if authorized_action(@context, @current_user, [:manage_content, :manage_course_content_add])
       if api_request?
         @source_course = api_find(Course, params[:source_course])
-        copy_params = {:everything => false}
+        copy_params = { everything: false }
         if params[:only] && params[:except]
-          render :json => {"errors"=>t('errors.no_only_and_except', 'You can not use "only" and "except" options at the same time.')}, :status => :bad_request
+          render json: { "errors" => t("errors.no_only_and_except", 'You can not use "only" and "except" options at the same time.') }, status: :bad_request
           return
         elsif params[:only]
-          convert_to_table_name(params[:only]).each {|o| copy_params["all_#{o}".to_sym] = true}
+          convert_to_table_name(params[:only]).each { |o| copy_params["all_#{o}".to_sym] = true }
         elsif params[:except]
-          COPY_TYPES.each {|o| copy_params["all_#{o}".to_sym] = true}
-          convert_to_table_name(params[:except]).each {|o| copy_params["all_#{o}".to_sym] = false}
+          COPY_TYPES.each { |o| copy_params["all_#{o}".to_sym] = true }
+          convert_to_table_name(params[:except]).each { |o| copy_params["all_#{o}".to_sym] = false }
         else
           copy_params[:everything] = true
         end
@@ -128,15 +145,20 @@ class ContentImportsController < ApplicationController
 
       # make sure the user can copy from the source course
       return render_unauthorized_action unless @source_course.grants_all_rights?(@current_user, :read, :read_as_admin)
-      cm = ContentMigration.create!(:context => @context,
-                                    :user => @current_user,
-                                    :source_course => @source_course,
-                                    :copy_options => copy_params,
-                                    :migration_type => 'course_copy_importer',
-                                    :initiated_source => api_request? ? (in_app? ? :api_in_app : :api) : :manual)
+
+      cm = ContentMigration.create!(context: @context,
+                                    user: @current_user,
+                                    source_course: @source_course,
+                                    copy_options: copy_params,
+                                    migration_type: "course_copy_importer",
+                                    initiated_source: if api_request?
+                                                        in_app? ? :api_in_app : :api
+                                                      else
+                                                        :manual
+                                                      end)
       cm.queue_migration
-      cm.workflow_state = 'created'
-      render :json => copy_status_json(cm, @context, @current_user, session)
+      cm.workflow_state = "created"
+      render json: copy_status_json(cm, @context, @current_user, session)
     end
   end
 
@@ -147,25 +169,24 @@ class ContentImportsController < ApplicationController
       params[:copy] ||= {}
       params[:items_to_copy].each_pair do |key, vals|
         params[:copy][key] ||= {}
-        if vals && !vals.empty?
-          vals.each do |val|
-            params[:copy][key][val] = true
-          end
+        next unless vals.present?
+
+        vals.each do |val|
+          params[:copy][key][val] = true
         end
       end
     end
   end
 
   SELECTION_CONVERSIONS = {
-          "external_tools" => "context_external_tools",
-          "files" => "attachments",
-          "topics" => "discussion_topics",
-          "modules" => "context_modules",
-          "outcomes" => "learning_outcomes"
+    "external_tools" => "context_external_tools",
+    "files" => "attachments",
+    "topics" => "discussion_topics",
+    "modules" => "context_modules",
+    "outcomes" => "learning_outcomes"
   }.freeze
   # convert types selected in API to expected format
   def convert_to_table_name(selections)
-    selections.map{|s| SELECTION_CONVERSIONS[s] || s}
+    selections.map { |s| SELECTION_CONVERSIONS[s] || s }
   end
-
 end

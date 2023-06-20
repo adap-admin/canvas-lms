@@ -18,32 +18,33 @@
 
 import $ from 'jquery'
 import {isArray, isObject, uniq} from 'lodash'
-import tz from 'timezone'
-import fcUtil from 'compiled/util/fcUtil'
+import tzInTest from '@canvas/timezone/specHelpers'
+import timezone from 'timezone'
+import fcUtil from '@canvas/calendar/jquery/fcUtil'
 import denver from 'timezone/America/Denver'
 import juneau from 'timezone/America/Juneau'
 import french from 'timezone/fr_FR'
-import AgendaView from 'compiled/views/calendar/AgendaView'
-import Calendar from 'compiled/calendar/Calendar'
-import EventDataSource from 'compiled/calendar/EventDataSource'
+import AgendaView from 'ui/features/calendar/backbone/views/AgendaView'
+import EventDataSource from '@canvas/calendar/jquery/EventDataSource'
 import eventResponse from 'helpers/ajax_mocks/api/v1/calendarEvents'
+import plannerItemsResponse from 'helpers/ajax_mocks/api/planner/items'
 import assignmentResponse from 'helpers/ajax_mocks/api/v1/calendarAssignments'
-import I18nStubber from 'helpers/I18nStubber'
 import fakeENV from 'helpers/fakeENV'
 
 const loadEventPage = (server, includeNext = false) =>
-  sendCustomEvents(server, eventResponse, assignmentResponse, includeNext)
-var sendCustomEvents = function(server, events, assignments, includeNext = false) {
-  const requestIndex = server.requests.length - 2
-  server.requests[requestIndex].respond(
+  sendCustomEvents(server, eventResponse, assignmentResponse, plannerItemsResponse, includeNext)
+const sendCustomEvents = function (server, events, assignments, plannerItems, includeNext = false) {
+  const requestIndex = server.requests.length - 3
+  server.requests[requestIndex].respond(200, {'Content-Type': 'application/json'}, plannerItems)
+  server.requests[requestIndex + 1].respond(
     200,
     {
       'Content-Type': 'application/json',
-      Link: `</api/magic>; rel="${includeNext ? 'next' : 'current'}"`
+      Link: `</api/magic>; rel="${includeNext ? 'next' : 'current'}"`,
     },
     events
   )
-  return server.requests[requestIndex + 1].respond(
+  return server.requests[requestIndex + 2].respond(
     200,
     {'Content-Type': 'application/json'},
     assignments
@@ -56,32 +57,37 @@ QUnit.module('AgendaView', {
     this.contexts = [
       {asset_string: 'user_1'},
       {asset_string: 'course_2'},
-      {asset_string: 'group_3'}
+      {asset_string: 'group_3'},
     ]
     this.contextCodes = ['user_1', 'course_2', 'group_3']
-    this.startDate = fcUtil.now()
-    this.startDate.minute(1)
-    this.startDate.year(2001)
+    // with LS-1701 we're only looking a month into the future,
+    // not 1000 years, so let's just
+    // backup 15 days from the first canned event
+    this.startDate = fcUtil.wrap(new Date(JSON.parse(eventResponse)[0].start_at))
+    fcUtil.addMinuteDelta(this.startDate, -60 * 24 * 15)
     this.dataSource = new EventDataSource(this.contexts)
     this.server = sinon.fakeServer.create()
-    this.snapshot = tz.snapshot()
-    tz.changeZone(denver, 'America/Denver')
-    I18nStubber.pushFrame()
+    tzInTest.configureAndRestoreLater({
+      tz: timezone(denver, 'America/Denver'),
+      tzData: {
+        'America/Denver': denver,
+      },
+      momentLocale: 'en',
+    })
     fakeENV.setup({CALENDAR: {}})
   },
   teardown() {
     this.container.remove()
     this.server.restore()
-    tz.restore(this.snapshot)
-    I18nStubber.popFrame()
+    tzInTest.restore()
     fakeENV.teardown()
-  }
+  },
 })
 
-test('should render results', function() {
+test('should render results', function () {
   const view = new AgendaView({
     el: this.container,
-    dataSource: this.dataSource
+    dataSource: this.dataSource,
   })
   view.fetch(this.contextCodes, this.startDate)
   loadEventPage(this.server)
@@ -98,25 +104,32 @@ test('should render results', function() {
   ok(!this.container.find('.agenda-load-btn').length, 'does not find the loader')
 })
 
-test('should show "load more" if there are more results', function() {
+test('should show "load more" if there are more results', function () {
   const view = new AgendaView({
     el: this.container,
-    dataSource: this.dataSource
+    dataSource: this.dataSource,
   })
   view.fetch(this.contextCodes, this.startDate)
   loadEventPage(this.server, true)
   ok(this.container.find('.agenda-load-btn').length)
 })
 
-test('toJSON should properly serialize results', function() {
-  I18nStubber.stub('en', {
-    'date.formats.short_with_weekday': '%a, %b %-d',
-    'date.abbr_day_names.1': 'Mon',
-    'date.abbr_month_names.10': 'Oct'
+test('toJSON should properly serialize results', function () {
+  tzInTest.configureAndRestoreLater({
+    tz: timezone(denver, 'America/Denver'),
+    tzData: {
+      'America/Denver': denver,
+    },
+    momentLocale: 'en',
+    formats: {
+      'date.formats.short_with_weekday': '%a, %b %-d',
+      'date.abbr_day_names.1': 'Mon',
+      'date.abbr_month_names.10': 'Oct',
+    },
   })
   const view = new AgendaView({
     el: this.container,
-    dataSource: this.dataSource
+    dataSource: this.dataSource,
   })
   view.fetch(this.contextCodes, this.startDate)
   loadEventPage(this.server)
@@ -125,18 +138,14 @@ test('toJSON should properly serialize results', function() {
   ok(isObject(serialized.meta), 'meta is an object')
   ok(uniq(serialized.days).length === serialized.days.length, 'does not duplicate dates')
   ok(serialized.days[0].date === 'Mon, Oct 7', 'finds the correct first day')
-  ok(
-    serialized.meta.hasOwnProperty('better_scheduler'),
-    'contains a property indicating better_scheduler is active or not'
-  )
   serialized.days.forEach(d => ok(d.events.length, 'every day has events'))
 })
 
-test('should only include days on page breaks once', function() {
+test('should only include days on page breaks once', function () {
   let i
   const view = new AgendaView({
     el: this.container,
-    dataSource: this.dataSource
+    dataSource: this.dataSource,
   })
   window.view = view
   view.fetch(this.contextCodes, this.startDate)
@@ -146,7 +155,7 @@ test('should only include days on page breaks once', function() {
       events.push({
         start_at: date.toISOString(),
         context_code: 'user_1',
-        id: id++
+        id: id++,
       })
     )
   const date = new Date()
@@ -155,7 +164,13 @@ test('should only include days on page breaks once', function() {
     date.setFullYear(date.getFullYear() + 1)
     addEvents(events, date)
   }
-  sendCustomEvents(this.server, JSON.stringify(events), JSON.stringify([]), true)
+  sendCustomEvents(
+    this.server,
+    JSON.stringify(events),
+    JSON.stringify([]),
+    JSON.stringify([]),
+    true
+  )
   ok(
     this.container.find('.agenda-event__item-container').length,
     40,
@@ -168,7 +183,13 @@ test('should only include days on page breaks once', function() {
     addEvents(events, date)
     date.setFullYear(date.getFullYear() + 1)
   }
-  sendCustomEvents(this.server, JSON.stringify(events), JSON.stringify([]), false)
+  sendCustomEvents(
+    this.server,
+    JSON.stringify(events),
+    JSON.stringify([]),
+    JSON.stringify([]),
+    false
+  )
   equal(
     this.container.find('.agenda-event__item-container').length,
     70,
@@ -176,59 +197,66 @@ test('should only include days on page breaks once', function() {
   )
 })
 
-test('renders non-assignment events with locale-appropriate format string', function() {
-  tz.changeLocale(french, 'fr_FR', 'fr')
-  I18nStubber.setLocale('fr_FR')
-  I18nStubber.stub('fr_FR', {'time.formats.tiny': '%k:%M'})
+test('renders non-assignment events with locale-appropriate format string', function () {
+  tzInTest.configureAndRestoreLater({
+    tz: timezone(denver, 'America/Denver', french, 'fr_FR'),
+    tzData: {
+      'America/Denver': denver,
+    },
+    momentLocale: 'fr',
+    formats: {'time.formats.tiny': '%k:%M'},
+  })
   const view = new AgendaView({
     el: this.container,
-    dataSource: this.dataSource
+    dataSource: this.dataSource,
   })
   view.fetch(this.contextCodes, this.startDate)
   loadEventPage(this.server)
 
   // this event has a start_at of 2013-10-08T20:30:00Z, or 1pm MDT
   ok(
-    this.container
-      .find('.agenda-event__time')
-      .slice(2, 3)
-      .text()
-      .match(/13:00/),
+    this.container.find('.agenda-event__time').slice(2, 3).text().match(/13:00/),
     'formats according to locale'
   )
 })
 
-test('renders assignment events with locale-appropriate format string', function() {
-  tz.changeLocale(french, 'fr_FR', 'fr')
-  I18nStubber.setLocale('fr_FR')
-  I18nStubber.stub('fr_FR', {'time.formats.tiny': '%k:%M'})
+test('renders assignment events with locale-appropriate format string', function () {
+  tzInTest.configureAndRestoreLater({
+    tz: timezone(denver, 'America/Denver', french, 'fr_FR'),
+    tzData: {
+      'America/Denver': denver,
+    },
+    momentLocale: 'fr',
+    formats: {'time.formats.tiny': '%k:%M'},
+  })
   const view = new AgendaView({
     el: this.container,
-    dataSource: this.dataSource
+    dataSource: this.dataSource,
   })
   view.fetch(this.contextCodes, this.startDate)
   loadEventPage(this.server)
 
   // this event has a start_at of 2013-10-13T05:59:59Z, or 11:59pm MDT
   ok(
-    this.container
-      .find('.agenda-event__time')
-      .slice(12, 13)
-      .text()
-      .match(/23:59/),
+    this.container.find('.agenda-event__time').slice(12, 13).text().match(/23:59/),
     'formats according to locale'
   )
 })
 
-test('renders non-assignment events in appropriate timezone', function() {
-  tz.changeZone(juneau, 'America/Juneau')
-  I18nStubber.stub('en', {
-    'time.formats.tiny': '%l:%M%P',
-    date: {}
+test('renders non-assignment events in appropriate timezone', function () {
+  tzInTest.configureAndRestoreLater({
+    tz: timezone(juneau, 'America/Juneau'),
+    tzData: {
+      'America/Juneau': juneau,
+    },
+    formats: {
+      'time.formats.tiny': '%l:%M%P',
+    },
   })
+
   const view = new AgendaView({
     el: this.container,
-    dataSource: this.dataSource
+    dataSource: this.dataSource,
   })
   view.fetch(this.contextCodes, this.startDate)
   loadEventPage(this.server)
@@ -244,15 +272,19 @@ test('renders non-assignment events in appropriate timezone', function() {
   )
 })
 
-test('renders assignment events in appropriate timezone', function() {
-  tz.changeZone(juneau, 'America/Juneau')
-  I18nStubber.stub('en', {
-    'time.formats.tiny': '%l:%M%P',
-    date: {}
+test('renders assignment events in appropriate timezone', function () {
+  tzInTest.configureAndRestoreLater({
+    tz: timezone(juneau, 'America/Juneau'),
+    tzData: {
+      'America/Juneau': juneau,
+    },
+    formats: {
+      'time.formats.tiny': '%l:%M%P',
+    },
   })
   const view = new AgendaView({
     el: this.container,
-    dataSource: this.dataSource
+    dataSource: this.dataSource,
   })
   view.fetch(this.contextCodes, this.startDate)
   loadEventPage(this.server)

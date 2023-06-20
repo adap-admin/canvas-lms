@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -18,17 +20,17 @@
 module AcademicBenchmark
   module OutcomeData
     class FromApi < Base
-      def initialize(options={})
+      def initialize(options = {})
         super(options.merge(AcademicBenchmark.config))
         unless partner_id.present? && partner_key.present?
           raise Canvas::Migration::Error,
-            'partner_id & partner_key are required'
+                "partner_id & partner_key are required"
         end
       end
-      delegate :authority, :document, :partner_id, :partner_key, to: :@options
+      delegate :authority, :publication, :partner_id, :partner_key, to: :@options
 
       def data
-        @_data ||= api.standards.send(api_method, guid, include_obsolete_standards: false)
+        @data ||= api.standards.send(api_method, guid, include_obsolete_standards: false, exclude_examples: true)
       end
 
       def error_message
@@ -36,19 +38,20 @@ module AcademicBenchmark
       end
 
       private
+
       def api
         @_api ||= AcademicBenchmarks::Api::Handle.new(
-          partner_id:  partner_id,
-          partner_key: partner_key
+          partner_id:,
+          partner_key:
         )
       end
 
       def api_method
-        authority.present? ? :authority_tree : :document_tree
+        authority.present? ? :authority_tree : :publication_tree
       end
 
       def guid
-        authority || document
+        authority || publication
       end
     end
   end

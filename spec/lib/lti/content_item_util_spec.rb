@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -15,13 +17,14 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper.rb')
 
 describe Lti::ContentItemUtil do
   let(:url) { "http://example.com/confirm/343" }
 
   context "with callback url" do
     include WebMock::API
+
+    subject { described_class.new(content_item) }
 
     let(:content_item) do
       JSON.parse('{
@@ -38,31 +41,32 @@ describe Lti::ContentItemUtil do
           "chapter" : "12",
           "section" : "3"
         },
-        "confirmUrl" : "'+url+'"
+        "confirmUrl" : "' + url + '"
       }')
     end
-    subject { described_class.new(content_item) }
 
-    it 'makes a POST to confirm creation' do
-      stub_request(:post, url).
-        to_return(:status => 200, :body => "", :headers => {})
+    it "makes a POST to confirm creation" do
+      stub_request(:post, url)
+        .to_return(status: 200, body: "", headers: {})
 
       subject.success_callback
       run_jobs
-      expect(WebMock).to have_requested(:post, url).with(:body => "")
+      expect(WebMock).to have_requested(:post, url).with(body: "")
     end
 
-    it 'makes a DELETE to signify Cancelation' do
-      stub_request(:delete, url).
-        to_return(:status => 200, :body => "", :headers => {})
+    it "makes a DELETE to signify Cancelation" do
+      stub_request(:delete, url)
+        .to_return(status: 200, body: "", headers: {})
 
       subject.failure_callback
       run_jobs
-      expect(WebMock).to have_requested(:delete, url).with(:body => "")
+      expect(WebMock).to have_requested(:delete, url).with(body: "")
     end
   end
 
   context "without callback url" do
+    subject { described_class.new(content_item) }
+
     let(:content_item) do
       JSON.parse('{
         "@type" : "LtiLinkItem",
@@ -80,19 +84,17 @@ describe Lti::ContentItemUtil do
         }
       }')
     end
-    subject { described_class.new(content_item) }
 
     it "will not call back for success if no confirmUrl is present" do
-      expect(CanvasHttp).to receive(:post).never
+      expect(CanvasHttp).not_to receive(:post)
       subject.success_callback
       run_jobs
     end
 
     it "will not call back for failure if no confirmUrl is present" do
-      expect(CanvasHttp).to receive(:delete).never
+      expect(CanvasHttp).not_to receive(:delete)
       subject.failure_callback
       run_jobs
     end
   end
-
 end

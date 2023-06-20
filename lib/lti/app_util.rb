@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -19,23 +21,22 @@
 module Lti
   module AppUtil
     TOOL_DISPLAY_TEMPLATES = {
-      'borderless'            => {template: 'lti/unframed_launch', layout: 'borderless_lti'}.freeze,
-      'full_width'            => {template: 'lti/full_width_launch'}.freeze,
-      'in_context'            => {template: 'lti/framed_launch'}.freeze,
-      'default'               => {template: 'lti/framed_launch'}.freeze,
-      'full_width_in_context' => {template: 'lti/full_width_in_context'}.freeze,
+      "borderless" => { template: "lti/unframed_launch", layout: "borderless_lti" }.freeze,
+      "full_width" => { template: "lti/full_width_launch" }.freeze,
+      "in_context" => { template: "lti/framed_launch" }.freeze,
+      "in_nav_context" => { template: "lti/full_width_in_context" }.freeze,
+      "default" => { template: "lti/framed_launch" }.freeze,
+      "full_width_in_context" => { template: "lti/full_width_in_context" }.freeze,
     }.freeze
-    BLACKLIST_WILDCARD = '*'.freeze # to set up 'deny all' rules
+    BLACKLIST_WILDCARD = "*" # to set up 'deny all' rules
 
-    def self.display_template(display_type=nil, display_override:nil)
+    def self.display_template(display_type = nil, display_override: nil)
       unless TOOL_DISPLAY_TEMPLATES.key?(display_type)
-        display_type = 'default'
+        display_type = "default"
       end
 
-      if display_override
-        if TOOL_DISPLAY_TEMPLATES.include?(display_override)
-          display_type = display_override
-        end
+      if display_override && TOOL_DISPLAY_TEMPLATES.include?(display_override)
+        display_type = display_override
       end
 
       TOOL_DISPLAY_TEMPLATES[display_type].dup
@@ -43,7 +44,7 @@ module Lti
 
     def self.custom_params(raw_post)
       form_pairs = URI.decode_www_form(raw_post)
-      form_pairs.each_with_object({}) do |(k,v), hash|
+      form_pairs.each_with_object({}) do |(k, v), hash|
         captures = k.match(/^external_tool\[custom_fields\[(.*)\]\]/).try(:captures)
         hash[captures.first] = v if captures.present?
       end
@@ -52,8 +53,8 @@ module Lti
     def self.allowed?(candidate, whitelist, blacklist)
       return true if whitelist.blank? && blacklist.blank?
       return false if blacklist.present? && (blacklist.include?(candidate) || blacklist.include?(BLACKLIST_WILDCARD))
+
       whitelist.blank? || whitelist.include?(candidate)
     end
-
   end
 end

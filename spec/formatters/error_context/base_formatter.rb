@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -30,7 +32,6 @@ require_relative "../rerun_argument"
 #  * video capture (selenium + xvfb)
 module ErrorContext
   class BaseFormatter < ::RSpec::Core::Formatters::BaseFormatter
-
     attr_reader :summary
 
     def example_started(notification)
@@ -46,11 +47,12 @@ module ErrorContext
     end
 
     def self.inherited(klass)
+      super
       ::RSpec::Core::Formatters.register klass,
-        :example_started,
-        :example_failed,
-        :example_pending,
-        :example_passed
+                                         :example_started,
+                                         :example_failed,
+                                         :example_pending,
+                                         :example_passed
 
       # TODO: once https://github.com/rspec/rspec-core/pull/2387 lands,
       # remove this and change the register call to use example_finished.
@@ -78,6 +80,7 @@ module ErrorContext
       # beyond a certain point
       MAX_FAILURES_TO_RECORD = 20
       attr_writer :num_failures
+
       def num_failures
         @num_failures ||= 0
       end
@@ -85,6 +88,8 @@ module ErrorContext
       def start(example)
         @summary ||= begin
           summary = new(example)
+          @errors_path = nil
+          @base_error_path = nil
           summary.start
           summary
         end
@@ -93,6 +98,7 @@ module ErrorContext
 
       def finish
         return unless @summary
+
         note_recent_spec_run @summary.example
         @summary.finish
         @summary = nil
@@ -100,9 +106,10 @@ module ErrorContext
 
       def note_recent_spec_run(example)
         recent_spec_runs << {
-          location: RerunArgument.for(example),
           exception: example.exception,
-          pending: example.pending
+          location: RerunArgument.for(example),
+          pending: example.pending,
+          recorded_at: Time.zone.now
         }
         self.num_failures += 1 if example.exception
       end
@@ -116,7 +123,7 @@ module ErrorContext
       end
 
       def base_error_path
-        @base_error_path ||= ENV.fetch("ERROR_CONTEXT_BASE_PATH", Rails.root.join("log", "spec_failures"))
+        @base_error_path ||= ENV.fetch("ERROR_CONTEXT_BASE_PATH", Rails.root.join("log/spec_failures/Initial"))
       end
     end
 
@@ -132,59 +139,63 @@ module ErrorContext
 
     def selenium?
       return @selenium unless @selenium.nil?
+
       @selenium = defined?(SeleniumDependencies) && example.example_group.include?(SeleniumDependencies)
     end
 
     def start
       Rails.logger.capture_messages!
-      start_capturing_video! if capture_video? && !ErrorSummary.discard_remaining?
+      # TODO: does not work with new docker builds
+      # start_capturing_video! if capture_video? && !ErrorSummary.discard_remaining?
     end
 
     def finish
       if discard?
-        discard_video! if capturing_video?
+        # TODO: does not work with new docker builds
+        # discard_video! if capturing_video?
       else
-        save_screenshot! if capture_screenshot?
-        save_video! if capturing_video?
+        save_screenshot! if capture_screenshot? # rubocop:disable Style/IfInsideElse
+        # TODO: does not work with new docker builds
+        # save_video! if capturing_video?
       end
     end
 
-    def capturing_video?
-      @capturing_video
-    end
+    # def capturing_video?
+    #   @capturing_video
+    # end
 
-    def start_capturing_video!
-      @capturing_video = true
-      SeleniumDriverSetup.headless.video.start_capture
-    end
+    # def start_capturing_video!
+    #   @capturing_video = true
+    #   SeleniumDriverSetup.headless.video.start_capture
+    # end
 
     def save_screenshot!
       SeleniumDriverSetup.driver.save_screenshot(File.join(errors_path, screenshot_name))
     end
 
-    def save_video!
-      SeleniumDriverSetup.headless.video.stop_and_save(File.join(errors_path, screen_capture_name))
-    end
+    # def save_video!
+    #   SeleniumDriverSetup.headless.video.stop_and_save(File.join(errors_path, screen_capture_name))
+    # end
 
-    def discard_video!
-      SeleniumDriverSetup.headless.video.stop_and_discard
-    end
+    # def discard_video!
+    #   SeleniumDriverSetup.headless.video.stop_and_discard
+    # end
 
     def log_messages
       Rails.logger.captured_messages
     end
 
     def page_html
-      example.metadata[:page_html] || 'Page HTML was not captured.'
+      example.metadata[:page_html] || "Page HTML was not captured."
     end
 
     def capture_screenshot?
-      selenium? && !SeleniumDriverSetup.saucelabs_test_run?
+      selenium?
     end
 
-    def capture_video?
-      selenium? && SeleniumDriverSetup.run_headless?
-    end
+    # def capture_video?
+    #   selenium? && SeleniumDriverSetup.run_headless?
+    # end
 
     def js_errors
       return unless selenium?
@@ -204,7 +215,8 @@ module ErrorContext
     end
 
     def spec_path
-      @spec_path ||= RerunArgument.for(example).sub(/\A[.\/]+/, "")
+      ex_name = example.exception ? example.exception.class.name : "none"
+      @spec_path ||= RerunArgument.for(example).sub(%r{\A[./]+}, "") + "/#{ex_name}"
     end
 
     def errors_path
@@ -219,8 +231,8 @@ module ErrorContext
       "screenshot.png" if capture_screenshot? && !discard?
     end
 
-    def screen_capture_name
-      "capture.mp4" if capture_video? && !discard?
-    end
+    # def screen_capture_name
+    #   "capture.mp4" if capture_video? && !discard?
+    # end
   end
 end

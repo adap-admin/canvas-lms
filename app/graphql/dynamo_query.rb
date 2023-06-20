@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -34,15 +36,23 @@
 class DynamoQuery
   attr_reader :partition_key, :sort_key
 
-  def initialize(db, table, partition_key:, value:, sort_key:, scan_index_forward: true)
+  def initialize(db,
+                 table,
+                 partition_key:,
+                 key_condition_expression:,
+                 expression_attribute_values:,
+                 value:,
+                 sort_key:,
+                 scan_index_forward: true)
     @db = db
     @table = table
     @partition_key = partition_key
     @partition_value = value
     @sort_key = sort_key
     @scan_index_forward = scan_index_forward
-    @key_condition_expression = "#{partition_key} = :id"
-    @expression_attribute_values = {":id" => value}
+    @key_condition_expression = +"#{partition_key} = :id"
+    @key_condition_expression << " AND #{key_condition_expression}" if key_condition_expression
+    @expression_attribute_values = expression_attribute_values.merge(":id" => value)
   end
 
   def limit(limit)
@@ -62,8 +72,8 @@ class DynamoQuery
     self
   end
 
-  def each
-    query.items.each { |item| yield item }
+  def each(&)
+    query.items.each(&)
   end
 
   def map
@@ -82,6 +92,7 @@ class DynamoQuery
 
   def query
     return @query if defined? @query
+
     params = {
       table_name: @table,
       key_condition_expression: @key_condition_expression,
@@ -93,5 +104,3 @@ class DynamoQuery
     @query = @db.query(params)
   end
 end
-
-GraphQL::Relay::BaseConnection.register_connection_implementation(DynamoQuery, DynamoConnection)

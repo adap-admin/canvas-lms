@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -20,9 +22,10 @@ class AddActiveSubmissionsIndex < ActiveRecord::Migration[5.0]
   disable_ddl_transaction!
 
   def change
-    add_index :submissions, [:assignment_id, :grading_period_id],
+    add_index :submissions,
+              [:assignment_id, :grading_period_id],
               algorithm: :concurrently,
-              name: 'index_active_submissions',
+              name: "index_active_submissions",
               where: "workflow_state <> 'deleted'"
   end
 end

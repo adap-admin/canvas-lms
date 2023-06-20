@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -48,16 +50,16 @@ module VisibilityPluckingHelper
 
     def empty_id_hash(ids)
       # [1,2,3] => {1:[],2:[],3:[]}
-      Hash[ids.zip(ids.map{[]})]
+      ids.zip(ids.map { [] }).to_h
     end
 
     def check_args(opts, key)
       # throw error if the the right args aren't given
-      [:course_id, key].each{ |k| opts.fetch(k) }
+      [:course_id, key].each { |k| opts.fetch(k) }
     end
 
     def pluck_own_and_user_ids(column_to_pluck, opts)
-      self.where(opts).pluck(:user_id, column_to_pluck)
+      where(opts).pluck(:user_id, column_to_pluck)
     end
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -21,8 +23,8 @@ class AddWorkflowStateToAccountUser < ActiveRecord::Migration[5.0]
 
   def change
     add_column :account_users, :workflow_state, :string
-    change_column_default(:account_users, :workflow_state, 'active')
-    DataFixup::BackfillNulls.run(AccountUser, :workflow_state, default_value: 'active')
+    change_column_default(:account_users, :workflow_state, "active")
+    DataFixup::BackfillNulls.run(AccountUser, :workflow_state, default_value: "active")
     change_column_null(:account_users, :workflow_state, false)
     add_index :account_users, :workflow_state, algorithm: :concurrently
   end

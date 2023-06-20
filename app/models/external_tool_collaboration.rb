@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -17,10 +19,9 @@
 #
 
 class ExternalToolCollaboration < Collaboration
-  validates_presence_of :url
+  validates :url, presence: true
 
   def update_url
-    data['updateUrl']
+    data["updateUrl"]
   end
-
 end

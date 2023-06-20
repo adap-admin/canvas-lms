@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -19,12 +21,12 @@
 module Types
   class TermType < ApplicationObjectType
     implements GraphQL::Types::Relay::Node
+    implements Interfaces::LegacyIDInterface
     graphql_name "Term"
 
-    alias term object
+    alias_method :term, :object
 
     global_id_field :id
-    field :_id, ID, "legacy canvas id", method: :id, null: false
 
     field :name, String, null: true
     field :start_at, DateTimeType, null: true
@@ -37,8 +39,16 @@ module Types
     end
     def courses_connection
       load_association(:root_account).then do |account|
-        next unless account.grants_any_right?(current_user, :manage_courses, :manage_account_settings)
+        next unless account.grants_right?(current_user, :read_course_list)
+
         term.courses
+      end
+    end
+
+    field :sis_id, String, null: true
+    def sis_id
+      load_association(:root_account).then do |root_account|
+        term.sis_source_id if root_account.grants_any_right?(current_user, :read_sis, :manage_sis)
       end
     end
   end

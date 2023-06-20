@@ -19,7 +19,7 @@
 import React from 'react'
 import {mount} from 'enzyme'
 
-import FocusableView from 'jsx/assignments/GradeSummary/components/FocusableView'
+import FocusableView from 'ui/features/assignment_grade_summary/react/components/FocusableView'
 
 // This rule does not apply for these specs.
 /* eslint-disable react/prop-types */
@@ -47,13 +47,13 @@ QUnit.module('GradeSummary FocusableView', suiteHooks => {
     down: 40,
     left: 37,
     right: 39,
-    up: 38
+    up: 38,
   }
 
   function scroll(direction) {
     const event = {
       keyCode: keyCodeMap[direction],
-      preventDefault: sinon.spy()
+      preventDefault: sinon.spy(),
     }
     wrapper.find(FocusableView).simulate('keyDown', event)
     return event

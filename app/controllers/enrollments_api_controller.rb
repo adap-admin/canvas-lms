@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -50,6 +52,11 @@
 #           "example": "",
 #           "type": "string"
 #         },
+#         "current_points": {
+#           "description": "The total points the user has earned in the class. Only included if user has permissions to view this score and 'current_points' is passed in the request's 'include' parameter.",
+#           "example": 150,
+#           "type": "integer"
+#         },
 #         "unposted_current_grade": {
 #           "description": "The user's current grade in the class including muted/unposted assignments. Only included if user has permissions to view this grade, typically teachers, TAs, and admins.",
 #           "example": "",
@@ -69,6 +76,11 @@
 #           "description": "The user's final score for the class including muted/unposted assignments. Only included if user has permissions to view this score, typically teachers, TAs, and admins..",
 #           "example": "",
 #           "type": "string"
+#         },
+#         "unposted_current_points": {
+#           "description": "The total points the user has earned in the class, including muted/unposted assignments. Only included if user has permissions to view this score (typically teachers, TAs, and admins) and 'current_points' is passed in the request's 'include' parameter.",
+#           "example": 150,
+#           "type": "integer"
 #         }
 #       }
 #     }
@@ -317,14 +329,14 @@ class EnrollmentsApiController < ApplicationController
   before_action :require_user
 
   @@errors = {
-    :missing_parameters                => 'No parameters given',
-    :missing_user_id                   => "Can't create an enrollment without a user. Include enrollment[user_id] to create an enrollment",
-    :bad_type                          => 'Invalid type',
-    :bad_role                          => 'Invalid role',
-    :inactive_role                     => 'Cannot create an enrollment with this role because it is inactive.',
-    :base_type_mismatch                => 'The specified type must match the base type for the role',
-    :concluded_course                  => 'Can\'t add an enrollment to a concluded course.',
-    :insufficient_sis_permissions      => 'Insufficient permissions to filter by SIS fields'
+    missing_parameters: "No parameters given",
+    missing_user_id: "Can't create an enrollment without a user. Include enrollment[user_id] to create an enrollment",
+    bad_type: "Invalid type",
+    bad_role: "Invalid role",
+    inactive_role: "Cannot create an enrollment with this role because it is inactive.",
+    base_type_mismatch: "The specified type must match the base type for the role",
+    concluded_course: "Can't add an enrollment to a concluded course.",
+    insufficient_sis_permissions: "Insufficient permissions to filter by SIS fields"
   }
 
   include Api::V1::User
@@ -338,8 +350,11 @@ class EnrollmentsApiController < ApplicationController
   # and a student or in multiple course sections), each enrollment will be
   # listed separately.
   #
-  # note: Currently, only a root level admin user can return other users' enrollments. A
-  # user can, however, return his/her own enrollments.
+  # note: Currently, only a root level admin user can return other users' enrollments.
+  # A user can, however, return his/her own enrollments.
+  #
+  # Enrollments scoped to a course context will include inactive states by default
+  # if the caller has account admin authorization and the state[] parameter is omitted.
   #
   # @argument type[] [String]
   #   A list of enrollment types to return. Accepted values are
@@ -358,9 +373,12 @@ class EnrollmentsApiController < ApplicationController
   #   querying a user's enrollments (either via user_id argument or via user
   #   enrollments endpoint): +current_and_invited+, +current_and_future+, +current_and_concluded+
   #
-  # @argument include[] [String, "avatar_url"|"group_ids"|"locked"|"observed_users"|"can_be_removed"|"uuid"]
+  # @argument include[] [String, "avatar_url"|"group_ids"|"locked"|"observed_users"|"can_be_removed"|"uuid"|"current_points"]
   #   Array of additional information to include on the enrollment or user records.
-  #   "avatar_url" and "group_ids" will be returned on the user record.
+  #   "avatar_url" and "group_ids" will be returned on the user record. If "current_points"
+  #   is specified, the fields "current_points" and (if the caller has
+  #   permissions to manage grades) "unposted_current_points" will be included
+  #   in the "grades" hash for student enrollments.
   #
   # @argument user_id [String]
   #   Filter by user_id (only valid for course or section enrollment
@@ -403,18 +421,23 @@ class EnrollmentsApiController < ApplicationController
   #
   # @returns [Enrollment]
   def index
-    Shackles.activate(:slave) do
-      endpoint_scope = (@context.is_a?(Course) ? (@section.present? ? "section" : "course") : "user")
+    GuardRail.activate(:secondary) do
+      endpoint_scope = if @context.is_a?(Course)
+                         @section.present? ? "section" : "course"
+                       else
+                         "user"
+                       end
 
-      return unless enrollments = @context.is_a?(Course) ?
-                                    course_index_enrollments :
-                                    user_index_enrollments
+      return unless (enrollments = if @context.is_a?(Course)
+                                     course_index_enrollments
+                                   else
+                                     user_index_enrollments
+                                   end)
 
-      enrollments = enrollments.joins(:user).select("enrollments.*").
-        order(:type, User.sortable_name_order_by_clause("users"), :id)
+      enrollments = enrollments.joins(:user).select("enrollments.*")
 
-      has_courses = enrollments.where_clause.instance_variable_get(:@predicates).
-        any? { |cond| cond.is_a?(String) && cond =~ /courses\./ }
+      has_courses = enrollments.where_clause.instance_variable_get(:@predicates)
+                               .any? { |cond| cond.is_a?(String) && cond.include?("courses.") }
       enrollments = enrollments.joins(:course) if has_courses
       enrollments = enrollments.shard(@shard_scope) if @shard_scope
 
@@ -425,12 +448,31 @@ class EnrollmentsApiController < ApplicationController
       end
 
       if params[:sis_user_id].present?
-        pseudonyms = @domain_root_account.pseudonyms.where(sis_user_id: params[:sis_user_id])
-        if value_to_boolean(params[:created_for_sis_id])
-          enrollments = enrollments.where(sis_pseudonym: pseudonyms)
-        else
-          enrollments = enrollments.where(user_id: pseudonyms.pluck(:user_id))
-        end
+        enrollments =
+          if value_to_boolean(params[:created_for_sis_id])
+            pseudonyms = @domain_root_account.pseudonyms.where(sis_user_id: params[:sis_user_id])
+            enrollments.where(sis_pseudonym: pseudonyms)
+          else
+            # include inactive enrollment states by default unless state param is specified
+            filter_params = params[:state].present? ? { enrollment_state: params[:state] } : { include_inactive_enrollments: true }
+
+            user_ids = Set.new
+            sis_user_ids = Array.wrap(params[:sis_user_id])
+            sis_user_ids.each do |sis_id|
+              sis_id = sis_id.to_s
+              users = UserSearch.for_user_in_context(sis_id,
+                                                     @context,
+                                                     @current_user,
+                                                     session,
+                                                     filter_params)
+              users.find_each do |user|
+                if user.pseudonyms.shard(user).active.where(sis_user_id: sis_id).exists?
+                  user_ids << user.id
+                end
+              end
+            end
+            enrollments.where(user_id: user_ids)
+          end
       end
 
       if params[:sis_section_id].present?
@@ -450,33 +492,48 @@ class EnrollmentsApiController < ApplicationController
       end
 
       if params[:grading_period_id].present?
-        if @context.is_a? User
-          grading_period = @context.courses.lazy.map do |course|
-            GradingPeriod.for(course).find_by(id: params[:grading_period_id])
-          end.detect(&:present?)
-        else
-          grading_period = GradingPeriod.for(@context).find_by(id: params[:grading_period_id])
-        end
+        grading_period = if @context.is_a? User
+                           @context.courses.lazy.map do |course|
+                             GradingPeriod.for(course).find_by(id: params[:grading_period_id])
+                           end.detect(&:present?)
+                         else
+                           GradingPeriod.for(@context).find_by(id: params[:grading_period_id])
+                         end
 
         unless grading_period
-          render(:json => {error: "invalid grading_period_id"}, :status => :bad_request)
+          render(json: { error: "invalid grading_period_id" }, status: :bad_request)
           return
         end
       end
 
+      collection =
+        if use_bookmarking?
+          enrollments = enrollments.select("users.sortable_name AS sortable_name")
+          bookmarker = BookmarkedCollection::SimpleBookmarker.new(Enrollment,
+                                                                  { type: { skip_collation: true }, sortable_name: { type: :string, null: false } },
+                                                                  :id)
+          ShardedBookmarkedCollection.build(bookmarker, enrollments, always_use_bookmarks: true)
+        else
+          enrollments.order(:type, User.sortable_name_order_by_clause("users"), :id)
+        end
       enrollments = Api.paginate(
-        enrollments,
-        self, send("api_v1_#{endpoint_scope}_enrollments_url"))
+        collection,
+        self,
+        send("api_v1_#{endpoint_scope}_enrollments_url")
+      )
 
-      ActiveRecord::Associations::Preloader.new.preload(enrollments, [:user, :course, :course_section, :root_account, :sis_pseudonym])
+      ActiveRecord::Associations.preload(enrollments, %i[user course course_section root_account sis_pseudonym])
 
       include_group_ids = Array(params[:include]).include?("group_ids")
       includes = [:user] + Array(params[:include])
-      user_json_preloads(enrollments.map(&:user), false, {group_memberships: include_group_ids})
+      user_json_preloads(enrollments.map(&:user), false, { group_memberships: include_group_ids })
 
-      render :json => enrollments.map { |e|
-        enrollment_json(e, @current_user, session, includes,
-                        grading_period: grading_period)
+      render json: enrollments.map { |e|
+        enrollment_json(e,
+                        @current_user,
+                        session,
+                        includes:,
+                        opts: { grading_period: })
       }
     end
   end
@@ -488,16 +545,22 @@ class EnrollmentsApiController < ApplicationController
   #  The ID of the enrollment object
   # @returns Enrollment
   def show
-    Shackles.activate(:slave) do
+    GuardRail.activate(:secondary) do
       enrollment = @context.all_enrollments.find(params[:id])
       if enrollment.user_id == @current_user.id || authorized_action(@context, @current_user, :read_roster)
-        render :json => enrollment_json(enrollment, @current_user, session)
+        render json: enrollment_json(enrollment, @current_user, session)
       end
     end
   end
 
   # @API Enroll a user
   # Create a new user enrollment for a course or section.
+  #
+  # @argument enrollment[start_at] [DateTime]
+  #   The start time of the enrollment, in ISO8601 format. e.g. 2012-04-18T23:08:51Z
+  #
+  # @argument enrollment[end_at] [DateTime]
+  #   The end time of the enrollment, in ISO8601 format. e.g. 2012-04-18T23:08:51Z
   #
   # @argument enrollment[user_id] [Required, String]
   #   The ID of the user to be enrolled in the course.
@@ -553,8 +616,7 @@ class EnrollmentsApiController < ApplicationController
   #   students the ability to drop the course if desired. Defaults to false.
   #
   # @argument enrollment[associated_user_id] [Integer]
-  #   For an observer enrollment, the ID of a student to observe. The
-  #   caller must have +manage_students+ permission in the course.
+  #   For an observer enrollment, the ID of a student to observe.
   #   This is a one-off operation; to automatically observe all a
   #   student's enrollments (for example, as a parent), please use
   #   the {api:UserObserveesController#create User Observees API}.
@@ -587,19 +649,19 @@ class EnrollmentsApiController < ApplicationController
 
       type = params[:enrollment].delete(:type)
 
-      if role_id = params[:enrollment].delete(:role_id)
+      if (role_id = params[:enrollment].delete(:role_id))
         role = @context.account.get_role_by_id(role_id)
-      elsif role_name = params[:enrollment].delete(:role)
+      elsif (role_name = params[:enrollment].delete(:role))
         role = @context.account.get_course_role_by_name(role_name)
       else
         type = "StudentEnrollment" if type.blank?
-        role = Role.get_built_in_role(type)
+        role = Role.get_built_in_role(type, root_account_id: @context.root_account_id)
         if role.nil? || !role.course_role?
           errors << @@errors[:bad_type]
         end
       end
 
-      if role && role.course_role? && !role.deleted?
+      if role&.course_role? && !role.deleted?
         type = role.base_role_type if type.blank?
         if role.inactive?
           errors << @@errors[:inactive_role]
@@ -622,6 +684,7 @@ class EnrollmentsApiController < ApplicationController
     unless @current_user.can_create_enrollment_for?(@context, session, type)
       render_unauthorized_action && return
     end
+
     params[:enrollment][:course_section_id] = @section.id if @section.present?
     if params[:enrollment][:course_section_id].present?
       @section = api_find(@context.course_sections.active, params[:enrollment].delete(:course_section_id))
@@ -631,23 +694,24 @@ class EnrollmentsApiController < ApplicationController
     user = api_find(User, api_user_id)
     raise(ActiveRecord::RecordNotFound, "Couldn't find User with API id '#{api_user_id}'") unless user.can_be_enrolled_in_course?(@context)
 
-    if @context.concluded?
-      # allow moving users already in the course to open sections
-      unless @section && user.enrollments.shard(@context.shard).where(course_id: @context).exists? && !@section.concluded?
-        return render_create_errors([@@errors[:concluded_course]])
-      end
+    # allow moving users already in the course to open sections
+    if @context.concluded? &&
+       !(@section && user.enrollments.shard(@context.shard).where(course_id: @context).exists? && !@section.concluded?)
+      return render_create_errors([@@errors[:concluded_course]])
     end
 
-    params[:enrollment][:limit_privileges_to_course_section] = value_to_boolean(params[:enrollment][:limit_privileges_to_course_section]) if params[:enrollment].has_key?(:limit_privileges_to_course_section)
+    params[:enrollment][:limit_privileges_to_course_section] = value_to_boolean(params[:enrollment][:limit_privileges_to_course_section]) if params[:enrollment].key?(:limit_privileges_to_course_section)
     params[:enrollment].slice!(:enrollment_state, :section, :limit_privileges_to_course_section, :associated_user_id, :role, :start_at, :end_at, :self_enrolled, :no_notify)
 
     DueDateCacher.with_executing_user(@current_user) do
-      @enrollment = @context.enroll_user(user, type, params[:enrollment].merge(:allow_multiple_enrollments => true))
+      @enrollment = @context.enroll_user(user, type, params[:enrollment].merge(allow_multiple_enrollments: true))
     end
 
-    @enrollment.valid? ?
-      render(:json => enrollment_json(@enrollment, @current_user, session)) :
-      render(:json => @enrollment.errors, :status => :bad_request)
+    if @enrollment.valid?
+      render(json: enrollment_json(@enrollment, @current_user, session))
+    else
+      render(json: @enrollment.errors, status: :bad_request)
+    end
   end
 
   def create_self_enrollment
@@ -660,8 +724,11 @@ class EnrollmentsApiController < ApplicationController
     if @context != @context.root_account.self_enrollment_course_for(code)
       errors << "enrollment[self_enrollment_code] is invalid"
     end
-    if options[:user_id] != 'self'
+    if options[:user_id] != "self"
       errors << "enrollment[user_id] must be 'self' when self-enrolling"
+    end
+    if MasterCourses::MasterTemplate.is_master_course?(@context)
+      errors << "course is not open for self-enrollment"
     end
     return render_create_errors(errors) if errors.present?
 
@@ -673,7 +740,7 @@ class EnrollmentsApiController < ApplicationController
       if @current_user.save
         render(json: enrollment_json(@current_user.self_enrollment, @current_user, session))
       else
-        render(json: {user: @current_user.errors}, status: :bad_request)
+        render(json: { user: @current_user.errors }, status: :bad_request)
       end
     end
   end
@@ -697,23 +764,19 @@ class EnrollmentsApiController < ApplicationController
     @enrollment = @context.enrollments.find(params[:id])
     permission =
       case params[:task]
-      when 'conclude'
-        :can_be_concluded_by
-      when 'delete', 'deactivate', 'inactivate'
+      when "delete", "deactivate", "inactivate"
         :can_be_deleted_by
-      else
+      else # 'conclude'
         :can_be_concluded_by
       end
 
     action =
       case params[:task]
-      when 'conclude'
-        :conclude
-      when 'delete'
+      when "delete"
         :destroy
-      when 'deactivate', 'inactivate'
+      when "deactivate", "inactivate"
         :deactivate
-      else
+      else # 'conclude'
         :conclude
       end
 
@@ -722,9 +785,9 @@ class EnrollmentsApiController < ApplicationController
     end
 
     if @enrollment.send(action)
-      render :json => enrollment_json(@enrollment, @current_user, session)
+      render json: enrollment_json(@enrollment, @current_user, session)
     else
-      render :json => @enrollment.errors, :status => :bad_request
+      render json: @enrollment.errors, status: :bad_request
     end
   end
 
@@ -743,16 +806,18 @@ class EnrollmentsApiController < ApplicationController
   def accept
     @enrollment = @context.enrollments.find(params[:id])
     return render_unauthorized_action unless @current_user && @enrollment.user == @current_user
-    return render(json: {success: true}) if @enrollment.active?
-    return render(json: {error: 'membership not activated'}, status: :bad_request) if @enrollment.inactive?
+    return render(json: { success: true }) if @enrollment.active?
+    return render(json: { error: "membership not activated" }, status: :bad_request) if @enrollment.inactive?
+
     if @enrollment.rejected?
-      @enrollment.workflow_state = 'invited'
+      @enrollment.workflow_state = "invited"
       @enrollment.save_without_broadcasting
     end
-    return render(json: {error: 'self enroll'}, status: :bad_request) if @enrollment.self_enrolled?
-    return render(json: {error: 'no current invitation'}, status: :bad_request) unless @enrollment.invited?
+    return render(json: { error: "self enroll" }, status: :bad_request) if @enrollment.self_enrolled?
+    return render(json: { error: "no current invitation" }, status: :bad_request) unless @enrollment.invited?
+
     @enrollment.accept!
-    render json: {success: true}
+    render json: { success: true }
   end
 
   # @API Reject Course Invitation
@@ -770,14 +835,14 @@ class EnrollmentsApiController < ApplicationController
   def reject
     @enrollment = @context.enrollments.find(params[:id])
     return render_unauthorized_action unless @current_user && @enrollment.user == @current_user
-    return render(json: {success: true}) if @enrollment.rejected?
-    return render(json: {error: 'membership not activated'}, status: :bad_request) if @enrollment.inactive?
-    return render(json: {error: 'self enroll'}, status: :bad_request) if @enrollment.self_enrolled?
-    return render(json: {error: 'no current invitation'}, status: :bad_request) unless @enrollment.invited?
-    @enrollment.reject!
-    render json: {success: true}
-  end
+    return render(json: { success: true }) if @enrollment.rejected?
+    return render(json: { error: "membership not activated" }, status: :bad_request) if @enrollment.inactive?
+    return render(json: { error: "self enroll" }, status: :bad_request) if @enrollment.self_enrolled?
+    return render(json: { error: "no current invitation" }, status: :bad_request) unless @enrollment.invited?
 
+    @enrollment.reject!
+    render json: { success: true }
+  end
 
   # @API Re-activate an enrollment
   # Activates an inactive enrollment
@@ -794,39 +859,43 @@ class EnrollmentsApiController < ApplicationController
       return render_unauthorized_action
     end
 
-
-    unless @enrollment.workflow_state == 'inactive'
-      return render(:json => {:error => "enrollment not inactive"}, :status => :bad_request)
+    unless @enrollment.workflow_state == "inactive"
+      return render(json: { error: "enrollment not inactive" }, status: :bad_request)
     end
 
     if @enrollment.reactivate
-      render :json => enrollment_json(@enrollment, @current_user, session)
+      render json: enrollment_json(@enrollment, @current_user, session)
     else
-      render :json => @enrollment.errors, :status => :bad_request
+      render json: @enrollment.errors, status: :bad_request
     end
   end
 
-  # @API Adds last attended date to student enrollment in course
+  # @API Add last attended date
+  # Add last attended date to student enrollment in course
+  #
+  # @argument date [Date]
+  #   The last attended date of a student enrollment in a course.
   #
   # @example_request
   #   curl https://<canvas>/api/v1/courses/:course_id/user/:user_id/last_attended"
   #     -X PUT => date="Thu%20Dec%2021%202017%2000:00:00%20GMT-0700%20(MST)
   #
-  #
   # @returns Enrollment
   def last_attended
     return unless authorized_action(@context, @current_user, [:view_all_grades, :manage_grades])
+
     date = Time.zone.parse(params[:date])
     if date
-      enrollments = Enrollment.where(:course_id => params[:course_id], :user_id => params[:user_id])
+      enrollments = Enrollment.where(course_id: params[:course_id], user_id: params[:user_id])
       enrollments.update_all(last_attended_at: date)
-      render :json => {:date => date}
+      render json: { date: }
     else
-      render :json => { :message => 'Invalid date time input' }, :status => :bad_request
+      render json: { message: "Invalid date time input" }, status: :bad_request
     end
   end
 
   protected
+
   # Internal: Collect course enrollments that @current_user has permissions to
   # read.
   #
@@ -835,66 +904,83 @@ class EnrollmentsApiController < ApplicationController
     if params[:user_id]
       # if you pass in your own id, you can see if you are enrolled in the
       # course, regardless of whether you have read_roster
-      scope = user_index_enrollments
-      return scope && scope.where(course_id: @context.id)
+      return user_index_enrollments(course: @context)
     end
 
-    if authorized_action(@context, @current_user, [:read_roster, :view_all_grades, :manage_grades])
+    if @context.grants_any_right?(@current_user, session, :read_roster, :view_all_grades, :manage_grades)
       scope = @context.apply_enrollment_visibility(@context.all_enrollments, @current_user).where(enrollment_index_conditions)
 
       unless params[:state].present?
         include_inactive = @context.grants_right?(@current_user, session, :read_as_admin)
         scope = include_inactive ? scope.all_active_or_pending : scope.active_or_pending
       end
-      scope
-    else
-      false
+      return scope
+    elsif @context.user_has_been_observer?(@current_user)
+      # Observers can see enrollments for the users they're observing, as well
+      # as their own enrollments
+      observer_enrollments = @context.observer_enrollments.active.where(user_id: @current_user)
+      observed_student_ids = observer_enrollments.pluck(:associated_user_id).uniq.compact
+
+      return @context.enrollments.where(user: @current_user).where(enrollment_index_conditions).union(
+        @context.student_enrollments.where(user_id: observed_student_ids).where(enrollment_index_conditions)
+      )
     end
+
+    render_unauthorized_action and return false
   end
 
   # Internal: Collect user enrollments that @current_user has permissions to
   # read.
   #
   # Returns an ActiveRecord scope of enrollments on success, false on failure.
-  def user_index_enrollments
+  def user_index_enrollments(course: nil)
     user = api_find(User, params[:user_id])
 
     if user == @current_user
       # if user is requesting for themselves, just return all of their
       # enrollments without any extra checking.
-      if params[:state].present?
-        enrollments = user.enrollments.where(enrollment_index_conditions(true)).joins(:enrollment_state).
-            where("enrollment_states.state IN (?)", enrollment_states_for_state_param)
-      else
-        enrollments = user.enrollments.current_and_invited.where(enrollment_index_conditions).
-            joins(:enrollment_state).where("enrollment_states.state<>'completed'")
-      end
+      enrollments = if params[:state].present?
+                      user.enrollments.where(enrollment_index_conditions(true)).joins(:enrollment_state)
+                          .where(enrollment_states: { state: enrollment_states_for_state_param })
+                    else
+                      user.enrollments.current_and_invited.where(enrollment_index_conditions)
+                          .joins(:enrollment_state).where("enrollment_states.state<>'completed'")
+                    end
+      enrollments = enrollments.where(course_id: course) if course
     else
-      is_approved_parent = user.grants_right?(@current_user, :read_as_parent)
-      # otherwise check for read_roster rights on all of the requested
-      # user's accounts
-      approved_accounts = user.associated_root_accounts.shard(user).inject([]) do |accounts, ra|
-        accounts << ra.id if is_approved_parent || ra.grants_right?(@current_user, session, :read_roster)
-        accounts
+      if course
+        # if current user is requesting enrollments for themselves or a specific user
+        # with params[:user_id] in a course context we want to follow the
+        # course_index_enrollments construct
+        render_unauthorized_action and return false unless course.user_has_been_observer?(@current_user) || course.grants_any_right?(@current_user, session, :read_roster, :view_all_grades, :manage_grades)
+
+        enrollments = user.enrollments.where(enrollment_index_conditions).where(course_id: course)
+      else
+        is_approved_parent = user.grants_right?(@current_user, :read_as_parent)
+        # otherwise check for read_roster rights on all of the requested
+        # user's accounts
+        approved_accounts = user.associated_root_accounts.filter_map do |ra|
+          ra.id if is_approved_parent || ra.grants_right?(@current_user, session, :read_roster)
+        end
+
+        # if there aren't any ids in approved_accounts, then the user doesn't have
+        # permissions.
+        render_unauthorized_action and return false if approved_accounts.empty?
+
+        enrollments = user.enrollments.where(enrollment_index_conditions)
+                          .where(root_account_id: approved_accounts)
       end
-
-      # if there aren't any ids in approved_accounts, then the user doesn't have
-      # permissions.
-      render_unauthorized_action and return false if approved_accounts.empty?
-
-      enrollments = user.enrollments.where(enrollment_index_conditions).
-        where(root_account_id: approved_accounts)
 
       # by default, return active and invited courses. don't use the existing
       # current_and_invited_enrollments scope because it won't return enrollments
       # on unpublished courses.
-      enrollments = enrollments.where(workflow_state: %w{active invited}) if params[:state].blank?
+      enrollments = enrollments.where(workflow_state: %w[active invited]) if params[:state].blank?
     end
 
     terms = @domain_root_account.enrollment_terms.active
     if params[:enrollment_term_id]
       term = api_find(terms, params[:enrollment_term_id])
-      enrollments = enrollments.joins(:course).where(courses: {enrollment_term_id: term})
+      enrollments = enrollments.joins(:course).where(courses: { enrollment_term_id: term })
     end
 
     @shard_scope = user
@@ -912,64 +998,66 @@ class EnrollmentsApiController < ApplicationController
     clauses = []
     replacements = {}
 
-    if !role_ids.present? && role_names.present?
-      role_ids = Array(role_names).map{|name| @context.account.get_course_role_by_name(name).id}
+    if role_ids.blank? && role_names.present?
+      role_ids = Array(role_names).map { |name| @context.account.get_course_role_by_name(name).id }
     end
 
     if role_ids.present?
       role_ids = Array(role_ids).map(&:to_i)
-      condition = 'enrollments.role_id IN (:role_ids)'
+      condition = "enrollments.role_id IN (:role_ids)"
       replacements[:role_ids] = role_ids
-
-      built_in_roles = role_ids.map{|r_id| Role.built_in_roles_by_id[r_id]}.compact
-      if built_in_roles.present?
-        condition = "(#{condition} OR (enrollments.role_id IS NULL AND enrollments.type IN (:built_in_role_types)))"
-        replacements[:built_in_role_types] = built_in_roles.map(&:name)
-      end
       clauses << condition
     elsif type.present?
-      clauses << 'enrollments.type IN (:type)'
+      clauses << "enrollments.type IN (:type)"
       replacements[:type] = Array(type)
     end
 
     if state.present?
       if use_course_state
-        conditions = state.map{ |s| Enrollment::QueryBuilder.new(s.to_sym).conditions }.compact
-        clauses << "(#{conditions.join(' OR ')})"
+        conditions = state.filter_map { |s| Enrollment::QueryBuilder.new(s.to_sym).conditions }
+        clauses << "(#{conditions.join(" OR ")})"
       else
-        clauses << 'enrollments.workflow_state IN (:workflow_state)'
+        clauses << "enrollments.workflow_state IN (:workflow_state)"
         replacements[:workflow_state] = Array(state)
       end
     end
 
     if @section.present?
-      clauses << 'enrollments.course_section_id = :course_section_id'
+      clauses << "enrollments.course_section_id = :course_section_id"
       replacements[:course_section_id] = @section.id
     end
 
-    [ clauses.join(' AND '), replacements ]
+    [clauses.join(" AND "), replacements]
   end
 
   def enrollment_states_for_state_param
     states = Array(params[:state]).uniq
-    states.concat(%w(active invited)) if states.delete 'current_and_invited'
-    states.concat(%w(active invited creation_pending)) if states.delete 'current_and_future'
-    states.concat(%w(active completed)) if states.delete 'current_and_concluded'
+    states.push("active", "invited") if states.delete "current_and_invited"
+    states.push("active", "invited", "creation_pending", "pending_active", "pending_invited") if states.delete "current_and_future"
+    states.push("active", "completed") if states.delete "current_and_concluded"
     states.uniq
   end
 
   def check_sis_permissions(sis_context)
-    sis_filters = %w(sis_account_id sis_course_id sis_section_id sis_user_id)
-    if (params.keys & sis_filters).present?
-      unless sis_context.grants_any_right?(@current_user, :read_sis, :manage_sis)
-        return false
-      end
+    sis_filters = %w[sis_account_id sis_course_id sis_section_id sis_user_id]
+    if params.keys.intersect?(sis_filters) && !sis_context.grants_any_right?(@current_user, :read_sis, :manage_sis)
+      return false
     end
 
     true
   end
 
   def render_create_errors(errors)
-    render json: {message: errors.join(', ')}, status: :bad_request
+    render json: { message: errors.join(", ") }, status: :bad_request
+  end
+
+  def use_bookmarking?
+    unless instance_variable_defined?(:@use_bookmarking)
+      # a few specific developer keys temporarily need bookmarking disabled, see INTEROP-5326
+      pagination_override_key_list = Setting.get("pagination_override_key_list", "").split(",").map(&:to_i)
+      use_numeric_pagination_override = pagination_override_key_list.include?(@access_token&.global_developer_key_id)
+      @use_bookmarking = !use_numeric_pagination_override
+    end
+    @use_bookmarking
   end
 end

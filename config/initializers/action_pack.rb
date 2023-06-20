@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -17,7 +19,7 @@
 
 module TimeZoneFormImprovements
   def time_zone_options_for_select(selected = nil, priority_zones = nil, model = I18nTimeZone)
-    selected = selected.name if selected && selected.is_a?(ActiveSupport::TimeZone)
+    selected = selected.name if selected.is_a?(ActiveSupport::TimeZone)
     result = super(selected, priority_zones, model)
 
     # the current value isn't one of Rails' friendly zones; just add it to the top
@@ -28,7 +30,7 @@ module TimeZoneFormImprovements
 
       unfriendly_zone = "".html_safe
       unfriendly_zone.safe_concat options_for_select([["#{selected} (#{zone.formatted_offset})", selected]], selected)
-      unfriendly_zone.safe_concat content_tag("option".freeze, '-------------', value: '', disabled: true)
+      unfriendly_zone.safe_concat content_tag("option", "-------------", value: "", disabled: true)
       unfriendly_zone.safe_concat "\n"
       unfriendly_zone.safe_concat result
       result = unfriendly_zone
@@ -42,14 +44,27 @@ ActionView::Helpers::FormOptionsHelper.prepend(TimeZoneFormImprovements)
 
 module DataStreamingContentLength
   def send_file(path, _options = {})
-    headers.merge!('Content-Length' => File.size(path).to_s)
+    headers["Content-Length"] = File.size(path).to_s
     super
   end
 
   def send_data(data, _options = {})
-    headers.merge!('Content-Length' => data.bytesize.to_s) if data.respond_to?(:bytesize)
+    headers["Content-Length"] = data.bytesize.to_s if data.respond_to?(:bytesize)
     super
   end
 end
 
 ActionController::Base.include(DataStreamingContentLength)
+
+module FileAccessUserOnSession
+  def self.included(klass)
+    klass.attr_writer :file_access_user
+  end
+
+  def file_access_user
+    @file_access_user ||= self["file_access_user_id"] && User.find_by(id: self["file_access_user_id"])
+  end
+end
+ActionDispatch::Request::Session.include(FileAccessUserOnSession)
+
+Autoextend.hook(:"ActionController::TestSession", FileAccessUserOnSession)

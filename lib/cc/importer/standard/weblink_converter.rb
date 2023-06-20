@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -19,22 +21,22 @@ module CC::Importer::Standard
   module WeblinkConverter
     include CC::Importer
     def get_weblink_title_and_url(resource)
-      title = ''
-      url = ''
-      if resource[:files] && resource[:files].first
+      title = ""
+      url = ""
+      if resource[:files]&.first
         path = get_full_path(resource[:files].first[:href])
         if File.exist?(path)
-          xml = File.open(path).read
+          xml = File.read(path)
           # because of some sadness from certain vendors clear empty namespace declarations
-          xml.gsub!(/xmlns=""/, '')
+          xml.gsub!(/xmlns=""/, "")
           doc = create_xml_doc(xml)
-          doc.remove_namespaces! unless doc.namespaces['xmlns']
-          title = get_node_val(doc, 'webLink title')
-          url = get_node_att(doc, 'webLink url', 'href')
+          doc.remove_namespaces! unless doc.namespaces["xmlns"]
+          title = get_node_val(doc, "webLink title")
+          url = get_node_att(doc, "webLink url", "href")
         end
-      elsif doc = get_node_or_open_file(resource, 'webLink')
-        title = get_node_val(doc, 'title')
-        url = get_node_att(doc, 'url', 'href')
+      elsif (doc = get_node_or_open_file(resource, "webLink"))
+        title = get_node_val(doc, "title")
+        url = get_node_att(doc, "url", "href")
       end
       [title, url]
     end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -227,6 +229,7 @@
 #           "type": "string"
 #         },
 #         "use_for_grading": {
+#           "description": "Whether or not the associated rubric is used for grade calculation",
 #           "example": "true",
 #           "type": "boolean"
 #         },
@@ -235,10 +238,12 @@
 #           "type": "string"
 #         },
 #         "purpose": {
+#           "description": "Whether or not the association is for grading (and thus linked to an assignment) or if it's to indicate the rubric should appear in its context. Values will be grading or bookmark.",
 #           "example": "grading",
 #           "type": "string"
 #         },
 #         "hide_score_total": {
+#           "description": "Whether or not the score total is displayed within the rubric. This option is only available if the rubric is not used for grading.",
 #           "example": "true",
 #           "type": "boolean"
 #         },
@@ -260,10 +265,9 @@ class RubricsApiController < ApplicationController
   before_action :require_user
   before_action :require_context
   before_action :validate_args
-  before_action :find_rubric, only: [:show]
 
-  VALID_ASSESSMENT_SCOPES = %w(assessments graded_assessments peer_assessments).freeze
-  VALID_ASSOCIATION_SCOPES = %w(associations assignment_associations course_associations account_associations).freeze
+  VALID_ASSESSMENT_SCOPES = %w[assessments graded_assessments peer_assessments].freeze
+  VALID_ASSOCIATION_SCOPES = %w[associations assignment_associations course_associations account_associations].freeze
 
   VALID_INCLUDE_PARAMS = (VALID_ASSESSMENT_SCOPES + VALID_ASSOCIATION_SCOPES).freeze
 
@@ -272,6 +276,7 @@ class RubricsApiController < ApplicationController
 
   def index
     return unless authorized_action(@context, @current_user, :manage_rubrics)
+
     rubrics = Api.paginate(@context.rubrics.active, self, rubric_pagination_url)
     render json: rubrics_json(rubrics, @current_user, session) unless performed?
   end
@@ -286,79 +291,81 @@ class RubricsApiController < ApplicationController
 
   def show
     return unless authorized_action(@context, @current_user, :manage_rubrics)
-    if !@context.errors.present?
-      assessments = rubric_assessments
-      associations = rubric_associations
-      render json: rubric_json(@rubric, @current_user, session,
-             assessments: assessments,
-             associations: associations,
-             style: params[:style])
-    else
+
+    rubric = @context.rubric_associations.bookmarked.find_by(rubric_id: params[:id])&.rubric
+    return render json: { message: "Rubric not found" }, status: :not_found unless rubric.present? && !rubric.deleted?
+
+    if @context.errors.present?
       render json: @context.errors, status: :bad_request
+    else
+      assessments = rubric_assessments(rubric)
+      associations = rubric_associations(rubric)
+      render json: rubric_json(rubric,
+                               @current_user,
+                               session,
+                               assessments:,
+                               associations:,
+                               style: params[:style])
     end
   end
 
   private
 
-  def find_rubric
-    @rubric = Rubric.find(params[:id])
-  end
-
-  def rubric_assessments
+  def rubric_assessments(rubric)
     scope = if @context.is_a? Course
-              RubricAssessment.for_course_context(@context.id).where(rubric_id: @rubric.id)
+              RubricAssessment.for_course_context(@context.id).where(rubric_id: rubric.id)
             else
-              RubricAssessment.where(rubric_id: @rubric.id)
+              RubricAssessment.where(rubric_id: rubric.id)
             end
     case (api_includes & VALID_ASSESSMENT_SCOPES)[0]
-    when 'assessments'
+    when "assessments"
       scope
-    when 'graded_assessments'
-      scope.where(assessment_type: 'grading')
-    when 'peer_assessments'
-      scope.where(assessment_type: 'peer_review')
+    when "graded_assessments"
+      scope.where(assessment_type: "grading")
+    when "peer_assessments"
+      scope.where(assessment_type: "peer_review")
     end
   end
 
-  def rubric_associations
-    scope = @rubric.rubric_associations
+  def rubric_associations(rubric)
+    scope = rubric.rubric_associations
     case (api_includes & VALID_ASSOCIATION_SCOPES)[0]
-    when 'associations'
+    when "associations"
       scope
-    when 'assignment_associations'
-      scope.where(association_type: 'Assignment')
-    when 'course_associations'
-      scope.where(association_type: 'Course')
-    when 'account_associations'
-      scope.where(association_type: 'Account')
+    when "assignment_associations"
+      scope.where(association_type: "Assignment")
+    when "course_associations"
+      scope.where(association_type: "Course")
+    when "account_associations"
+      scope.where(association_type: "Account")
     end
   end
 
   def validate_args
     errs = {}
 
-    valid_style_args = ['full', 'comments_only']
+    valid_style_args = ["full", "comments_only"]
     if params[:style] && !valid_style_args.include?(params[:style])
-      errs['style'] = "invalid style requested. Must be one of the following: #{valid_style_args.join(', ')}"
+      errs["style"] = "invalid style requested. Must be one of the following: #{valid_style_args.join(", ")}"
     end
 
     if (api_includes - VALID_INCLUDE_PARAMS).present?
-      errs['include'] = "invalid include value requested. Must be one of the following: #{VALID_INCLUDE_PARAMS.join(', ')}"
+      errs["include"] = "invalid include value requested. Must be one of the following: #{VALID_INCLUDE_PARAMS.join(", ")}"
     else
-      validate_inclusion_category(VALID_ASSOCIATION_SCOPES, errs, 'association')
-      include_assessments = validate_inclusion_category(VALID_ASSESSMENT_SCOPES, errs, 'assessment').present?
+      validate_inclusion_category(VALID_ASSOCIATION_SCOPES, errs, "association")
+      include_assessments = validate_inclusion_category(VALID_ASSESSMENT_SCOPES, errs, "assessment").present?
       if params[:style] && !include_assessments
-        errs['style'] = "invalid parameters. Style parameter passed without requesting assessments"
+        errs["style"] = "invalid parameters. Style parameter passed without requesting assessments"
       end
     end
 
-    errs.each{|key, msg| @context.errors.add(key, msg, att_name: key)}
+    errs.each { |key, msg| @context.errors.add(key, msg, att_name: key) }
   end
 
   def validate_inclusion_category(category_items, errs, name)
     inclusion_items = api_includes & category_items
     if inclusion_items.count > 1
-      errs['include'] = "cannot list multiple #{name} includes. Multiple given: #{inclusion_items.join(', ')}"
+      errs["include"] = "cannot list multiple #{name} includes. Multiple given: #{inclusion_items.join(", ")}"
     elsif inclusion_items.count == 1
       return inclusion_items[0]
     end
@@ -369,4 +376,3 @@ class RubricsApiController < ApplicationController
     @api_includes ||= Array(params[:include])
   end
 end
-

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -15,18 +17,18 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-require_relative '../spec_helper'
+require_relative "../spec_helper"
 
-describe GradebookCsv do
+describe GradebookCSV do
   it { is_expected.to validate_presence_of(:progress) }
 
   context "given a course with a teacher" do
     def csv(course:, user:, force_failure: false)
       attachment = course.attachments.create!(uploaded_data: default_uploaded_data)
-      progress = @course.progresses.new(tag: 'gradebook_export')
-      progress.workflow_state = 'failed' if force_failure
+      progress = @course.progresses.new(tag: "gradebook_export")
+      progress.workflow_state = "failed" if force_failure
       progress.save!
-      course.gradebook_csvs.create!(user: user, progress: progress, attachment: attachment)
+      course.gradebook_csvs.create!(user:, progress:, attachment:)
     end
 
     before(:once) do
@@ -36,18 +38,18 @@ describe GradebookCsv do
     describe ".last_successful_export" do
       it "returns the last exported gradebook CSV for the given user" do
         csv = csv(course: @course, user: @teacher)
-        last_csv = GradebookCsv.last_successful_export(course: @course, user: @teacher)
+        last_csv = GradebookCSV.last_successful_export(course: @course, user: @teacher)
         expect(last_csv).to eq csv
       end
 
       it "returns nil if the last exported gradebook CSV failed for the given user" do
         csv(course: @course, user: @teacher, force_failure: true)
-        last_csv = GradebookCsv.last_successful_export(course: @course, user: @teacher)
+        last_csv = GradebookCSV.last_successful_export(course: @course, user: @teacher)
         expect(last_csv).to be_nil
       end
 
       it "returns nil if the user hasn't exported any gradebook CSVs" do
-        last_csv = GradebookCsv.last_successful_export(course: @course, user: @teacher)
+        last_csv = GradebookCSV.last_successful_export(course: @course, user: @teacher)
         expect(last_csv).to be_nil
       end
     end

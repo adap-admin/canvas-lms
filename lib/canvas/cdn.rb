@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -15,44 +17,66 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
+require "canvas/cdn/registry"
+
 module Canvas
   module Cdn
     class << self
-
       def config
         @config ||= begin
           config = ActiveSupport::OrderedOptions.new
           config.enabled = false
-          yml = ConfigFile.load('canvas_cdn')
+          yml = ConfigFile.load("canvas_cdn")
+          creds = Rails.application.credentials.canvas_cdn_creds
           config.merge!(yml.symbolize_keys) if yml
+          config.merge!(creds) if creds
           config
         end
       end
 
+      # Provides an instance of Cdn::Registry for the current Rails environment.
+      #
+      # Set ENV['USE_OPTIMIZED_JS'] to a truthy value to load the optimized
+      # version of the JavaScripts even if you're running a development Rails
+      # server.
+      def registry
+        @registry ||= begin
+          environment = if %w[1 True true].include?(ENV["USE_OPTIMIZED_JS"])
+                          "production"
+                        else
+                          Rails.env
+                        end
+
+          Cdn::Registry.new(
+            environment:,
+            cache: if ActionController::Base.perform_caching
+                     Cdn::Registry::ProcessCache.new
+                   else
+                     Cdn::Registry::RequestCache.new
+                   end
+          )
+        end
+      end
+
       def should_be_in_bucket?(source)
-        source.start_with?('/dist/brandable_css') || Canvas::Cdn::RevManifest.include?(source)
+        source.start_with?("/dist/brandable_css") || registry.include?(source)
       end
 
-      def asset_host_for(source, request=nil)
-        return unless config.host # unless you've set a :host in the canvas_cdn.yml file, just serve normally
-        add_brotli_to_host_if_supported(request) if should_be_in_bucket?(source)
-        # Otherwise, return nil & use the same domain the page request came from, like normal.
+      def asset_host_for(source)
+        # use the :host specified in canvas_cdn.yml
+        if config.host && should_be_in_bucket?(source)
+          config.host
+        else
+          # Otherwise, use the same domain the page request came from, like normal.
+          nil
+        end
       end
 
-      def add_brotli_to_host_if_supported(request)
-        # there is a /br/ folder on the s3 bucket that has evertying we publish,
-        # but encoded as brotli instead of gzip
-        "#{config.host}#{'/br' if config.host && supports_brotli?(request)}"
-      end
-
-      def supports_brotli?(request)
-        request && request.headers['Accept-Encoding']&.include?('br')
-      end
-
-      def push_to_s3!(*args, &block)
+      def push_to_s3!(*args, **kwargs, &)
         return unless config.bucket
-        uploader = Canvas::Cdn::S3Uploader.new(*args)
-        uploader.upload!(&block)
+
+        uploader = Canvas::Cdn::S3Uploader.new(*args, **kwargs)
+        uploader.upload!(&)
       end
 
       def enabled?

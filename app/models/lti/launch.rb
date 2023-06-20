@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -15,25 +17,20 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'browser/browser'
-
 module Lti
   class Launch
-    FRAME_ALLOWANCES = ['geolocation', 'microphone', 'camera', 'midi', 'encrypted-media', 'autoplay'].freeze
+    FRAME_ALLOWANCES = %w[geolocation microphone camera midi encrypted-media autoplay clipboard-write display-capture].freeze
 
-    attr_writer :analytics_id, :analytics_message_type
-    attr_accessor :link_text, :resource_url, :params, :launch_type, :tool_dimensions, :base_string
+    attr_writer :analytics_id, :analytics_message_type, :resource_url
+    attr_accessor :link_text, :params, :launch_type, :tool_dimensions, :base_string
 
-    def self.iframe_allowances(user_agent = nil)
-      if user_agent.blank? || Browser.new(user_agent).chrome?
-        return FRAME_ALLOWANCES.map { |s| "#{s} *" }
-      end
-      FRAME_ALLOWANCES
+    def self.iframe_allowances
+      FRAME_ALLOWANCES.map { |s| "#{s} *" }
     end
 
     def initialize(options = {})
       @post_only = options[:post_only]
-      @tool_dimensions = options[:tool_dimensions] || {selection_height: '100%', selection_width: '100%'}
+      @tool_dimensions = options[:tool_dimensions] || { selection_height: "100%", selection_width: "100%" }
     end
 
     def post_message_token
@@ -43,29 +40,28 @@ module Lti
     def resource_url
       url = URI(@resource_url)
 
-      if ['http', 'https'].include?(url.scheme)
-        @post_only ? @resource_url.split('?').first : @resource_url
+      if ["http", "https"].include?(url.scheme)
+        @post_only ? @resource_url.split("?").first : @resource_url
       else
-        'about:blank'
+        "about:blank"
       end
     rescue
-      'about:blank'
+      "about:blank"
     end
 
     def resource_path
       url = URI.parse(resource_url)
-      url.path.presence || '/'
+      url.path.presence || "/"
     end
 
     def analytics_id
-      @analytics_id || URI.parse(resource_url).host || 'unknown'
+      @analytics_id || URI.parse(resource_url).host || "unknown"
     end
 
     def analytics_message_type
       @analytics_message_type ||
-          (params['lti_message_type'] == 'basic-lti-launch-request' ? 'tool_launch' : params['lti_message_type']) ||
-          'tool_launch'
+        ((params["lti_message_type"] == "basic-lti-launch-request") ? "tool_launch" : params["lti_message_type"]) ||
+        "tool_launch"
     end
-
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper.rb')
-
 describe Polling::Poll do
   before :once do
     course_factory
@@ -26,8 +26,8 @@ describe Polling::Poll do
 
   context "creating a poll" do
     it "requires an associated user" do
-      expect { Polling::Poll.create!(question: 'A Test Poll') }.to raise_error(ActiveRecord::RecordInvalid,
-                                                                        /User can't be blank/)
+      expect { Polling::Poll.create!(question: "A Test Poll") }.to raise_error(ActiveRecord::RecordInvalid,
+                                                                               /User can't be blank/)
     end
 
     it "requires a question" do
@@ -36,15 +36,15 @@ describe Polling::Poll do
     end
 
     it "saves successfully" do
-      @poll = Polling::Poll.create!(user: @teacher, question: 'A Test Poll', description: 'A test description.')
+      @poll = Polling::Poll.create!(user: @teacher, question: "A Test Poll", description: "A test description.")
       expect(@poll).to be_valid
     end
   end
 
   describe "#closed_and_viewable_for?" do
     it "returns false if the latest poll session available to the user is opened" do
-      student = student_in_course(active_user:true).user
-      poll = @teacher.polls.create!(question: 'A Test Poll')
+      student = student_in_course(active_user: true).user
+      poll = @teacher.polls.create!(question: "A Test Poll")
       session = poll.poll_sessions.create(course: @course)
       session.publish!
 
@@ -52,10 +52,10 @@ describe Polling::Poll do
     end
 
     context "the latest poll session available to the user is closed" do
-      before(:each) do
-        @student = student_in_course(active_user:true).user
-        @poll = @teacher.polls.create!(question: 'A Test Poll')
-        @choice = @poll.poll_choices.create!(text: 'Choice A', is_correct: true)
+      before do
+        @student = student_in_course(active_user: true).user
+        @poll = @teacher.polls.create!(question: "A Test Poll")
+        @choice = @poll.poll_choices.create!(text: "Choice A", is_correct: true)
         @session = @poll.poll_sessions.create(course: @course)
       end
 
@@ -81,7 +81,7 @@ describe Polling::Poll do
 
   describe "#total_results" do
     def create_submission(session, choice)
-      student = student_in_course(active_user:true).user
+      student = student_in_course(active_user: true).user
 
       session.poll_submissions.create!(
         poll: @poll,
@@ -90,13 +90,13 @@ describe Polling::Poll do
       )
     end
 
-    before(:each) do
-      @poll = @teacher.polls.create!(question: 'A Test Poll')
-      @choice1 = @poll.poll_choices.create!(text: 'Choice A', is_correct: false)
-      @choice2 = @poll.poll_choices.create!(text: 'Choice B', is_correct: true)
-      @choice3 = @poll.poll_choices.create!(text: 'Choice B', is_correct: false)
+    before do
+      @poll = @teacher.polls.create!(question: "A Test Poll")
+      @choice1 = @poll.poll_choices.create!(text: "Choice A", is_correct: false)
+      @choice2 = @poll.poll_choices.create!(text: "Choice B", is_correct: true)
+      @choice3 = @poll.poll_choices.create!(text: "Choice B", is_correct: false)
 
-      @section = @course.course_sections.create!(name: 'Section 2')
+      @section = @course.course_sections.create!(name: "Section 2")
     end
 
     it "sums multiple poll session results together" do
@@ -121,10 +121,10 @@ describe Polling::Poll do
       @poll.reload
 
       expect(@poll.total_results).to eq({
-        @choice1.id => 3,
-        @choice2.id => 1,
-        @choice3.id => 2
-      })
+                                          @choice1.id => 3,
+                                          @choice2.id => 1,
+                                          @choice3.id => 2
+                                        })
     end
   end
 end

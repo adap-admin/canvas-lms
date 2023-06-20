@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -15,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_relative 'da_homework_assignee_module'
+require_relative "da_homework_assignee_module"
 
 module DifferentiatedAssignments
   module DifferentiatedAssignmentsWrappable
@@ -36,7 +38,7 @@ module DifferentiatedAssignments
 
       HomeworkAssignee::ASSIGNEE_TYPES.each do |type|
         types_list = organize_by_type(type)
-        organized_assignees << types_list if types_list.size > 0
+        organized_assignees << types_list unless types_list.empty?
       end
 
       organized_assignees.sort!
@@ -44,52 +46,52 @@ module DifferentiatedAssignments
     end
 
     def assign_overrides
-      self.assignees.each { |assignee| assign_to(assignee) }
+      assignees.each { |assignee| assign_to(assignee) }
     end
 
     private
 
-      def initialize_assignees(assignees)
-        @assignees = Array(assignees)
-        validate_self
+    def initialize_assignees(assignees)
+      @assignees = Array(assignees)
+      validate_self
+    end
+
+    def validate_self
+      raise ArgumentError, "Invalid homework assignee!" unless validate_assignees
+    end
+
+    def validate_assignees
+      !DifferentiatedAssignments::HomeworkAssignee::ASSIGNEES.intersect?(assignees)
+    end
+
+    def assign_to(assignee)
+      users = DifferentiatedAssignments::Users
+      super(user: users.student(assignee)) if HomeworkAssignee::Student::ALL.include? assignee
+      super(section: users.section(assignee)) if HomeworkAssignee::Section::ALL.include? assignee
+      super(group: users.group(assignee)) if HomeworkAssignee::Group::ALL.include? assignee
+    end
+
+    def organize_by_type(type)
+      grouped_type = assignees_by_type(type)
+
+      if grouped_type.size > 1
+        # turn into an array of the specific type assignees, e.g. ["1", "2", "3"]
+        grouped_type_list = remove_word_from_array_items(grouped_type, type)
+
+        # pluralize the type and make a list of the specific type
+        "#{type}s #{grouped_type_list.to_sentence}"
+      else
+        grouped_type.to_sentence
       end
+    end
 
-      def validate_self
-        raise ArgumentError, 'Invalid homework assignee!' unless validate_assignees
-      end
+    def remove_word_from_array_items(an_array, word)
+      an_array.map { |item| item.sub(word, "").strip }
+    end
 
-      def validate_assignees
-        (DifferentiatedAssignments::HomeworkAssignee::ASSIGNEES & self.assignees).empty?
-      end
-
-      def assign_to(assignee)
-        users = DifferentiatedAssignments::Users
-        super(user: users.student(assignee)) if HomeworkAssignee::Student::ALL.include? assignee
-        super(section: users.section(assignee)) if HomeworkAssignee::Section::ALL.include? assignee
-        super(group: users.group(assignee)) if HomeworkAssignee::Group::ALL.include? assignee
-      end
-
-      def organize_by_type(type)
-        grouped_type = assignees_by_type(type)
-
-        if grouped_type.size > 1
-          # turn into an array of the specific type assignees, e.g. ["1", "2", "3"]
-          grouped_type_list = remove_word_from_array_items(grouped_type, type)
-
-          # pluralize the type and make a list of the specific type
-          "#{type}s #{grouped_type_list.to_sentence}"
-        else
-          grouped_type.to_sentence
-        end
-      end
-
-      def remove_word_from_array_items(an_array, word)
-        an_array.map { |item| item.sub(word, '').strip }
-      end
-
-      def assignees_by_type(type)
-        self.assignees.select { |a| a.include? type }
-                      .sort
-      end
+    def assignees_by_type(type)
+      assignees.select { |a| a.include? type }
+               .sort
+    end
   end
 end

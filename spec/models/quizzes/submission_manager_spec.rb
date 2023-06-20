@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -16,20 +18,17 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper.rb')
-
 describe Quizzes::SubmissionManager do
-
-  describe '#find_or_create_submission' do
+  describe "#find_or_create_submission" do
     let(:test_user) { user_factory }
 
-    before(:each) do
+    before do
       course_factory
-      @quiz = @course.quizzes.create! :title => "hello"
+      @quiz = @course.quizzes.create! title: "hello"
     end
 
-    context 'for a masquerading user' do
-      it 'uses to_s on the user to query the db when temporary is set to false' do
+    context "for a masquerading user" do
+      it "uses to_s on the user to query the db when temporary is set to false" do
         @quiz.quiz_submissions.create!(temporary_user_code: "asdf")
         stub_user = double(to_s: "asdf")
 
@@ -38,7 +37,7 @@ describe Quizzes::SubmissionManager do
         expect(s.temporary_user_code).to eq "asdf"
       end
 
-      it 'uses to_s on the user to query the db when temporary is set to true' do
+      it "uses to_s on the user to query the db when temporary is set to true" do
         @quiz.quiz_submissions.create!(temporary_user_code: "asdf")
         stub_user = double(to_s: "asdf")
 
@@ -48,8 +47,8 @@ describe Quizzes::SubmissionManager do
       end
     end
 
-    context 'for a temporary user' do
-      it 'uses a temporary user code to query the db' do
+    context "for a temporary user" do
+      it "uses a temporary user code to query the db" do
         @quiz.quiz_submissions.create!(temporary_user_code: "user_#{test_user.id}")
 
         s = Quizzes::SubmissionManager.new(@quiz).find_or_create_submission(test_user, true)
@@ -58,49 +57,48 @@ describe Quizzes::SubmissionManager do
       end
     end
 
-
-    context 'for a non-temporary user' do
-      it 'uses the user id to query the db' do
+    context "for a non-temporary user" do
+      it "uses the user id to query the db" do
         submission = @quiz.quiz_submissions.create!(user: test_user)
 
         s = nil
-        expect {
+        expect do
           s = Quizzes::SubmissionManager.new(@quiz).find_or_create_submission(test_user)
-        }.to_not change { Quizzes::QuizSubmission.count }
+        end.to_not change { Quizzes::QuizSubmission.count }
 
         expect(s.user).to eq test_user
         expect(s).to eq submission
       end
     end
 
-    context 'for existing submissions' do
-      it 'fetches the submission from the db and does not change an existing workflow state' do
+    context "for existing submissions" do
+      it "fetches the submission from the db and does not change an existing workflow state" do
         submission = @quiz.quiz_submissions.create!(user: test_user)
-        submission.update_attribute :workflow_state, 'graded'
-        expect_any_instance_of(Quizzes::QuizSubmission).to receive(:save!).never
+        submission.update_attribute :workflow_state, "graded"
+        expect_any_instance_of(Quizzes::QuizSubmission).not_to receive(:save!)
         s = nil
-        expect {
+        expect do
           s = Quizzes::SubmissionManager.new(@quiz).find_or_create_submission(test_user)
-        }.to_not change { Quizzes::QuizSubmission.count }
+        end.to_not change { Quizzes::QuizSubmission.count }
         expect(s).to eq submission
-        expect(s.workflow_state).to eq 'graded'
+        expect(s.workflow_state).to eq "graded"
       end
     end
 
-    context 'for a non-existant submissions' do
-      it 'creates new submission and set the workflow state' do
+    context "for a non-existant submissions" do
+      it "creates new submission and set the workflow state" do
         s = nil
-        expect {
+        expect do
           s = Quizzes::SubmissionManager.new(@quiz).find_or_create_submission(test_user, false, "preview")
-        }.to change { Quizzes::QuizSubmission.count }.by(1)
+        end.to change { Quizzes::QuizSubmission.count }.by(1)
         expect(s.workflow_state).to eq "preview"
       end
 
-      it 'defaults workflow state to untaken if not set' do
+      it "defaults workflow state to untaken if not set" do
         s = nil
-        expect {
+        expect do
           s = Quizzes::SubmissionManager.new(@quiz).find_or_create_submission(test_user)
-        }.to change { Quizzes::QuizSubmission.count }.by(1)
+        end.to change { Quizzes::QuizSubmission.count }.by(1)
         expect(s.workflow_state).to eq "untaken"
       end
     end

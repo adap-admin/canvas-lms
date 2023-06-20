@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -16,16 +18,18 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require_relative '../spec_helper'
+require_relative "../spec_helper"
 
 RSpec.describe LatePolicySerializer do
   subject(:json) do
-    LatePolicySerializer.new(late_policy, controller: instance_double('FakeController')).as_json
+    LatePolicySerializer.new(late_policy, controller: instance_double("FakeController")).as_json
   end
+
   let(:late_policy) { LatePolicy.new(course_id: course) }
   let(:course) { Course.create! }
 
   it { expect(json.keys).to contain_exactly :late_policy }
+
   it do
     expect(json[:late_policy].keys).to contain_exactly(
       :id,

@@ -16,11 +16,12 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import AssignmentGroup from 'compiled/models/AssignmentGroup'
-import Assignment from 'compiled/models/Assignment'
-import AssignmentGroupCollection from 'compiled/collections/AssignmentGroupCollection'
-import Course from 'compiled/models/Course'
+import AssignmentGroup from '@canvas/assignments/backbone/models/AssignmentGroup'
+import Assignment from '@canvas/assignments/backbone/models/Assignment'
+import AssignmentGroupCollection from '@canvas/assignments/backbone/collections/AssignmentGroupCollection'
+import Course from '@canvas/courses/backbone/models/Course'
 import fakeENV from 'helpers/fakeENV'
+import {saveObservedId} from '@canvas/observer-picker/ObserverGetObservee'
 
 const COURSE_SUBMISSIONS_URL = '/courses/1/submissions'
 
@@ -31,13 +32,13 @@ QUnit.module('AssignmentGroupCollection', {
     this.assignments = [1, 2, 3, 4].map(id => new Assignment({id}))
     this.group = new AssignmentGroup({assignments: this.assignments})
     this.collection = new AssignmentGroupCollection([this.group], {
-      courseSubmissionsURL: COURSE_SUBMISSIONS_URL
+      courseSubmissionsURL: COURSE_SUBMISSIONS_URL,
     })
   },
   teardown() {
     fakeENV.teardown()
     this.server.restore()
-  }
+  },
 })
 
 test('::model is AssignmentGroup', () =>
@@ -52,7 +53,7 @@ test('optionProperties', () => {
   const course = new Course()
   const collection = new AssignmentGroupCollection([], {
     course,
-    courseSubmissionsURL: COURSE_SUBMISSIONS_URL
+    courseSubmissionsURL: COURSE_SUBMISSIONS_URL,
   })
   strictEqual(
     collection.courseSubmissionsURL,
@@ -62,19 +63,19 @@ test('optionProperties', () => {
   strictEqual(collection.course, course, 'assigns course to this.course')
 })
 
-test('(#getGrades) loading grades from the server', function() {
+test('(#getGrades) loading grades from the server', function () {
   ENV.observed_student_ids = []
   ENV.PERMISSIONS.read_grades = true
   let triggeredChangeForAssignmentWithoutSubmission = false
   const submissions = [1, 2, 3].map(id => ({
     id,
     assignment_id: id,
-    grade: id
+    grade: id,
   }))
   this.server.respondWith('GET', `${COURSE_SUBMISSIONS_URL}?per_page=50`, [
     200,
     {'Content-Type': 'application/json'},
-    JSON.stringify(submissions)
+    JSON.stringify(submissions),
   ])
   const lastAssignment = this.assignments[3]
   lastAssignment.on(
@@ -95,4 +96,25 @@ test('(#getGrades) loading grades from the server', function() {
     triggeredChangeForAssignmentWithoutSubmission,
     'triggers change for assignments without a matching submission grade so the UI can update'
   )
+})
+
+test('(#getObservedUserId) when observing a student', function () {
+  const expected_user_id = 2012
+  const current_user_id = 1999
+  ENV.current_user = {id: current_user_id}
+  ENV.observed_student_ids = [123, 456, 789] // should be ignored
+
+  saveObservedId(current_user_id, expected_user_id) // should be used
+
+  const actual_user_id = this.collection.getObservedUserId()
+
+  equal(expected_user_id, actual_user_id, 'returns the selected observed user id')
+})
+
+test('(#getObservedUserId) when not observing a student', function () {
+  ENV.observed_student_ids = []
+
+  const actual_user_id = this.collection.getObservedUserId()
+
+  equal(!!actual_user_id, false, 'returns falsey')
 })

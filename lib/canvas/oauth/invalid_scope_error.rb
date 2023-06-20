@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -15,20 +17,17 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-module Canvas::Oauth
+module Canvas::OAuth
   class InvalidScopeError < RequestError
     def initialize(missing_scopes)
-      super("A requested scope is invalid, unknown, malformed, or exceeds the scope granted by the resource owner. "\
-        "The following scopes were requested, but not granted: #{missing_scopes.to_sentence}")
+      super("A requested scope is invalid, unknown, malformed, or exceeds the scope granted by the resource owner. " \
+            "The following scopes were requested, but not granted: #{missing_scopes.to_sentence(locale: :en)}")
     end
 
-    def to_render_data
+    def as_json
       {
-        status: 400,
-        json: {
-          error: :invalid_scope,
-          error_description: @message
-        }
+        error: :invalid_scope,
+        error_description: @message
       }
     end
 

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -15,43 +17,46 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'spec_helper'
-require_dependency "canvas/plugins/ticketing_system/custom_error"
-
 module Canvas::Plugins::TicketingSystem
   describe CustomError do
-    let(:report){ ErrorReport.new }
+    let(:report) { ErrorReport.new }
     let(:delegate) { CustomError.new(report) }
 
     describe "#to_document" do
       it "translates an error_report to a json-able hash" do
-        expect(delegate.to_document).to eq({:subject=>nil, :description=>nil,
-           :report_type=>"ERROR", :error_message=>nil, :perceived_severity=>'',
-           :account_id=>nil, :account_domain=>nil, :report_origin_url=>nil,
-           :reporter=>
-             {:canvas_id=>"", :email=>"unknown-unknowndomain-example-com@instructure.example.com",
-              :name=>"Unknown User", :role=>nil, :become_user_uri=>nil, :environment=>nil},
-           :canvas_details=>
-             {:request_context_id=>nil, :error_report_id=>nil, :sub_account=>nil}
-        })
+        expect(delegate.to_document).to eq({ subject: nil,
+                                             description: nil,
+                                             report_type: "ERROR",
+                                             error_message: nil,
+                                             perceived_severity: "",
+                                             account_id: nil,
+                                             account_domain: nil,
+                                             report_origin_url: nil,
+                                             reporter: { canvas_id: "",
+                                                         email: "unknown-unknowndomain-example-com@instructure.example.com",
+                                                         name: "Unknown User",
+                                                         role: nil,
+                                                         become_user_uri: nil,
+                                                         environment: nil },
+                                             canvas_details: { request_context_id: nil, error_report_id: nil, sub_account: nil } })
       end
     end
 
     describe "#sub_account_tag" do
-      let(:asset_manager) { double() }
+      let(:asset_manager) { double }
 
       it "prefixes the account_id with subaccount" do
-        report.data['context_asset_string'] = "42"
+        report.data["context_asset_string"] = "42"
         context = double(account_id: "123")
         allow(asset_manager).to receive(:find_by_asset_string).with("42").and_return(context)
-        expect(delegate.sub_account_tag(asset_manager, context.class)).
-          to eq("subaccount_123")
+        expect(delegate.sub_account_tag(asset_manager, context.class))
+          .to eq("subaccount_123")
       end
 
       # since Course is the expected type, we just need to NOT send
       # a type override
       it "returns nil if the context isnt the expected type" do
-        report.data['context_asset_string'] = "42"
+        report.data["context_asset_string"] = "42"
         context = double(account_id: "123")
         allow(asset_manager).to receive(:find_by_asset_string).with("42").and_return(context)
         expect(delegate.sub_account_tag(asset_manager)).to be_nil
@@ -81,7 +86,7 @@ module Canvas::Plugins::TicketingSystem
 
     describe "#user_severity" do
       it "passes through the data value" do
-        report.data['user_perceived_severity'] = "bad"
+        report.data["user_perceived_severity"] = "bad"
         expect(delegate.user_severity).to eq("bad")
       end
 
@@ -93,13 +98,13 @@ module Canvas::Plugins::TicketingSystem
 
     describe "#user_roles" do
       it "passes through the data value" do
-        report.data['user_roles'] = "teacher"
+        report.data["user_roles"] = "teacher"
         expect(delegate.user_roles).to eq("teacher")
       end
 
       it "defaults to a blank string" do
         report.data = nil
-        expect(delegate.user_roles).to be(nil)
+        expect(delegate.user_roles).to be_nil
       end
     end
 
@@ -111,7 +116,7 @@ module Canvas::Plugins::TicketingSystem
 
       it "is nil if no account" do
         report.account = nil
-        expect(delegate.account_domain_value).to be(nil)
+        expect(delegate.account_domain_value).to be_nil
       end
     end
 
@@ -129,7 +134,7 @@ module Canvas::Plugins::TicketingSystem
 
     describe "#become_user_id_uri" do
       it "is nil if there's no url or user" do
-        expect(delegate.become_user_id_uri).to be(nil)
+        expect(delegate.become_user_id_uri).to be_nil
       end
 
       it "transforms the url into one that targets the user for reproduction" do
@@ -149,16 +154,13 @@ module Canvas::Plugins::TicketingSystem
 
     describe "#pretty_http_env" do
       it "is nil if theres no http_env" do
-        expect(delegate.pretty_http_env).to eq(nil)
+        expect(delegate.pretty_http_env).to be_nil
       end
 
       it "maps an env hash to a json string" do
-        report.http_env = {one: "two", three: "four"}
-        expect(delegate.pretty_http_env).to eq( %Q{one: "two"\nthree: "four"})
+        report.http_env = { one: "two", three: "four" }
+        expect(delegate.pretty_http_env).to eq(%(one: "two"\nthree: "four"))
       end
     end
-
   end
-
-
 end

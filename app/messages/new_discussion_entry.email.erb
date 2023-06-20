@@ -1,12 +1,13 @@
 <% define_content :link do %>
-  <%= polymorphic_url([asset.context, :discussion_topic], id: asset.discussion_topic_id, anchor: "entry-#{asset.id}") %>
+<%# TODO: once react_discussions_post is no longer feature_flag_dependent, remove the anchor param %>
+  <%= polymorphic_url([asset.context, :discussion_topic], id: asset.discussion_topic_id, anchor: "entry-#{asset.id}", entry_id: asset.id) %>
 <% end %>
 
 <% define_content :subject do %>
-  <%= t :subject, "New Comment for %{discussion_topic}: %{course}", :discussion_topic => asset.title, :course => asset.context.name %>
+  <%= t :subject, "%{user} replied to %{discussion_topic}, %{course}", :discussion_topic => asset.title, :course => asset.context.name, :user => asset.author_name %>
 <% end %>
 
-<%= t :body, "%{user} posted a new comment on the thread %{discussion_topic} for %{course}:", :user => asset.user.short_name, :discussion_topic => asset.title, :course => asset.context.name %>
+<%= t :body, "%{user} replied to %{discussion_topic}, %{course}:", :user => asset.author_name, :discussion_topic => asset.title, :course => asset.context.name %>
 
 <%= html_to_text(asset.message, :base_url => dashboard_url) %>
 

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -16,14 +18,13 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/../views_helper')
+require_relative "../views_helper"
 
-describe "courses/_settings_sidebar.html.erb" do
+describe "courses/_settings_sidebar" do
   before do
-    course_with_teacher(:active_all => true)
+    course_with_teacher(active_all: true)
     @course.sis_source_id = "so_special_sis_id"
-    @course.workflow_state = 'claimed'
+    @course.workflow_state = "claimed"
     @course.save!
     assign(:context, @course)
     assign(:user_counts, {})
@@ -32,7 +33,7 @@ describe "courses/_settings_sidebar.html.erb" do
   end
 
   describe "End this course button" do
-    it "should not display if the course or term end date has passed" do
+    it "does not display if the course or term end date has passed" do
       allow(@course).to receive(:soft_concluded?).and_return(true)
       view_context(@course, @user)
       assign(:current_user, @user)
@@ -40,7 +41,7 @@ describe "courses/_settings_sidebar.html.erb" do
       expect(response.body).not_to match(/Conclude this Course/)
     end
 
-    it "should display if the course and its term haven't ended" do
+    it "displays if the course and its term haven't ended" do
       allow(@course).to receive(:soft_concluded?).and_return(false)
       view_context(@course, @user)
       assign(:current_user, @user)
@@ -50,12 +51,27 @@ describe "courses/_settings_sidebar.html.erb" do
   end
 
   describe "Reset course content" do
-    it "should not display the dialog contents under the button" do
+    it "does not display the dialog contents under the button" do
+      @course.account.disable_feature!(:granular_permissions_manage_courses)
       view_context(@course, @user)
       assign(:current_user, @user)
       render
-      doc = Nokogiri::HTML.parse(response.body)
-      expect(doc.at_css('#reset_course_content_dialog')['style']).to eq 'display:none;'
+      doc = Nokogiri::HTML5(response.body)
+      expect(doc.at_css("#reset_course_content_dialog")["style"]).to eq "display:none;"
+    end
+
+    it "does not display the dialog contents under the button (granular permissions)" do
+      @course.account.enable_feature!(:granular_permissions_manage_courses)
+      @course.root_account.role_overrides.create!(
+        permission: "manage_courses_reset",
+        role: teacher_role,
+        enabled: true
+      )
+      view_context(@course, @user)
+      assign(:current_user, @user)
+      render
+      doc = Nokogiri.HTML5(response.body)
+      expect(doc.at_css("#reset_course_content_dialog")["style"]).to eq "display:none;"
     end
   end
 
@@ -68,35 +84,43 @@ describe "courses/_settings_sidebar.html.erb" do
 
     describe "external tools" do
       def create_course_settings_sub_navigation_tool(options = {})
-          @course.root_account.enable_feature!(:lor_for_account)
-          defaults = {
-            name: options[:name] || "external tool",
-            consumer_key: 'test',
-            shared_secret: 'asdf',
-            url: 'http://example.com/ims/lti',
-            course_settings_sub_navigation: { icon_url: '/images/delete.png' },
-          }
-          @course.context_external_tools.create!(defaults.merge(options))
+        defaults = {
+          name: options[:name] || "external tool",
+          consumer_key: "test",
+          shared_secret: "asdf",
+          url: "http://example.com/ims/lti",
+          course_settings_sub_navigation: { icon_url: "/images/delete.png" },
+        }
+        @course.context_external_tools.create!(defaults.merge(options))
       end
 
-      it "should display all configured tools" do
+      it "displays all configured tools" do
         num_tools = 3
         (1..num_tools).each do |n|
           create_course_settings_sub_navigation_tool(name: "tool #{n}")
         end
         assign(:course_settings_sub_navigation_tools, @course.context_external_tools.to_a)
         render
-        doc = Nokogiri::HTML.parse(response.body)
-        expect(doc.css('.course-settings-sub-navigation-lti').size).to eq num_tools
+        doc = Nokogiri::HTML5(response.body)
+        expect(doc.css(".course-settings-sub-navigation-lti").size).to eq num_tools
       end
 
-      it "should include the launch type parameter" do
+      it "includes the launch type parameter" do
         create_course_settings_sub_navigation_tool
         assign(:course_settings_sub_navigation_tools, @course.context_external_tools.to_a)
         render
-        doc = Nokogiri::HTML.parse(response.body)
-        tool_link = doc.at_css('.course-settings-sub-navigation-lti')
-        expect(tool_link['href']).to include("launch_type=course_settings_sub_navigation")
+        doc = Nokogiri::HTML5(response.body)
+        tool_link = doc.at_css(".course-settings-sub-navigation-lti")
+        expect(tool_link["href"]).to include("launch_type=course_settings_sub_navigation")
+      end
+
+      it "does not have additional spacing between an icon and a label" do
+        create_course_settings_sub_navigation_tool
+        assign(:course_settings_sub_navigation_tools, @course.context_external_tools.to_a)
+        render
+        doc = Nokogiri::HTML5(response.body)
+        tool_link = doc.at_css(".course-settings-sub-navigation-lti")
+        expect(tool_link.to_html).to include("<img class=\"icon\" alt=\"\" src=\"/images/delete.png\">external tool")
       end
     end
   end

@@ -1,7 +1,6 @@
-$:.push File.expand_path("../lib", __FILE__)
+# frozen_string_literal: true
 
-# Maintain your gem's version:
-require "attachment_fu/version"
+require_relative "lib/attachment_fu/version"
 
 # Describe your gem and declare its dependencies:
 Gem::Specification.new do |s|
@@ -13,7 +12,6 @@ Gem::Specification.new do |s|
   s.summary     = "Instructure-maintained fork of attachment_fu"
 
   s.files = Dir["{app,config,db,lib}/**/*"]
-  s.test_files = Dir["spec_canvas/**/*"]
 
   s.add_dependency "rails", ">= 3.2"
 end

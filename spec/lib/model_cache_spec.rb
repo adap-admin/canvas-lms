@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -16,57 +18,53 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper.rb')
-require 'lib/model_cache'
-
 describe ModelCache do
-  before(:all) do
-    class TestModelCacheUser < ActiveRecord::Base
-      self.table_name = :users # reuse exiting tables so AR doesn't asplode
+  before do
+    # these classes must be real constants because their name is accessed when cacheable_method is called
+    class TestModelCacheUser < ActiveRecord::Base # rubocop:disable Lint/ConstantDefinitionInBlock, RSpec/LeakyConstantDeclaration
+      self.table_name = :users # reuse existing tables so AR doesn't asplode
       include ModelCache
     end
 
-    class TestModelCachePseudonym < ActiveRecord::Base
+    class TestModelCachePseudonym < ActiveRecord::Base # rubocop:disable Lint/ConstantDefinitionInBlock, RSpec/LeakyConstantDeclaration
       self.table_name = :pseudonyms
       include ModelCache
 
-      belongs_to :test_model_cache_user, :foreign_key => :user_id
-      cacheable_method :test_model_cache_user, :key_method => :user_id
+      belongs_to :test_model_cache_user, foreign_key: :user_id
+      cacheable_method :test_model_cache_user, key_method: :user_id
 
-      belongs_to :test_model_cache_user_copy, :class_name => 'TestModelCacheUser', :foreign_key => :user_id
+      belongs_to :test_model_cache_user_copy, class_name: "TestModelCacheUser", foreign_key: :user_id
     end
   end
 
   before do
-    user_with_pseudonym(:name => 'qwerty')
-    @user = TestModelCacheUser.where(:id => @user).first
-    @pseudonym = TestModelCachePseudonym.where(:id => @pseudonym).first
+    user_with_pseudonym(name: "qwerty")
+    @user = TestModelCacheUser.where(id: @user).first
+    @pseudonym = TestModelCachePseudonym.where(id: @pseudonym).first
   end
 
-  after(:all) do
-    ModelCache.keys.delete('TestModelCacheUser')
-    ModelCache.keys.delete('TestModelCachePseudonym')
-    ActiveSupport::DescendantsTracker.class_variable_get(:@@direct_descendants)[ActiveRecord::Base].delete(TestModelCacheUser)
-    ActiveSupport::DescendantsTracker.class_variable_get(:@@direct_descendants)[ActiveRecord::Base].delete(TestModelCachePseudonym)
+  after do
+    ModelCache.keys.delete("TestModelCacheUser")
+    ModelCache.keys.delete("TestModelCachePseudonym")
     Object.send(:remove_const, :TestModelCacheUser)
     Object.send(:remove_const, :TestModelCachePseudonym)
   end
 
-  it "should not cache by default" do
+  it "does not cache by default" do
     u1 = @pseudonym.test_model_cache_user
     expect(u1).to eql(@user)
     expect(u1).not_to equal(@user)
   end
 
   context "with_cache" do
-    it "should cache configured instance lookups" do
-      ModelCache.with_cache(:test_model_cache_users => [@user]) do
+    it "caches configured instance lookups" do
+      ModelCache.with_cache(test_model_cache_users: [@user]) do
         expect(@pseudonym.test_model_cache_user).to equal(@user)
       end
     end
 
-    it "should not cache any other lookups" do
-      ModelCache.with_cache(:test_model_cache_users => [@user]) do
+    it "does not cache any other lookups" do
+      ModelCache.with_cache(test_model_cache_users: [@user]) do
         u2 = @pseudonym.test_model_cache_user_copy
         expect(u2).to eql(@user)
         expect(u2).not_to equal(@user)

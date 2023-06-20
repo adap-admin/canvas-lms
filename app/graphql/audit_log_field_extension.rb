@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -30,32 +32,37 @@ class AuditLogFieldExtension < GraphQL::Schema::FieldExtension
     end
 
     def log(entry, field_name)
-      @dynamo.put_item(
-        table_name: "graphql_mutations",
-        item: {
-          # TODO: this is where you redirect
-          "object_id" => log_entry_id(entry, field_name),
-          "mutation_id" => mutation_id,
-          "timestamp" => @timestamp.iso8601,
-          "expires" => @ttl,
-          "mutation_name" => @mutation.graphql_name,
-          "current_user_id" => @context[:current_user]&.global_id&.to_s,
-          "real_current_user_id" => @context[:real_current_user]&.global_id&.to_s,
-          "params" => @params,
-        },
-        return_consumed_capacity: "TOTAL"
-      )
+      log_entry_ids(entry, field_name).each do |log_entry_id|
+        @dynamo.put_item(
+          table_name: AuditLogFieldExtension.ddb_table_name,
+          item: {
+            # TODO: this is where you redirect
+            "object_id" => log_entry_id,
+            "mutation_id" => mutation_id,
+            "timestamp" => @timestamp.iso8601,
+            "expires" => @ttl,
+            "mutation_name" => @mutation.graphql_name,
+            "current_user_id" => @context[:current_user]&.global_id&.to_s,
+            "real_current_user_id" => @context[:real_current_user]&.global_id&.to_s,
+            "params" => @params,
+          },
+          return_consumed_capacity: "TOTAL"
+        )
+      end
     rescue Aws::DynamoDB::Errors::ServiceError => e
+      ::Canvas::Errors.capture_exception(:graphql_mutation_audit_logs, e)
       Rails.logger.error "Couldn't log mutation: #{e}"
     end
 
-    def log_entry_id(entry, field_name)
+    def log_entry_ids(entry, field_name)
       override_entry_method = :"#{field_name}_log_entry"
-      entry = @mutation.send(override_entry_method, entry) if @mutation.respond_to?(override_entry_method)
+      entry = @mutation.send(override_entry_method, entry, @context) if @mutation.respond_to?(override_entry_method)
 
-      domain_root_account = root_account_for(entry)
+      domain_root_account_ids = root_account_ids_for(entry)
 
-      "#{domain_root_account.global_id}-#{entry.asset_string}"
+      domain_root_account_ids.map do |domain_root_account_id|
+        "#{domain_root_account_id}-#{entry.asset_string}"
+      end
     end
 
     ##
@@ -66,26 +73,22 @@ class AuditLogFieldExtension < GraphQL::Schema::FieldExtension
     #
     # this method will have to know how to resolve a root account for every
     # object that is logged by a mutation
-    def root_account_for(entry)
-      if Progress === entry
+    def root_account_ids_for(entry)
+      if entry.is_a?(Progress)
         entry = entry.context
       end
 
+      if entry.respond_to? :global_root_account_ids
+        return entry.global_root_account_ids
+      end
+
       if entry.respond_to? :root_account_id
-        return entry.root_account
+        return [Shard.global_id_for(entry.root_account_id, entry.shard)]
       end
 
       case entry
-      when Course
-        entry.root_account
-      when Assignment, ContextModule, SubmissionComment
-        entry.context.root_account
-      when Submission
-        entry.assignment.course.root_account
       when SubmissionDraft
-        entry.submission.assignment.course.root_account
-      when PostPolicy
-        (entry.assignment&.course || entry.course).root_account
+        [Shard.global_id_for(entry.submission.root_account_id, entry.shard)]
       else
         raise "don't know how to resolve root_account for #{entry.inspect}"
       end
@@ -102,18 +105,18 @@ class AuditLogFieldExtension < GraphQL::Schema::FieldExtension
     private
 
     def process_arguments(arguments)
-      params = ActionDispatch::Http::ParameterFilter.new(Rails.application.config.filter_parameters).filter(arguments[:input].to_h)
+      params = ActiveSupport::ParameterFilter.new(Rails.application.config.filter_parameters).filter(arguments[:input].to_h)
       truncate_params!(params)
     end
 
     def truncate_params!(o)
       case o
       when Hash
-        o.each { |k,v| o[k] = truncate_params!(v) }
+        o.each { |k, v| o[k] = truncate_params!(v) }
       when Array
         o.map! { |x| truncate_params!(x) }
       when String
-        o.size > 256 ? o.slice(0, 256) : o
+        (o.size > 256) ? o.slice(0, 256) : o
       else
         o
       end
@@ -124,11 +127,25 @@ class AuditLogFieldExtension < GraphQL::Schema::FieldExtension
     Canvas::DynamoDB::DatabaseBuilder.configured?(:auditors)
   end
 
-  def resolve(object:, arguments:, context:, **rest)
+  def self.ddb_table_name
+    Setting.get("graphql_mutations_ddb_table_name", "graphql_mutations")
+  end
+
+  def resolve(object:, arguments:, context:, **)
     yield(object, arguments).tap do |value|
       next unless AuditLogFieldExtension.enabled?
 
       mutation = field.mutation
+      # DiscussionEntryDrafts are not objects that need audit logs, they are
+      # only allowed to be created by the user, and they have timestamps, so
+      # skip audit logs for this mutation.
+      #
+      # Also skip audit logs for internal setting mutations, which can only
+      # be executed by siteadmins.
+      next if [Mutations::CreateDiscussionEntryDraft,
+               Mutations::CreateInternalSetting,
+               Mutations::UpdateInternalSetting,
+               Mutations::DeleteInternalSetting].include? mutation
 
       logger = Logger.new(mutation, context, arguments)
 
@@ -136,7 +153,8 @@ class AuditLogFieldExtension < GraphQL::Schema::FieldExtension
       # should make them on the arguments too???
       mutation.fields.each do |_, return_field|
         next if return_field.original_name == :errors
-        if entry = value[return_field.original_name]
+
+        if (entry = value[return_field.original_name])
           # technically we could be returning lists of lists but gosh dang i
           # hope we never do that
           if entry.respond_to?(:each)

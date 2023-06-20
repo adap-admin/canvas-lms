@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -20,13 +22,18 @@ module Canvas
     module DatabaseBuilder
       class InvalidConfig < StandardError; end
 
+      def self.reset
+        @clients = {}
+      end
+
       def self.configured?(category, environment = default_environment)
         raise ArgumentError, "config name required" if category.blank?
+
         config = configs(environment)[category]
         !!(config && config[:table_prefix] && config[:region])
       end
 
-      def self.from_config(category, environment = default_environment)
+      def self.from_config(category, environment = default_environment, credentials: nil)
         key = [category, environment]
         @clients ||= {}
         @clients.fetch(key) do
@@ -37,22 +44,20 @@ module Canvas
           end
           validate_config(config)
           opts = {
+            credentials: credentials || Canvas::AwsCredentialProvider.new("auditors_creds", config["vault_credential_path"]),
             region: config[:region],
-            access_key_id: config[:access_key_id],
-            secret_access_key: config[:secret_access_key]
           }
           opts[:endpoint] = config[:endpoint] if config[:endpoint]
           fingerprint = "#{category}:#{environment}"
           begin
             @clients[key] = CanvasDynamoDB::Database.new(
               fingerprint,
-              config[:table_prefix],
-              config[:autoscaling_role_arn],
-              opts,
-              Rails.logger
+              prefix: config[:table_prefix],
+              client_opts: opts,
+              logger: Rails.logger
             )
-          rescue Exception => exception
-            Rails.logger.error "Failed to create DynamoDB client for #{key}: #{exception}"
+          rescue => e
+            Rails.logger.error "Failed to create DynamoDB client for #{key}: #{e}"
             nil # don't save this nil into @clients[key], so we can retry later
           end
         end
@@ -72,15 +77,11 @@ module Canvas
       end
 
       def self.configs(environment = default_environment)
-        YAML.load(Canvas::DynamicSettings.find(tree: :private)['dynamodb.yml'] || '{}').with_indifferent_access
+        ConfigFile.load("dynamodb", environment) || {}
       end
 
       def self.categories
         configs.keys
-      end
-
-      def self.read_consistency_setting(category)
-        Cavas::Cassandra::DatabaseBuilder.read_consistency_setting(category)
       end
     end
   end

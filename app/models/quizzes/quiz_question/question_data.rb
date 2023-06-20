@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -58,7 +60,7 @@ class Quizzes::QuizQuestion::QuestionData
 
   def self.generate(fields = {})
     fields = Quizzes::QuizQuestion::RawFields.new(fields)
-    question = Quizzes::QuizQuestion::QuestionData.new(HashWithIndifferentAccess.new)
+    question = Quizzes::QuizQuestion::QuestionData.new(ActiveSupport::HashWithIndifferentAccess.new)
     question.allows_partial_credit! if fields.fetch_any(:allow_partial_credit, true)
 
     # general fields
@@ -101,13 +103,23 @@ class Quizzes::QuizQuestion::QuestionData
   private
 
   def question_types
-    @question_types ||= %w(calculated essay file_upload fill_in_multiple_blanks matching
-          multiple_answers multiple_choice multiple_dropdowns numerical
-          short_answer text_only unknown ).map(&:to_sym)
+    @question_types ||= %w[calculated
+                           essay
+                           file_upload
+                           fill_in_multiple_blanks
+                           matching
+                           multiple_answers
+                           multiple_choice
+                           multiple_dropdowns
+                           numerical
+                           short_answer
+                           text_only
+                           unknown ].map(&:to_sym)
   end
 
   def set_defaults
     return allows_partial_credit! unless @question.key?(:allow_partial_credit)
+
     @allows_partial_credit = @question[:allow_partial_credit]
   end
 
@@ -123,7 +135,6 @@ class Quizzes::QuizQuestion::QuestionData
   def build_match_group
     Quizzes::QuizQuestion::MatchGroup.new(@question[:matches])
   end
-
 
   def type_to_class(type)
     type.to_s.gsub("_question", "").camelize

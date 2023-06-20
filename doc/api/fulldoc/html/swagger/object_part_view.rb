@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -16,8 +18,8 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'hash_view'
-require 'formatted_type'
+require "hash_view"
+require "formatted_type"
 
 class ObjectPartView < HashView
   attr_reader :name, :part
@@ -25,6 +27,7 @@ class ObjectPartView < HashView
   # 'part' is a hash of name/example pairs, e.g.
   # { "name": "Sheldon Cooper", "email": "sheldon@caltech.example.com" }
   def initialize(name, part)
+    super()
     @name = name
     @part = part
   end
@@ -44,6 +47,6 @@ class ObjectPartView < HashView
   end
 
   def properties
-    Hash[property_pairs]
+    property_pairs.to_h
   end
 end

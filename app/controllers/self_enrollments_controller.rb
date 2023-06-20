@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -17,25 +19,29 @@
 #
 
 class SelfEnrollmentsController < ApplicationController
-  before_action :infer_signup_info, :only => [:new]
+  before_action :infer_signup_info, only: [:new]
 
   include Api::V1::Course
 
   def new
     @domain_root_account.reload
-    js_env :PASSWORD_POLICY => @domain_root_account.password_policy
+    js_env PASSWORD_POLICY: @domain_root_account.password_policy
     @login_label_name = t("email")
+    @include_recaptcha = recaptcha_enabled?
 
     login_handle_name = @domain_root_account.login_handle_name_with_inference
     @login_label_name = login_handle_name if login_handle_name
 
     if !@current_user && (
       (@domain_root_account.auth_discovery_url && !params[:authentication_provider]) ||
-      (@domain_root_account.delegated_authentication? && !(params[:authentication_provider] == 'canvas'))
+      (@domain_root_account.delegated_authentication? && params[:authentication_provider] != "canvas")
     )
       store_location
       return redirect_to login_url(params.permit(:authentication_provider))
     end
+
+    # Needed for recaptcha info
+    js_env ACCOUNT: account_json(@domain_root_account, nil, session, ["registration_settings"])
   end
 
   private

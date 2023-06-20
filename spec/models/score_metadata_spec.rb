@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -16,22 +18,20 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'spec_helper'
-
 describe ScoreMetadata do
   it { is_expected.to belong_to(:score).required }
   it { is_expected.to validate_presence_of(:score) }
   it { is_expected.to validate_presence_of(:calculation_details) }
   it { is_expected.to validate_uniqueness_of(:score_id) }
 
-  include_examples 'has_one soft deletion' do
-    subject { score.create_score_metadata!(calculation_details: calculation_details) }
+  include_examples "has_one soft deletion" do
+    subject { score.create_score_metadata!(calculation_details:) }
 
     let(:course) { Course.create! }
-    let(:student) { student_in_course(course: course) }
+    let(:student) { student_in_course(course:) }
     let(:score) { student.scores.create! }
     let(:calculation_details) do
-      {"current"=>{"dropped"=>[]}, "final"=>{"dropped"=>[]}}
+      { "current" => { "dropped" => [] }, "final" => { "dropped" => [] } }
     end
   end
 end

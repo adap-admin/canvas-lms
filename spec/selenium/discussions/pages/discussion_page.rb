@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -14,15 +16,22 @@
 #
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
-require_relative '../../common'
+require_relative "../../common"
 
 class Discussion
   class << self
     include SeleniumDependencies
 
-    # ---------------------- Controls ----------------------
+    # ---------------------- Selectors ---------------------
+
+    # ---------------------- Elements ----------------------
+
+    def discussion_page_body
+      f("body")
+    end
+
     def create_reply_button
-      f('.discussion-reply-box')
+      f(".discussion-reply-box")
     end
 
     def post_reply_button
@@ -30,18 +39,34 @@ class Discussion
     end
 
     def add_media_button
-      f('.mce-i-media')
+      f(".mce-i-media")
     end
 
     def close_media_modal_button
-      f('.mce-close')
+      f(".mce-close")
     end
 
     def media_modal
       fj('div:contains("Insert/edit media")')
     end
 
-    # ---------------------- Page ----------------------
+    def manage_discussion_button
+      fj("[role='button']:contains('Manage Discussion')")
+    end
+
+    def send_to_menuitem
+      fj("li:contains('Send To...')")
+    end
+
+    def copy_to_menuitem
+      fj("li:contains('Copy To...')")
+    end
+
+    def course_pacing_notice
+      f("[data-testid='CoursePacingNotice']")
+    end
+
+    # ---------------------- Actions ----------------------
     def visit(course, discussion)
       get("/courses/#{course.id}/discussion_topics/#{discussion.id}")
       wait_for_ajaximations
@@ -56,4 +81,3 @@ class Discussion
     end
   end
 end
-

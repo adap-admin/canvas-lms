@@ -16,19 +16,21 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import parseLinkHeader from 'compiled/fn/parseLinkHeader'
+import parseLinkHeader from 'link-header-parsing/parseLinkHeaderFromXHR'
 
 QUnit.module('parseLinkHeader', {
-  setup () {
+  setup() {
     this.xhr = {
-      getResponseHeader () {
-        return '<http://canvas.example.com/api/v1/someendpoint&page=1&per_page=50>; rel="current",' +
-               '<http://canvas.example.com/api/v1/someendpoint&page=1&per_page=50>; rel="first",' +
-               '<http://canvas.example.com/api/v1/someendpoint&page=2&per_page=50>; rel="next",' +
-               '<http://canvas.example.com/api/v1/someendpoint&page=3&per_page=50>; rel="last"'
-      }
+      getResponseHeader() {
+        return (
+          '<http://canvas.example.com/api/v1/someendpoint&page=1&per_page=50>; rel="current",' +
+          '<http://canvas.example.com/api/v1/someendpoint&page=1&per_page=50>; rel="first",' +
+          '<http://canvas.example.com/api/v1/someendpoint&page=2&per_page=50>; rel="next",' +
+          '<http://canvas.example.com/api/v1/someendpoint&page=3&per_page=50>; rel="last"'
+        )
+      },
     }
-  }
+  },
 })
 
 test('it pulls out the links from an Axios response header', function () {
@@ -37,7 +39,7 @@ test('it pulls out the links from an Axios response header', function () {
     current: 'http://canvas.example.com/api/v1/someendpoint&page=1&per_page=50',
     first: 'http://canvas.example.com/api/v1/someendpoint&page=1&per_page=50',
     next: 'http://canvas.example.com/api/v1/someendpoint&page=2&per_page=50',
-    last: 'http://canvas.example.com/api/v1/someendpoint&page=3&per_page=50'
+    last: 'http://canvas.example.com/api/v1/someendpoint&page=3&per_page=50',
   }
 
   deepEqual(links, expected, 'the links matched')

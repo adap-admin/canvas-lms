@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -22,37 +24,38 @@ module CanvasPartman
         max_id = base_class.maximum(base_class.partitioning_field)
         return ensure_partitions(advance_partitions) if max_id.nil?
 
-        (0..max_id/base_class.partition_size + advance_partitions).each do |index|
+        (0..(max_id / base_class.partition_size) + advance_partitions).each do |index|
           create_partition(index * base_class.partition_size, graceful: true)
         end
       end
 
       def migrate_data_to_partitions(batch_size: 1000)
         loop do
-          ids = base_class.from("ONLY #{base_class.quoted_table_name}").
-              order(base_class.partitioning_field).
-              limit(batch_size).
-              pluck(:id, base_class.partitioning_field)
+          ids = base_class.from("ONLY #{base_class.quoted_table_name}")
+                          .order(base_class.partitioning_field)
+                          .limit(batch_size)
+                          .pluck(:id, base_class.partitioning_field)
           break if ids.empty?
+
           partition = ids.first.last / base_class.partition_size
-          partition_table = [base_class.table_name, partition].join('_')
+          partition_table = [base_class.table_name, partition].join("_")
           # make sure we're only moving rows for one partition at a time
-          ids.reject! { |(_id, partitioning_field)| partitioning_field / base_class.partition_size != partition }
-          base_class.connection.execute(<<-SQL)
+          ids.select! { |(_id, partitioning_field)| partitioning_field / base_class.partition_size == partition }
+          base_class.connection.execute(<<~SQL.squish)
             WITH x AS (
               DELETE FROM ONLY #{base_class.quoted_table_name}
-              WHERE id IN (#{ids.map(&:first).join(', ')})
+              WHERE id IN (#{ids.map(&:first).join(", ")})
               RETURNING *
             ) INSERT INTO #{base_class.connection.quote_table_name(partition_table)} SELECT * FROM x
-SQL
+          SQL
         end
       end
 
-      def ensure_partitions(advance=1)
+      def ensure_partitions(advance = 1)
         ensure_or_check_partitions(advance, true)
       end
 
-      def partitions_created?(advance=1)
+      def partitions_created?(advance = 1)
         ensure_or_check_partitions(advance, false)
       end
 
@@ -60,20 +63,21 @@ SQL
         empties = 0
         partitions = partition_tables
 
-        if partitions.empty?
-          current = -1
-        else
-          current = partitions.last[base_class.table_name.length + 1..-1].to_i
-        end
+        current = if partitions.empty?
+                    -1
+                  else
+                    partitions.last[base_class.table_name.length + 1..].to_i
+                  end
 
-        if self.partition_on_primary_key?
+        if partition_on_primary_key?
           partitions.reverse_each do |partition|
             break if empties >= advance
             break if base_class.from(base_class.connection.quote_table_name(partition)).exists?
+
             empties += 1
           end
         else
-          id = self.maximum_foreign_id
+          id = maximum_foreign_id
           last_needed = id ? (id / base_class.partition_size) : -1
           # yes `empties` could be negative but that just means we'll make even more partitions to catch up
           empties = current - last_needed
@@ -92,7 +96,7 @@ SQL
       end
 
       def partition_tables
-        super.sort_by { |t| t[base_class.table_name.length + 1..-1].to_i }
+        super.sort_by { |t| t[base_class.table_name.length + 1..].to_i }
       end
 
       protected
@@ -107,7 +111,7 @@ SQL
           if reflection.polymorphic?
             reflection.options[:polymorphic].map do |type|
               if type.is_a?(Hash)
-                type.values.map{|v| v.constantize rescue nil}
+                type.values.map { |v| v.constantize rescue nil }
               else
                 type.to_s.classify.constantize rescue nil
               end
@@ -115,11 +119,11 @@ SQL
           else
             [reflection.klass]
           end
-        klasses.map{|klass| klass.maximum(klass.primary_key)}.compact.max
+        klasses.filter_map { |klass| klass.maximum(klass.primary_key) }.max
       end
 
       def table_regex
-        @table_regex ||= /^#{Regexp.escape(base_class.table_name)}_(?<index>\d+)$/.freeze
+        @table_regex ||= /^#{Regexp.escape(base_class.table_name)}_(?<index>\d+)$/
       end
 
       def generate_check_constraint(id)

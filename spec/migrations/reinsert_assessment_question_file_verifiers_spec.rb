@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -16,25 +18,25 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require_relative '../spec_helper'
+require_relative "../spec_helper"
 
-describe 'DataFixup::ReinsertAssessmentQuestionFileVerifiers' do
-  it "should work" do
+describe "DataFixup::ReinsertAssessmentQuestionFileVerifiers" do
+  it "works" do
     course_factory
     @att1 = attachment_with_context(@course)
     @att2 = attachment_with_context(@course)
-    bank = @course.assessment_question_banks.create!(:title=>'Test Bank')
-    aq = bank.assessment_questions.create!(:question_data => {
-      :question_type => 'essay_question',
-      :question_text =>
-        "File refs:
+    bank = @course.assessment_question_banks.create!(title: "Test Bank")
+    aq = bank.assessment_questions.create!(question_data: {
+                                             question_type: "essay_question",
+                                             question_text: "File refs:
         <img src=\"/courses/#{@course.id}/files/#{@att1.id}/download\">
-        <img src=\"/courses/#{@course.id}/files/#{@att2.id}/download\">"})
+        <img src=\"/courses/#{@course.id}/files/#{@att2.id}/download\">"
+                                           })
 
     aq_atts = aq.attachments.to_a
     expect(aq_atts.count).to eq 2
 
-    original_text = aq.reload.question_data['question_text']
+    original_text = aq.reload.question_data["question_text"]
     expect(original_text).to include("verifier=")
 
     stripped_text = original_text.dup
@@ -47,7 +49,7 @@ describe 'DataFixup::ReinsertAssessmentQuestionFileVerifiers' do
     aq.save!
 
     @quiz = @course.quizzes.create!
-    linked_question = @quiz.quiz_questions.create!(:question_data => aq.question_data, :assessment_question_id => aq.id)
+    linked_question = @quiz.quiz_questions.create!(question_data: aq.question_data, assessment_question_id: aq.id)
     @quiz.reload.publish!
     expect(@quiz.reload.quiz_data.first["question_text"]).to eq stripped_text
 
@@ -57,14 +59,13 @@ describe 'DataFixup::ReinsertAssessmentQuestionFileVerifiers' do
     expect(linked_question.reload.question_data["question_text"]).to eq original_text
   end
 
-  it "should be able to fix the broken yaml with another fixup" do
+  it "is able to fix the broken yaml with another fixup" do
     course_factory
     @att1 = attachment_with_context(@course)
-    bank = @course.assessment_question_banks.create!(:title=>'Test Bank')
-    aq = bank.assessment_questions.create!(:question_data => {
-      :question_type => 'essay_question',
-      :question_text =>
-        "File refs:
+    bank = @course.assessment_question_banks.create!(title: "Test Bank")
+    aq = bank.assessment_questions.create!(question_data: {
+                                             question_type: "essay_question",
+                                             question_text: "File refs:
         <img src=\"/courses/#{@course.id}/files/#{@att1.id}/download\">
         <img src=\"/courses/#{@course.id}/files/#{@att1.id}/download?some_query=1\">
         Here's a whole lot of weird ol' yaml with a whole lot of text\n
@@ -72,11 +73,12 @@ describe 'DataFixup::ReinsertAssessmentQuestionFileVerifiers' do
         out what exactly about it does that but it somehow involves unicode\n
         hey look here's some random unicode there 𝐶𝐶=3.5𝑝𝑝\n
         i hope it doesn't ruin everything
-        "})
+        "
+                                           })
 
     aq_att = aq.attachments.first
 
-    original_text = aq.reload.question_data['question_text']
+    original_text = aq.reload.question_data["question_text"]
     # the fixup will append the verifier so just rearrange them now
     original_text.sub!("verifier=#{aq_att.uuid}&some_query=1", "some_query=1&verifier=#{aq_att.uuid}")
 
@@ -89,7 +91,7 @@ describe 'DataFixup::ReinsertAssessmentQuestionFileVerifiers' do
     aq.save!
 
     @quiz = @course.quizzes.create!
-    linked_question = @quiz.quiz_questions.create!(:question_data => aq.question_data, :assessment_question_id => aq.id)
+    linked_question = @quiz.quiz_questions.create!(question_data: aq.question_data, assessment_question_id: aq.id)
     @quiz.reload.publish!
     expect(@quiz.reload.quiz_data.first["question_text"]).to eq stripped_text
 

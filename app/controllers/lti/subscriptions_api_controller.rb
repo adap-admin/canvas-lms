@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -16,8 +18,13 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 module Lti
-  # @API Webhooks Subscriptions
+  # @API Webhooks Subscriptions for Plagiarism Platform
   # **LTI API for Webhook Subscriptions (Must use <a href="jwt_access_tokens.html">JWT access tokens</a> with this API).**
+  #
+  # This is intended for use with Canvas'
+  # <a href="plagiarism_platform.html">Plagiarism Detection Platform</a>. For
+  # general-purpose event subscriptions see
+  # <a href="data_service_introduction.html">Live Events</a>.
   #
   # The tool proxy must also have the appropriate enabled capabilities (See appendix).
   #
@@ -37,16 +44,16 @@ module Lti
   # to your application, you must check the "event_time" attribute in the
   # "metadata" hash to determine sequence.
   class SubscriptionsApiController < ApplicationController
-    include Lti::Ims::AccessTokenHelper
+    include Lti::IMS::AccessTokenHelper
 
-    WEBHOOK_SUBSCRIPTION_SERVICE = 'vnd.Canvas.webhooksSubscription'.freeze
+    WEBHOOK_SUBSCRIPTION_SERVICE = "vnd.Canvas.webhooksSubscription"
 
     SERVICE_DEFINITIONS = [
       {
         id: WEBHOOK_SUBSCRIPTION_SERVICE,
-        endpoint: 'api/lti/subscriptions',
-        format: ['application/json'].freeze,
-        action: ['POST', 'GET', 'PUT', 'DELETE'].freeze
+        endpoint: "api/lti/subscriptions",
+        format: ["application/json"].freeze,
+        action: %w[POST GET PUT DELETE].freeze
       }.freeze
     ].freeze
 
@@ -54,12 +61,12 @@ module Lti
     before_action :authorized_lti2_tool, :verify_service_configured
 
     rescue_from Lti::SubscriptionsValidator::InvalidContextType do
-      render json: {error: 'Invalid subscription'}, status: :bad_request
+      render json: { error: "Invalid subscription" }, status: :bad_request
     end
 
     rescue_from Lti::SubscriptionsValidator::MissingCapability,
                 Lti::SubscriptionsValidator::ToolNotInContext do
-        render json: {error: 'Unauthorized subscription'}, status: :unauthorized
+      render json: { error: "Unauthorized subscription" }, status: :unauthorized
     end
 
     def lti2_service_name
@@ -112,7 +119,7 @@ module Lti
     # This endpoint uses the same parameters as the create endpoint
     def update
       subscription = params.require(:subscription)
-      subscription['Id'] = params.require(:id)
+      subscription["Id"] = params.require(:id)
 
       subscription_helper = SubscriptionsValidator.new(params.require(:subscription).to_unsafe_h, tool_proxy)
       subscription_helper.validate_subscription_request!
@@ -120,7 +127,6 @@ module Lti
       service_response = Services::LiveEventsSubscriptionService.update_tool_proxy_subscription(tool_proxy, params.require(:id), subscription)
       forward_service_response(service_response)
     end
-
 
     # @API List all Webhook Subscription for a tool proxy
     #
@@ -131,9 +137,9 @@ module Lti
     # Example use of a 'StartKey' header object:
     #   { "Id":"71d6dfba-0547-477d-b41d-db8cb528c6d1","DeveloperKey":"10000000000001" }
     def index
-      headers = request.headers['StartKey'] ? { 'StartKey' => request.headers['StartKey'] } : {}
+      headers = request.headers["StartKey"] ? { "StartKey" => request.headers["StartKey"] } : {}
       service_response = Services::LiveEventsSubscriptionService.tool_proxy_subscriptions(tool_proxy, headers)
-      response.headers['EndKey'] = service_response.headers['endkey'] if service_response.headers['endkey']
+      response.headers["EndKey"] = service_response.headers["endkey"] if service_response.headers["endkey"]
       forward_service_response(service_response)
     end
 
@@ -141,7 +147,7 @@ module Lti
 
     def verify_service_configured
       unless Services::LiveEventsSubscriptionService.available?
-        render json: {error: 'Subscription service not configured'}, status: :internal_server_error
+        render json: { error: "Subscription service not configured" }, status: :internal_server_error
       end
     end
 

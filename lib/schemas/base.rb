@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -20,13 +22,23 @@ module Schemas
   class Base
     delegate :validate, :valid?, to: :schema_checker
 
-    def self.simple_validation_errors(json_hash)
-      error = self.new.validate(json_hash).to_a.first
+    def self.simple_validation_errors(json_hash, error_format: :string)
+      error = new.validate(json_hash).to_a.first
       return nil if error.blank?
-      if error['data_pointer'].present?
-        return "#{error['data']} #{error['data_pointer']}. Schema: #{error['schema']}"
+
+      if error["data_pointer"].present?
+        if error_format == :hash
+          return {
+            error: error["data"],
+            field: error["data_pointer"],
+            schema: error["schema"]
+          }
+        else
+          return "#{error["data"]} #{error["data_pointer"]}. Schema: #{error["schema"]}"
+        end
       end
-      "The following fields are required: #{error.dig('schema', 'required').join(', ')}"
+
+      "The following fields are required: #{error.dig("schema", "required").join(", ")}"
     end
 
     private
@@ -36,7 +48,7 @@ module Schemas
     end
 
     def schema
-      raise 'Abstract method'
+      raise "Abstract method"
     end
   end
 end

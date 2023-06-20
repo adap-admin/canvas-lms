@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -17,7 +19,7 @@
 #
 
 module DataFixup::Lti::UpdateCustomParams
-  LOGGER_PREFIX = "Lti::UpdateCustomParams => ".freeze
+  LOGGER_PREFIX = "Lti::UpdateCustomParams => "
 
   # This script will update all specified instances of LTI tools within Canvas,
   # it is intended to be copied and pasted into a Canvas console
@@ -44,12 +46,13 @@ module DataFixup::Lti::UpdateCustomParams
 
       search(domains, subdomain_matching, validate_domain) do |tool|
         tool.settings = Importers::ContextExternalToolImporter.create_tool_settings({
-          settings: tool.settings.deep_merge({
-            "custom_fields" => custom_fields
-          })
-        })
+                                                                                      settings: tool.settings.deep_merge({
+                                                                                                                           "custom_fields" => custom_fields
+                                                                                                                         })
+                                                                                    })
 
         return failures << tool unless tool.save
+
         logger "Successfully migrated tool @ #{tool.url} !"
       end
 
@@ -57,12 +60,10 @@ module DataFixup::Lti::UpdateCustomParams
       failures
     end
 
-    def search(domains, subdomain_matching, validate_domain)
+    def search(domains, subdomain_matching, validate_domain, &)
       validate_domains!(domains) if validate_domain
       Switchman::Shard.with_each_shard do
-        select_by_domains(domains, subdomain_matching).find_each do |tool|
-          yield tool
-        end
+        select_by_domains(domains, subdomain_matching).find_each(&)
       end
     end
 
@@ -71,17 +72,16 @@ module DataFixup::Lti::UpdateCustomParams
     end
 
     def validate_domains!(domains)
-      domains.select { |domain| domain =~ /\A[\w.-]*\z/ }
+      domains.grep(/\A[\w.-]*\z/)
     end
 
     def select_by_domains(domains, subdomain_matching)
       # we allow one \w*. before the provided domain
-      subdomain_match = subdomain_matching ? '(\\w*\\.)?' : ''
+      subdomain_match = subdomain_matching ? "(\\w*\\.)?" : ""
 
-      tools = ContextExternalTool.active.where(
-        '"context_external_tools".url ~ ANY (array[?])', domains.map {|d| "^https?://#{subdomain_match}#{d}/" }
+      ContextExternalTool.active.where(
+        '"context_external_tools".url ~ ANY (array[?])', domains.map { |d| "^https?://#{subdomain_match}#{d}/" }
       )
-      tools
     end
   end
 end

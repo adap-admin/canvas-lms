@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -17,21 +19,37 @@
 
 module MasterCourses
   def self.table_name_prefix
-    'master_courses_'
+    "master_courses_"
   end
 
   # probably not be a comprehensive list but oh well
-  ALLOWED_CONTENT_TYPES = %w{
-    Announcement AssessmentQuestionBank Assignment AssignmentGroup Attachment CalendarEvent DiscussionTopic
-    ContextExternalTool ContextModule ContentTag LearningOutcome LearningOutcomeGroup Quizzes::Quiz Rubric Wiki WikiPage
-  }.freeze
+  ALLOWED_CONTENT_TYPES = %w[
+    Announcement
+    AssessmentQuestionBank
+    Assignment
+    AssignmentGroup
+    Attachment
+    CalendarEvent
+    CoursePace
+    ContextExternalTool
+    ContextModule
+    ContentTag
+    DiscussionTopic
+    LearningOutcome
+    LearningOutcomeGroup
+    MediaTrack
+    Quizzes::Quiz
+    Rubric
+    Wiki
+    WikiPage
+  ].freeze
 
-  CONTENT_TYPES_FOR_DELETIONS = (ALLOWED_CONTENT_TYPES - ['Wiki']).freeze
-  CONTENT_TYPES_FOR_UNSYNCED_CHANGES = (ALLOWED_CONTENT_TYPES - ['ContentTag', 'Wiki'] + ['Folder']).freeze
+  CONTENT_TYPES_FOR_DELETIONS = (ALLOWED_CONTENT_TYPES - ["Wiki"]).freeze
+  CONTENT_TYPES_FOR_UNSYNCED_CHANGES = (ALLOWED_CONTENT_TYPES - ["Wiki"] + ["Folder"]).freeze
 
-  MIGRATION_ID_PREFIX = "mastercourse_".freeze
+  MIGRATION_ID_PREFIX = "mastercourse_"
 
-  LOCK_TYPES = [:content, :settings, :points, :due_dates, :availability_dates, :state].freeze
+  LOCK_TYPES = %i[content settings points due_dates availability_dates state].freeze
 
-  RESTRICTED_OBJECT_TYPES = %w{Assignment Attachment DiscussionTopic Quizzes::Quiz WikiPage}.freeze
+  RESTRICTED_OBJECT_TYPES = %w[Assignment Attachment DiscussionTopic Quizzes::Quiz WikiPage CoursePace].freeze
 end

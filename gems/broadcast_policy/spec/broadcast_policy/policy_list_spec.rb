@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -15,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'spec_helper'
+require_relative "../spec_helper"
 
 describe BroadcastPolicy::PolicyList do
   describe ".new" do
@@ -28,7 +30,7 @@ describe BroadcastPolicy::PolicyList do
     it "stores notification policies" do
       subject.populate do
         dispatch :foo
-        to       { 'test@example.com' }
+        to       { "test@example.com" }
         whenever { true }
       end
 
@@ -40,11 +42,11 @@ describe BroadcastPolicy::PolicyList do
     it "returns the named policy" do
       subject.populate do
         dispatch :foo
-        to       { 'test@example.com' }
+        to       { "test@example.com" }
         whenever { true }
       end
 
-      expect(subject.find_policy_for('Foo')).not_to be(nil)
+      expect(subject.find_policy_for("Foo")).not_to be_nil
     end
   end
 
@@ -52,11 +54,11 @@ describe BroadcastPolicy::PolicyList do
     it "calls broadcast on each notification" do
       subject.populate do
         dispatch :foo
-        to       { 'test@example.com' }
+        to       { "test@example.com" }
         whenever { true }
       end
 
-      record = 'record'
+      record = "record"
       expect(subject.notifications[0]).to receive(:broadcast).with(record)
       subject.broadcast(record)
     end
@@ -65,7 +67,7 @@ describe BroadcastPolicy::PolicyList do
   describe "#dispatch" do
     it "saves new notifications" do
       subject.dispatch(:foo)
-      expect(subject.notifications).not_to be(nil)
+      expect(subject.notifications).not_to be_nil
     end
 
     it "ignores existing notifications" do

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -16,10 +18,9 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../apis/api_spec_helper')
+require_relative "../apis/api_spec_helper"
 
 describe WebZipExportsController do
-
   before :once do
     account = Account.default
     account.settings[:enable_offline_web_export] = true
@@ -28,7 +29,7 @@ describe WebZipExportsController do
     student_in_course(active_all: true)
   end
 
-  before(:each) do
+  before do
     user_session(@student)
   end
 
@@ -38,25 +39,25 @@ describe WebZipExportsController do
       @course.web_zip_exports.create!(user: @student)
     end
 
-    it "should return all course web zip exports" do
+    it "returns all course web zip exports" do
       json = api_call_as_user(@student, :get, "/api/v1/courses/#{@course.id}/web_zip_exports", {
-        controller: :web_zip_exports,
-        action: :index,
-        course_id: @course.to_param,
-        format: 'json'
-      })
+                                controller: :web_zip_exports,
+                                action: :index,
+                                course_id: @course.to_param,
+                                format: "json"
+                              })
 
       expect(json.size).to eq 2
     end
 
-    it "should not return web zip exports for other users" do
+    it "does not return web zip exports for other users" do
       @course.web_zip_exports.create!(user: @teacher)
       json = api_call_as_user(@student, :get, "/api/v1/courses/#{@course.id}/web_zip_exports", {
-        controller: :web_zip_exports,
-        action: :index,
-        course_id: @course.to_param,
-        format: 'json'
-      })
+                                controller: :web_zip_exports,
+                                action: :index,
+                                course_id: @course.to_param,
+                                format: "json"
+                              })
 
       expect(json.size).to eq 2
     end
@@ -65,34 +66,33 @@ describe WebZipExportsController do
   describe "GET :show.json", type: :request do
     let_once(:web_zip_export) do
       @course.web_zip_exports.create!({
-        user: @student
-      })
+                                        user: @student
+                                      })
     end
 
-    it "should be success" do
+    it "is success" do
       json = api_call_as_user(@student, :get, "/api/v1/courses/#{@course.id}/web_zip_exports/#{web_zip_export.id}", {
-        controller: :web_zip_exports,
-        action: :show,
-        course_id: @course.to_param,
-        id: web_zip_export.to_param,
-        format: 'json'
-      })
+                                controller: :web_zip_exports,
+                                action: :show,
+                                course_id: @course.to_param,
+                                id: web_zip_export.to_param,
+                                format: "json"
+                              })
 
-      expect(json['id']).to eq(web_zip_export.id)
+      expect(json["id"]).to eq(web_zip_export.id)
     end
 
-    it "should not show web zip exports for other users" do
+    it "does not show web zip exports for other users" do
       student_in_course(active_all: true)
       response = raw_api_call(:get, "/api/v1/courses/#{@course.id}/web_zip_exports/#{web_zip_export.id}", {
-        controller: :web_zip_exports,
-        action: :show,
-        course_id: @course.to_param,
-        id: web_zip_export.to_param,
-        format: 'json'
-      })
+                                controller: :web_zip_exports,
+                                action: :show,
+                                course_id: @course.to_param,
+                                id: web_zip_export.to_param,
+                                format: "json"
+                              })
 
       expect(response).to eq 401
     end
   end
-
 end

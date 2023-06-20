@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -39,10 +41,11 @@ module CanvasPartman::Concerns
       def partitioning_strategy=(value)
         raise ArgumentError unless [:by_date, :by_id].include?(value)
 
-        if value == :by_date
+        case value
+        when :by_date
           self.partitioning_field = "created_at"
           self.partitioning_interval = :months
-        elsif value == :by_id
+        when :by_id
           self.partitioning_field = nil
           self.partition_size = 1_000_000
         end
@@ -63,7 +66,7 @@ module CanvasPartman::Concerns
       # @attr [Symbol] partitioning_interval
       #  A time interval to partition the table over. Only applies to
       #  :by_date partitioning_strategy
-      #  Allowed values are one of: [ :months, :years ]
+      #  Allowed values are one of: [ :weeks, :months, :years ]
       #
       #  Default value is :months.
       #
@@ -72,7 +75,7 @@ module CanvasPartman::Concerns
       attr_reader :partitioning_interval
 
       def partitioning_interval=(value)
-        raise ArgumentError unless [:weeks, :months, :years].include?(value)
+        raise ArgumentError unless %i[weeks months years].include?(value)
 
         @partitioning_interval = value
       end
@@ -97,6 +100,18 @@ module CanvasPartman::Concerns
         self.partitioning_interval = over.to_sym if over
       end
 
+      # Convenience method for wrangling a group of attribute
+      # hashes for xome kind of bulk operation.  Example
+      # would be constructing a bulk insert statement
+      #
+      # @param [Array] attrs_list
+      #   each element is a hash that carries the attributes of a
+      #   potential record of the current class type
+      #
+      def attrs_in_partition_groups(attrs_list, &)
+        attrs_list.group_by { |a| infer_partition_table_name(a) }.each(&)
+      end
+
       # :nodoc:
       #
       # @override ActiveRecord::Persistence#unscoped
@@ -106,25 +121,19 @@ module CanvasPartman::Concerns
       # Monkey patch the relation we'll use for queries.
       def unscoped
         super.tap do |relation|
-          relation.send :extend, CanvasPartman::DynamicRelation
+          relation.extend CanvasPartman::DynamicRelation
         end
       end
 
       def _insert_record(values)
-        if ::ActiveRecord.version >= Gem::Version.new("5.2")
-          begin
-            prev_table = @arel_table
-            prev_builder = @predicate_builder
-            @arel_table = arel_table_from_key_values(values)
-            @predicate_builder = nil
-            super
-          ensure
-            @arel_table = prev_table
-            @predicate_builder = prev_builder
-          end
-        else
-          super
-        end
+        prev_table = @arel_table
+        prev_builder = @predicate_builder
+        @arel_table = arel_table_from_key_values(values)
+        @predicate_builder = nil
+        super
+      ensure
+        @arel_table = prev_table
+        @predicate_builder = prev_builder
       end
 
       # :nodoc:
@@ -132,13 +141,7 @@ module CanvasPartman::Concerns
         partition_table_name = infer_partition_table_name(attributes)
 
         @arel_tables ||= {}
-        @arel_tables[partition_table_name] ||= begin
-          if ::ActiveRecord.version < Gem::Version.new('5')
-            Arel::Table.new(partition_table_name, { engine: self.arel_engine })
-          else
-            Arel::Table.new(partition_table_name, type_caster: type_caster)
-          end
-        end
+        @arel_tables[partition_table_name] ||= Arel::Table.new(partition_table_name, klass: self)
       end
 
       # @internal
@@ -156,31 +159,31 @@ module CanvasPartman::Concerns
         attr = attributes.detect { |(k, _v)| (k.is_a?(String) ? k : k.name) == partitioning_field }
 
         if attr.nil? || attr[1].nil?
-          raise ArgumentError.new <<-ERROR
+          raise ArgumentError, <<~TEXT
             Partition resolution failure!!!
             Expected "#{partitioning_field}" attribute to be present in set and
             have a value, but was or did not:
 
             #{attributes}
-          ERROR
+          TEXT
         end
 
         if partitioning_strategy == :by_date
-          date = attr[1]
-          date = date.utc if ActiveRecord::Base.default_timezone == :utc
+          date = attr[1].is_a?(ActiveModel::Attribute) ? attr[1].value : attr[1]
+          date = date.utc if ActiveRecord.default_timezone == :utc
 
           case partitioning_interval
           when :weeks
             date = date.to_date
-            [ table_name, date.cwyear, ("%02d" % date.cweek) ].join('_')
+            [table_name, date.cwyear, ("%02d" % date.cweek)].join("_")
           when :months
-            [ table_name, date.year, date.month ].join('_')
+            [table_name, date.year, date.month].join("_")
           when :years
-            [ table_name, date.year ].join('_')
+            [table_name, date.year].join("_")
           end
         else
-          id = attr[1]
-          [ table_name, id / partition_size ].join('_')
+          id = attr[1].is_a?(ActiveModel::Attribute) ? attr[1].value : attr[1]
+          [table_name, id / partition_size].join("_")
         end
       end
     end

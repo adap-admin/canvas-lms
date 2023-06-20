@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -19,7 +21,7 @@ module Canvas
   class RedisConfig
     attr_reader :redis
 
-    def initialize(servers, database=nil, options=nil)
+    def initialize(servers, database = nil, options = nil)
       @redis = RedisConfig.from_servers(servers, options)
       @redis.select database if database.present?
     end
@@ -33,7 +35,7 @@ module Canvas
     end
 
     def self.factory
-      Bundler.require 'redis'
+      Bundler.require "redis"
       ::Redis::Store::Factory
     end
 
@@ -42,11 +44,11 @@ module Canvas
     end
 
     def self.from_servers(servers, options)
-      raw_conn = factory.create(servers.map { |s|
+      raw_conn = factory.create(servers.map do |s|
         # convert string addresses to options hash, and disable redis-cache's
         # built-in marshalling code
         url_to_redis_options(s).merge(options || {})
-      })
+      end)
       ::Canvas::RedisWrapper.new(raw_conn)
     end
   end

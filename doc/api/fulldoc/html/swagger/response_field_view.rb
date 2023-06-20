@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -16,8 +18,8 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require_relative 'canvas_api/deprecatable'
-require 'hash_view'
+require_relative "canvas_api/deprecatable"
+require "hash_view"
 
 class ResponseFieldView < HashView
   include CanvasAPI::Deprecatable
@@ -25,8 +27,9 @@ class ResponseFieldView < HashView
   attr_reader :types, :effective_date, :notice_date
 
   def initialize(tag)
+    super()
     line = tag.text
-    @deprecated = tag.tag_name == 'deprecated_response_field'
+    @deprecated = tag.tag_name == "deprecated_response_field"
     @deprecated_date_key = :NOTICE
     @effective_date_key = :EFFECTIVE
     @tag_declaration_line = line
@@ -46,6 +49,7 @@ class ResponseFieldView < HashView
     raise(ArgumentError, "param name missing:\n#{line}") unless name
 
     raise(ArgumentError, "Expected a description to be present, but it was not provided.\n#{line}") if remaining.nil?
+
     description = remaining.strip
     [name, description]
   end

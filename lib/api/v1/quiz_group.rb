@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -20,7 +22,7 @@ module Api::V1::QuizGroup
   include Api::V1::Json
 
   API_ALLOWED_QUIZ_GROUP_OUTPUT_FIELDS = {
-    :only => %w(
+    only: %w[
       id
       quiz_id
       name
@@ -28,18 +30,18 @@ module Api::V1::QuizGroup
       question_points
       assessment_question_bank_id
       position
-      )
-  }
+    ]
+  }.freeze
 
   API_ALLOWED_QUIZ_INPUT_FIELDS = {
-    :only => %w(
+    only: %w[
       name
       pick_count
       question_points
       assessment_question_bank_id
       position
-      )
-  }
+    ]
+  }.freeze
 
   def quiz_groups_compound_json(quiz_groups, context, user, session)
     { quiz_groups: quiz_groups_json(quiz_groups, context, user, session) }
@@ -51,7 +53,7 @@ module Api::V1::QuizGroup
     end
   end
 
-  def quiz_group_json(quiz_group, context, user, session)
+  def quiz_group_json(quiz_group, _context, user, session)
     api_json(quiz_group, user, session, API_ALLOWED_QUIZ_GROUP_OUTPUT_FIELDS)
   end
 
@@ -65,5 +67,4 @@ module Api::V1::QuizGroup
     quiz_group.attributes = filter_params(quiz_group_params)
     quiz_group.save
   end
-
 end

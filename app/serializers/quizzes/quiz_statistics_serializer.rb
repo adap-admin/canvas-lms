@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -23,63 +25,53 @@ module Quizzes
     # quiz statistics.
     #
     # This is what you should pass to this serializer!!!
-    class Input < Struct.new(:quiz, :options, :student_analysis, :item_analysis)
+    Input = Struct.new(:quiz, :options, :student_analysis, :item_analysis) do
       include ActiveModel::SerializerSupport
     end
 
     root :quiz_statistics
 
-    attributes *[
-      # the id is really only included in JSON-API and only because the spec
-      # requires it, this is because the output of this serializer is a mix of
-      # two entities, an id doesn't make much sense, but we'll use the id of the
-      # StudentAnalysis when needed
-      :id,
-      :url,
-      :html_url,
-
-      # whether any of the participants has taken the quiz more than one time
-      :multiple_attempts_exist,
-
-       # the time of the generation of the analysis (the earliest one)
-      :generated_at,
-
-      # whether the statistics were based on earlier and current quiz submissions
-      #
-      # PS: this is always true for item analysis
-      :includes_all_versions,
-
-      # whether statistics report includes sis ids
-      # always false for item analysis
-      :includes_sis_ids,
-
-      :points_possible,
-      :anonymous_survey,
-
-      :speed_grader_url,
-      :quiz_submissions_zip_url,
-
-      # an aggregate of question stats from both student and item analysis
-      :question_statistics,
-
-      # submission-related statistics (extracted from student analysis):
-      #
-      #   - correct_count_average
-      #   - incorrect_count_average
-      #   - duration_average
-      #   - score_average
-      #   - score_high
-      #   - score_low
-      #   - score_stdev
-      :submission_statistics,
-    ]
+    # the id is really only included in JSON-API and only because the spec
+    # requires it, this is because the output of this serializer is a mix of
+    # two entities, an id doesn't make much sense, but we'll use the id of the
+    # StudentAnalysis when needed
+    attributes :id,
+               :url,
+               :html_url,
+               # whether any of the participants has taken the quiz more than one time
+               :multiple_attempts_exist,
+               # the time of the generation of the analysis (the earliest one)
+               :generated_at,
+               # whether the statistics were based on earlier and current quiz submissions
+               #
+               # PS: this is always true for item analysis
+               :includes_all_versions,
+               # whether statistics report includes sis ids
+               # always false for item analysis
+               :includes_sis_ids,
+               :points_possible,
+               :anonymous_survey,
+               :speed_grader_url,
+               :quiz_submissions_zip_url,
+               # an aggregate of question stats from both student and item analysis
+               :question_statistics,
+               # submission-related statistics (extracted from student analysis):
+               #
+               #   - correct_count_average
+               #   - incorrect_count_average
+               #   - duration_average
+               #   - score_average
+               #   - score_high
+               #   - score_low
+               #   - score_stdev
+               :submission_statistics
 
     def_delegators :@controller,
-      :course_quiz_statistics_url,
-      :api_v1_course_quiz_url,
-      :api_v1_course_quiz_statistics_url,
-      :speed_grader_course_gradebook_url,
-      :course_quiz_quiz_submissions_url
+                   :course_quiz_statistics_url,
+                   :api_v1_course_quiz_url,
+                   :api_v1_course_quiz_statistics_url,
+                   :speed_grader_course_gradebook_url,
+                   :course_quiz_quiz_submissions_url
 
     has_one :quiz, embed: :ids
 
@@ -109,9 +101,9 @@ module Quizzes
       # we're going to merge the item analysis for applicable questions into the
       # generic question statistics from the student analysis
       question_statistics.each do |question|
-        question_id = question[:id] = "#{question[:id]}"
-        question_item = item_analysis_report.detect do |question_item|
-          "#{question_item[:question_id]}" == question_id
+        question_id = question[:id] = question[:id].to_s
+        question_item = item_analysis_report.detect do |item|
+          item[:question_id].to_s == question_id
         end
 
         if question_item.present?
@@ -128,15 +120,15 @@ module Quizzes
           out[$1] = statistic if key =~ SubmissionStatisticsExtractor
         end
 
-        out.delete('user_ids')
-        out.delete('logged_out_users')
+        out.delete("user_ids")
+        out.delete("logged_out_users")
 
-        out['unique_count'] = student_analysis_report[:unique_submission_count]
+        out["unique_count"] = student_analysis_report[:unique_submission_count]
       end
     end
 
     def generated_at
-      [ object[:student_analysis], object[:item_analysis] ].map(&:created_at).min
+      [object[:student_analysis], object[:item_analysis]].map(&:created_at).min
     end
 
     def multiple_attempts_exist
@@ -151,9 +143,7 @@ module Quizzes
       object[:student_analysis].includes_sis_ids
     end
 
-    def points_possible
-      quiz.points_possible
-    end
+    delegate points_possible: :quiz
 
     def anonymous_survey
       quiz.anonymous_survey?
@@ -162,8 +152,8 @@ module Quizzes
     def speed_grader_url
       if show_speed_grader?
         speed_grader_course_gradebook_url(quiz.context, {
-          assignment_id: quiz.assignment.id
-        })
+                                            assignment_id: quiz.assignment.id
+                                          })
       end
     end
 

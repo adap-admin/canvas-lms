@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -18,7 +20,7 @@
 module Factories
   def add_section(section_name, opts = {})
     course = opts[:course] || @course
-    @course_section = course.course_sections.create!(:name => section_name)
+    @course_section = course.course_sections.create!(name: section_name)
     course.reload
     @course_section
   end

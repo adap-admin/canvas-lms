@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -16,10 +18,9 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/messages_helper')
+require_relative "messages_helper"
 
-describe 'appointment_reserved_for_user' do
+describe "appointment_reserved_for_user" do
   include MessagesCommon
 
   before :once do
@@ -37,10 +38,11 @@ describe 'appointment_reserved_for_user' do
 
   context ".email" do
     let(:path_type) { :email }
-    it "should render" do
+
+    it "renders" do
       msg = generate_message(notification_name, path_type, asset, message_options)
-      expect(msg.subject).to include('some title')
-      expect(msg.body).to include('some title')
+      expect(msg.subject).to include("some title")
+      expect(msg.body).to include("some title")
       expect(msg.body).to include(@teacher.name)
       expect(msg.body).to include(@user.name)
       expect(msg.body).to include(@course.name)
@@ -48,7 +50,7 @@ describe 'appointment_reserved_for_user' do
     end
 
     context "for groups" do
-      it "should render group name" do
+      it "renders group name" do
         msg = generate_message(notification_name, path_type, asset, message_options)
 
         expect(msg.body).to include(@group.name)
@@ -58,27 +60,30 @@ describe 'appointment_reserved_for_user' do
 
   context ".sms" do
     let(:path_type) { :sms }
-    it "should render" do
+
+    it "renders" do
       msg = generate_message(notification_name, path_type, asset, message_options)
-      expect(msg.body).to include('some title')
+      expect(msg.body).to include("some title")
     end
   end
 
   context ".summary" do
     let(:path_type) { :summary }
-    it "should render" do
+
+    it "renders" do
       msg = generate_message(notification_name, path_type, asset, message_options)
-      expect(msg.subject).to include('some title')
-      expect(msg.body).to include('some title')
+      expect(msg.subject).to include("some title")
+      expect(msg.body).to include("some title")
       expect(msg.body).to include(@teacher.name)
     end
   end
 
   context ".twitter" do
     let(:path_type) { :twitter }
-    it "should render" do
+
+    it "renders" do
       msg = generate_message(notification_name, path_type, asset, message_options)
-      expect(msg.body).to include('some title')
+      expect(msg.body).to include("some title")
     end
   end
 end

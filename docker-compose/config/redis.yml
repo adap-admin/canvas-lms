@@ -13,4 +13,8 @@ test:
   # warning: the redis database will get cleared before each test, so if you
   # use this server for anything else, make sure to set aside a database id for
   # these tests to use.
-  database: 1
+  db: <%= ENV.fetch('PARALLEL_INDEX', '1') %>
+
+  # when using RspecQ under test, ignore redis guards to allow execution of
+  # unsafe redis commands against redis test queue.
+  ignore_redis_guards: true

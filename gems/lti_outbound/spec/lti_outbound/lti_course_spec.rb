@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,10 +18,10 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'spec_helper'
+require "spec_helper"
 
 describe LtiOutbound::LTICourse do
-  it_behaves_like 'an LTI context'
+  it_behaves_like "an LTI context"
 
-  it_behaves_like 'it has a proc attribute setter and getter for', :course_code
+  it_behaves_like "it has a proc attribute setter and getter for", :course_code
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -22,14 +24,16 @@ module CC::Importer::Canvas
     def convert_media_tracks(doc)
       track_map = {}
       return track_map unless doc
-      if media_tracks = doc.at_css('media_tracks')
-        media_tracks.css('media').each do |media|
-          file_migration_id = media['identifierref']
+
+      if (media_tracks = doc.at_css("media_tracks"))
+        media_tracks.css("media").each do |media|
+          file_migration_id = media["identifierref"]
           tracks = []
-          media.css('track').each do |track|
-            track = { 'migration_id' => track['identifierref'],
-                      'kind' => track['kind'],
-                      'locale' => track['locale'] }
+          media.css("track").each do |track_node|
+            track = { "migration_id" => track_node["identifierref"],
+                      "kind" => track_node["kind"],
+                      "locale" => track_node["locale"] }
+            track["content"] = track_node.text if Account.site_admin.feature_enabled?(:media_links_use_attachment_id)
             tracks << track
           end
           track_map[file_migration_id] = tracks
@@ -37,6 +41,5 @@ module CC::Importer::Canvas
       end
       track_map
     end
-
   end
 end

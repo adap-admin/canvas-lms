@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -15,8 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-# rubocop:disable Metrics/LineLength
-module Lti::Ims
+module Lti::IMS
   # @API Names and Role
   #
   # API for IMS Names and Role Provisioning Service version 2 .
@@ -258,10 +259,9 @@ module Lti::Ims
   #        }
   #     }
   class NamesAndRolesController < ApplicationController
-    # rubocop:enable Metrics/LineLength
     include Concerns::AdvantageServices
 
-    MIME_TYPE = 'application/vnd.ims.lti-nrps.v2.membershipcontainer+json'.freeze
+    MIME_TYPE = "application/vnd.ims.lti-nrps.v2.membershipcontainer+json"
 
     # @API List Course Memberships
     # Return active NamesAndRoleMemberships in the given course.
@@ -277,7 +277,7 @@ module Lti::Ims
     #   If the `rlid` parameter is also present, it will be 'and-ed' together with this parameter
     #
     # @argument limit [String]
-    #   May be used to limit the number of NamesAndRoleMemberships returned in a page
+    #   May be used to limit the number of NamesAndRoleMemberships returned in a page. Defaults to 50.
     #
     # @returns NamesAndRoleMemberships
     def course_index
@@ -300,7 +300,7 @@ module Lti::Ims
     #   If the `rlid` parameter is also present, it will be 'and-ed' together with this parameter
     #
     # @argument limit [String]
-    #   May be used to limit the number of NamesAndRoleMemberships returned in a page
+    #   May be used to limit the number of NamesAndRoleMemberships returned in a page. Defaults to 50.
     #
     # @returns NamesAndRoleMemberships
     def group_index
@@ -331,7 +331,11 @@ module Lti::Ims
     end
 
     def find_memberships_page
-      {url: request.url}.reverse_merge(new_provider.find)
+      canonical_url = URI.parse(request.url)
+      if context.root_account.feature_enabled?(:consistent_ags_ids_based_on_account_principal_domain)
+        canonical_url.host = context.root_account.domain
+      end
+      { url: canonical_url.to_s }.reverse_merge(new_provider.find)
     end
 
     def new_provider

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -29,11 +31,9 @@ class RemoveRedundantQuizSubmissionEventIndices < CanvasPartman::Migration
     # environments have run it (since no other migrations will create
     # these extra indices again)
     with_each_partition do |partition|
-      index_ns = partition.sub('quiz_submission_events', 'qse')
+      index_ns = partition.sub("quiz_submission_events", "qse")
 
-      next unless connection.index_exists?(partition, :created_at, {
-        name: "#{index_ns}_idx_on_created_at"
-      })
+      next unless connection.index_exists?(partition, :created_at, name: "#{index_ns}_idx_on_created_at")
 
       remove_index partition, name: "#{index_ns}_idx_on_created_at"
       remove_index partition, name: "#{index_ns}_predecessor_locator_idx"

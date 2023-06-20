@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -22,7 +24,8 @@ module Quizzes
     end
 
     def build_outcome_results(questions, alignments)
-      return unless ['complete', 'graded'].include?(@qs.workflow_state)
+      return unless ["complete", "graded"].include?(@qs.workflow_state)
+
       create_quiz_outcome_results(questions, alignments)
       questions.each do |question|
         alignments.each do |alignment|
@@ -32,28 +35,33 @@ module Quizzes
         end
       end
     end
+
     private
 
     def create_outcome_question_result(question, alignment)
       # find or create the user's unique LearningOutcomeResult for this alignment
       # of the quiz question.
-      quiz_result = alignment.learning_outcome_results.
-        for_association(@qs.quiz).
-        for_associated_asset(@qs.quiz).
-        where(user_id: @qs.user.id).
-        first_or_initialize
+      quiz_result = alignment.learning_outcome_results
+                             .for_association(@qs.quiz)
+                             .for_associated_asset(@qs.quiz)
+                             .where(user_id: @qs.user.id)
+                             .first_or_initialize
+
+      quiz_result.workflow_state = :active
+      quiz_result.user_uuid = @qs.user.uuid
 
       # get data from quiz submission's question result to ensure result should be generated
       cached_question = @qs.quiz_data.detect { |q| q[:assessment_question_id] == question.id }
-      cached_answer = @qs.submission_data.detect { |q| q[:question_id] == cached_question[:id] }
       raise "Could not find valid question" unless cached_question
+
+      cached_answer = @qs.submission_data.detect { |q| q[:question_id] == cached_question[:id] }
       raise "Could not find valid answer" unless cached_answer
 
       # Create a question scoped outcome result linked to the quiz_result.
       question_result = quiz_result.learning_outcome_question_results.for_associated_asset(question).first_or_initialize
 
       # do not create a result if no points are possible.
-      if cached_question['points_possible'] == 0
+      if cached_question["points_possible"] == 0
         # destroy any existing results that might be persisted if points possible were not always 0
         question_result.destroy if question_result.persisted?
         return
@@ -64,7 +72,7 @@ module Quizzes
 
       # mastery
       question_result.score = cached_answer[:points]
-      question_result.possible = cached_question['points_possible']
+      question_result.possible = cached_question["points_possible"]
       question_result.calculate_percent!
       question_result.mastery = determine_mastery(question_result, alignment)
 
@@ -72,7 +80,10 @@ module Quizzes
       question_result.attempt = @qs.attempt
 
       # title
-      question_result.title = "#{@qs.user.name}, #{@qs.quiz.title}: #{cached_question[:name]}"
+      question_result.title = CanvasTextHelper.truncate_text(
+        "#{@qs.user.name}, #{@qs.quiz.title}: #{cached_question[:name]}",
+        { max_length: 250 }
+      )
 
       question_result.submitted_at = @qs.finished_at
       question_result.assessed_at = Time.zone.now
@@ -83,11 +94,16 @@ module Quizzes
     def create_quiz_outcome_results(questions, alignments)
       unique_alignments = alignments.uniq
       unique_alignments.map do |alignment|
-        result = alignment.learning_outcome_results.
-          for_association(@qs.quiz).
-          for_associated_asset(@qs.quiz).
-          where(user_id: @qs.user.id).
-          first_or_initialize
+        result = alignment.learning_outcome_results
+                          .for_association(@qs.quiz)
+                          .for_associated_asset(@qs.quiz)
+                          .where(user_id: @qs.user.id)
+                          .first_or_initialize
+
+        next if !result.new_record? && result.attempt.to_i > @qs.attempt.to_i
+
+        result.workflow_state = :active
+        result.user_uuid = @qs.user.uuid
 
         result.artifact = @qs
         result.context = @qs.quiz.context || alignment.context
@@ -96,15 +112,16 @@ module Quizzes
           question.assessment_question_bank_id == alignment.content_id
         end.map do |question|
           cached_question = @qs.quiz_data.detect { |q| q[:assessment_question_id] == question.id }
-          cached_answer = @qs.submission_data.detect { |q| q[:question_id] == cached_question[:id] }
           raise "Could not find valid question" unless cached_question
+
+          cached_answer = @qs.submission_data.detect { |q| q[:question_id] == cached_question[:id] }
           raise "Could not find valid answer" unless cached_answer
+
           [cached_question, cached_answer]
         end
 
-        result.possible = cached_questions_and_answers.map(&:first).
-          map { |h| h['points_possible']}.
-          inject(:+)
+        result.possible = cached_questions_and_answers.map(&:first)
+                                                      .sum { |h| h["points_possible"] }
 
         # do not create a result if no points are possible.
         if result.possible == 0
@@ -113,14 +130,16 @@ module Quizzes
           next
         end
 
-        result.score = cached_questions_and_answers.map(&:last).
-          map { |h| h[:points] }.
-          inject(:+)
+        result.score = cached_questions_and_answers.map(&:last)
+                                                   .sum { |h| h[:points] }
 
         result.calculate_percent!
         result.mastery = determine_mastery(result, alignment)
         result.attempt = @qs.attempt
-        result.title = "#{@qs.user.name}, #{@qs.quiz.title}"
+        result.title = CanvasTextHelper.truncate_text(
+          "#{@qs.user.name}, #{@qs.quiz.title}",
+          { max_length: 250 }
+        )
         result.assessed_at = Time.zone.now
         result.submitted_at = @qs.finished_at
         result.save_to_version(result.attempt)

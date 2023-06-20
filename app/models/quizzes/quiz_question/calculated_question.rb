@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -20,7 +22,8 @@ class Quizzes::QuizQuestion::CalculatedQuestion < Quizzes::QuizQuestion::Numeric
   def answers
     answer = @question_data.answers.first
     return [] unless answer
-    return [{:id => answer[:id], :numerical_answer_type => "exact_answer", :exact => answer[:answer], :margin => @question_data[:answer_tolerance]}]
+
+    [{ id: answer[:id], numerical_answer_type: "exact_answer", exact: answer[:answer], margin: @question_data[:answer_tolerance] }]
   end
 
   # TODO: remove once new stats is on for everybody
@@ -28,8 +31,8 @@ class Quizzes::QuizQuestion::CalculatedQuestion < Quizzes::QuizQuestion::Numeric
   # mutates responses with statistical data
   # also potentially mutates @question_data[:answers]
   def stats(responses)
-    #@question_data[:answers]:
-    #[{"weight"=>100,
+    # @question_data[:answers]:
+    # [{"weight"=>100,
     #  "variables"=>[{"name"=>"x", "value"=>4}, {"name"=>"y", "value"=>3}],
     #  "answer"=>6,
     #  "id"=>9339,
@@ -58,15 +61,15 @@ class Quizzes::QuizQuestion::CalculatedQuestion < Quizzes::QuizQuestion::Numeric
 
       answer[:numbers] ||= {}
       answer_stats = answer[:numbers][r[:text].to_f] ||= {
-        :responses => 1,
-        :user_ids => [],
-        :correct => true,
+        responses: 1,
+        user_ids: [],
+        correct: true,
       }
       answer_stats[:responses] += 1
       answer_stats[:user_ids] << r[:user_id]
     end
 
-    stats = {:multiple_responses => true}
+    stats = { multiple_responses: true }
     @question_data.merge stats
   end
 end

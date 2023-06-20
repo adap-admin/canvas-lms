@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -17,10 +19,6 @@
 
 class MakeCriticalColumnsNotNull < ActiveRecord::Migration[4.2]
   tag :predeploy
-
-  def connection
-    Delayed::Job.connection
-  end
 
   def up
     change_column_null :delayed_jobs, :run_at, false

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -22,13 +24,13 @@ module Quizzes
     root :quiz_report
 
     def_delegators :@controller,
-      :api_v1_course_quiz_url,
-      :api_v1_course_quiz_report_url,
-      :api_v1_progress_url
+                   :api_v1_course_quiz_url,
+                   :api_v1_course_quiz_report_url,
+                   :api_v1_progress_url
 
     def_delegators :object, :quiz
 
-    attributes *%w[
+    attributes(*%w[
       id
       report_type
       readable_type
@@ -40,7 +42,7 @@ module Quizzes
       progress_url
       created_at
       updated_at
-    ].map(&:to_sym)
+    ].map(&:to_sym))
 
     has_one :quiz, embed: :ids, root: :quiz
     has_one :progress, {
@@ -80,17 +82,17 @@ module Quizzes
       super.select do |key|
         case key
         when :progress_url then !accepts_jsonapi? && has_progress?
-        when :progress then has_progress? && including?('progress')
-        when :attachment then has_attachment? && including?('file')
+        when :progress then has_progress? && including?("progress")
+        when :attachment then has_attachment? && including?("file")
         else true
         end
       end
     end
 
-    def serializable_object(options={})
+    def serializable_object(**)
       super.tap do |hash|
         unless accepts_jsonapi?
-          hash.delete('links')
+          hash.delete("links")
           hash[:quiz_id] = quiz.id
         end
       end

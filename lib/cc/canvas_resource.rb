@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -21,9 +23,12 @@ module CC
     include ExternalFeeds
     include AssignmentGroups
     include GradingStandards
+    include LatePolicy
     include LearningOutcomes
     include Rubrics
     include Events
+    include CoursePaces
+    include BlueprintSettings
     include WebResources
 
     def add_canvas_non_cc_data
@@ -31,21 +36,24 @@ module CC
 
       @canvas_resource_dir = File.join(@export_dir, CCHelper::COURSE_SETTINGS_DIR)
       canvas_export_path = File.join(CCHelper::COURSE_SETTINGS_DIR, CCHelper::CANVAS_EXPORT_FLAG)
-      FileUtils::mkdir_p @canvas_resource_dir
+      FileUtils.mkdir_p @canvas_resource_dir
 
       resources = []
-      resources << run_and_set_progress(:create_course_settings, nil, I18n.t('course_exports.errors.course_settings', "Failed to export course settings"), migration_id) if export_symbol?(:all_course_settings)
-      resources << run_and_set_progress(:create_module_meta, nil, I18n.t('course_exports.errors.module_meta', "Failed to export module meta data"))
-      resources << run_and_set_progress(:create_external_feeds, nil, I18n.t('course_exports.errors.external_feeds', "Failed to export external feeds"))
-      resources << run_and_set_progress(:create_assignment_groups, nil, I18n.t('course_exports.errors.assignment_groups', "Failed to export assignment groups"))
-      resources << run_and_set_progress(:create_grading_standards, 20, I18n.t('course_exports.errors.grading_standards', "Failed to export grading standards"))
-      resources << run_and_set_progress(:create_rubrics, nil, I18n.t('course_exports.errors.rubrics', "Failed to export rubrics"))
-      resources << run_and_set_progress(:create_learning_outcomes, nil, I18n.t('course_exports.errors.learning_outcomes', "Failed to export learning outcomes"))
-      resources << run_and_set_progress(:files_meta_path, nil, I18n.t('course_exports.errors.file_meta', "Failed to export file meta data"))
-      resources << run_and_set_progress(:create_events, 25, I18n.t('course_exports.errors.events', "Failed to export calendar events"))
+      resources << run_and_set_progress(:create_course_settings, nil, I18n.t("course_exports.errors.course_settings", "Failed to export course settings"), migration_id) if export_symbol?(:all_course_settings)
+      resources << run_and_set_progress(:create_module_meta, nil, I18n.t("course_exports.errors.module_meta", "Failed to export module meta data"))
+      resources << run_and_set_progress(:create_course_paces, nil, I18n.t("Failed to export course paces"))
+      resources << run_and_set_progress(:create_external_feeds, nil, I18n.t("course_exports.errors.external_feeds", "Failed to export external feeds"))
+      resources << run_and_set_progress(:create_assignment_groups, nil, I18n.t("course_exports.errors.assignment_groups", "Failed to export assignment groups"))
+      resources << run_and_set_progress(:create_grading_standards, 20, I18n.t("course_exports.errors.grading_standards", "Failed to export grading standards"))
+      resources << run_and_set_progress(:create_rubrics, nil, I18n.t("course_exports.errors.rubrics", "Failed to export rubrics"))
+      resources << run_and_set_progress(:create_learning_outcomes, nil, I18n.t("course_exports.errors.learning_outcomes", "Failed to export learning outcomes"))
+      resources << run_and_set_progress(:files_meta_path, nil, I18n.t("course_exports.errors.file_meta", "Failed to export file meta data"))
+      resources << run_and_set_progress(:create_events, 25, I18n.t("course_exports.errors.events", "Failed to export calendar events"))
+      resources << run_and_set_progress(:add_late_policy, nil, I18n.t("course_exports.errors.late_policy", "Failed to export late policy")) if export_symbol?(:all_course_settings)
+      resources << run_and_set_progress(:create_context_info, nil, I18n.t("Failed to export context info")) unless @content_export&.for_course_copy?
 
       if export_media_objects?
-        File.write(File.join(@canvas_resource_dir, CCHelper::MEDIA_TRACKS), '') # just in case an error happens later
+        File.write(File.join(@canvas_resource_dir, CCHelper::MEDIA_TRACKS), "") # just in case an error happens later
         resources << File.join(CCHelper::COURSE_SETTINGS_DIR, CCHelper::MEDIA_TRACKS)
       end
 
@@ -58,7 +66,7 @@ module CC
           :href => syl_rel_path,
           :intendeduse => "syllabus"
         ) do |res|
-          res.file(:href=>syl_rel_path)
+          res.file(href: syl_rel_path)
         end
       end
 
@@ -70,14 +78,12 @@ module CC
         "type" => Manifest::LOR,
         :href => canvas_export_path
       ) do |res|
-
         resources.each do |resource|
-          res.file(:href=>resource) if resource
+          res.file(href: resource) if resource
         end
 
-        res.file(:href => canvas_export_path)
+        res.file(href: canvas_export_path)
       end
-
     end
 
     # Method Summary
@@ -86,47 +92,73 @@ module CC
     #   do this because we can't change the structure of the xml
     #   but still need some type of flag.
     def create_canvas_export_flag
-      path = File.join(@canvas_resource_dir, 'canvas_export.txt')
-      canvas_export_file = File.open(path, 'w')
+      path = File.join(@canvas_resource_dir, "canvas_export.txt")
+      canvas_export_file = File.open(path, "w")
 
       # Fun panda joke!
-      canvas_export_file << <<-JOKE
-Q: What did the panda say when he was forced out of his natural habitat?
-A: This is un-BEAR-able
-JOKE
+      canvas_export_file << <<~TEXT
+        Q: What did the panda say when he was forced out of his natural habitat?
+        A: This is un-BEAR-able
+      TEXT
       canvas_export_file.close
     end
 
-    def create_syllabus(io_object=nil)
+    # This is used to identify the source course of a content export
+    def create_context_info(document = nil)
+      unless document
+        rel_path = File.join(CCHelper::COURSE_SETTINGS_DIR, CCHelper::CONTEXT_INFO)
+        path = File.join(@canvas_resource_dir, CCHelper::CONTEXT_INFO)
+        file = File.open(path, "w")
+        document = Builder::XmlMarkup.new(target: file, indent: 2)
+      end
+
+      document.instruct!
+      document.context_info("xmlns" => CCHelper::CANVAS_NAMESPACE,
+                            "xmlns:xsi" => "http://www.w3.org/2001/XMLSchema-instance",
+                            "xsi:schemaLocation" => "#{CCHelper::CANVAS_NAMESPACE} #{CCHelper::XSD_URI}") do |ci|
+        ci.course_id @course.id
+        ci.course_name @course.name
+        @course.root_account.tap do |a|
+          ci.root_account_id a.global_id
+          ci.root_account_name a.name
+          ci.root_account_uuid a.uuid
+          ci.canvas_domain a.domain
+        end
+      end
+
+      file&.close
+      rel_path
+    end
+
+    def create_syllabus(io_object = nil)
       syl_rel_path = nil
 
       unless io_object
         syl_rel_path = File.join(CCHelper::COURSE_SETTINGS_DIR, CCHelper::SYLLABUS)
         path = File.join(@canvas_resource_dir, CCHelper::SYLLABUS)
-        io_object = File.open(path, 'w')
+        io_object = File.open(path, "w")
       end
-      io_object << @html_exporter.html_page(@course.syllabus_body || '', "Syllabus")
+      io_object << @html_exporter.html_page(@course.syllabus_body || "", "Syllabus")
       io_object.close
 
       syl_rel_path
     end
 
-    def create_course_settings(migration_id, document=nil)
+    def create_course_settings(migration_id, document = nil)
       if document
         course_file = nil
         rel_path = nil
       else
-        course_file = File.new(File.join(@canvas_resource_dir, CCHelper::COURSE_SETTINGS), 'w')
+        course_file = File.new(File.join(@canvas_resource_dir, CCHelper::COURSE_SETTINGS), "w")
         rel_path = File.join(CCHelper::COURSE_SETTINGS_DIR, CCHelper::COURSE_SETTINGS)
-        document = Builder::XmlMarkup.new(:target=>course_file, :indent=>2)
+        document = Builder::XmlMarkup.new(target: course_file, indent: 2)
       end
 
       document.instruct!
       document.course("identifier" => migration_id,
                       "xmlns" => CCHelper::CANVAS_NAMESPACE,
-                      "xmlns:xsi"=>"http://www.w3.org/2001/XMLSchema-instance",
-                      "xsi:schemaLocation"=> "#{CCHelper::CANVAS_NAMESPACE} #{CCHelper::XSD_URI}"
-      ) do |c|
+                      "xmlns:xsi" => "http://www.w3.org/2001/XMLSchema-instance",
+                      "xsi:schemaLocation" => "#{CCHelper::CANVAS_NAMESPACE} #{CCHelper::XSD_URI}") do |c|
         c.title @course.name
         c.course_code @course.course_code
         c.start_at ims_datetime(@course.start_at, nil)
@@ -135,11 +167,11 @@ JOKE
           tab_config = []
           @course.tab_configuration.each do |t|
             tab = t.dup
-            if tab['id'].is_a?(String)
+            if tab["id"].is_a?(String)
               # it's an external tool, so translate the id to a migration_id
-              tool_id = tab['id'].sub('context_external_tool_', '')
-              if tool = ContextExternalTool.find_for(tool_id, @course, :course_navigation, false)
-                tab['id'] = "context_external_tool_#{create_key(tool)}"
+              tool_id = tab["id"].sub("context_external_tool_", "")
+              if (tool = ContextExternalTool.find_for(tool_id, @course, :course_navigation, false))
+                tab["id"] = "context_external_tool_#{create_key(tool)}"
               end
             end
             tab_config << tab
@@ -155,14 +187,22 @@ JOKE
         if @course.image_url.present?
           atts << :image_url
         elsif @course.image_id.present?
-          if image_att = @course.attachments.active.where(id: @course.image_id).first
+          if (image_att = @course.attachments.active.where(id: @course.image_id).first)
             c.image_identifier_ref(create_key(image_att))
+          end
+        end
+
+        if @course.banner_image_url.present?
+          atts << :banner_image_url
+        elsif @course.banner_image_id.present?
+          if (image_att = @course.attachments.active.where(id: @course.banner_image_id).first)
+            c.banner_image_identifier_ref(create_key(image_att))
           end
         end
 
         @course.disable_setting_defaults do # so that we don't copy defaulted settings
           atts.uniq.each do |att|
-            c.tag!(att, @course.send(att)) unless @course.send(att).nil? || @course.send(att) == ''
+            c.tag!(att, @course.send(att)) unless @course.send(att).nil? || @course.send(att) == ""
           end
           c.tag!(:overridden_course_visibility, @course.overridden_course_visibility)
         end
@@ -179,8 +219,20 @@ JOKE
         if @course.default_post_policy.present?
           c.default_post_policy { |policy| policy.post_manually(@course.default_post_policy.post_manually?) }
         end
+
+        if @course.time_zone != @course.account.default_time_zone
+          c.time_zone @course.time_zone.name
+        end
+
+        if @course.account.feature_enabled?(:final_grades_override)
+          c.allow_final_grade_override(@course.allow_final_grade_override?)
+        end
+
+        if @course.account.feature_enabled?(:course_paces)
+          c.enable_course_paces(@course.enable_course_paces)
+        end
       end
-      course_file.close if course_file
+      course_file&.close
       rel_path
     end
   end

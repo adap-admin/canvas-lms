@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -15,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-require_relative '../../spec_helper'
+require_relative "../../spec_helper"
 
 describe Submission::ShowPresenter do
   include Rails.application.routes.url_helpers
@@ -25,7 +27,7 @@ describe Submission::ShowPresenter do
     course.assignments.create!(
       anonymous_peer_reviews: true,
       peer_reviews: true,
-      title: 'hi'
+      title: "hi"
     )
   end
 
@@ -41,13 +43,13 @@ describe Submission::ShowPresenter do
     Submission::ShowPresenter.new(
       submission: reviewee_submission,
       current_user: reviewer,
-      assessment_request: assessment_request
+      assessment_request:
     )
   end
 
   let(:submission_path) { course_assignment_submission_path(course, assignment, reviewee_submission.user_id) }
   let(:anonymous_submission_path) do
-    course_assignment_anonymous_submission_path(course, assignment, reviewee_submission.anonymous_id) 
+    course_assignment_anonymous_submission_path(course, assignment, reviewee_submission.anonymous_id)
   end
 
   describe "#anonymize_submission_owner?" do
@@ -104,8 +106,8 @@ describe Submission::ShowPresenter do
     end
 
     it "returns any additional parameters as part of the URL" do
-      expect(presenter_for_reviewer.submission_data_url(another_param: 'z')).to match_path(anonymous_submission_path).
-        and_query({'another_param' => 'z'})
+      expect(presenter_for_reviewer.submission_data_url(another_param: "z")).to match_path(anonymous_submission_path)
+        .and_query({ "another_param" => "z" })
     end
   end
 
@@ -116,26 +118,75 @@ describe Submission::ShowPresenter do
     end
   end
 
+  describe "#submission_details_tool_launch_url" do
+    subject do
+      presenter_for_reviewer.submission_details_tool_launch_url
+    end
+
+    let(:resource_link_lookup_uuid) { SecureRandom.uuid }
+    let(:parameters) do
+      {
+        assignment_id: assignment.id,
+        display: "borderless",
+        url: reviewee_submission.external_tool_url,
+        resource_link_lookup_uuid:
+      }
+    end
+    let(:launch_params) do
+      "assignment_id=#{assignment.id}&display=borderless&resource_link_lookup_uuid=#{resource_link_lookup_uuid}"
+    end
+
+    before do
+      reviewee_submission.resource_link_lookup_uuid = resource_link_lookup_uuid
+    end
+
+    context "when `current_host` is not given" do
+      it "return the tool launch url using the host from the domain config file (config/domain.yml)" do
+        expect(subject).to eq "http://localhost/courses/#{course.id}/external_tools/retrieve?#{launch_params}"
+      end
+    end
+
+    context "when `current_host` is given" do
+      let(:current_host) { "edu.com" }
+      let(:presenter_for_reviewer) do
+        Submission::ShowPresenter.new(
+          submission: reviewee_submission,
+          current_user: reviewer,
+          assessment_request:,
+          current_host:
+        )
+      end
+
+      before do
+        allow(HostUrl).to receive(:context_host).and_return(current_host)
+      end
+
+      it "return the tool launch url using the host from the `current_host`" do
+        expect(subject).to eq "http://edu.com/courses/#{course.id}/external_tools/retrieve?#{launch_params}"
+      end
+    end
+  end
+
   describe "#comment_attachment_download_url" do
     it "calls submission_data_url with parameters from the passed-in comment and attachment" do
       attachment = Attachment.create!(
         context: reviewer,
-        filename: 'a_file.txt',
-        uploaded_data: StringIO.new('hi'),
+        filename: "a_file.txt",
+        uploaded_data: StringIO.new("hi"),
         user: reviewer
       )
-      submission_comment = reviewee_submission.add_comment(author: reviewer, comment: 'ok I guess')
+      submission_comment = reviewee_submission.add_comment(author: reviewer, comment: "ok I guess")
 
-      expect(presenter_for_reviewer).to receive(:submission_data_url).
-        with(hash_including(comment_id: submission_comment.id, download: attachment.id))
-      presenter_for_reviewer.comment_attachment_download_url(submission_comment: submission_comment, attachment: attachment)
+      expect(presenter_for_reviewer).to receive(:submission_data_url)
+        .with(hash_including(comment_id: submission_comment.id, download: attachment.id))
+      presenter_for_reviewer.comment_attachment_download_url(submission_comment:, attachment:)
     end
   end
 
   describe "#comment_attachment_template_url" do
     it "calls submission_data_url with template-style parameters" do
-      expect(presenter_for_reviewer).to receive(:submission_data_url).
-        with(hash_including(comment_id: "{{ comment_id }}", download: "{{ id }}"))
+      expect(presenter_for_reviewer).to receive(:submission_data_url)
+        .with(hash_including(comment_id: "{{ comment_id }}", download: "{{ id }}"))
 
       presenter_for_reviewer.comment_attachment_template_url
     end
@@ -153,6 +204,39 @@ describe Submission::ShowPresenter do
 
     it "returns false if no assessment request is present" do
       expect(presenter_for_teacher).not_to be_currently_peer_reviewing
+    end
+  end
+
+  describe "#default_url_options" do
+    subject { presenter.default_url_options }
+
+    let(:current_host) { nil }
+    let(:presenter) do
+      Submission::ShowPresenter.new(
+        submission: reviewee_submission,
+        current_user: teacher,
+        current_host:
+      )
+    end
+
+    context "when `current_host` is not given" do
+      it "return the `host` from the domain config file (config/domain.yml)" do
+        expect(subject[:host]).to eq "localhost"
+        expect(subject[:protocol]).to eq "http"
+      end
+    end
+
+    context "when `current_host` is given" do
+      let(:current_host) { "edu.com" }
+
+      before do
+        allow(HostUrl).to receive(:context_host).and_return(current_host)
+      end
+
+      it "return the current host and protocol" do
+        expect(subject[:host]).to eq current_host
+        expect(subject[:protocol]).to eq "http"
+      end
     end
   end
 end

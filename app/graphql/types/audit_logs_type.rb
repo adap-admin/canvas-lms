@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -18,20 +20,31 @@
 
 module Types
   class AuditLogsType < ApplicationObjectType
-    alias dynamo object
+    alias_method :dynamo, :object
 
     field :mutation_logs, MutationLogType.connection_type, null: true do
       description "A list of all recent graphql mutations run on the specified object"
       argument :asset_string, String, required: true
+      argument :start_time, DateTimeType, required: false
+      argument :end_time, DateTimeType, required: false
     end
 
-    def mutation_logs(asset_string:)
+    def mutation_logs(asset_string:, start_time: nil, end_time: nil)
       return nil unless AuditLogFieldExtension.enabled? &&
-        context[:domain_root_account].grants_right?(current_user, :manage_account_settings)
+                        context[:domain_root_account].grants_right?(current_user, :manage_account_settings)
 
-      DynamoQuery.new(dynamo, "graphql_mutations",
+      start_time ||= 1.year.ago
+      end_time ||= 1.year.from_now
+
+      DynamoQuery.new(dynamo,
+                      AuditLogFieldExtension.ddb_table_name,
                       partition_key: "object_id",
                       value: "#{context[:domain_root_account].global_id}-#{asset_string}",
+                      key_condition_expression: "mutation_id BETWEEN :start_time AND :end_time",
+                      expression_attribute_values: {
+                        ":start_time" => start_time.to_i.to_s,
+                        ":end_time" => end_time.to_i.to_s,
+                      },
                       sort_key: "mutation_id",
                       scan_index_forward: false)
     end

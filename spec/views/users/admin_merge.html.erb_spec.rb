@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,17 +18,16 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/../views_helper')
+require_relative "../views_helper"
 
-describe "/users/admin_merge" do
-  it "should only list accounts that the user can merge users in" do
+describe "users/admin_merge" do
+  it "only lists accounts that the user can merge users in" do
     user_factory
-    @account = Account.create!(:name => "My Root Account")
-    @account2 = @account.sub_accounts.create!(:name => "Sub-Account")
+    @account = Account.create!(name: "My Root Account")
+    @account2 = @account.sub_accounts.create!(name: "Sub-Account")
     @account.account_users.create!(user: @user)
-    @course1 = Course.create!(:account => Account.default)
-    @course2 = Course.create!(:account => @account2)
+    @course1 = Course.create!(account: Account.default)
+    @course2 = Course.create!(account: @account2)
     @course1.enroll_teacher(@user)
     @course2.enroll_teacher(@user)
 
@@ -38,8 +39,8 @@ describe "/users/admin_merge" do
 
     render "users/admin_merge"
     expect(response).not_to be_nil
-    expect(response.body).to match /My Root Account/
-    expect(response.body).to match /Sub-Account/
-    expect(response.body).not_to match /Default Account/
+    expect(response.body).to match(/My Root Account/)
+    expect(response.body).to match(/Sub-Account/)
+    expect(response.body).not_to match(/Default Account/)
   end
 end

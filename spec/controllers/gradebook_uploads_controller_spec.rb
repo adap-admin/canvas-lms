@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,35 +18,31 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
-
-require 'csv'
-
 describe GradebookUploadsController do
   def course_with_graded_student
-    @group = @course.assignment_groups.create!(:name => "Some Assignment Group", :group_weight => 100)
-    @assignment = @course.assignments.create!(:title => "Some Assignment", :points_possible => 10, :assignment_group => @group)
+    @group = @course.assignment_groups.create!(name: "Some Assignment Group", group_weight: 100)
+    @assignment = @course.assignments.create!(title: "Some Assignment", points_possible: 10, assignment_group: @group)
     @assignment.grade_student(@user, grade: "10", grader: @teacher)
-    @assignment2 = @course.assignments.create!(:title => "Some Assignment 2", :points_possible => 10, :assignment_group => @group)
+    @assignment2 = @course.assignments.create!(title: "Some Assignment 2", points_possible: 10, assignment_group: @group)
     @assignment2.grade_student(@user, grade: "8", grader: @teacher)
     @course.recompute_student_scores
     @user.reload
     @course.reload
   end
 
-  def generate_file(include_sis_id=false)
+  def generate_file(include_sis_id = false)
     file = Tempfile.new("csv.csv")
-    file.puts(GradebookExporter.new(@course, @teacher, :include_sis_id => include_sis_id).to_csv)
+    file.puts(GradebookExporter.new(@course, @teacher, include_sis_id:).to_csv)
     file.close
     file
   end
 
   def upload_gradebook_import(course, file)
-    data = Rack::Test::UploadedFile.new(file.path, 'text/csv', true)
-    post 'create', params: {course_id: course.id, gradebook_upload: {uploaded_data: data}}
+    data = Rack::Test::UploadedFile.new(file.path, "text/csv", true)
+    post "create", params: { course_id: course.id, gradebook_upload: { uploaded_data: data } }
   end
 
-  def check_create_response(include_sis_id=false)
+  def check_create_response(include_sis_id = false)
     file = generate_file(include_sis_id)
     upload_gradebook_import(@course, file)
     expect(response).to be_successful
@@ -55,15 +53,15 @@ describe GradebookUploadsController do
     @student1, @student2, @student3 = create_users(3, return_type: :record)
     @assignment.only_visible_to_overrides = true
     @assignment.save
-    @course.enroll_student(@student3, :enrollment_state => 'active')
+    @course.enroll_student(@student3, enrollment_state: "active")
     @section = @course.course_sections.create!(name: "test section")
     @section2 = @course.course_sections.create!(name: "second test section")
     student_in_section(@section, user: @student1)
     student_in_section(@section2, user: @student2)
-    create_section_override_for_assignment(@assignment, {course_section: @section})
+    create_section_override_for_assignment(@assignment, { course_section: @section })
     @assignment2.only_visible_to_overrides = true
     @assignment2.save
-    create_section_override_for_assignment(@assignment2, {course_section: @section2})
+    create_section_override_for_assignment(@assignment2, { course_section: @section2 })
     @course.reload
     @assignment.reload
     @assignment2.reload
@@ -76,15 +74,15 @@ describe GradebookUploadsController do
   end
 
   describe "POST 'create'" do
-    it "should require authorization" do
-      post 'create', params: {:course_id => @course.id}
+    it "requires authorization" do
+      post "create", params: { course_id: @course.id }
       assert_unauthorized
     end
 
     context "with authorized teacher" do
-      before(:each) { user_session(@teacher) }
+      before { user_session(@teacher) }
 
-      it "should accept a valid csv upload" do
+      it "accepts a valid csv upload" do
         check_create_response
       end
 
@@ -96,16 +94,16 @@ describe GradebookUploadsController do
       end
 
       context "and final grade column" do
-        before(:each) do
+        before do
           @course.grading_standard_id = 0
           @course.save!
         end
 
-        it "should accept a valid csv upload with a final grade column" do
+        it "accepts a valid csv upload with a final grade column" do
           check_create_response
         end
 
-        it "should accept a valid csv upload with sis id columns" do
+        it "accepts a valid csv upload with sis id columns" do
           check_create_response(true)
         end
       end
@@ -114,7 +112,7 @@ describe GradebookUploadsController do
 
   describe "GET 'data'" do
     it "requires authorization" do
-      get 'data', params: {course_id: @course.id}
+      get "data", params: { course_id: @course.id }
       assert_unauthorized
     end
 
@@ -122,22 +120,40 @@ describe GradebookUploadsController do
       user_session(@teacher)
       progress = Progress.create!(tag: "test", context: @teacher)
 
-      @gb_upload = GradebookUpload.new course: @course, user: @teacher, progress: progress, gradebook: {foo: 'bar'}
+      @gb_upload = GradebookUpload.new course: @course, user: @teacher, progress:, gradebook: { foo: "bar" }
       @gb_upload.save
 
-      get 'data', params: {course_id: @course.id}
+      get "data", params: { course_id: @course.id }
       expect(response).to be_successful
-      expect(response.body).to eq("while(1);{\"foo\":\"bar\"}")
+      expect(response.body).to eq("{\"foo\":\"bar\"}")
     end
 
     it "destroys an uploaded gradebook after retrieval" do
       user_session(@teacher)
       progress = Progress.create!(tag: "test", context: @teacher)
-      @gb_upload = GradebookUpload.new course: @course, user: @teacher, progress: progress, gradebook: {foo: 'bar'}
+      @gb_upload = GradebookUpload.new course: @course, user: @teacher, progress:, gradebook: { foo: "bar" }
       @gb_upload.save
-      get 'data', params: {course_id: @course.id}
+      get "data", params: { course_id: @course.id }
       expect { GradebookUpload.find(@gb_upload.id) }.to raise_error(ActiveRecord::RecordNotFound)
       expect(response).to be_successful
+    end
+  end
+
+  describe "GET 'show'" do
+    it "requires authorization" do
+      get "data", params: { course_id: @course.id }
+      assert_unauthorized
+    end
+
+    it "sets js_env.bulk_update_override_scores_path" do
+      user_session(@teacher)
+      progress = Progress.create!(tag: "test", context: @teacher)
+
+      @gb_upload = GradebookUpload.new course: @course, user: @teacher, progress:, gradebook: { foo: "bar" }
+      @gb_upload.save
+
+      get "show", params: { course_id: @course.id }
+      expect(assigns[:js_env]).to have_key(:bulk_update_override_scores_path)
     end
   end
 end

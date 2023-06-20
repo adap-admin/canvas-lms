@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -16,62 +18,65 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper.rb')
-
 describe Profile do
   context "sub-classing" do
-    before(:all) do
+    # rubocop:disable Lint/ConstantDefinitionInBlock, RSpec/LeakyConstantDeclaration
+    # Profile accesses klass.name in its inherited hook, so we can't stub this
+    before do
       class FooProfile < Profile; end
 
       class Foo < ActiveRecord::Base
         self.table_name = :users
         prepend Profile::Association
-        def root_account; Account.default; end
+        def root_account
+          Account.default
+        end
       end
     end
+    # rubocop:enable Lint/ConstantDefinitionInBlock, RSpec/LeakyConstantDeclaration
 
-    after(:all) do
+    after do
       Object.send(:remove_const, :FooProfile)
       Object.send(:remove_const, :Foo)
     end
 
     describe "initialization" do
-      it "should be set by default" do
+      it "is set by default" do
         expect(Foo.new.profile).not_to be_nil
       end
 
-      it "should have the correct class when initialized" do
+      it "has the correct class when initialized" do
         expect(Foo.new.profile.class).to eq FooProfile
       end
 
-      it "should have the correct class when found" do
-        Foo.new(:name => "foo", :workflow_state => 'registered').profile.save!
+      it "has the correct class when found" do
+        Foo.new(name: "foo", workflow_state: "registered").profile.save!
         expect(Profile.all.first.class).to eq FooProfile
       end
     end
 
     describe ".path" do
-      it "should be inferred from the title" do
-        profile = Foo.create!(:name => "My Foo!", :workflow_state => 'registered').profile
+      it "is inferred from the title" do
+        profile = Foo.create!(name: "My Foo!", workflow_state: "registered").profile
         expect(profile.path).to eq "my-foo"
         profile.save!
 
-        profile2 = Foo.create!(:name => "My Foo?!!!", :workflow_state => 'registered').profile
+        profile2 = Foo.create!(name: "My Foo?!!!", workflow_state: "registered").profile
         expect(profile2.path).to eq "my-foo-1"
       end
     end
 
     describe "#data" do
-      it "should add accessors" do
+      it "adds accessors" do
         FooProfile.class_eval do
-          data :bar, :default => []
+          data :bar, default: []
         end
         profile = FooProfile.new
         expect(profile.data).to eq({})
         expect(profile.bar).to eq []
-        expect(profile.data).to eq({:bar => []})
+        expect(profile.data).to eq({ bar: [] })
         profile.bar = ["lol"]
-        expect(profile.data).to eq({:bar => ["lol"]})
+        expect(profile.data).to eq({ bar: ["lol"] })
       end
     end
   end

@@ -17,8 +17,8 @@
  */
 
 import $ from 'jquery'
-import SisButtonView from 'compiled/views/SisButtonView'
-import Backbone from 'Backbone'
+import SisButtonView from '@canvas/sis/backbone/views/SisButtonView'
+import Backbone from '@canvas/backbone'
 
 class AssignmentStub extends Backbone.Model {
   constructor() {
@@ -116,13 +116,12 @@ QuizStub.prototype.url = '/fake'
 
 QUnit.module('SisButtonView', {
   setup() {
-    this.assignment = new AssignmentStub()
-    this.quiz = new QuizStub()
-    this.quiz.set('toggle_post_to_sis_url', '/some_other_url')
-  }
+    this.assignment = new AssignmentStub({id: 1})
+    this.quiz = new QuizStub({id: 1, assignment_id: 2})
+  },
 })
 
-test('properly populates initial settings', function() {
+test('properly populates initial settings', function () {
   this.assignment.set('post_to_sis', true)
   this.quiz.set('post_to_sis', false)
   this.view1 = new SisButtonView({model: this.assignment, sisName: 'SIS'})
@@ -133,7 +132,7 @@ test('properly populates initial settings', function() {
   equal(this.view2.$input.attr('title'), 'Sync to SIS disabled. Click to toggle.')
 })
 
-test('properly populates initial settings with custom SIS name', function() {
+test('properly populates initial settings with custom SIS name', function () {
   this.assignment.set('post_to_sis', true)
   this.quiz.set('post_to_sis', false)
   this.view1 = new SisButtonView({model: this.assignment, sisName: 'PowerSchool'})
@@ -144,7 +143,7 @@ test('properly populates initial settings with custom SIS name', function() {
   equal(this.view2.$input.attr('title'), 'Sync to PowerSchool disabled. Click to toggle.')
 })
 
-test('properly toggles model sis status when clicked', function() {
+test('properly toggles model sis status when clicked', function () {
   ENV.MAX_NAME_LENGTH = 256
   this.assignment.set('post_to_sis', false)
   this.assignment.set('name', 'Too Much Tuna')
@@ -156,7 +155,7 @@ test('properly toggles model sis status when clicked', function() {
   ok(!this.assignment.postToSIS())
 })
 
-test('model does not save if there are name length errors for assignment AND SIS_INTEGRATION_SETTINGS_ENABLED is true', function() {
+test('model does not save if there are name length errors for assignment AND SIS_INTEGRATION_SETTINGS_ENABLED is true', function () {
   ENV.MAX_NAME_LENGTH = 5
   ENV.SIS_INTEGRATION_SETTINGS_ENABLED = true
   this.assignment.set('post_to_sis', false)
@@ -167,7 +166,7 @@ test('model does not save if there are name length errors for assignment AND SIS
   ok(!this.assignment.postToSIS())
 })
 
-test('model saves if there are name length errors for assignment AND SIS_INTEGRATION_SETTINGS_ENABLED is false', function() {
+test('model saves if there are name length errors for assignment AND SIS_INTEGRATION_SETTINGS_ENABLED is false', function () {
   ENV.MAX_NAME_LENGTH = 5
   ENV.SIS_INTEGRATION_SETTINGS_ENABLED = false
   this.assignment.set('post_to_sis', false)
@@ -178,7 +177,7 @@ test('model saves if there are name length errors for assignment AND SIS_INTEGRA
   ok(this.assignment.postToSIS())
 })
 
-test('model does not save if there are name length errors for quiz AND SIS_INTEGRATION_SETTINGS_ENABLED is true', function() {
+test('model does not save if there are name length errors for quiz AND SIS_INTEGRATION_SETTINGS_ENABLED is true', function () {
   ENV.MAX_NAME_LENGTH = 5
   ENV.SIS_INTEGRATION_SETTINGS_ENABLED = true
   this.quiz.set('post_to_sis', false)
@@ -189,7 +188,7 @@ test('model does not save if there are name length errors for quiz AND SIS_INTEG
   ok(!this.quiz.postToSIS())
 })
 
-test('model saves if there are name length errors for quiz AND SIS_INTEGRATION_SETTINGS_ENABLED is false', function() {
+test('model saves if there are name length errors for quiz AND SIS_INTEGRATION_SETTINGS_ENABLED is false', function () {
   ENV.MAX_NAME_LENGTH = 5
   ENV.SIS_INTEGRATION_SETTINGS_ENABLED = false
   this.quiz.set('post_to_sis', false)
@@ -200,7 +199,7 @@ test('model saves if there are name length errors for quiz AND SIS_INTEGRATION_S
   ok(this.quiz.postToSIS())
 })
 
-test('model does not save if there are due date errors for assignment AND SIS_INTEGRATION_SETTINGS_ENABLED is true', function() {
+test('model does not save if there are due date errors for assignment AND SIS_INTEGRATION_SETTINGS_ENABLED is true', function () {
   ENV.MAX_NAME_LENGTH = 5
   ENV.SIS_INTEGRATION_SETTINGS_ENABLED = true
   this.assignment.set('post_to_sis', false)
@@ -211,7 +210,7 @@ test('model does not save if there are due date errors for assignment AND SIS_IN
   ok(!this.assignment.postToSIS())
 })
 
-test('model saves if there are overrides but not base due date for assignment AND SIS_INTEGRATION_SETTINGS_ENABLED is true', function() {
+test('model saves if there are overrides but not base due date for assignment AND SIS_INTEGRATION_SETTINGS_ENABLED is true', function () {
   ENV.MAX_NAME_LENGTH = 5
   ENV.SIS_INTEGRATION_SETTINGS_ENABLED = true
   this.assignment.set('post_to_sis', false)
@@ -224,7 +223,7 @@ test('model saves if there are overrides but not base due date for assignment AN
   ok(this.assignment.postToSIS())
 })
 
-test('model does not save if there are no due date overrides and no base due date for assignment AND SIS_INTEGRATION_SETTINGS_ENABLED is true', function() {
+test('model does not save if there are no due date overrides and no base due date for assignment AND SIS_INTEGRATION_SETTINGS_ENABLED is true', function () {
   ENV.MAX_NAME_LENGTH = 5
   ENV.SIS_INTEGRATION_SETTINGS_ENABLED = true
   this.assignment.set('post_to_sis', false)
@@ -237,7 +236,7 @@ test('model does not save if there are no due date overrides and no base due dat
   ok(!this.assignment.postToSIS())
 })
 
-test('model does not save if there is only one due date override and no base due date for assignment AND SIS_INTEGRATION_SETTINGS_ENABLED is true', function() {
+test('model does not save if there is only one due date override and no base due date for assignment AND SIS_INTEGRATION_SETTINGS_ENABLED is true', function () {
   ENV.MAX_NAME_LENGTH = 5
   ENV.SIS_INTEGRATION_SETTINGS_ENABLED = true
   this.assignment.set('post_to_sis', false)
@@ -250,7 +249,7 @@ test('model does not save if there is only one due date override and no base due
   ok(!this.assignment.postToSIS())
 })
 
-test('model does not save if there are no due dates on overrides assignment AND SIS_INTEGRATION_SETTINGS_ENABLED is true', function() {
+test('model does not save if there are no due dates on overrides assignment AND SIS_INTEGRATION_SETTINGS_ENABLED is true', function () {
   ENV.MAX_NAME_LENGTH = 5
   ENV.SIS_INTEGRATION_SETTINGS_ENABLED = true
   this.assignment.set('post_to_sis', false)
@@ -263,7 +262,7 @@ test('model does not save if there are no due dates on overrides assignment AND 
   ok(!this.assignment.postToSIS())
 })
 
-test('model saves if there are overrides but not base due date for quiz AND SIS_INTEGRATION_SETTINGS_ENABLED is true', function() {
+test('model saves if there are overrides but not base due date for quiz AND SIS_INTEGRATION_SETTINGS_ENABLED is true', function () {
   ENV.MAX_NAME_LENGTH = 5
   ENV.SIS_INTEGRATION_SETTINGS_ENABLED = true
   this.quiz.set('post_to_sis', false)
@@ -276,7 +275,7 @@ test('model saves if there are overrides but not base due date for quiz AND SIS_
   ok(this.quiz.postToSIS())
 })
 
-test('model does not save if there are no due date overrides and no base due date for quiz AND SIS_INTEGRATION_SETTINGS_ENABLED is true', function() {
+test('model does not save if there are no due date overrides and no base due date for quiz AND SIS_INTEGRATION_SETTINGS_ENABLED is true', function () {
   ENV.MAX_NAME_LENGTH = 5
   ENV.SIS_INTEGRATION_SETTINGS_ENABLED = true
   this.quiz.set('post_to_sis', false)
@@ -289,7 +288,7 @@ test('model does not save if there are no due date overrides and no base due dat
   ok(!this.quiz.postToSIS())
 })
 
-test('model does not save if there is only one due date override and no base due date for quiz AND SIS_INTEGRATION_SETTINGS_ENABLED is true', function() {
+test('model does not save if there is only one due date override and no base due date for quiz AND SIS_INTEGRATION_SETTINGS_ENABLED is true', function () {
   ENV.MAX_NAME_LENGTH = 5
   ENV.SIS_INTEGRATION_SETTINGS_ENABLED = true
   this.quiz.set('post_to_sis', false)
@@ -302,7 +301,7 @@ test('model does not save if there is only one due date override and no base due
   ok(!this.quiz.postToSIS())
 })
 
-test('model saves if there are no due date overrides and base for quiz AND SIS_INTEGRATION_SETTINGS_ENABLED is true', function() {
+test('model saves if there are no due date overrides and base for quiz AND SIS_INTEGRATION_SETTINGS_ENABLED is true', function () {
   ENV.MAX_NAME_LENGTH = 5
   ENV.SIS_INTEGRATION_SETTINGS_ENABLED = true
   this.quiz.set('post_to_sis', false)
@@ -315,7 +314,7 @@ test('model saves if there are no due date overrides and base for quiz AND SIS_I
   ok(!this.quiz.postToSIS())
 })
 
-test('model saves if there are due date errors for assignment AND SIS_INTEGRATION_SETTINGS_ENABLED is false', function() {
+test('model saves if there are due date errors for assignment AND SIS_INTEGRATION_SETTINGS_ENABLED is false', function () {
   ENV.MAX_NAME_LENGTH = 5
   ENV.SIS_INTEGRATION_SETTINGS_ENABLED = false
   this.assignment.set('post_to_sis', false)
@@ -326,7 +325,7 @@ test('model saves if there are due date errors for assignment AND SIS_INTEGRATIO
   ok(this.assignment.postToSIS())
 })
 
-test('model does not save if there are due date errors for quiz AND SIS_INTEGRATION_SETTINGS_ENABLED is true', function() {
+test('model does not save if there are due date errors for quiz AND SIS_INTEGRATION_SETTINGS_ENABLED is true', function () {
   ENV.MAX_NAME_LENGTH = 5
   ENV.SIS_INTEGRATION_SETTINGS_ENABLED = true
   this.quiz.set('post_to_sis', false)
@@ -337,7 +336,7 @@ test('model does not save if there are due date errors for quiz AND SIS_INTEGRAT
   ok(!this.quiz.postToSIS())
 })
 
-test('model saves if there are due date errors for quiz AND SIS_INTEGRATION_SETTINGS_ENABLED is false', function() {
+test('model saves if there are due date errors for quiz AND SIS_INTEGRATION_SETTINGS_ENABLED is false', function () {
   ENV.MAX_NAME_LENGTH = 5
   ENV.SIS_INTEGRATION_SETTINGS_ENABLED = false
   this.quiz.set('post_to_sis', false)
@@ -348,30 +347,41 @@ test('model saves if there are due date errors for quiz AND SIS_INTEGRATION_SETT
   ok(this.quiz.postToSIS())
 })
 
-test('does not override dates', function() {
+test('toggles post_to_sis for an assignment', function () {
   ENV.MAX_NAME_LENGTH = 256
+  ENV.COURSE_ID = 1001
   this.assignment.set('name', 'Gil Faizon')
-  const saveStub = sandbox.stub(this.assignment, 'save').callsFake(() => {})
+  this.assignment.set('post_to_sis', true)
+  const saveStub = sandbox.stub($, 'ajaxJSON')
   this.view = new SisButtonView({model: this.assignment})
   this.view.render()
   this.view.$el.click()
-  ok(saveStub.calledWith({override_dates: false}))
+  ok(
+    saveStub.calledWith('/api/v1/courses/1001/assignments/1', 'PUT', {
+      assignment: {override_dates: false, post_to_sis: false},
+    })
+  )
+  ok(!this.assignment.postToSIS())
 })
 
-test('properly saves model with a custom url if present', function() {
+test('toggles post_to_sis for a quiz', function () {
   ENV.MAX_NAME_LENGTH = 256
+  ENV.COURSE_ID = 1001
   this.quiz.set('title', 'George St. Geegland')
-  sandbox.stub(this.quiz, 'save').callsFake(function(attributes, options) {
-    ok(options.url, '/some_other_url')
-  })
   this.quiz.set('post_to_sis', false)
+  const saveStub = sandbox.stub($, 'ajaxJSON')
   this.view = new SisButtonView({model: this.quiz})
   this.view.render()
   this.view.$el.click()
+  ok(
+    saveStub.calledWith('/api/v1/courses/1001/assignments/2', 'PUT', {
+      assignment: {override_dates: false, post_to_sis: true},
+    })
+  )
   ok(this.quiz.postToSIS())
 })
 
-test('properly associates button label via aria-describedby', function() {
+test('properly associates button label via aria-describedby', function () {
   this.assignment.set('id', '1')
   this.view = new SisButtonView({model: this.assignment})
   this.view.render()
@@ -379,11 +389,12 @@ test('properly associates button label via aria-describedby', function() {
   equal(this.view.$label.attr('id'), 'sis-status-label-1')
 })
 
-test('properly toggles aria-pressed value based on post_to_sis', function() {
+test('properly toggles aria-pressed value based on post_to_sis', function () {
   this.assignment.set('post_to_sis', true)
   this.view = new SisButtonView({model: this.assignment})
   this.view.render()
   equal(this.view.$label.attr('aria-pressed'), 'true')
+  sandbox.stub($, 'ajaxJSON').callsFake((url, method, data, success) => success(data.assignment))
   this.view.$el.click()
   equal(this.view.$label.attr('aria-pressed'), 'false')
 })

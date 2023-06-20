@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -18,11 +20,10 @@
 
 # Public: Delete old (> 90 days) records from delayed_messages table.
 class DelayedMessageScrubber < MessageScrubber
-
   protected
 
   def filter_attribute
-    'send_at'
+    "send_at"
   end
 
   def klass
@@ -30,7 +31,7 @@ class DelayedMessageScrubber < MessageScrubber
   end
 
   def limit_setting
-    'delayed_message_scrubber_limit'
+    "delayed_message_scrubber_limit"
   end
 
   def limit_size

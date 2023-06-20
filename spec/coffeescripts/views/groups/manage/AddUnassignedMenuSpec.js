@@ -16,11 +16,11 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import GroupUserCollection from 'compiled/collections/GroupUserCollection'
-import GroupUser from 'compiled/models/GroupUser'
-import GroupCategory from 'compiled/models/GroupCategory'
-import Group from 'compiled/models/Group'
-import AddUnassignedMenu from 'compiled/views/groups/manage/AddUnassignedMenu'
+import GroupUserCollection from '@canvas/groups/backbone/collections/GroupUserCollection'
+import GroupUser from '@canvas/groups/backbone/models/GroupUser'
+import GroupCategory from '@canvas/groups/backbone/models/GroupCategory'
+import Group from '@canvas/groups/backbone/models/Group'
+import AddUnassignedMenu from 'ui/features/manage_groups/backbone/views/AddUnassignedMenu'
 import $ from 'jquery'
 import fakeENV from 'helpers/fakeENV'
 
@@ -40,11 +40,11 @@ QUnit.module('AddUnassignedMenu', {
     waldo = new GroupUser({
       id: 4,
       name: 'Waldo',
-      sortable_name: 'Waldo'
+      sortable_name: 'Waldo',
     })
     users = new GroupUserCollection(null, {
       group: new Group(),
-      category: new GroupCategory()
+      category: new GroupCategory(),
     })
     users.setParam('search_term', 'term')
     users.loaded = true
@@ -54,19 +54,19 @@ QUnit.module('AddUnassignedMenu', {
       new GroupUser({
         id: 1,
         name: 'Frank Herbert',
-        sortable_name: 'Herbert, Frank'
+        sortable_name: 'Herbert, Frank',
       }),
       new GroupUser({
         id: 2,
         name: 'Neal Stephenson',
-        sortable_name: 'Stephenson, Neal'
+        sortable_name: 'Stephenson, Neal',
       }),
       new GroupUser({
         id: 3,
         name: 'John Scalzi',
-        sortable_name: 'Scalzi, John'
+        sortable_name: 'Scalzi, John',
       }),
-      waldo
+      waldo,
     ])
     view.$el.appendTo($('#fixtures'))
   },
@@ -76,7 +76,7 @@ QUnit.module('AddUnassignedMenu', {
     server.restore()
     view.remove()
     document.getElementById('fixtures').innerHTML = ''
-  }
+  },
 })
 
 test("updates the user's group and removes from unassigned collection", () => {

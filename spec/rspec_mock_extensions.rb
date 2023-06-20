@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -26,7 +28,8 @@ module RspecMockAnyInstantiation
 
     def add_any_instantiation(ar_obj)
       raise(ArgumentError, "need to save first") if ar_obj.new_record?
-      @@any_instantiation[ [ar_obj.class.base_class, ar_obj.id] ] = ar_obj
+
+      @@any_instantiation[[ar_obj.class.base_class, ar_obj.id]] = ar_obj
       # calling any_instantiation is likely to be because you're stubbing it,
       # and to later be cached inadvertently from code that *thinks* it
       # has a non-stubbed object. So let it dump, but not load (i.e.
@@ -39,8 +42,16 @@ module RspecMockAnyInstantiation
       ar_obj
     end
 
-    def instantiate(*args)
-      if obj = @@any_instantiation[[base_class, args.first['id'].to_i]]
+    def instantiate(record, column_types = {}, &)
+      if (obj = @@any_instantiation[[base_class, record["id"].to_i]])
+        obj
+      else
+        super
+      end
+    end
+
+    def instantiate_instance_of(klass, record, column_types = {}, &)
+      if (obj = @@any_instantiation[[klass, record["id"].to_i]])
         obj
       else
         super
@@ -55,7 +66,7 @@ module RspecMockAnyInstantiation
 
   def expect_any_instantiation_of(ar_object)
     ActiveRecord::Base.add_any_instantiation(ar_object)
-    expect(ar_object)
+    expect(ar_object) # rubocop:disable RSpec/VoidExpect we return the expectation object to the caller
   end
 end
 ActiveRecord::Base.singleton_class.prepend(RspecMockAnyInstantiation::ClassMethods)

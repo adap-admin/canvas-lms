@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -21,7 +23,7 @@ module Submissions
     attr_reader :id
 
     def initialize(assignment_id:, context:, id:, preview: false, version: nil)
-      super(assignment_id: assignment_id, context: context, preview: preview, version: version)
+      super(assignment_id:, context:, preview:, version:)
       @id = id
     end
 
@@ -32,11 +34,11 @@ module Submissions
     private
 
     def root_submission
-      @root_submission ||= assignment.submissions.
-        except(:preload).
-        preload(versioned? ? :versions : nil).
-        where(user_id: user).
-        first_or_initialize
+      @root_submission ||= assignment.submissions
+                                     .except(:preload)
+                                     .preload(versioned? ? :versions : nil)
+                                     .where(user_id: user)
+                                     .first_or_initialize
     end
   end
 end

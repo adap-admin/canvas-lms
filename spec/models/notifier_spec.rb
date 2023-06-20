@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -16,21 +18,18 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper.rb')
-
 describe Notifier do
-  describe '#send_notification' do
-    it 'caches messages for inspection in test' do
+  describe "#send_notification" do
+    it "caches messages for inspection in test" do
       group_user = user_with_communication_channel(active_all: true)
       group_membership = group_with_user(user: group_user, active_all: true)
       notification = Notification.create!(name: "New Context Group Membership", category: "Registration")
       to_list = [group_user]
       dispatch = :test_dispatch
-      message = double('message')
+      message = double("message")
 
-      expect(DelayedNotification).to receive(:send_later_if_production_enqueue_args).with(
-        :process,
-        kind_of(Hash),
+      expect(DelayedNotification).to receive(:delay_if_production).and_call_original
+      expect(DelayedNotification).to receive(:process).with(
         kind_of(ActiveRecord::Base),
         kind_of(Notification),
         ["user_#{group_user.id}"],

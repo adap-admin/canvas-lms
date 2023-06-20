@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -20,10 +22,10 @@ class Quizzes::TakeQuizPresenter
   include ApplicationHelper
 
   attr_accessor :quiz,
-    :submission,
-    :params,
-    :submission_data,
-    :answers
+                :submission,
+                :params,
+                :submission_data,
+                :answers
 
   delegate :one_question_at_a_time?, :cant_go_back?, :require_lockdown_browser?, to: :quiz
 
@@ -61,7 +63,7 @@ class Quizzes::TakeQuizPresenter
     classes << (one_question_at_a_time? ? "one_question_at_a_time" : "all_questions")
     classes << "cant_go_back" if cant_go_back?
     classes << "last_page" if last_page?
-    classes.join(' ')
+    classes.join(" ")
   end
 
   def question_class(q)
@@ -71,7 +73,7 @@ class Quizzes::TakeQuizPresenter
     classes << "seen" if question_seen?(q)
     classes << "current_question" if one_question_at_a_time? && current_question?(q)
     classes << "text_only" if text_only?(q)
-    classes.join(' ')
+    classes.join(" ")
   end
 
   def marked?(q)
@@ -79,24 +81,24 @@ class Quizzes::TakeQuizPresenter
   end
 
   def text_only?(q)
-    q['question_type'] == "text_only_question"
+    q["question_type"] == "text_only_question"
   end
 
   def answered_icon(q)
-    question_answered?(q) ? 'icon-check' : 'icon-question'
+    question_answered?(q) ? "icon-check" : "icon-question"
   end
 
   def answered_text(q)
     if question_answered?(q)
-      I18n.t('question_answered', 'Answered')
+      I18n.t("question_answered", "Answered")
     else
-      I18n.t('question_unanswered', 'Haven\'t Answered Yet')
+      I18n.t("question_unanswered", "Haven't Answered Yet")
     end
   end
 
   def marked_text(q)
     if marked?(q)
-      I18n.t('titles.come_back_later', 'You marked this question to come back to later')
+      I18n.t("titles.come_back_later", "You marked this question to come back to later")
     end
   end
 
@@ -113,7 +115,7 @@ class Quizzes::TakeQuizPresenter
   end
 
   def question_answered?(question)
-    answers.has_key?(question[:id])
+    answers.key?(question[:id])
   end
 
   def question_index(question)
@@ -133,7 +135,7 @@ class Quizzes::TakeQuizPresenter
   end
 
   def neighboring_question(direction)
-    if current_index = all_questions.index(current_question)
+    if (current_index = all_questions.index(current_question))
       modifier = (direction == :next) ? 1 : -1
       neighbor_index = current_index + modifier
       all_questions[neighbor_index] if neighbor_index >= 0
@@ -149,12 +151,12 @@ class Quizzes::TakeQuizPresenter
   end
 
   def question_path(id)
-    ps = { :course_id => quiz.context.id, :quiz_id => quiz.id, :question_id => id }
+    ps = { course_id: quiz.context.id, quiz_id: quiz.id, question_id: id }
     ps[:preview] = true if params[:preview]
     course_quiz_question_path(ps)
   end
 
-  def form_action(session,user)
+  def form_action(session, user)
     if one_question_at_a_time? && next_question
       next_question_form_action(session, user)
     else
@@ -169,23 +171,23 @@ class Quizzes::TakeQuizPresenter
   def next_question_form_action(session, user)
     record_answer_course_quiz_quiz_submission_path(
       quiz.context, quiz, submission, form_action_params(session, user).merge({
-        :next_question_path => next_question_path
-      })
+                                                                                next_question_path:
+                                                                              })
     )
   end
 
   def previous_question_form_action(session, user)
     record_answer_course_quiz_quiz_submission_path(
       quiz.context, quiz, submission, form_action_params(session, user).merge({
-        :next_question_path => previous_question_path
-      })
+                                                                                next_question_path: previous_question_path
+                                                                              })
     )
   end
 
   private
 
   def first_unread_question
-    question_ids = all_questions.map { |question| question[:id] }
+    question_ids = all_questions.pluck(:id)
     first_unread = question_ids.detect do |question_id|
       !submission_data[:"_question_#{question_id}_read"]
     end
@@ -193,8 +195,8 @@ class Quizzes::TakeQuizPresenter
   end
 
   def form_action_params(session, user)
-    url_params = { :user_id => user && user.id }
-    if session['lockdown_browser_popup']
+    url_params = { user_id: user&.id }
+    if session["lockdown_browser_popup"]
       url_params.merge!(Canvas::LockdownBrowser.plugin.base.quiz_exit_params)
     end
     url_params
@@ -213,26 +215,26 @@ class Quizzes::TakeQuizPresenter
   # is meaningless; if the key exists, then the question is answered.
   def resolve_answers(dataset = submission_data)
     # get all the question status-entries and group them by the question id
-    _answers = dataset.keys.group_by do |k|
-      k =~ /question_(\d+)/ ? $1.to_i : :irrelevant
+    answers = dataset.keys.group_by do |k|
+      (k =~ /question_(\d+)/) ? $1.to_i : :irrelevant
     end
 
     # remove any non-question keys we've collected
-    _answers.delete(:irrelevant)
+    answers.delete(:irrelevant)
 
     # discard "marked" or "read" entries
-    _answers.each_pair do |_, status_entries|
+    answers.each_pair do |_, status_entries|
       status_entries.reject! { |status| status =~ /_(marked|read)$/ }
     end
 
-    _answers.reject! do |_, status_entries|
+    answers.reject! do |_, status_entries|
       # an answer must not be falsy/empty
-      status_entries.any? { |status| !dataset[status].present? } ||
-      # all zeroes for an answer is a no-answer
-      status_entries.all? { |status| dataset[status] == '0' }
+      status_entries.any? { |status| dataset[status].blank? } ||
+        # all zeroes for an answer is a no-answer
+        status_entries.all? { |status| dataset[status] == "0" }
     end
 
-    _answers
+    answers
   end
 
   def determine_current_questions

@@ -17,15 +17,15 @@
  */
 
 import $ from 'jquery'
-import 'compiled/jquery/redirectClickTo'
+import 'ui/features/wiki_page_index/jquery/redirectClickTo'
 
 QUnit.module('redirectClickTo')
-const createClick = function() {
+const createClick = function () {
   const e = document.createEvent('MouseEvents')
   e.initMouseEvent('click', true, true, window, 0, 0, 0, 0, 0, true, false, false, false, 2, null)
   return e
 }
-test('redirects clicks', function() {
+test('redirects clicks', () => {
   const sourceDiv = $('<div></div>')
   const targetDiv = $('<div></div>')
   const targetDivSpy = sinon.spy()

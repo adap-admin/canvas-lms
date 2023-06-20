@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -16,35 +18,48 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 class LiveEventsObserver < ActiveRecord::Observer
-  observe :content_export,
+  observe :account_notification,
+          :assignment_group,
+          :assignment_override,
+          :assignment,
+          :attachment,
+          :content_export,
           :content_migration,
+          :content_tag,
+          :context_module_progression,
+          :context_module,
+          :conversation_message,
+          :conversation,
+          :course_section,
           :course,
           :discussion_entry,
           :discussion_topic,
-          :enrollment,
           :enrollment_state,
-          :group,
+          :enrollment,
           :group_category,
           :group_membership,
-          :wiki_page,
-          :assignment,
-          :assignment_group,
-          :submission,
+          :group,
+          :learning_outcome_group,
+          :learning_outcome_result,
+          :learning_outcome,
+          :outcome_proficiency,
+          :outcome_calculation_method,
+          :outcome_friendly_description,
+          :sis_batch,
           :submission_comment,
-          :attachment,
-          :user,
+          :submission,
           :user_account_association,
-          :account_notification,
-          :course_section,
-          :context_module,
-          :context_module_progression,
-          :content_tag,
-          :learning_outcome_result
+          :user,
+          :wiki_page,
+          "MasterCourses::MasterTemplate",
+          "MasterCourses::MasterMigration",
+          "MasterCourses::ChildSubscription",
+          "MasterCourses::MasterContentTag"
 
-  NOP_UPDATE_FIELDS = [ "updated_at", "sis_batch_id" ].freeze
+  NOP_UPDATE_FIELDS = ["updated_at", "sis_batch_id"].freeze
   def after_update(obj)
     changes = obj.saved_changes
-    return nil if changes.except(*NOP_UPDATE_FIELDS).empty?
+    return nil unless changes.except(*NOP_UPDATE_FIELDS).any? || obj.class.try(:emit_live_events_on_any_update?)
 
     obj.class.connection.after_transaction_commit do
       Canvas::LiveEventsCallbacks.after_update(obj, changes)

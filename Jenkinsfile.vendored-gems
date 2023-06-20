@@ -18,30 +18,37 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+library "canvas-builds-library@${env.CANVAS_BUILDS_REFSPEC}"
+loadLocalLibrary('local-lib', 'build/new-jenkins/library')
+
 pipeline {
-  agent { label 'docker' }
+  agent none
   options {
     ansiColor('xterm')
+    timeout(time: 15)
+    timestamps()
   }
 
   environment {
-    COMPOSE_FILE = 'docker-compose.new-vendored-gems.yml'
-    // 'refs/changes/63/181863/8' -> '63.181863.8'
-    NAME = "${env.GERRIT_REFSPEC}".minus('refs/changes/').replaceAll('/','.')
+    BUILD_REGISTRY_FQDN = configuration.buildRegistryFQDN()
+    DISABLE_SPRING = 'true'
+    COMPOSE_FILE = 'docker-compose.new-jenkins.yml:docker-compose.new-jenkins.vendored-gems.yml'
+    POSTGRES_PASSWORD = 'sekret'
   }
 
   stages {
-    stage ('Run Vendored Gems specs') {
+    stage('Environment') {
       steps {
-        timeout(time: 60) {
-          sh 'printenv | sort'
-          sh 'build/new-jenkins/test-gems.sh'
-        }
-      }
+        script {
+          def stageHooks = [
+            onNodeAcquired: vendoredGemsStage.setupNode(),
+          ]
 
-      post {
-        cleanup {
-          sh 'docker-compose stop && docker-compose down --volumes --remove-orphans --rmi all'
+          extendedStage('Runner').hooks(stageHooks).nodeRequirements(label: nodeLabel()).obeysAllowStages(false).execute {
+            extendedStage('Vendored Gems').obeysAllowStages(false).timeout(10).execute {
+              sh 'build/new-jenkins/test-gems.sh'
+            }
+          }
         }
       }
     }

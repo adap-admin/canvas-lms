@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -131,10 +133,10 @@ module Lti
   #       }
   #     }
   class PublicJwkController < ApplicationController
-    include Ims::Concerns::LtiServices
+    include ::Lti::IMS::Concerns::LtiServices
     include Api::V1::DeveloperKey
 
-    MIME_TYPE = 'application/vnd.ims.lis.v2.publicjwk+json'.freeze
+    MIME_TYPE = "application/vnd.ims.lis.v2.publicjwk+json"
 
     ACTION_SCOPE_MATCHERS = {
       update: all_of(TokenScopes::LTI_UPDATE_PUBLIC_JWK_SCOPE)
@@ -148,7 +150,7 @@ module Lti
     #
     # @returns DeveloperKey
     def update
-      developer_key.update! public_jwk: public_jwk
+      developer_key.update!(public_jwk:)
       render json: developer_key_json(developer_key, @current_user, session, context), content_type: MIME_TYPE
     end
 

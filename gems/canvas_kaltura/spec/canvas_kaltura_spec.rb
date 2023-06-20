@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -15,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'spec_helper'
+require "spec_helper"
 
 describe CanvasKaltura do
   context ".timeout_protector" do
@@ -25,7 +27,7 @@ describe CanvasKaltura do
     end
 
     it "call timeout protector if set" do
-      CanvasKaltura.timeout_protector_proc = lambda { |options, &block| 27 }
+      CanvasKaltura.timeout_protector_proc = proc { 27 }
       expect(CanvasKaltura.with_timeout_protector).to be 27
     end
   end

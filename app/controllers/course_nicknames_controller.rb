@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -63,9 +65,18 @@ class CourseNicknamesController < ApplicationController
   #
   # @returns [CourseNickname]
   def index
-    # TODO if these are moved out of the user preferences hash
-    #      and into AR objects, we should paginate
-    render(:json => course_nicknames_json(@current_user))
+    scope = @current_user.user_preference_values.where(key: :course_nicknames).order(:id)
+    value_records = Api.paginate(scope, self, api_v1_course_nicknames_url)
+    @current_user.shard.activate do
+      courses = Course.where(id: value_records.map(&:sub_key)).to_a.index_by(&:id)
+      nicknames_json =
+        value_records.filter_map do |record|
+          course = courses[record.sub_key]
+          course && record.value && course_nickname_json(@current_user, course, record.value)
+        end
+
+      render(json: nicknames_json)
+    end
   end
 
   # @API Get course nickname
@@ -81,7 +92,8 @@ class CourseNicknamesController < ApplicationController
   def show
     course = api_find(Course, params[:course_id])
     return unless authorized_action(course, @current_user, :read)
-    render(:json => course_nickname_json(@current_user, course))
+
+    render(json: course_nickname_json(@current_user, course))
   end
 
   # @API Set course nickname
@@ -104,15 +116,14 @@ class CourseNicknamesController < ApplicationController
   def update
     course = api_find(Course, params[:course_id])
     return unless authorized_action(course, @current_user, :read)
-    return render(:json => {:message => 'missing nickname'}, :status => :bad_request) unless params[:nickname].present?
-    return render(:json => {:message => 'nickname too long'}, :status => :bad_request) if params[:nickname].length >= 60
+    return render(json: { message: "missing nickname" }, status: :bad_request) unless params[:nickname].present?
+    return render(json: { message: "nickname too long" }, status: :bad_request) if params[:nickname].length >= 60
 
     @current_user.shard.activate do
-      @current_user.course_nicknames[course.id] = params[:nickname]
-      if @current_user.save
-        render :json => course_nickname_json(@current_user, course)
+      if @current_user.set_preference(:course_nicknames, course.id, params[:nickname])
+        render json: course_nickname_json(@current_user, course)
       else
-        render :json => @current_user.errors, :status => :bad_request
+        render json: @current_user.errors, status: :bad_request
       end
     end
   end
@@ -132,14 +143,14 @@ class CourseNicknamesController < ApplicationController
     course = api_find(Course, params[:course_id])
 
     @current_user.shard.activate do
-      if @current_user.course_nicknames.delete(course.id)
-        if @current_user.save
-          render :json => course_nickname_json(@current_user, course)
+      if @current_user.get_preference(:course_nicknames, course.id)
+        if @current_user.set_preference(:course_nicknames, course.id, nil)
+          render json: course_nickname_json(@current_user, course)
         else
-          render :json => @current_user.errors, :status => :bad_request
+          render json: @current_user.errors, status: :bad_request
         end
       else
-        render :json => { :message => 'no nickname exists for course' } , :status => :not_found
+        render json: { message: "no nickname exists for course" }, status: :not_found
       end
     end
   end
@@ -154,31 +165,21 @@ class CourseNicknamesController < ApplicationController
   #     -H 'Authorization: Bearer <token>'
   #
   def clear
-    @current_user.course_nicknames.clear
+    @current_user.clear_all_preferences_for(:course_nicknames)
     if @current_user.save
-      render :json => { :message => 'OK' }
+      render json: { message: "OK" }
     else
-      render :json => @current_user.errors, :status => :bad_request
+      render json: @current_user.errors, status: :bad_request
     end
   end
 
   private
 
-  def course_nicknames_json(user)
-    user.shard.activate do
-      user.course_nicknames.map do |course_id, nickname|
-        course = Course.where(id: course_id).first
-        course && course_nickname_json(user, course, nickname)
-      end.compact
-    end
-  end
-
   def course_nickname_json(user, course, nickname = nil)
     {
       course_id: course.id,
       name: course.name,
-      nickname: nickname || course.nickname_for(user, nil)
+      nickname: nickname || course.nickname_for(user, nil, prefer_friendly_name: false)
     }
   end
-
 end

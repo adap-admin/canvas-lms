@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -18,18 +20,18 @@
 
 module EportfoliosHelper
   def show_me(link_class)
-    raw("<a href=\"#\" class=\"#{link_class}\"><b>#{h(t('#eportfolios.show_me', "show me"))}</b></a>")
+    raw("<a href=\"#\" class=\"#{link_class}\"><b>#{h(t("#eportfolios.show_me", "show me"))}</b></a>")
   end
 
   def edit_icon
     "<i class='icon-edit'></i>".html_safe
   end
 
-  def delete_icon(png=false)
+  def delete_icon(png = false)
     if png
-      image_tag("delete.png", :alt => t("Delete"))
+      image_tag("delete.png", alt: I18n.t("Delete"))
     else
-      raw('&#215;')
+      raw("&#215;")
     end
   end
 
@@ -38,18 +40,18 @@ module EportfoliosHelper
   end
 
   def edit_link_text
-    t('#eportfolios.edit_link_text', "%{edit_icon} Edit This Page", :edit_icon => edit_icon)
+    t("#eportfolios.edit_link_text", "%{edit_icon} Edit This Page", edit_icon:)
   end
 
   def help_link_text
-    t('#eportfolios.help_link_text', "%{help_icon} How Do I...?", :help_icon => help_icon)
+    t("#eportfolios.help_link_text", "%{help_icon} How Do I...?", help_icon:)
   end
 
   def manage_pages_link_text
-    t('#eportfolios.manage_pages_link_text', "Organize/Manage Pages")
+    t("#eportfolios.manage_pages_link_text", "Organize/Manage Pages")
   end
 
   def manage_sections_link_text
-    t('#eportfolios.manage_sections_link_text', "Organize Sections")
+    t("#eportfolios.manage_sections_link_text", "Organize Sections")
   end
 end

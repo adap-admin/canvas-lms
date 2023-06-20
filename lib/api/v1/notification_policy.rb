@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -21,12 +23,13 @@ module Api::V1::NotificationPolicy
   include Api::V1::Json
 
   JSON_OPTS = {
-    :only => %w{ frequency } }
+    only: %w[frequency]
+  }.freeze
 
   def notification_policy_json(policy, user, session)
     api_json(policy, user, session, JSON_OPTS).tap do |json|
-      json[:notification] = policy.notification && policy.notification.name.underscore.gsub(/\s/, '_')
-      json[:category] = policy.notification && policy.notification.category.underscore.gsub(/\s/, '_')
+      json[:notification] = policy.notification && policy.notification.name.underscore.gsub(/\s/, "_")
+      json[:category] = policy.notification && policy.notification.category.underscore.gsub(/\s/, "_")
     end
   end
 end

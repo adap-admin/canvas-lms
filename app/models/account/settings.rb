@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -17,28 +19,28 @@
 
 module Account::Settings
   module ClassMethods
-    def add_setting(setting, opts=nil)
+    def add_setting(setting, opts = nil)
       if opts && opts[:inheritable]
         opts[:hash] = true
         opts[:values] = [:value, :locked]
 
-        self.class_eval "def #{setting}; cached_inherited_setting(:#{setting}); end"
-      elsif (opts && opts[:boolean] && opts.has_key?(:default))
+        class_eval "def #{setting}; cached_inherited_setting(:#{setting}); end", __FILE__, __LINE__
+      elsif opts && opts[:boolean] && opts.key?(:default)
         if opts[:default]
           # if the default is true, we want a nil result to evaluate to true.
           # this prevents us from having to backfill true values into a
           # serialized column, which would be expensive.
-          self.class_eval "def #{setting}?; settings[:#{setting}] != false; end"
+          class_eval "def #{setting}?; settings[:#{setting}] != false; end", __FILE__, __LINE__
         else
           # if the default is not true, we can fall back to a straight boolean.
-          self.class_eval "def #{setting}?; !!settings[:#{setting}]; end"
+          class_eval "def #{setting}?; !!settings[:#{setting}]; end", __FILE__, __LINE__
         end
       end
-      self.account_settings_options[setting.to_sym] = opts || {}
+      account_settings_options[setting.to_sym] = opts || {}
     end
 
     def inheritable_settings
-      self.account_settings_options.select{|k, v| v[:inheritable]}.keys
+      account_settings_options.select { |_k, v| v[:inheritable] }.keys
     end
   end
 
@@ -49,9 +51,11 @@ module Account::Settings
   end
 
   def cached_inherited_setting(setting)
-    self.shard.activate do
-      Rails.cache.fetch([setting, self.global_id].cache_key) do
-        calculate_inherited_setting(setting)
+    shard.activate do
+      RequestCache.cache("inherited_settings", self, setting) do
+        Rails.cache.fetch([setting, global_id].cache_key) do
+          calculate_inherited_setting(setting)
+        end
       end
     end
   end
@@ -59,15 +63,17 @@ module Account::Settings
   # should continue down the account chain until it reaches a locked value
   # otherwise use the last explicitly set value
   def calculate_inherited_setting(setting)
-    inherited_hash = {:locked => false, :value => self.class.account_settings_options[setting][:default]}
-    self.account_chain.reverse_each do |acc|
+    inherited_hash = { locked: false, value: self.class.account_settings_options[setting][:default] }
+    # If this account's root account isn't a primary settings root account,
+    # it must have a federated parent that is the primary settings root account
+    account_chain(include_federated_parent: !root_account.primary_settings_root_account?).reverse_each do |acc|
       current_hash = acc.settings[setting]
       next if current_hash.nil?
 
-      if !current_hash.is_a?(Hash)
-        current_hash = {:locked => false, :value => current_hash}
+      unless current_hash.is_a?(Hash)
+        current_hash = { locked: false, value: current_hash }
       end
-      current_hash[:inherited] = true if (self != acc)
+      current_hash[:inherited] = true if self != acc
 
       if current_hash[:locked]
         return current_hash
@@ -75,6 +81,6 @@ module Account::Settings
         inherited_hash = current_hash
       end
     end
-    return inherited_hash
+    inherited_hash
   end
 end

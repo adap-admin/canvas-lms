@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -19,7 +21,7 @@ module SpecTimeLimit
   class Error < ::Timeout::Error
     # #initialize and #to_s are overwritten here to prevent Timeout.timeout
     # overwriting the error message to "execution expired"
-    def initialize(message)
+    def initialize(message) # rubocop:disable Lint/MissingSuper
       @message = message
     end
 
@@ -52,15 +54,15 @@ module SpecTimeLimit
     # find an appropriate timeout for this spec
     def timeout_for(example)
       if example.metadata[:custom_timeout]
+        raise "Custom timeouts cannot exceed #{ABSOLUTE_TIMEOUT} seconds!" if example.metadata[:custom_timeout].to_i > ABSOLUTE_TIMEOUT
+
         [:target, example.metadata[:custom_timeout].to_i]
       elsif ENV.fetch("SELENIUM_REMOTE_URL", "undefined remote url").include? "saucelabs"
         [:status_quo, SAUCELABS_ABSOLUTE_TIMEOUT]
-      elsif example.file_path.match? /\.\/spec\/selenium\/.*rcs/ # files in ./spec/selenium/**/rcs
+      elsif example.file_path.match?(%r{\./spec/selenium/.*rcs}) # files in ./spec/selenium/**/rcs
         [:target, SIDEBAR_LOADING_TIMEOUT]
       elsif example.file_path.include? "./spec/selenium/performance/"
         [:status_quo, PERFORMANCE_TIMEOUT]
-      elsif (timeout = typical_time_for(example))
-        [:status_quo, [timeout, ABSOLUTE_TIMEOUT].min]
       elsif commit_modifies_spec?(example)
         [:target, TARGET_TIMEOUT]
       else
@@ -77,46 +79,17 @@ module SpecTimeLimit
     TARGET_TIMEOUT = ENV.fetch("SPEC_TIME_LIMIT_TARGET", 15).to_i
     SIDEBAR_LOADING_TIMEOUT = ENV.fetch("SIDEBAR_LOADING_TIMEOUT", 35).to_i
 
-    def typical_time_for(example)
-      return unless defined?(TestQueue::Runner::RSpec::GroupQueue)
-      stat_key = TestQueue::Runner::RSpec::GroupQueue.stat_key_for(example.example)
-      return unless stats[stat_key]
-
-      # specs inside Timecop.freeze filters can report taking 0 time. In those
-      # cases, we just shoot for the target time.
-      return if stats[stat_key] == 0
-
-      # since actual time can depend on external factors (hardware, load,
-      # photons, etc.), apply a generous fudge factor ... you should only
-      # ever hit the threshold when you introduce something :bananas:, e.g.
-      # `sleep 10`, or `100.times { course_with_student }`
-      #
-      # furthermore, these are exempt from rerun thresholds so your build
-      # will likely still pass if it was a total fluke.
-      ((stats[stat_key] * 3) + 5).ceil
-    end
-
-    def stats
-      @stats ||= if File.exist?(".test_queue_stats")
-                   Marshal.load(IO.binread(".test_queue_stats")) || {}
-                 else
-                   {}
-                 end
-    end
-
-    # note: we only see if the file itself was modified, this won't catch
+    # NOTE: we only see if the file itself was modified, this won't catch
     # changes to things it depends on. but that's where the status_quo stuff
     # helps us out
     def commit_modifies_spec?(example)
-      commit_files.include?(example.metadata[:file_path].sub(/\A\.\//, ''))
+      commit_files.include?(example.metadata[:file_path].delete_prefix("./"))
     end
 
     def commit_files
-      # env var since in test-queue land workers won't have a .git dir
-      @commit_files ||= ENV.fetch(
-        "RELEVANT_SPECS",
+      @commit_files ||=
         `git diff-tree --no-commit-id --name-only -r HEAD | grep -E '_spec\.rb$'`
-      ).split("\n")
+        .split("\n")
     end
   end
 end

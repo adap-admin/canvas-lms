@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -35,14 +37,12 @@ class Quizzes::QuizQuestion::ShortAnswerQuestion < Quizzes::QuizQuestion::Base
     answer_text = user_answer.answer_text
     return nil if answer_text.nil?
 
-    answer_text = CGI::escapeHTML(answer_text).strip.downcase
+    answer_text = CGI.escapeHTML(answer_text).strip.downcase
 
-    answer = @question_data[:answers].sort_by { |a| a[:weight] || CanvasSort::First }.find do |answer|
-      valid_answer = (answer[:text] || '').strip.downcase
+    @question_data[:answers].sort_by { |a| a[:weight] || CanvasSort::First }.find do |answer|
+      valid_answer = (answer[:text] || "").strip.downcase
       # Ignore blank answers (no match on that)
-      (CGI::escapeHTML(valid_answer) == answer_text) && !valid_answer.blank?
+      (CGI.escapeHTML(valid_answer) == answer_text) && valid_answer.present?
     end
-    answer
   end
-
 end

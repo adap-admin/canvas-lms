@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -22,44 +24,87 @@ module Quizzes
 
     root :quiz
 
-    attributes :id, :title, :html_url, :mobile_url, :description, :quiz_type,
-                :time_limit, :shuffle_answers, :show_correct_answers,
-                :scoring_policy, :allowed_attempts, :one_question_at_a_time,
-                :question_count, :points_possible, :cant_go_back,
-                :access_code, :ip_filter, :due_at, :lock_at, :unlock_at,
-                :published, :deleted, :unpublishable, :locked_for_user, :lock_info,
-                :lock_explanation, :hide_results, :show_correct_answers_at,
-                :hide_correct_answers_at, :all_dates, :can_unpublish, :can_update,
-                :require_lockdown_browser, :require_lockdown_browser_for_results,
-                :require_lockdown_browser_monitor, :lockdown_browser_monitor_data,
-                :speed_grader_url, :permissions, :quiz_reports_url, :quiz_statistics_url,
-                :message_students_url, :quiz_submission_html_url, :section_count,
-                :moderate_url, :take_quiz_url, :quiz_extensions_url,
-                # :takeable,
-                :quiz_submissions_zip_url, :preview_url, :quiz_submission_versions_html_url,
-                :assignment_id, :one_time_results, :only_visible_to_overrides,
-                :assignment_group_id, :show_correct_answers_last_attempt, :version_number,
-                :has_access_code, :post_to_sis, :anonymous_submissions, :migration_id
+    attributes :id,
+               :title,
+               :html_url,
+               :mobile_url,
+               :description,
+               :quiz_type,
+               :time_limit,
+               :timer_autosubmit_disabled,
+               :shuffle_answers,
+               :show_correct_answers,
+               :scoring_policy,
+               :allowed_attempts,
+               :one_question_at_a_time,
+               :question_count,
+               :points_possible,
+               :cant_go_back,
+               :access_code,
+               :ip_filter,
+               :due_at,
+               :lock_at,
+               :unlock_at,
+               :published,
+               :deleted,
+               :unpublishable,
+               :locked_for_user,
+               :lock_info,
+               :lock_explanation,
+               :hide_results,
+               :show_correct_answers_at,
+               :hide_correct_answers_at,
+               :all_dates,
+               :can_unpublish,
+               :can_update,
+               :require_lockdown_browser,
+               :require_lockdown_browser_for_results,
+               :require_lockdown_browser_monitor,
+               :lockdown_browser_monitor_data,
+               :speed_grader_url,
+               :permissions,
+               :quiz_reports_url,
+               :quiz_statistics_url,
+               :message_students_url,
+               :quiz_submission_html_url,
+               :section_count,
+               :moderate_url,
+               :take_quiz_url,
+               :quiz_extensions_url,
+               :important_dates,
+               # :takeable,
+               :quiz_submissions_zip_url,
+               :preview_url,
+               :quiz_submission_versions_html_url,
+               :assignment_id,
+               :one_time_results,
+               :only_visible_to_overrides,
+               :assignment_group_id,
+               :show_correct_answers_last_attempt,
+               :version_number,
+               :has_access_code,
+               :post_to_sis,
+               :anonymous_submissions,
+               :migration_id,
+               :in_paced_course
 
     def_delegators :@controller,
-      # :api_v1_course_assignment_group_url,
-      :speed_grader_course_gradebook_url,
-      :api_v1_course_quiz_submission_url,
-      :api_v1_course_quiz_submissions_url,
-      :api_v1_course_quiz_reports_url,
-      :api_v1_course_quiz_statistics_url,
-      :course_quiz_submission_html_url,
-      :api_v1_course_quiz_submission_users_url,
-      :api_v1_course_quiz_submission_users_message_url,
-      :api_v1_course_quiz_extensions_create_url,
-      :course_quiz_moderate_url,
-      :course_quiz_take_url,
-      :course_quiz_quiz_submissions_url,
-      :course_quiz_submission_versions_url
+                   # :api_v1_course_assignment_group_url,
+                   :speed_grader_course_gradebook_url,
+                   :api_v1_course_quiz_submission_url,
+                   :api_v1_course_quiz_submissions_url,
+                   :api_v1_course_quiz_reports_url,
+                   :api_v1_course_quiz_statistics_url,
+                   :course_quiz_submission_html_url,
+                   :api_v1_course_quiz_submission_users_url,
+                   :api_v1_course_quiz_submission_users_message_url,
+                   :api_v1_course_quiz_extensions_create_url,
+                   :course_quiz_moderate_url,
+                   :course_quiz_take_url,
+                   :course_quiz_quiz_submissions_url,
+                   :course_quiz_submission_versions_url
 
-    def context
-      quiz.context
-    end
+    delegate context: :quiz
 
     def_delegators :@quiz, :quiz_questions
 
@@ -110,7 +155,7 @@ module Quizzes
     # end
 
     def preview_url
-      course_quiz_take_url(context, quiz, preview: '1')
+      course_quiz_take_url(context, quiz, preview: "1")
     end
 
     # def unsubmitted_students
@@ -127,6 +172,7 @@ module Quizzes
 
     def speed_grader_url
       return nil unless show_speedgrader?
+
       speed_grader_course_gradebook_url(context, assignment_id: quiz.assignment.id)
     end
 
@@ -143,7 +189,8 @@ module Quizzes
     end
 
     def description
-      return '' if hide_locked_description?
+      return "" if hide_locked_description?
+
       if @serializer_options[:description_formatter]
         @serializer_options[:description_formatter].call(quiz.description)
       else
@@ -152,7 +199,7 @@ module Quizzes
     end
 
     def unsubmitted_students_url
-      api_v1_course_quiz_submission_users_url(context, quiz, submitted: 'false')
+      api_v1_course_quiz_submission_users_url(context, quiz, submitted: "false")
     end
 
     def submitted_students_url
@@ -184,7 +231,7 @@ module Quizzes
     end
 
     def locked_for_json_type
-      'quiz'
+      "quiz"
     end
 
     # Teacher or Observer?
@@ -246,6 +293,10 @@ module Quizzes
       quiz.grants_right?(current_user, :update)
     end
 
+    def important_dates
+      !!quiz.assignment&.important_dates
+    end
+
     def question_count
       quiz.available_question_count
     end
@@ -262,26 +313,24 @@ module Quizzes
       quiz.require_lockdown_browser_monitor?
     end
 
-    def lockdown_browser_monitor_data
-      quiz.lockdown_browser_monitor_data
-    end
+    delegate lockdown_browser_monitor_data: :quiz
 
-    def serializable_object(options={})
-      hash = super(options)
+    def serializable_object(**)
+      hash = super
       # legacy v1 api
-      unless accepts_jsonapi?
-        links = hash.delete('links')
-        # id = hash['assignment_group']
-        # hash['assignment_group_id'] = quiz.assignment_group.try(:id)
-      else
+      if accepts_jsonapi?
         # since we're not embedding QuizStatistics as an association because
         # the statistics objects are built on-demand when the endpoint is
         # requested, and we only need the link, we'll have to assign it manually
-        hash['links'] ||= {}
-        hash['links']['quiz_statistics'] = hash.delete(:quiz_statistics_url)
-        hash['links']['quiz_reports'] = hash.delete(:quiz_reports_url)
+        hash["links"] ||= {}
+        hash["links"]["quiz_statistics"] = hash.delete(:quiz_statistics_url)
+        hash["links"]["quiz_reports"] = hash.delete(:quiz_reports_url)
+      else
+        hash.delete("links")
+        # id = hash['assignment_group']
+        # hash['assignment_group_id'] = quiz.assignment_group.try(:id)
       end
-      if mc_status = serializer_option(:master_course_status)
+      if (mc_status = serializer_option(:master_course_status))
         hash.merge!(quiz.master_course_api_restriction_data(mc_status))
       end
       hash
@@ -343,10 +392,12 @@ module Quizzes
     #
     # @param [:due_at|:lock_at|:unlock_at] domain
     def overridden_date(domain)
-      !serializer_option(:skip_date_overrides) &&
-      context.user_has_been_student?(current_user) && due_dates.any? ?
-        due_dates[0][domain] :
+      if !serializer_option(:skip_date_overrides) &&
+         context.user_has_been_student?(current_user) && due_dates.any?
+        due_dates[0][domain]
+      else
         quiz.send(domain)
+      end
     end
 
     def due_at
@@ -366,7 +417,7 @@ module Quizzes
     end
 
     def user_may_manage?
-      context.grants_right?(current_user, :manage_assignments)
+      context.grants_any_right?(current_user, *RoleOverride::GRANULAR_MANAGE_ASSIGNMENT_PERMISSIONS)
     end
 
     def user_finder
@@ -389,6 +440,14 @@ module Quizzes
 
     def post_to_sis
       quiz.post_to_sis?
+    end
+
+    def timer_autosubmit_disabled
+      quiz.timer_autosubmit_disabled?
+    end
+
+    def in_paced_course
+      context.try(:enable_course_paces)
     end
   end
 end

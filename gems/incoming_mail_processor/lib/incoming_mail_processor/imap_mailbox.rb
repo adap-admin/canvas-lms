@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -16,15 +18,15 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'net/imap'
-require File.expand_path('../configurable_timeout', __FILE__)
+require "net/imap"
+
+require_relative "configurable_timeout"
 
 module IncomingMailProcessor
-
   class ImapMailbox
     include ConfigurableTimeout
 
-    UsedImapMethods = [:login, :logout, :disconnect, :select, :search, :fetch, :expunge, :store, :list, :create, :copy]
+    UsedImapMethods = %i[login logout disconnect select search fetch expunge store list create copy].freeze
 
     attr_accessor :server, :port, :ssl, :username, :password, :folder, :filter
 
@@ -39,7 +41,7 @@ module IncomingMailProcessor
     end
 
     def connect
-      @imap = with_timeout { Net::IMAP.new(@server, :port => @port, :ssl => @ssl) }
+      @imap = with_timeout { Net::IMAP.new(@server, port: @port, ssl: @ssl) }
       wrap_with_timeout(@imap, UsedImapMethods)
       @imap.login(@username, @password)
     end
@@ -48,12 +50,13 @@ module IncomingMailProcessor
       @imap.logout
       @imap.disconnect
     rescue
+      nil
     end
 
-    def each_message(opts={})
+    def each_message(opts = {})
       @imap.select(@folder)
       message_ids = @imap.search(@filter)
-      message_ids = message_ids.select{|id| id % opts[:stride] == opts[:offset]} if opts[:stride] && opts[:offset]
+      message_ids = message_ids.select { |id| id % opts[:stride] == opts[:offset] } if opts[:stride] && opts[:offset]
       message_ids.each do |message_id|
         body = @imap.fetch(message_id, "RFC822")[0].attr["RFC822"]
         yield message_id, body
@@ -67,7 +70,7 @@ module IncomingMailProcessor
 
     def move_message(message_id, target_folder)
       existing = @imap.list("", target_folder)
-      if !existing || existing.empty?
+      if existing.blank?
         @imap.create(target_folder)
       end
       @imap.copy(message_id, target_folder)
@@ -82,5 +85,4 @@ module IncomingMailProcessor
       length
     end
   end
-
 end

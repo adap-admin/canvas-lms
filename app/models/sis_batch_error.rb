@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -18,19 +20,17 @@
 class SisBatchError < ActiveRecord::Base
   belongs_to :sis_batch, inverse_of: :sis_batch_errors
   belongs_to :parallel_importer, inverse_of: :sis_batch_errors
-  belongs_to :root_account, class_name: 'Account', inverse_of: :sis_batch_errors
+  belongs_to :root_account, class_name: "Account", inverse_of: :sis_batch_errors
 
-  scope :expired_errors, -> {where('created_at < ?', 30.days.ago)}
-  scope :failed, -> {where(failure: true)}
-  scope :warnings, -> {where(failure: false)}
+  scope :expired_errors, -> { where("created_at < ?", 30.days.ago) }
+  scope :failed, -> { where(failure: true) }
+  scope :warnings, -> { where(failure: false) }
 
   def self.cleanup_old_errors
-    cleanup = expired_errors.limit(10_000)
-    while cleanup.delete_all > 0; end
+    expired_errors.in_batches(of: 10_000).delete_all
   end
 
   def description
-    (self.file || "") + " - " + (self.message || "")
+    (file || "") + " - " + (message || "")
   end
-
 end

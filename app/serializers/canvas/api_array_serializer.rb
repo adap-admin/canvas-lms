@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -19,7 +21,7 @@ module Canvas
   class APIArraySerializer < ActiveModel::ArraySerializer
     include Canvas::APISerialization
 
-    def initialize(object, options={})
+    def initialize(object, options = {})
       super(object, options)
       @options = options
       @controller = options.fetch(:controller)

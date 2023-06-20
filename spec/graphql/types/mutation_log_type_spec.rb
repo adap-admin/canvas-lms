@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -21,18 +23,22 @@ require_relative "../graphql_spec_helper"
 
 describe Types::MutationLogType do
   before do
-    if !AuditLogFieldExtension.enabled?
+    unless AuditLogFieldExtension.enabled?
       skip("AuditLog needs to be enabled by configuring dynamodb.yml")
     end
   end
 
   before(:once) do
+    creds = Aws::Credentials.new("key", "secret")
+    Canvas::DynamoDB::DevUtils.initialize_ddb_for_development!(:auditors, "graphql_mutations", recreate: true, credentials: creds)
     student_in_course(active_all: true)
     @assignment = @course.assignments.create! name: "asdf"
     account_admin_user
     @asset_string = @assignment.asset_string
 
-    make_log_entry(current_user: @teacher)
+    Timecop.freeze(1.week.ago) do
+      make_log_entry(current_user: @teacher)
+    end
     make_log_entry(current_user: @teacher, real_current_user: @admin)
   end
 
@@ -42,13 +48,13 @@ describe Types::MutationLogType do
       current_user: @teacher,
     }.merge(ctx)
 
-    CanvasSchema.execute(<<~MUTATION, context: ctx)
+    CanvasSchema.execute(<<~GQL, context: ctx)
       mutation {
         updateAssignment(input: {id: "#{@assignment.id}"}) {
           assignment { name }
         }
       }
-    MUTATION
+    GQL
   end
 
   def audit_log_query(variables, ctx = {})
@@ -56,7 +62,7 @@ describe Types::MutationLogType do
       query {
         auditLogs {
           mutationLogs(
-            #{variables.map { |arg, val| "#{arg}: #{val.inspect}" }.join(", ") }
+            #{variables.map { |arg, val| "#{arg}: #{val.inspect}" }.join(", ")}
           ) {
             nodes {
               assetString
@@ -78,14 +84,14 @@ describe Types::MutationLogType do
 
   it "requires permission" do
     expect(
-      audit_log_query({assetString: @asset_string}, current_user: @teacher).
-      dig("data", "auditLogs", "mutationLogs", "nodes")
+      audit_log_query({ assetString: @asset_string }, current_user: @teacher)
+      .dig("data", "auditLogs", "mutationLogs", "nodes")
     ).to be_nil
   end
 
   it "works" do
-    result = audit_log_query({assetString: @asset_string}, current_user: @admin).
-      dig("data", "auditLogs", "mutationLogs", "nodes", 0)
+    result = audit_log_query({ assetString: @asset_string }, current_user: @admin)
+             .dig("data", "auditLogs", "mutationLogs", "nodes", 0)
     expect(result["assetString"]).to eq @asset_string
     expect(result["timestamp"]).not_to be_nil
     expect(result["user"]["_id"]).to eq @teacher.id.to_s
@@ -93,23 +99,52 @@ describe Types::MutationLogType do
   end
 
   it "logs the real user id when masquerading" do
-    result = audit_log_query({assetString: @asset_string}, current_user: @admin).
-      dig("data", "auditLogs", "mutationLogs", "nodes", 0)
+    result = audit_log_query({ assetString: @asset_string }, current_user: @admin)
+             .dig("data", "auditLogs", "mutationLogs", "nodes", 0)
 
     expect(result["user"]["_id"]).to eq @teacher.id.to_s
     expect(result["realUser"]["_id"]).to eq @admin.id.to_s
   end
 
   it "paginates" do
-    result = audit_log_query({assetString: @asset_string, first: 1}, current_user: @admin).
-      dig("data", "auditLogs", "mutationLogs")
+    result = audit_log_query({ assetString: @asset_string, first: 1 }, current_user: @admin)
+             .dig("data", "auditLogs", "mutationLogs")
 
     cursor = result.dig("pageInfo", "endCursor")
-    expect(result.dig("pageInfo", "hasNextPage")).to eq true
+    expect(result.dig("pageInfo", "hasNextPage")).to be true
 
-    result = audit_log_query({assetString: @asset_string, after: cursor}, current_user: @admin).
-      dig("data", "auditLogs", "mutationLogs")
-    expect(result.dig("pageInfo", "hasNextPage")).to eq false
-    expect(result.dig("nodes").size).to eq 1
+    result = audit_log_query({ assetString: @asset_string, after: cursor }, current_user: @admin)
+             .dig("data", "auditLogs", "mutationLogs")
+    expect(result.dig("pageInfo", "hasNextPage")).to be false
+    expect(result["nodes"].size).to eq 1
+  end
+
+  it "supports date ranges" do
+    result = audit_log_query({
+                               assetString: @asset_string,
+                               startTime: 1.day.ago.iso8601,
+                             },
+                             current_user: @admin).dig("data", "auditLogs", "mutationLogs")
+
+    expect(result["nodes"].size).to eq 1
+    expect(result.dig("nodes", 0, "timestamp")).to be > 1.day.ago
+
+    result = audit_log_query({
+                               assetString: @asset_string,
+                               endTime: 1.day.ago.iso8601,
+                             },
+                             current_user: @admin).dig("data", "auditLogs", "mutationLogs")
+
+    expect(result["nodes"].size).to eq 1
+    expect(result.dig("nodes", 0, "timestamp")).to be < 1.day.ago
+
+    result = audit_log_query({
+                               assetString: @asset_string,
+                               startTime: 2.years.ago.iso8601,
+                               endTime: 1.year.ago.iso8601,
+                             },
+                             current_user: @admin).dig("data", "auditLogs", "mutationLogs")
+
+    expect(result["nodes"].size).to eq 0
   end
 end

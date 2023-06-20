@@ -32,12 +32,12 @@
       </a>
     <% end %>
     <% if @context.is_a?(Course)%>
-      <% if @context.user_is_instructor?(@user) && can_do(@user, @current_user, :read_reports) %>
+      <% if @context.user_is_instructor?(@user) && can_do(@user, @current_user, :read_reports) && can_do(@context, @current_user, :view_all_grades) %>
         <a href="<%= user_course_teacher_activity_url(@user, @context) %>" class="btn button-sidebar-wide">
           <i class="icon-chat" aria-hidden="true"></i>
           <%= t 'Student Interactions Report' %>
         </a>
-      <% elsif @context.user_has_been_student?(@user) && @context.user_is_instructor?(@current_user) && can_do(@context, @current_user, :read_reports) %>
+      <% elsif @context.user_has_been_student?(@user) && @context.user_is_instructor?(@current_user) && can_do(@context, @current_user, :read_reports) && can_do(@context, @current_user, :view_all_grades) %>
         <a href="<%= user_student_teacher_activity_url(@current_user, @user) %>" class="btn button-sidebar-wide">
           <i class="icon-chat" aria-hidden="true"></i>
           <%= t 'Interactions Report' %>
@@ -79,8 +79,9 @@
 
 <%= render :partial => 'shared/profile' %>
 
+<% manage_perm = @context.root_account.feature_enabled?(:granular_permissions_manage_users) ? :allow_course_admin_actions : :manage_admin_users %>
 <% can_manage_students = can_do(@context, @current_user, :manage_students) %>
-<% can_manage_admins = can_do(@context, @current_user, :manage_admin_users) %>
+<% can_manage_admins = can_do(@context, @current_user, manage_perm) %>
 
 <% if !@context.is_a?(Group) && (can_manage_students || can_manage_admins) %>
 <div class="more_user_information">
@@ -98,7 +99,7 @@
               <a href="<%= context_url(@context, :context_section_url, enrollment.course_section_id) rescue "#" %>"><%= enrollment.try_rescue(:course_section).try_rescue(:display_name) || enrollment.short_name %></a>
             </td>
             <td style="width: 50%;">
-              <%= t 'enrolled_as', "Enrolled as a %{enrollment_type}", :enrollment_type => enrollment.readable_type %>
+              <%= t 'enrolled_as', "Enrolled as: %{enrollment_type}", :enrollment_type => enrollment.readable_role_name %>
               <br />
               <%= t "Created %{created}", created: datetime_string(enrollment.created_at) %>
               <% if enrollment.is_a?(ObserverEnrollment) %>
@@ -134,7 +135,7 @@
             <% end %>
           </tr>
         <% end %>
-        <% if @context.is_a?(Course) && can_do(@context, @current_user, :manage_admin_users) %>
+        <% if @context.is_a?(Course) && can_do(@context, @current_user, manage_perm) %>
           <tr id="priveleges">
             <td scope="row">
               <%= before_label('user_privileges', %{Privileges}) %>
@@ -152,7 +153,7 @@
           </tr>
         <% end %>
       </table>
-      <% if @context.is_a?(Course) && can_do(@context, @current_user, :manage_admin_users) %>
+      <% if @context.is_a?(Course) && can_do(@context, @current_user, manage_perm) %>
         <div id="student_last_attended__component"></div>
       <% end %>
     </fieldset>

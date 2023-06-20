@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,21 +18,28 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/../views_helper')
+require_relative "../views_helper"
 
-describe "/users/show" do
-  it "should render" do
-    course_with_student
+describe "users/show" do
+  before do
+    enroll = course_with_student
+    account_admin_user
+    gm = GroupMembership.create!(
+      group: @course.groups.create(name: "our group"),
+      user: @user,
+      workflow_state: "accepted"
+    )
     view_context
     assign(:user, @user)
     assign(:courses, [@course])
     assign(:topics, [])
     assign(:upcoming_events, [])
-    assign(:enrollments, [])
-    assign(:group_memberships, [])
-    assign(:page_views, PageView.paginate(:page => 1, :per_page => 20))
+    assign(:enrollments, [enroll])
+    assign(:group_memberships, [gm])
+    assign(:page_views, PageView.paginate(page: 1, per_page: 20))
+  end
 
+  it "renders" do
     render "users/show"
     expect(response).not_to be_nil
     expect(content_for(:right_side)).to include "Message #{@user.name}" # regardless of permissions

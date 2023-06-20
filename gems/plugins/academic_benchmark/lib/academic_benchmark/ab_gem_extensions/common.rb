@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -33,8 +35,8 @@ module AcademicBenchmarks
           migration_id: guid,
           vendor_guid: guid,
           is_global_standard: true,
-          type: 'learning_outcome_group',
-          outcomes: children.map {|c| c.build_outcomes(ratings, self)}.compact
+          type: "learning_outcome_group",
+          outcomes: children.filter_map { |c| c.build_outcomes(ratings, self) }
         }
       end
     end

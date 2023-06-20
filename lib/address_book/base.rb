@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -16,7 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 module AddressBook
-
   # base interface and partial implementation of AddressBook, including
   # documentation.
   #
@@ -26,7 +27,9 @@ module AddressBook
   # cache.
   class Base
     def self.inherited(derived)
+      super
       return unless derived.superclass == AddressBook::Base
+
       derived.prepend(AddressBook::Caching)
     end
 
@@ -51,12 +54,12 @@ module AddressBook
     # the :conversation_id option indicates that any participants in the
     # existing conversation should be considered known; ignored if the sender
     # is not already a participant in that conversation.
-    def known_users(users, options={})
-      raise NotImplemented
+    def known_users(users, options = {})
+      raise NotImplementedError
     end
 
     # as known_users, but for just the one user
-    def known_user(user, options={})
+    def known_user(user, options = {})
       known_users([user], options).first
     end
 
@@ -65,7 +68,7 @@ module AddressBook
     # known. if not known, returns an empty hash
     def common_courses(user)
       if user == @sender
-        return {}
+        {}
       else
         known = known_user(user)
         known ? @cache.common_courses(known) : {}
@@ -77,7 +80,7 @@ module AddressBook
     # known. if not known, returns an empty hash
     def common_groups(user)
       if user == @sender
-        return {}
+        {}
       else
         known = known_user(user)
         known ? @cache.common_groups(known) : {}
@@ -88,12 +91,12 @@ module AddressBook
     # such as `course_123` or `course_123_teachers` or as a Course,
     # CourseSection, or Group object).
     def known_in_context(context)
-      raise NotImplemented
+      raise NotImplementedError
     end
 
     # counts the known users in each of the given contexts
     def count_in_contexts(contexts)
-      raise NotImplemented
+      raise NotImplementedError
     end
 
     # returns a paginatable collection for all known users matching the search
@@ -123,8 +126,8 @@ module AddressBook
     # implementation note: we don't need to worry about top-level pagination of
     # the result -- we know it's used in a merge -- so all it needs to
     # implement are depth, new_pager, and execute_page.
-    def search_users(options={})
-      raise NotImplemented
+    def search_users(options = {})
+      raise NotImplementedError
     end
 
     # flag the provided users as known, even if they would not otherwise be, to
@@ -132,7 +135,7 @@ module AddressBook
     # contexts for participants in existing conversations. future lookups of
     # users not otherwise known will provide empty sets common contexts.
     def preload_users(users)
-      raise NotImplemented
+      raise NotImplementedError
     end
 
     # returns the course sections known to the sender
@@ -163,7 +166,7 @@ module AddressBook
 
       # if the context doesn't exist, or the sender does not have read_as_admin
       # permission, they don't get an admin view
-      return false unless context && context.grants_right?(@sender, :read_as_admin)
+      return false unless context&.grants_right?(@sender, :read_as_admin)
 
       # but even if they have read_as_admin permission, we need to check if the
       # context is part of a course they participate in. if so, they still
@@ -173,7 +176,7 @@ module AddressBook
         case context
         when Course then context.id
         when CourseSection then context.course_id
-        when Group then context.context_type == 'Course' && context.context_id
+        when Group then context.context_type == "Course" && context.context_id
         end
       return false if course_id && @sender.current_and_concluded_courses.where(id: course_id).exists?
 

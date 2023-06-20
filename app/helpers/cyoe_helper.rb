@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -18,9 +20,10 @@
 
 module CyoeHelper
   def cyoe_able?(item)
-    if item.content_type == 'Assignment'
+    case item.content_type
+    when "Assignment"
       item.graded? && item.content.graded?
-    elsif item.content_type == 'Quizzes::Quiz'
+    when "Quizzes::Quiz"
       item.graded? && item.content.assignment?
     else
       item.graded?
@@ -31,12 +34,12 @@ module CyoeHelper
     ConditionalRelease::Service.enabled_in_context?(context)
   end
 
-  def cyoe_rules(context, current_user, items, session)
-    ConditionalRelease::Service.rules_for(context, current_user, items, session)
+  def cyoe_rules(context, current_user, session)
+    ConditionalRelease::Service.rules_for(context, current_user, session)
   end
 
   def conditional_release_rule_for_module_item(content_tag, opts = {})
-    rules = opts[:conditional_release_rules] || cyoe_rules(opts[:context], opts[:user], [], opts[:session])
+    rules = opts[:conditional_release_rules] || cyoe_rules(opts[:context], opts[:user], opts[:session])
     assignment_id = content_tag.assignment.try(:id)
     path_data = conditional_release_assignment_set(rules, assignment_id) if rules.present? && assignment_id.present?
     if path_data.present? && opts[:is_student]
@@ -48,17 +51,29 @@ module CyoeHelper
   end
 
   def conditional_release_assignment_set(rules, id)
-    result = rules.find { |rule| rule[:trigger_assignment].to_s == id.to_s }
+    result = rules.find { |rule| rule[:trigger_assignment].to_s == id.to_s || rule[:trigger_assignment_id] == id }
     return if result.blank?
+
     result.slice(:locked, :assignment_sets, :selected_set_id)
+  end
+
+  def assignment_set_action_ids(rules, user)
+    ConditionalRelease::AssignmentSetAction
+      .active
+      .where(student_id: user)
+      .where(assignment_set_id: rules.map { |rule| rule[:assignment_sets].pluck(:id) }.flatten.uniq)
+      .pluck(:id)
   end
 
   def conditional_release_json(content_tag, user, opts = {})
     result = conditional_release_rule_for_module_item(content_tag, opts)
     return if result.blank?
+
     result[:assignment_sets].each do |as|
-      next if as[:assignments].blank?
-      as[:assignments].each do |a|
+      associations = as[:assignment_set_associations]
+      next if associations.blank?
+
+      associations.each do |a|
         a[:model] = assignment_json(a[:model], user, nil) if a[:model]
       end
     end
@@ -67,31 +82,30 @@ module CyoeHelper
 
   def show_cyoe_placeholder(mastery_paths)
     (mastery_paths[:selected_set_id].nil? && mastery_paths[:assignment_sets].present?) ||
-    mastery_paths[:awaiting_choice] ||
-    mastery_paths[:still_processing] ||
-    mastery_paths[:locked]
+      mastery_paths[:awaiting_choice] ||
+      mastery_paths[:still_processing] ||
+      mastery_paths[:locked]
   end
 
   private
 
   def check_if_processing(data)
     if !data[:awaiting_choice] && data[:assignment_sets].length == 1
-      vis_assignments = AssignmentStudentVisibility.visible_assignment_ids_for_user(@current_user.id, @context.id) || []
-      selected_set_assignment_ids = data[:assignment_sets][0][:assignments].map{ |a| a[:assignment_id].to_i } || []
-      data[:still_processing] = (selected_set_assignment_ids - vis_assignments).present?
+      set = data[:assignment_sets][0]
+      data[:still_processing] = !ConditionalRelease::AssignmentSetAction.where(assignment_set_id: set[:id], student_id: @current_user.id).exists?
     end
   end
 
   def build_path_data(data, tag_id)
     awaiting_choice = data[:selected_set_id].nil? && data[:assignment_sets].present?
-    modules_url = context_url(@context, :context_url) + '/modules'
-    choose_url = modules_url + '/items/' + tag_id + '/choose'
-    modules_disabled = @context.tabs_available(@current_user).select{|tabs| tabs[:label] == "Modules" }.blank?
+    modules_url = context_url(@context, :context_url) + "/modules"
+    choose_url = modules_url + "/items/" + tag_id + "/choose"
+    modules_disabled = @context.tabs_available(@current_user).select { |tabs| tabs[:label] == "Modules" }.blank?
     data.merge!({
-      awaiting_choice: awaiting_choice,
-      modules_url: modules_url,
-      choose_url: choose_url,
-      modules_tab_disabled: modules_disabled
-    })
+                  awaiting_choice:,
+                  modules_url:,
+                  choose_url:,
+                  modules_tab_disabled: modules_disabled
+                })
   end
 end

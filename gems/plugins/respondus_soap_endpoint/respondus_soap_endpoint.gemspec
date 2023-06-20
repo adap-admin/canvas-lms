@@ -1,7 +1,6 @@
-$:.push File.expand_path("../lib", __FILE__)
+# frozen_string_literal: true
 
-# Maintain your gem's version:
-require "respondus_soap_endpoint/version"
+require_relative "lib/respondus_soap_endpoint/version"
 
 # Describe your gem and declare its dependencies:
 Gem::Specification.new do |s|
@@ -13,7 +12,6 @@ Gem::Specification.new do |s|
   s.summary     = "SOAP Endpoint for Respondus QTI uploads"
 
   s.files = Dir["{app,config,db,lib}/**/*"]
-  s.test_files = Dir["spec_canvas/**/*"]
 
   s.add_dependency "rails",             ">= 3.2"
   s.add_dependency "soap4r-middleware", "0.8.7"

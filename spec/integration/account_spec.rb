@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -16,36 +18,33 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
-
-require 'nokogiri'
+require "nokogiri"
 
 describe AccountsController do
-
   context "SAML meta data" do
-    before(:each) do
+    before do
       skip("requires SAML extension") unless AuthenticationProvider::SAML.enabled?
-      @account = Account.create!(:name => "test")
+      @account = Account.create!(name: "test")
     end
 
-    it 'should render for non SAML configured accounts' do
+    it "renders for non SAML configured accounts" do
       get "/saml2"
       expect(response).to be_successful
       expect(response.body).not_to eq ""
     end
 
-    it "should use the correct entity_id" do
-      allow(HostUrl).to receive(:default_host).and_return('bob.cody.instructure.com')
-      @aac = @account.authentication_providers.create!(:auth_type => "saml")
+    it "uses the correct entity_id" do
+      allow(HostUrl).to receive(:default_host).and_return("bob.cody.instructure.com")
+      @aac = @account.authentication_providers.create!(auth_type: "saml")
 
       get "/saml2"
       expect(response).to be_successful
       doc = Nokogiri::XML(response.body)
-      expect(doc.at_xpath("md:EntityDescriptor", SAML2::Namespaces::ALL)['entityID']).to eq "http://bob.cody.instructure.com/saml2"
+      expect(doc.at_xpath("md:EntityDescriptor", SAML2::Namespaces::ALL)["entityID"]).to eq "http://bob.cody.instructure.com/saml2"
     end
 
     it "renders valid schema" do
-      allow(HostUrl).to receive(:context_hosts).and_return(['bob.cody.instructure.com'])
+      allow(HostUrl).to receive(:context_hosts).and_return(["bob.cody.instructure.com"])
       get "/saml2"
       expect(response).to be_successful
 
@@ -55,7 +54,7 @@ describe AccountsController do
   end
 
   context "section tabs" do
-    it "should change in response to role override changes" do
+    it "changes in response to role override changes" do
       enable_cache do
         # cache permissions and tabs for a user
         @account = Account.default
@@ -64,19 +63,20 @@ describe AccountsController do
         Timecop.freeze(61.minutes.ago) do
           get "/accounts/#{@account.id}"
           expect(response).to be_ok
-          doc = Nokogiri::HTML(response.body)
-          expect(doc.at_css('#section-tabs .section .outcomes')).not_to be_nil
+          doc = Nokogiri::HTML5(response.body)
+          expect(doc.at_css("#section-tabs .section .outcomes")).not_to be_nil
         end
 
         # change a permission on the user's role
-        @account.role_overrides.create! role: admin_role, permission: 'manage_outcomes',
+        @account.role_overrides.create! role: admin_role,
+                                        permission: "manage_outcomes",
                                         enabled: false
 
         # ensure the change is reflected once the user's cached permissions expire
         get "/accounts/#{@account.id}"
         expect(response).to be_ok
-        doc = Nokogiri::HTML(response.body)
-        expect(doc.at_css('#section-tabs .section .outcomes')).to be_nil
+        doc = Nokogiri::HTML5(response.body)
+        expect(doc.at_css("#section-tabs .section .outcomes")).to be_nil
       end
     end
   end

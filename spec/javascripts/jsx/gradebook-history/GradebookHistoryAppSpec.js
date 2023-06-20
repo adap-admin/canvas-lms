@@ -19,10 +19,11 @@
 import React from 'react'
 import {Provider} from 'react-redux'
 import {shallow} from 'enzyme'
-import SearchForm from 'jsx/gradebook-history/SearchForm'
-import SearchResults from 'jsx/gradebook-history/SearchResults'
-import GradebookHistoryApp from 'jsx/gradebook-history/GradebookHistoryApp'
-import GradebookHistoryStore from 'jsx/gradebook-history/store/GradebookHistoryStore'
+import SearchForm from 'ui/features/gradebook_history/react/SearchForm'
+import SearchResults from 'ui/features/gradebook_history/react/SearchResults'
+import GradebookHistoryApp from 'ui/features/gradebook_history/react/GradebookHistoryApp'
+import GradebookHistoryStore from 'ui/features/gradebook_history/react/store/GradebookHistoryStore'
+import GradebookMenu from '@canvas/gradebook-menu'
 
 QUnit.module('GradebookHistoryApp has component', {
   setup() {
@@ -31,26 +32,42 @@ QUnit.module('GradebookHistoryApp has component', {
 
   teardown() {
     this.wrapper.unmount()
-  }
+  },
 })
 
-test('Provider with a store prop', function() {
+test('Provider with a store prop', function () {
   const provider = this.wrapper.find(Provider)
   equal(provider.length, 1)
   equal(provider.props().store, GradebookHistoryStore)
 })
 
-test('Heading', function() {
+test('Heading', function () {
   const heading = this.wrapper.find('h1')
   strictEqual(heading.length, 1)
 })
 
-test('SearchForm', function() {
+test('SearchForm', function () {
   const form = this.wrapper.find(SearchForm)
   strictEqual(form.length, 1)
 })
 
-test('SearchResults', function() {
+test('SearchResults', function () {
   const results = this.wrapper.find(SearchResults)
   strictEqual(results.length, 1)
+})
+
+QUnit.module('GradebookMenu', () => {
+  test('is passed the provided courseUrl prop', () => {
+    const wrapper = shallow(<GradebookHistoryApp courseUrl="/courseUrl" learningMasteryEnabled />)
+    const menu = wrapper.find(GradebookMenu)
+    strictEqual(menu.prop('courseUrl'), '/courseUrl')
+  })
+
+  test('is passed the provided learningMasteryEnabled prop', () => {
+    const wrapper = shallow(
+      <GradebookHistoryApp courseUrl="/courseUrl" learningMasteryEnabled={false} />
+    )
+    const menu = wrapper.find(GradebookMenu)
+    strictEqual(menu.prop('learningMasteryEnabled'), false)
+  })
 })

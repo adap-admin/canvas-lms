@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -15,30 +17,26 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_dependency 'importers'
-
 module Importers
   class RubricImporter < Importer
-
-    extend OutcomeImporter
-
     self.item_class = Rubric
 
     def self.process_migration(data, migration)
-      rubrics = data['rubrics'] ? data['rubrics']: []
+      rubrics = data["rubrics"] || []
       migration.outcome_to_id_map ||= {}
+      migration.copied_external_outcome_map ||= {}
       rubrics.each do |rubric|
-        if migration.import_object?("rubrics", rubric['migration_id'])
-          begin
-            self.import_from_migration(rubric, migration)
-          rescue
-            migration.add_import_warning(t('#migration.rubric_type', "Rubric"), rubric[:title], $!)
-          end
+        next unless migration.import_object?("rubrics", rubric["migration_id"])
+
+        begin
+          import_from_migration(rubric, migration)
+        rescue
+          migration.add_import_warning(t("#migration.rubric_type", "Rubric"), rubric[:title], $!)
         end
       end
     end
 
-    def self.import_from_migration(hash, migration, item=nil)
+    def self.import_from_migration(hash, migration, item = nil)
       context = migration.context
       hash = hash.with_indifferent_access
       return nil if hash[:migration_id] && hash[:rubrics_to_import] && !hash[:rubrics_to_import][hash[:migration_id]]
@@ -47,7 +45,7 @@ module Importers
       if !item && hash[:external_identifier]
         rubric = context.available_rubric(hash[:external_identifier]) unless migration.cross_institution?
 
-        if !rubric
+        unless rubric
           Rails.logger.warn("The external Rubric couldn't be found for \"#{hash[:title]}\", creating a copy.")
         end
       end
@@ -57,9 +55,9 @@ module Importers
       else
         item ||= Rubric.where(context_id: context, context_type: context.class.to_s, id: hash[:id]).first
         item ||= Rubric.where(context_id: context, context_type: context.class.to_s, migration_id: hash[:migration_id]).first if hash[:migration_id]
-        item ||= Rubric.new(:context => context)
+        item ||= Rubric.new(context:)
         item.migration_id = hash[:migration_id]
-        item.workflow_state = 'active' if item.deleted?
+        item.workflow_state = "active" if item.deleted?
         item.title = hash[:title]
         item.populate_rubric_title # just in case
         item.description = hash[:description]
@@ -73,26 +71,34 @@ module Importers
         item.data = hash[:data]
         item.data.each do |crit|
           if crit[:learning_outcome_migration_id].present?
-            if migration.respond_to?(:outcome_to_id_map) && id = migration.outcome_to_id_map[crit[:learning_outcome_migration_id]]
+            if migration.respond_to?(:outcome_to_id_map) && (id = migration.outcome_to_id_map[crit[:learning_outcome_migration_id]])
               crit[:learning_outcome_id] = id
-            elsif lo = context.created_learning_outcomes.where(migration_clause(crit[:learning_outcome_migration_id])).first
+            elsif (lo = context.created_learning_outcomes.where(migration_id: crit[:learning_outcome_migration_id]).first)
               crit[:learning_outcome_id] = lo.id
             end
-          elsif crit[:learning_outcome_external_identifier].present? && !migration.cross_institution?
-            if lo = context.available_outcome(crit[:learning_outcome_external_identifier])
-              crit[:learning_outcome_id] = lo.id
+          elsif crit[:learning_outcome_external_identifier].present?
+            # link an account outcome
+            lo = context.available_outcome(crit[:learning_outcome_external_identifier]) unless migration.cross_institution?
+
+            # link the copy of an account outcome that isn't available in the destination context
+            unless lo
+              mig_id = migration.copied_external_outcome_map[crit[:learning_outcome_external_identifier]]
+              lo = context.created_learning_outcomes.find_by(migration_id: mig_id) if mig_id
             end
+
+            crit[:learning_outcome_id] = lo.id if lo
           end
           crit.delete(:learning_outcome_migration_id)
           crit.delete(:learning_outcome_external_identifier)
         end
 
         item.skip_updating_points_possible = true
+        item.update_mastery_scales(false)
         migration.add_imported_item(item)
         item.save!
       end
 
-      if association = context.rubric_associations.where(rubric_id: item).first
+      if (association = context.rubric_associations.where(rubric_id: item).first)
         unless association.bookmarked
           association.bookmarked = true
           association.save!

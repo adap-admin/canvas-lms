@@ -16,33 +16,11 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React from 'react'
-import ReactDOM from 'react-dom'
-import formatMessage from '../../../format-message'
+import doFileUpload from '../shared/Upload/doFileUpload'
 
-export default function(ed, document, trayProps) {
-  return import('../shared/Upload/UploadFile').then(({UploadFile}) => {
-    let container = document.querySelector('.canvas-rce-upload-container')
-    if (!container) {
-      container = document.createElement('div')
-      container.className = 'canvas-rce-upload-container'
-      document.body.appendChild(container)
-    }
-
-    const handleDismiss = () => {
-      ReactDOM.unmountComponentAtNode(container)
-      ed.focus(false)
-    }
-
-    ReactDOM.render(
-      <UploadFile
-        accept="image/*"
-        editor={ed}
-        label={formatMessage('Upload Image')}
-        panels={['COMPUTER', 'UNSPLASH', 'URL']}
-        onDismiss={handleDismiss}
-        trayProps={trayProps}
-      />, container
-    )
-  })
+export default function (ed, document) {
+  return doFileUpload(ed, document, {
+    accept: 'image/*',
+    panels: ['COMPUTER', 'URL'],
+  }).shownPromise
 }

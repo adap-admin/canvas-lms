@@ -22,7 +22,9 @@
 
 // print button for grades summary page
 .print-grades {
-  float: direction(right);
+  body:not(.responsive_student_grades_page) & {
+    float: direction(right);
+  }
   @media print {
     display: none;
   }
@@ -118,11 +120,28 @@
 
 #grades_summary td.assignment_score {
   cursor: pointer;
-  white-space: nowrap;
+
+  body:not(.responsive_student_grades_page) & {
+    white-space: nowrap;
+  }
+
+  body.responsive_student_grades_page & {
+    @include breakpoint(tablet) {
+      white-space: nowrap;
+    }
+  }
 }
 
 #grades_summary th.possible {
-  white-space: nowrap;
+  body:not(.responsive_student_grades_page) & {
+    white-space: nowrap;
+  }
+
+  body.responsive_student_grades_page & {
+    @include breakpoint(tablet) {
+      white-space: nowrap;
+    }
+  }
 }
 
 #grades_summary td a, #grades_summary th a {
@@ -137,8 +156,18 @@
 #grades_summary td.details {
   text-align: direction(right);
   padding-#{direction(left)}: 0;
-  white-space: nowrap;
-  min-width: 80px;  // equals 4 x 20 pixel icons
+
+  body:not(.responsive_student_grades_page) & {
+    white-space: nowrap;
+    min-width: 80px;  // equals 4 x 20 pixel icons
+  }
+
+  body.responsive_student_grades_page & {
+    @include breakpoint(tablet) {
+      white-space: nowrap;
+      min-width: 80px;  // equals 4 x 20 pixel icons
+    }
+  }
 
   & a {
     color: $ic-icon-link-color;
@@ -154,10 +183,14 @@
 #grades_summary th.title {
   font-weight: normal;
   border-bottom-color: $ic-border-light;
+  word-break: break-word;
 }
 
 #grades_summary th.title .context {
-  visibility: hidden;
+  body:not(.responsive_student_grades_page) & {
+    visibility: hidden;
+  }
+
   font-size: $ic-font-size - 2;
   color: $ic-font-color-dark;
   @media print {
@@ -166,13 +199,26 @@
     padding: 0;
   }
 }
+#grades_summary th.title a {
+  word-break: break-word;
+}
 
-#grades_summary th.title .context.context_hover {
-  visibility: visible;
+body:not(.responsive_student_grades_page) {
+  #grades_summary th.title .context.context_hover {
+    visibility: visible;
+  }
 }
 
 #grades_summary td.due {
-  white-space: nowrap;
+  body:not(.responsive_student_grades_page) & {
+    white-space: nowrap;
+  }
+
+  body.responsive_student_grades_page & {
+    @include breakpoint(tablet) {
+      white-space: nowrap;
+    }
+  }
 }
 
 #grades_summary tr.assignment_graded {
@@ -221,6 +267,54 @@
   display: none;
   &:hover, &:focus {
     opacity: 0.7;
+  }
+}
+
+#grades_summary .feedback_visibility_ff {
+  a.toggle_comments_link,
+  a.toggle_rubric_assessments_link {
+    background-color: $ic-color-medium-light;
+    padding: 4px 6px;
+    border: 1px solid $ic-border-color;
+    border-radius: 4px;
+    position: relative;
+    display: inline-block;
+    width: fit-content;
+  }
+
+  a.tooltip {
+    margin-#{direction(left)}: 8px;
+  }
+
+  .score_holder span.tooltip {
+    display: inline-block;
+  }
+
+  span.comment_count {
+    font-size: 14px;
+  }
+
+  .unread_dot {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    background-color: $electric;
+    border-radius: 6px;
+  }
+
+  .grade_dot {
+    #{direction(right)}: -10px;
+    top: -11px;
+  }
+
+  .rubric_dot {
+    #{direction(left)}: 23px;
+    top: -7px;
+  }
+
+  .comment_dot {
+    #{direction(right)}: -6px;
+    top: -7px;
   }
 }
 
@@ -284,7 +378,7 @@
 #student-grades-show-all,
 #only_consider_graded_assignments_wrapper {
   display: block;
-  margin: $ic-sp/2 0;
+  margin: $ic-sp*0.5 0;
 }
 
 #grades_summary table.score_details_table {
@@ -311,6 +405,7 @@ a.screenreader-toggle {
   overflow: hidden;
   border-style: solid;
   border-color: $ic-border-dark;
+  box-sizing: border-box;
 }
 
 div.rubric-toggle {
@@ -323,12 +418,19 @@ div.rubric-toggle {
 }
 
 .outcome-toggles {
-  float: direction(right);
-  position: absolute;
-  #{direction(right)}: 1em;
-  margin-top: -2.3em;
+  text-align: #{direction(right)};
+  margin-top: 0.75rem;
+
+  @include breakpoint(mini-tablet) {
+    float: direction(right);
+    padding-top: 0;
+    position: absolute;
+    #{direction(right)}: 1em;
+    margin-top: -2.3em;
+  }
+
   .btn {
-    margin-#{direction(left)}: 0.5em;
+    margin-#{direction(left)}: 0.75em;
   }
   a[class*=icon-]:before, a[class^=icon-]:before {
     margin: 0;
@@ -628,4 +730,46 @@ $outcome-border: 1px solid #BCC2CA;
   display: none;
   margin-bottom: 10px;
   font-size: 0.8em;
+}
+
+.turnitin_score_container {
+  i {
+    &.icon-empty,
+    &.icon-oval-half {
+      color: $ic-color-danger;
+    }
+
+    &.icon-certified {
+      color: $ic-color-success;
+    }
+  }
+
+  .turnitin_similarity_score {
+    color: $ic-color-dark;
+  }
+}
+
+.ic-Table.ic-Table--grades-summary-table th,
+.ic-Table.ic-Table--grades-summary-table td {
+  padding-#{direction(left)}: 0;
+  padding-#{direction(right)}: 0;
+
+  @include breakpoint(tablet) {
+    padding-#{direction(left)}: $ic-sp + 2;
+    padding-#{direction(right)}: $ic-sp + 2;
+  }
+}
+
+@media print {
+  .comment_thread_show_print {
+    display: table-row !important;
+  }
+
+  [data-id="submissions-comments-tray"] {
+    display: none
+  }
+}
+
+.selected-assignment {
+  background-color: $ic-bg-light-primary
 }

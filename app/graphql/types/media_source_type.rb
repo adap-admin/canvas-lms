@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -18,7 +20,7 @@
 
 module Types
   class MediaSourceType < ApplicationObjectType
-    graphql_name 'MediaSource'
+    graphql_name "MediaSource"
 
     field :bitrate, String, null: true
 

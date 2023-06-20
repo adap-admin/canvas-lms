@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -18,6 +20,8 @@
 class AccessToken < ActiveRecord::Base
   include Workflow
 
+  extend RootAccountResolver
+
   workflow do
     state :active
     state :deleted
@@ -25,26 +29,48 @@ class AccessToken < ActiveRecord::Base
 
   attr_reader :full_token
   attr_reader :plaintext_refresh_token
+
   belongs_to :developer_key, counter_cache: :access_token_count
-  belongs_to :user
+  belongs_to :user, inverse_of: :access_tokens
+  belongs_to :real_user, inverse_of: :masquerade_tokens, class_name: "User"
   has_one :account, through: :developer_key
 
   serialize :scopes, Array
+
+  validates :purpose, length: { maximum: maximum_string_length }
   validate :must_only_include_valid_scopes, unless: :deleted?
 
-  has_many :notification_endpoints, -> { where(:workflow_state => "active") }, dependent: :destroy
+  has_many :notification_endpoints, -> { where(workflow_state: "active") }, dependent: :destroy
 
   before_validation -> { self.developer_key ||= DeveloperKey.default }
+
+  resolves_root_account through: :developer_key
+
+  has_a_broadcast_policy
+
+  set_broadcast_policy do |p|
+    p.dispatch :manually_created_access_token_created
+    p.to(&:user)
+    p.whenever do |access_token|
+      access_token.crypted_token_previously_changed? && access_token.manually_created?
+    end
+  end
 
   # For user-generated tokens, purpose can be manually set.
   # For app-generated tokens, this should be generated based
   # on the scope defined in the auth process (scope has not
   # yet been implemented)
 
-  scope :active, -> { not_deleted.where("expires_at IS NULL OR expires_at>?", DateTime.now.utc) }
-  scope :not_deleted, -> { where(:workflow_state => "active") }
+  scope :active, -> { not_deleted.where("permanent_expires_at IS NULL OR permanent_expires_at>?", Time.now.utc) }
+  scope :not_deleted, -> { where(workflow_state: "active") }
 
   TOKEN_SIZE = 64
+  TOKEN_TYPES = OpenStruct.new(
+    {
+      crypted_token: :crypted_token,
+      crypted_refresh_token: :crypted_refresh_token
+    }
+  )
 
   before_create :generate_token
   before_create :generate_refresh_token
@@ -52,110 +78,113 @@ class AccessToken < ActiveRecord::Base
   alias_method :destroy_permanently!, :destroy
   def destroy
     return true if deleted?
-    self.workflow_state = 'deleted'
+
+    self.workflow_state = "deleted"
     run_callbacks(:destroy) { save! }
   end
 
-  def self.authenticate(token_string, token_key = :crypted_token)
+  def self.authenticate(token_string, token_key = :crypted_token, access_token = nil)
     # hash the user supplied token with all of our known keys
     # attempt to find a token that matches one of the hashes
     hashed_tokens = all_hashed_tokens(token_string)
-    token = self.not_deleted.where(token_key => hashed_tokens).first
+    token = access_token || not_deleted.where(token_key => hashed_tokens).first
     if token && token.send(token_key) != hashed_tokens.first
       # we found the token but, its hashed using an old key. save the updated hash
       token.send("#{token_key}=", hashed_tokens.first)
       token.save!
     end
-    token = nil unless token.try(:usable?, token_key)
+    token = nil unless token&.usable?(token_key)
     token
   end
 
   def self.authenticate_refresh_token(token_string)
-    self.authenticate(token_string, :crypted_refresh_token)
+    authenticate(token_string, :crypted_refresh_token)
   end
 
-  def self.hashed_token(token)
+  def self.hashed_token(token, key = Canvas::Security.encryption_key)
     # This use of hmac is a bit odd, since we aren't really signing a message
     # other than the random token string itself.
     # However, what we're essentially looking for is a hash of the token
     # "signed" or concatenated with the secret encryption key, so this is perfect.
-    Canvas::Security.hmac_sha1(token)
+    Canvas::Security.hmac_sha1(token, key)
   end
 
   def self.all_hashed_tokens(token)
-    Canvas::Security.encryption_keys.map { |key| Canvas::Security.hmac_sha1(token, key) }
+    Canvas::Security.encryption_keys.map { |key| hashed_token(token, key) }
   end
 
   def self.visible_tokens(tokens)
     tokens.reject { |token| token.developer_key&.internal_service }
   end
 
-  def usable?(token_key = :crypted_token)
-    # true if
-    # developer key is usable AND
-    # there is a user id AND
-    # its not expired OR Its a refresh token
-    # since you need a refresh token to
-    # refresh expired tokens
+  def self.site_admin?(token_string)
+    !!authenticate(token_string)&.site_admin?
+  end
 
-    if !developer_key_id || cached_developer_key.try(:usable?)
-      # we are a stand alone token, or a token with an active developer key
-      # make sure we
-      #   - have a user id
-      #   - its a refresh token
-      #     - If we aren't a refresh token. make sure we aren't expired
-      return true if user_id && (token_key == :crypted_refresh_token || !expired?)
+  def usable?(token_key = :crypted_token)
+    return false if expired?
+
+    if !developer_key_id || developer_key&.usable?
+      return false if token_key != :crypted_refresh_token && needs_refresh?
+      return true if user_id
     end
     false
   end
 
   def app_name
-    cached_developer_key.try(:name) || "No App"
+    developer_key&.name || "No App"
   end
 
   def authorized_for_account?(target_account)
-    return true unless cached_developer_key
-    cached_developer_key.authorized_for_account?(target_account)
+    return true unless developer_key
+
+    developer_key.authorized_for_account?(target_account)
+  end
+
+  def site_admin?
+    return false unless global_developer_key_id.present?
+
+    Shard.shard_for(global_developer_key_id).default?
   end
 
   def record_last_used_threshold
-    Setting.get('access_token_last_used_threshold', 10.minutes).to_i
+    Setting.get("access_token_last_used_threshold", 10.minutes).to_i
   end
 
   def used!
     if !last_used_at || last_used_at < record_last_used_threshold.seconds.ago
-      self.last_used_at = DateTime.now.utc
-      self.save
+      self.last_used_at = Time.now.utc
+      save
     end
   end
 
   def expired?
-    (slaved_developer_key == DeveloperKey.default || slaved_developer_key.try(:auto_expire_tokens)) && expires_at && expires_at < DateTime.now.utc
+    !!(permanent_expires_at && permanent_expires_at < Time.now.utc)
+  end
+
+  def needs_refresh?
+    # expires_at is only used for refreshable tokens, and therefore is only set on tokens
+    # from dev keys with auto_expire_tokens=true. We want to immediately respect
+    # auto_expire_tokens being flipped off, so ignore the expires_at in the
+    # db if the dev key no longer wants tokens to expire
+    developer_key&.auto_expire_tokens && expires_at && expires_at < Time.now.utc
   end
 
   def token=(new_token)
     self.crypted_token = AccessToken.hashed_token(new_token)
     @full_token = new_token
-    self.token_hint = new_token[0,5]
+    self.token_hint = new_token[0, 5]
   end
 
   def clear_full_token!
     @full_token = nil
   end
 
-  def generate_token(overwrite=false)
-    if overwrite || !self.crypted_token
+  def generate_token(overwrite = false)
+    if overwrite || !crypted_token
       self.token = CanvasSlug.generate(nil, TOKEN_SIZE)
 
-      # all reasons to _not_ expire the token
-      if slaved_developer_key == DeveloperKey.default ||
-        expires_at_changed? ||
-        !slaved_developer_key&.auto_expire_tokens ||
-        scopes == ['/auth/userinfo']
-        # do nothing
-      else
-        self.expires_at = DateTime.now.utc + 1.hour
-      end
+      self.expires_at = Time.now.utc + 1.hour if developer_key&.auto_expire_tokens
     end
   end
 
@@ -164,28 +193,16 @@ class AccessToken < ActiveRecord::Base
     @plaintext_refresh_token = new_token
   end
 
-  def generate_refresh_token(overwrite=false)
-    if overwrite || !self.crypted_refresh_token
-      self.refresh_token = CanvasSlug.generate(nil, TOKEN_SIZE)
-    end
-  end
-
-  def regenerate_refresh_token=(val)
-    if val == '1' && !protected_token?
-      generate_refresh_token(true)
-    end
+  def generate_refresh_token
+    self.refresh_token = CanvasSlug.generate(nil, TOKEN_SIZE) unless crypted_refresh_token
   end
 
   def clear_plaintext_refresh_token!
     @plaintext_refresh_token = nil
   end
 
-  def protected_token?
-    slaved_developer_key != DeveloperKey.default
-  end
-
   def regenerate=(val)
-    if val == '1' && !protected_token?
+    if val == "1" && manually_created?
       generate_token(true)
     end
   end
@@ -196,7 +213,7 @@ class AccessToken < ActiveRecord::Base
   end
 
   def visible_token
-    if protected_token?
+    if !manually_created?
       nil
     elsif full_token
       full_token
@@ -208,18 +225,18 @@ class AccessToken < ActiveRecord::Base
   def self.always_allowed_scopes
     [
       "/login/oauth2/token"
-    ].map{ |path| Regexp.new("^#{path}$")}
+    ].map { |path| Regexp.new("^#{path}$") }
   end
 
   def url_scopes_for_method(method)
     re = /^url:#{method}\|/
-    scopes.select { |scope| re =~ scope }.map do |scope|
-      path = scope.split('|').last
+    scopes.grep(re).map do |scope|
+      path = scope.split("|").last
       # build up the scope matching regexp from the route path
-      path = path.gsub(/:[^\/\)]+/, '[^/]+') # handle dynamic segments /courses/:course_id -> /courses/[^/]+
-      path = path.gsub(/\*[^\/\)]+/, '.+') # handle glob segments /files/*path -> /files/.+
-      path = path.gsub(/\(/, '(?:').gsub(/\)/, '|)') # handle optional segments /files(/[^/]+) -> /files(?:/[^/]+|)
-      path = "#{path}(?:\\\.[^/]+|)" # handle format segments /files(.:format) -> /files(?:\.[^/]+|)
+      path = path.gsub(%r{:[^/)]+}, "[^/]+") # handle dynamic segments /courses/:course_id -> /courses/[^/]+
+      path = path.gsub(%r{\*[^/)]+}, ".+") # handle glob segments /files/*path -> /files/.+
+      path = path.gsub(/\(/, "(?:").gsub(/\)/, "|)") # handle optional segments /files(/[^/]+) -> /files(?:/[^/]+|)
+      path = "#{path}(?:\\.[^/]+|)" # handle format segments /files(.:format) -> /files(?:\.[^/]+|)
       Regexp.new("^#{path}$")
     end
   end
@@ -230,37 +247,31 @@ class AccessToken < ActiveRecord::Base
   end
 
   def self.scopes_match?(scopes, req_scopes)
-    return req_scopes.size == 0 if scopes.nil?
+    return req_scopes.empty? if scopes.nil?
 
     scopes.size == req_scopes.size &&
       scopes.all? do |scope|
-        req_scopes.any? {|req_scope| scope[/(^|\/)#{req_scope}$/]}
+        req_scopes.any? { |req_scope| scope[%r{(^|/)#{req_scope}$}] }
       end
   end
 
   def must_only_include_valid_scopes
     return true if scopes.nil? || !developer_key.require_scopes?
-    errors.add(:scopes, 'requested scopes must match scopes on developer key') unless scopes.all? { |scope| developer_key.scopes.include?(scope) }
+
+    errors.add(:scopes, "requested scopes must match scopes on developer key") unless scopes.all? { |scope| developer_key.scopes.include?(scope) }
   end
 
   # It's encrypted, but end users still shouldn't see this.
   # The hint is only returned in visible_token, if protected_token is false.
   def self.serialization_excludes
-    [:crypted_token, :token_hint, :crypted_refresh_token]
+    %i[crypted_token token_hint crypted_refresh_token]
   end
 
   def dev_key_account_id
-    cached_developer_key.account_id
+    developer_key.account_id
   end
 
-  private
-
-  def cached_developer_key
-    return nil unless developer_key_id
-    @developer_key ||= DeveloperKey.find_cached(developer_key_id)
-  end
-
-  def slaved_developer_key
-    Shackles.activate(:slave){ return developer_key }
+  def manually_created?
+    developer_key_id == DeveloperKey.default.id
   end
 end

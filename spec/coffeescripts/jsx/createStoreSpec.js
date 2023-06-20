@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import createStore from 'jsx/shared/helpers/createStore'
+import createStore from '@canvas/util/createStore'
 
 test('sets initial state', () => {
   const store = createStore({foo: 'bar'})
@@ -26,16 +26,16 @@ test('sets initial state', () => {
 test('merges data on setState', () => {
   const store = createStore({
     foo: 'bar',
-    baz: null
+    baz: null,
   })
   deepEqual(store.getState(), {
     foo: 'bar',
-    baz: null
+    baz: null,
   })
   store.setState({baz: 'qux'})
   deepEqual(store.getState(), {
     foo: 'bar',
-    baz: 'qux'
+    baz: 'qux',
   })
 })
 

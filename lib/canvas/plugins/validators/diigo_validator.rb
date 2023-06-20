@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -20,18 +22,16 @@ module Canvas::Plugins::Validators::DiigoValidator
   def self.validate(settings, plugin_setting)
     if settings.map(&:last).all?(&:blank?)
       {}
+    elsif settings.map(&:last).any?(&:blank?)
+      plugin_setting.errors.add(:base, I18n.t("canvas.plugins.errors.all_fields_required", "All fields are required"))
+      false
     else
-      if settings.map(&:last).any?(&:blank?)
-        plugin_setting.errors.add(:base, I18n.t('canvas.plugins.errors.all_fields_required', 'All fields are required'))
+      res = Diigo::Connection.config_check(settings)
+      if res
+        plugin_setting.errors.add(:base, res)
         false
       else
-        res = Diigo::Connection.config_check(settings)
-        if res
-          plugin_setting.errors.add(:base, res)
-          false
-        else
-          settings.slice(:api_key).to_h.with_indifferent_access
-        end
+        settings.slice(:api_key).to_h.with_indifferent_access
       end
     end
   end

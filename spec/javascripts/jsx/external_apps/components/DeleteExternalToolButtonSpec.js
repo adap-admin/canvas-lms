@@ -19,19 +19,24 @@
 import React from 'react'
 import ReactDOM from 'react-dom'
 import TestUtils from 'react-dom/test-utils'
-import Modal from 'react-modal'
-import DeleteExternalToolButton from 'jsx/external_apps/components/DeleteExternalToolButton'
-import store from 'jsx/external_apps/lib/ExternalAppsStore'
+import Modal from '@canvas/react-modal'
+import DeleteExternalToolButton from 'ui/features/external_apps/react/components/DeleteExternalToolButton'
+import store from 'ui/features/external_apps/react/lib/ExternalAppsStore'
 import {mount} from 'enzyme'
 
 const {Simulate} = TestUtils
 const wrapper = document.getElementById('fixtures')
 Modal.setAppElement(wrapper)
 const createElement = data => (
-  <DeleteExternalToolButton tool={data.tool} canAddEdit={data.canAddEdit} returnFocus={data.returnFocus} />
+  <DeleteExternalToolButton
+    tool={data.tool}
+    canDelete={data.canDelete}
+    canAddEdit={data.canAddEdit}
+    returnFocus={data.returnFocus}
+  />
 )
 const renderComponent = data => ReactDOM.render(createElement(data), wrapper)
-const getDOMNodes = function(data) {
+const getDOMNodes = function (data) {
   const component = renderComponent(data)
   const btnTriggerDelete = component.refs.btnTriggerDelete
   return [component, btnTriggerDelete]
@@ -47,7 +52,7 @@ QUnit.module('ExternalApps.DeleteExternalToolButton', {
           'Talent provides an online, interactive video platform for professional development',
         enabled: true,
         installed_locally: true,
-        name: 'Talent'
+        name: 'Talent',
       },
       {
         app_id: 2,
@@ -55,8 +60,8 @@ QUnit.module('ExternalApps.DeleteExternalToolButton', {
         description: null,
         enabled: true,
         installed_locally: true,
-        name: 'Twitter'
-      }
+        name: 'Twitter',
+      },
     ]
     store.reset()
     return store.setState({externalTools: this.tools})
@@ -64,7 +69,7 @@ QUnit.module('ExternalApps.DeleteExternalToolButton', {
   teardown() {
     store.reset()
     ReactDOM.unmountComponentAtNode(wrapper)
-  }
+  },
 })
 
 test('does not render when the canAddEdit permission is false', () => {
@@ -74,7 +79,7 @@ test('does not render when the canAddEdit permission is false', () => {
   notOk(node)
 })
 
-test('open and close modal', function() {
+test('open and close modal', function () {
   const data = {tool: this.tools[1], canAddEdit: true, returnFocus: () => {}}
   const [component, btnTriggerDelete] = Array.from(getDOMNodes(data))
   Simulate.click(btnTriggerDelete)
@@ -83,9 +88,38 @@ test('open and close modal', function() {
   ok(!component.state.modalIsOpen, 'modal is not open')
 })
 
-test('deletes a tool', function() {
+test('deletes a tool', function () {
   sinon.spy(store, 'delete')
-  const wrapper = mount(<DeleteExternalToolButton tool={this.tools[0]} canAddEdit returnFocus={() => {}}/>)
+  const wrapper = mount(
+    <DeleteExternalToolButton tool={this.tools[0]} canAddEdit returnFocus={() => {}} />
+  )
+  wrapper.instance().deleteTool({preventDefault: () => {}})
+  ok(store.delete.called)
+  store.delete.restore()
+  wrapper.unmount()
+})
+
+test('does not render when the canDelete permission is false (granular)', () => {
+  const tool = {name: 'test tool'}
+  const component = renderComponent({tool, canDelete: false, returnFocus: () => {}})
+  const node = ReactDOM.findDOMNode(component)
+  notOk(node)
+})
+
+test('open and close modal (granular)', function () {
+  const data = {tool: this.tools[1], canDelete: true, returnFocus: () => {}}
+  const [component, btnTriggerDelete] = Array.from(getDOMNodes(data))
+  Simulate.click(btnTriggerDelete)
+  ok(component.state.modalIsOpen, 'modal is open')
+  component.closeModal()
+  ok(!component.state.modalIsOpen, 'modal is not open')
+})
+
+test('deletes a tool (granular)', function () {
+  sinon.spy(store, 'delete')
+  const wrapper = mount(
+    <DeleteExternalToolButton tool={this.tools[0]} canDelete returnFocus={() => {}} />
+  )
   wrapper.instance().deleteTool({preventDefault: () => {}})
   ok(store.delete.called)
   store.delete.restore()

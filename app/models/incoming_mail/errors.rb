@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -18,9 +20,21 @@
 module IncomingMail
   module Errors
     class ReplyFrom < StandardError; end
+
     class UnknownAddress < ReplyFrom; end
+
     class UnknownSender < ReplyFrom; end
+
     class ReplyToLockedTopic < ReplyFrom; end
+
     class ReplyToDeletedDiscussion < ReplyFrom; end
+
+    class InvalidParticipant < ReplyFrom; end
+
+    class BlankMessage < ReplyFrom; end
+
+    class MessageTooLong < ReplyFrom; end
+
+    class UserSuspended < ReplyFrom; end
   end
 end

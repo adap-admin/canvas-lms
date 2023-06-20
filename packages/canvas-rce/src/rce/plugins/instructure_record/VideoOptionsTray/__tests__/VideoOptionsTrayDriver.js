@@ -16,7 +16,14 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {getByLabelText, queryByLabelText, wait} from '@testing-library/dom'
+import {
+  fireEvent,
+  getAllByText,
+  getByLabelText,
+  queryByLabelText,
+  queryByTestId,
+  waitFor,
+} from '@testing-library/dom'
 
 function getSizeOptions($sizeSelect) {
   const controlledId = $sizeSelect.getAttribute('aria-controls')
@@ -44,14 +51,38 @@ export default class VideoOptionsTrayDriver {
     return this.$element.getAttribute('aria-label')
   }
 
+  get $titleTextField() {
+    return this.$element.querySelector('textarea')
+  }
+
+  get $displayAsField() {
+    return getAllByText(this.$element, 'Display Options')[0].closest('fieldset')
+  }
+
   get $sizeSelect() {
-    return getByLabelText(this.$element, 'Size')
+    return getByLabelText(this.$element, /Size.*/)
   }
 
   get $doneButton() {
     return [...this.$element.querySelectorAll('button,[role="button"]')].find(
       $button => $button.textContent.trim() === 'Done'
     )
+  }
+
+  get $closedCaptionPanel() {
+    return queryByTestId(this.$element, 'ClosedCaptionPanel')
+  }
+
+  get titleText() {
+    return this.$titleTextField.value
+  }
+
+  get titleTextDisabled() {
+    return this.$titleTextField.disabled
+  }
+
+  get displayAs() {
+    return this.$displayAsField.querySelector('input[type="radio"]:checked').value
   }
 
   get size() {
@@ -62,9 +93,18 @@ export default class VideoOptionsTrayDriver {
     return this.$doneButton.disabled
   }
 
+  setTitleText(titleText) {
+    fireEvent.change(this.$titleTextField, {target: {value: titleText}})
+  }
+
+  setDisplayAs(value) {
+    const $input = this.$displayAsField.querySelector(`input[type="radio"][value="${value}"]`)
+    $input.click()
+  }
+
   async setSize(sizeText) {
     this.$sizeSelect.click()
-    await wait(() => getSizeOptions(this.$sizeSelect))
+    await waitFor(() => getSizeOptions(this.$sizeSelect))
     const $options = getSizeOptions(this.$sizeSelect)
     $options.find($option => $option.textContent.trim().includes(sizeText)).click()
   }

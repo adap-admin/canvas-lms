@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -15,41 +17,40 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-require_relative '../spec_helper'
+require_relative "../spec_helper"
 describe PlannerNote do
   before :once do
     course_factory
     student_in_course
     teacher_in_course
     @student_planner_note = PlannerNote.create!(user_id: @student.id,
-                                                        todo_date: 4.days.from_now,
-                                                        title: "Student Test Assignment",
-                                                        course_id: @course.id)
+                                                todo_date: 4.days.from_now,
+                                                title: "Student Test Assignment",
+                                                course_id: @course.id)
     @teacher_planner_note = PlannerNote.create!(user_id: @teacher.id,
-                                                        todo_date: 4.days.from_now,
-                                                        title: "Student Test Assignment",
-                                                        details: "Students Need Grading",
-                                                        course_id: @course.id)
+                                                todo_date: 4.days.from_now,
+                                                title: "Student Test Assignment",
+                                                details: "Students Need Grading",
+                                                course_id: @course.id)
   end
 
   describe "::planner_note_workflow_state" do
-
     it "returns 'deleted' for deleted note" do
       @teacher_planner_note.destroy!
-      expect(@teacher_planner_note.workflow_state).to eq 'deleted'
+      expect(@teacher_planner_note.workflow_state).to eq "deleted"
     end
 
     it "returns 'active' for created note" do
-      expect(@student_planner_note.workflow_state).to eq 'active'
+      expect(@student_planner_note.workflow_state).to eq "active"
     end
   end
 
   it "creates a note without a course" do
     note = PlannerNote.create!(user_id: @teacher.id,
-                                                      todo_date: 4.days.from_now,
-                                                      title: "Student Test Assignment",
-                                                      details: "Students Need Grading")
-    expect(note.workflow_state).to eq 'active'
+                               todo_date: 4.days.from_now,
+                               title: "Student Test Assignment",
+                               details: "Students Need Grading")
+    expect(note.workflow_state).to eq "active"
   end
 
   describe ".before" do

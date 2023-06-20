@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -16,16 +18,12 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../../spec_helper.rb')
-
 describe Canvas::Builders::EnrollmentDateBuilder do
-
   describe "#build" do
-
     before do
-      course_with_teacher(:active_all => true)
+      course_with_teacher(active_all: true)
       @teacher_enrollment = @enrollment
-      course_with_student(:active_all => true, :course => @course)
+      course_with_student(active_all: true, course: @course)
       @student_enrollment = @enrollment
 
       @section = @course.course_sections.first
@@ -33,7 +31,7 @@ describe Canvas::Builders::EnrollmentDateBuilder do
     end
 
     def test_builder(enrollment, res)
-      expect(Canvas::Builders::EnrollmentDateBuilder.build(enrollment).map{|d|d.map(&:to_i)}).to eq res.map{|d|d.map(&:to_i)}
+      expect(Canvas::Builders::EnrollmentDateBuilder.build(enrollment).map { |d| d.map(&:to_i) }).to eq(res.map { |d| d.map(&:to_i) })
     end
 
     context "has enrollment dates from enrollment" do
@@ -41,7 +39,7 @@ describe Canvas::Builders::EnrollmentDateBuilder do
         @teacher_enrollment.start_at = 2.days.from_now
         @teacher_enrollment.end_at = 4.days.from_now
         @teacher_enrollment.save!
-        @student_enrollment.start_at = 1.days.from_now
+        @student_enrollment.start_at = 1.day.from_now
         @student_enrollment.end_at = 3.days.from_now
         @student_enrollment.save!
       end
@@ -58,7 +56,7 @@ describe Canvas::Builders::EnrollmentDateBuilder do
     context "has enrollment dates from section" do
       append_before do
         @section.restrict_enrollments_to_section_dates = true
-        @section.start_at = 1.days.ago
+        @section.start_at = 1.day.ago
         @section.end_at = 3.days.from_now
         @section.save!
 
@@ -77,7 +75,7 @@ describe Canvas::Builders::EnrollmentDateBuilder do
         @term.start_at = nil
         @term.end_at = nil
         @term.save!
-        test_builder @teacher_enrollment, [[@section.start_at, @section.end_at], [nil,nil]]
+        test_builder @teacher_enrollment, [[@section.start_at, @section.end_at], [nil, nil]]
       end
 
       it "for student" do
@@ -107,7 +105,7 @@ describe Canvas::Builders::EnrollmentDateBuilder do
         @term.start_at = nil
         @term.end_at = nil
         @term.save!
-        test_builder @teacher_enrollment, [[@course.start_at, @course.end_at], [nil,nil]]
+        test_builder @teacher_enrollment, [[@course.start_at, @course.end_at], [nil, nil]]
       end
 
       it "for student" do
@@ -132,12 +130,11 @@ describe Canvas::Builders::EnrollmentDateBuilder do
         test_builder @student_enrollment, [[@term.start_at, @term.end_at]]
       end
     end
-
   end
 
   describe ".preload" do
-    it "should work" do
-      course_with_teacher(:active_all => true)
+    it "works" do
+      course_with_teacher(active_all: true)
       @enrollment.reload
       loaded_course = @enrollment.association(:course).loaded?
       expect(loaded_course).to be_falsey
@@ -150,13 +147,13 @@ describe Canvas::Builders::EnrollmentDateBuilder do
       expect(loaded_enrollment_term).to be_truthy
 
       # should already be cached on the object
-      expect(Rails.cache).to receive(:fetch).never
+      expect(Rails.cache).not_to receive(:fetch)
       @enrollment.enrollment_dates
     end
 
-    it "should not have to load stuff if already in cache" do
+    it "does not have to load stuff if already in cache" do
       enable_cache do
-        course_with_teacher(:active_all => true)
+        course_with_teacher(active_all: true)
         # prime the cache
         Canvas::Builders::EnrollmentDateBuilder.preload([@enrollment])
 
@@ -172,7 +169,7 @@ describe Canvas::Builders::EnrollmentDateBuilder do
         expect(loaded_enrollment_term).to be_falsey
         # should already be cached on the object
 
-        expect(Rails.cache).to receive(:fetch).never
+        expect(Rails.cache).not_to receive(:fetch)
         @enrollment.enrollment_dates
       end
     end

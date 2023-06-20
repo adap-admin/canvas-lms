@@ -20,7 +20,7 @@ import React from 'react'
 
 import ReactDOM from 'react-dom'
 import TestUtils from 'react-dom/test-utils'
-import MetricsList from 'jsx/context_cards/MetricsList'
+import MetricsList from '@canvas/context-cards/react/MetricsList'
 
 QUnit.module('StudentContextTray/MetricsList', hooks => {
   let subject
@@ -40,39 +40,64 @@ QUnit.module('StudentContextTray/MetricsList', hooks => {
       notOk(subject.grade)
     })
 
-    test('returns override_grade if present', () => {
+    test('returns override_grade if present and final_grade_override is true', () => {
       const overrideGrade = 'A+'
       subject = TestUtils.renderIntoDocument(
         <MetricsList
+          allowFinalGradeOverride
           user={{
             enrollments: [
               {
                 grades: {
-                  override_grade: overrideGrade
+                  override_grade: overrideGrade,
                 },
-                sections: []
-              }
-            ]
+                sections: [],
+              },
+            ],
           }}
         />
       )
 
       equal(subject.grade, overrideGrade)
     })
+    test('returns current_grade if override_grade is present and final_grade_override is false', () => {
+      const overrideGrade = 'A+'
+      const currentGrade = 'B-'
+
+      subject = TestUtils.renderIntoDocument(
+        <MetricsList
+          allowFinalGradeOverride={false}
+          user={{
+            enrollments: [
+              {
+                grades: {
+                  override_grade: overrideGrade,
+                  current_grade: currentGrade,
+                },
+                sections: [],
+              },
+            ],
+          }}
+        />
+      )
+
+      equal(subject.grade, currentGrade)
+    })
 
     test('returns override_score if present and override_grade is not present', () => {
       const overrideScore = '81.8'
       subject = TestUtils.renderIntoDocument(
         <MetricsList
+          allowFinalGradeOverride
           user={{
             enrollments: [
               {
                 grades: {
-                  override_score: overrideScore
+                  override_score: overrideScore,
                 },
-                sections: []
-              }
-            ]
+                sections: [],
+              },
+            ],
           }}
         />
       )
@@ -88,11 +113,11 @@ QUnit.module('StudentContextTray/MetricsList', hooks => {
             enrollments: [
               {
                 grades: {
-                  current_grade: currentGrade
+                  current_grade: currentGrade,
                 },
-                sections: []
-              }
-            ]
+                sections: [],
+              },
+            ],
           }}
         />
       )
@@ -109,11 +134,11 @@ QUnit.module('StudentContextTray/MetricsList', hooks => {
               {
                 grades: {
                   current_grade: null,
-                  current_score: currentScore
+                  current_score: currentScore,
                 },
-                sections: []
-              }
-            ]
+                sections: [],
+              },
+            ],
           }}
         />
       )
@@ -125,7 +150,7 @@ QUnit.module('StudentContextTray/MetricsList', hooks => {
       subject = TestUtils.renderIntoDocument(
         <MetricsList
           user={{
-            enrollments: []
+            enrollments: [],
           }}
         />
       )
@@ -141,8 +166,8 @@ QUnit.module('StudentContextTray/MetricsList', hooks => {
         <MetricsList
           analytics={{
             tardiness_breakdown: {
-              missing: missingCount
-            }
+              missing: missingCount,
+            },
           }}
         />
       )
@@ -158,8 +183,8 @@ QUnit.module('StudentContextTray/MetricsList', hooks => {
         <MetricsList
           analytics={{
             tardiness_breakdown: {
-              late: lateCount
-            }
+              late: lateCount,
+            },
           }}
         />
       )

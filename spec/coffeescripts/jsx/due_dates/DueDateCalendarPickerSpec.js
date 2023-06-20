@@ -19,10 +19,9 @@
 import React from 'react'
 import {mount} from 'enzyme'
 import chicago from 'timezone/America/Chicago'
-import DueDateCalendarPicker from 'jsx/due_dates/DueDateCalendarPicker'
-import tz from 'timezone'
-import french from 'timezone/fr_FR'
-import I18nStubber from 'helpers/I18nStubber'
+import DueDateCalendarPicker from '@canvas/due-dates/react/DueDateCalendarPicker'
+import tz from '@canvas/timezone'
+import tzInTest from '@canvas/timezone/specHelpers'
 import fakeENV from 'helpers/fakeENV'
 
 QUnit.module('DueDateCalendarPicker', suiteHooks => {
@@ -44,7 +43,7 @@ QUnit.module('DueDateCalendarPicker', suiteHooks => {
       isFancyMidnight: false,
       labelText: 'bar',
       labelledBy: 'foo',
-      rowKey: 'nullnullnull'
+      rowKey: 'nullnullnull',
     }
   })
 
@@ -52,6 +51,7 @@ QUnit.module('DueDateCalendarPicker', suiteHooks => {
     wrapper.unmount()
     clock.restore()
     fakeENV.teardown()
+    tzInTest.restore()
   })
 
   function mountComponent() {
@@ -79,37 +79,24 @@ QUnit.module('DueDateCalendarPicker', suiteHooks => {
   test('converts to fancy midnight in the timezone of the user', () => {
     props.isFancyMidnight = true
     mountComponent()
-    const snapshot = tz.snapshot()
-    tz.changeZone(chicago, 'America/Chicago')
+    tzInTest.changeZone(chicago, 'America/Chicago')
     simulateChange('2015-08-31T00:00:00')
-    tz.restore(snapshot)
     equal(getEnteredDate().toUTCString(), 'Tue, 01 Sep 2015 04:59:59 GMT')
+  })
+
+  test('sets the default time (if provided) in the timezone of the user', () => {
+    props.defaultTime = '16:22:22'
+    props.isFancyMidnight = true
+    mountComponent()
+    tzInTest.changeZone(chicago, 'America/Chicago')
+    simulateChange('2022-02-22')
+    equal(getEnteredDate().toUTCString(), 'Tue, 22 Feb 2022 22:22:22 GMT')
   })
 
   test('does not convert to fancy midnight when isFancyMidnight is false', () => {
     mountComponent()
     simulateChange('2015-08-31T00:00:00')
     equal(getEnteredDate().toUTCString(), 'Mon, 31 Aug 2015 00:00:00 GMT')
-  })
-
-  test('#formattedDate() returns a date in the same format used by DatetimeField', () => {
-    mountComponent()
-    equal(wrapper.instance().formattedDate(), 'Feb 1, 2012 7:01am')
-  })
-
-  test('#formattedDate() returns a localized Date', () => {
-    mountComponent()
-    const snapshot = tz.snapshot()
-    tz.changeLocale(french, 'fr_FR', 'fr')
-    I18nStubber.pushFrame()
-    I18nStubber.setLocale('fr_FR')
-    I18nStubber.stub('fr_FR', {
-      'date.formats.medium': '%-d %b %Y',
-      'time.formats.tiny': '%-k:%M'
-    })
-    equal(wrapper.instance().formattedDate(), '1 févr. 2012 7:01')
-    I18nStubber.popFrame()
-    tz.restore(snapshot)
   })
 
   test('call the update prop when changed', () => {
@@ -141,13 +128,23 @@ QUnit.module('DueDateCalendarPicker', suiteHooks => {
   test('forwards properties to label', () => {
     props.labelClasses = 'special-label'
     mountComponent()
-    ok(wrapper.find('label').prop('className').match(/special-label/));
+    ok(
+      wrapper
+        .find('label')
+        .prop('className')
+        .match(/special-label/)
+    )
   })
 
   test('forwards properties to input', () => {
     props.name = 'special-name'
     mountComponent()
-    ok(wrapper.find('input').prop('name').match(/special-name/));
+    ok(
+      wrapper
+        .find('input')
+        .prop('name')
+        .match(/special-name/)
+    )
   })
 
   test('label and input reference each other', () => {

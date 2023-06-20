@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -23,12 +25,12 @@ module CodepointTestHelper
     encode_mes.each do |encode_me|
       encoded = LuckySneaks::Unidecoder.encode(encode_me)
       actual = encoded.to_ascii
-      if expected != actual
-        message = "<#{expected.inspect}> expected but was <#{actual.inspect}>\n"
-        message << "  defined in #{LuckySneaks::Unidecoder.in_json_file(encoded)}"
-        fail message
-        #raise Test::Unit::AssertionFailedError.new(message)
-      end
+      next unless expected != actual
+
+      message = "<#{expected.inspect}> expected but was <#{actual.inspect}>\n"
+      message << "  defined in #{LuckySneaks::Unidecoder.in_json_file(encoded)}"
+      raise message
+      # raise Test::Unit::AssertionFailedError.new(message)
     end
   end
 end

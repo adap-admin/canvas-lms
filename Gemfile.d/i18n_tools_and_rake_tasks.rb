@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -16,11 +18,9 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 group :i18n_tools do
-  gem 'i18n_extraction', path: 'gems/i18n_extraction', require: false
-
+  gem "i18n_extraction", path: "../gems/i18n_extraction", require: false
 end
 
 group :i18n_tools, :development do
-  gem 'i18n_tasks', path: 'gems/i18n_tasks'
+  gem "i18n_tasks", path: "../gems/i18n_tasks"
 end
-

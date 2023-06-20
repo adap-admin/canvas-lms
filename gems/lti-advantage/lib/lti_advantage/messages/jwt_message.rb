@@ -1,4 +1,6 @@
-require 'json/jwt'
+# frozen_string_literal: true
+
+require "json/jwt"
 
 module LtiAdvantage::Messages
   # Abstract base class for all LTI 1.3 JWT message types
@@ -14,9 +16,13 @@ module LtiAdvantage::Messages
       iss
       message_type
       nonce
-      sub
       version
       target_link_uri
+    ].freeze
+
+    OPTIONAL_CLAIMS = %i[
+      lti11_legacy_user_id
+      sub
     ].freeze
 
     TYPED_ATTRIBUTES = {
@@ -30,22 +36,20 @@ module LtiAdvantage::Messages
       assignment_and_grade_service: LtiAdvantage::Claims::AssignmentAndGradeService,
       tool_platform: LtiAdvantage::Claims::Platform,
       roles: Array,
-      role_scope_mentor: Array
+      role_scope_mentor: Array,
+      lti1p1: LtiAdvantage::Claims::Lti1p1
     }.freeze
 
-    attr_accessor *REQUIRED_CLAIMS
-    attr_accessor *TYPED_ATTRIBUTES.keys
+    attr_accessor(*(REQUIRED_CLAIMS + OPTIONAL_CLAIMS))
+    attr_accessor(*TYPED_ATTRIBUTES.keys)
     attr_accessor :address,
                   :birthdate,
                   :custom,
                   :email,
                   :email_verified,
-                  :extensions,
                   :family_name,
                   :gender,
                   :given_name,
-                  :launch_presentation,
-                  :lis,
                   :locale,
                   :middle_name,
                   :name,
@@ -53,15 +57,18 @@ module LtiAdvantage::Messages
                   :phone_number,
                   :phone_number_verified,
                   :picture,
-                  :tool_platform,
                   :preferred_username,
                   :profile,
-                  :roles,
-                  :role_scope_mentor,
                   :updated_at,
                   :website,
                   :zoneinfo,
                   :id
+    attr_writer :extensions,
+                :launch_presentation,
+                :list,
+                :roles,
+                :role_scope_mentor,
+                :tool_platform
 
     def self.create_jws(body, private_key, alg = :RS256)
       JSON::JWT.new(body).sign(private_key, alg).to_s
@@ -103,8 +110,12 @@ module LtiAdvantage::Messages
       @tool_platform ||= TYPED_ATTRIBUTES[:tool_platform].new
     end
 
+    def lti1p1
+      @lti1p1 ||= TYPED_ATTRIBUTES[:lti1p1].new
+    end
+
     def read_attribute(attribute)
-      self.send(attribute)
+      send(attribute)
     end
 
     def to_h
@@ -112,7 +123,7 @@ module LtiAdvantage::Messages
     end
 
     def to_jws(private_key, alg = :RS256)
-      self.class.create_jws(self.to_h, private_key, alg)
+      self.class.create_jws(to_h, private_key, alg)
     end
   end
 end

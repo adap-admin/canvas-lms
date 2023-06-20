@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -16,13 +18,12 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 module BroadcastPolicy
-
   class NotificationPolicy
     attr_accessor :dispatch, :to, :whenever, :data, :recipient_filter
 
     def initialize(dispatch)
       self.dispatch = dispatch
-      self.recipient_filter = lambda { |record, user| record }
+      self.recipient_filter = ->(record, _user) { record }
     end
 
     # This should be called for an instance.  It can only be sent out if the
@@ -35,28 +36,42 @@ module BroadcastPolicy
     # reasons.
     def broadcast(record)
       return if record.respond_to?(:skip_broadcasts) && record.skip_broadcasts
-      return unless record.instance_eval &self.whenever
+      return unless record.instance_eval(&whenever)
 
-      notification = BroadcastPolicy.notification_finder.by_name(self.dispatch)
+      notification = BroadcastPolicy.notification_finder.by_name(dispatch)
       return if notification.nil?
 
       record.class.connection.after_transaction_commit do
-        to_list = record.instance_eval(&self.to)
+        to_list = record.instance_eval(&to)
         to_list = Array(to_list).flatten
         next if to_list.empty?
 
         data = record.instance_eval(&self.data) if self.data
+        to_list.each_slice(NotificationPolicy.slice_size) do |to_slice|
+          recipients = to_slice.reject { |to| to.class.method_defined?(:suspended?) ? to.suspended? : false }
+          next if recipients.empty?
 
-        BroadcastPolicy.notifier.send_notification(
-          record,
-          self.dispatch,
-          notification,
-          to_list,
-          data
-        )
+          BroadcastPolicy.notifier.send_notification(
+            record,
+            dispatch,
+            notification,
+            recipients,
+            data
+          )
+        end
       end
     end
 
+    # if the to_list is users, each user will have a couple of communication channels,
+    # then we need to load the policies for them. Limiting the number to 500 keeps
+    # the process from memory bloat on the job server and large queries in the database.
+    # For 99% of broadcasts this will not change anything.
+    def self.slice_size
+      if defined?(Setting)
+        Setting.get("broadcast_policy_slice_size", 500).to_i
+      else
+        500
+      end
+    end
   end
-
 end

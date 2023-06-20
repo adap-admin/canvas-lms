@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,12 +18,11 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/messages_helper')
+require_relative "messages_helper"
 
-describe 'account_user_registration' do
+describe "account_user_registration" do
   before :once do
-    @object = AccountUser.create(:account => account_model, :user => user_with_pseudonym)
+    @object = AccountUser.create(account: account_model, user: user_with_pseudonym)
   end
 
   let(:asset) { @object }

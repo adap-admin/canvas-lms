@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -60,8 +62,8 @@ describe RuboCop::Cop::Specs::NoBeforeOnceStubs do
         end
       })
       expect(cop.offenses.size).to eq(5)
-      expect(cop.messages.all? { |msg| msg =~ /Use `before\(:once\)`/ })
-      expect(cop.offenses.all? { |off| off.severity.name == :warning })
+      expect(cop.messages.all? { |msg| msg.include?("`before(:once)`") }).to be true
+      expect(cop.offenses.all? { |off| off.severity.name == :warning }).to be true
     end
   end
 end

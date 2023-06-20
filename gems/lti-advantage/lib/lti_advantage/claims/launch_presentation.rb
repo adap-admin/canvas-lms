@@ -1,4 +1,6 @@
-require 'active_model'
+# frozen_string_literal: true
+
+require "active_model"
 
 module LtiAdvantage::Claims
   # Class represeting an LTI 1.3 message "launch_presentation" claim.

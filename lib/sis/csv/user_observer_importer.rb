@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -19,9 +21,8 @@
 module SIS
   module CSV
     class UserObserverImporter < CSVBaseImporter
-
       def self.user_observer_csv?(row)
-        row.include?('observer_id') && row.include?('student_id')
+        row.include?("observer_id") && row.include?("student_id")
       end
 
       def self.identifying_fields
@@ -30,17 +31,14 @@ module SIS
 
       # possible columns:
       # observer_id, student_id, status
-      def process(csv, index=nil, count=nil)
-        count = SIS::UserObserverImporter.new(@root_account, importer_opts).process do |i|
+      def process(csv, index = nil, count = nil)
+        SIS::UserObserverImporter.new(@root_account, importer_opts).process do |i|
           csv_rows(csv, index, count) do |row|
-            begin
-              i.process_user_observer(row['observer_id'], row['student_id'], row['status'])
-            rescue ImportError => e
-              SisBatch.add_error(csv, e.to_s, sis_batch: @batch, row: row['lineno'], row_info: row)
-            end
+            i.process_user_observer(row["observer_id"], row["student_id"], row["status"])
+          rescue ImportError => e
+            SisBatch.add_error(csv, e.to_s, sis_batch: @batch, row: row["lineno"], row_info: row)
           end
         end
-        count
       end
     end
   end

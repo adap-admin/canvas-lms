@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -19,7 +21,6 @@
 module Quizzes::QuizQuestion::AnswerParsers
   class MultipleAnswers < AnswerParser
     def parse(question)
-
       @answers.map_with_group! do |answer_group, answer|
         fields = Quizzes::QuizQuestion::RawFields.new(answer)
         a = {

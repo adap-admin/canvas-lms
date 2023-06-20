@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -15,8 +17,6 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'spec_helper'
-
 class MyTestError < StandardError
   def response_status
     401
@@ -24,8 +24,7 @@ class MyTestError < StandardError
 end
 
 describe Canvas::Errors::Reporter do
-
-  it "Should be able to catch a composed exception" do
+  it "is able to catch a composed exception" do
     new_class = error_instance
     exception_handled = false
     begin
@@ -36,7 +35,7 @@ describe Canvas::Errors::Reporter do
     expect(exception_handled).to be true
   end
 
-  it "Should have extra info" do
+  it "has extra info" do
     new_class = error_instance
     expect(new_class.respond_to?(:canvas_error_info)).to be true
     expect(new_class.canvas_error_info[:princess_mode]).to be false
@@ -44,12 +43,12 @@ describe Canvas::Errors::Reporter do
     expect(new_class.canvas_error_info[:garbage]).to eq "%%jksdh38912398732987lkhjsadfkjhdfslk"
   end
 
-  it "Should have correct backtrace" do
+  it "has correct backtrace" do
     new_class = error_instance
-    expect(new_class.backtrace[0]).to match /typical_usage/
+    expect(new_class.backtrace[0]).to match(/typical_usage/)
   end
 
-  it "Shouldn't mess with existing classes" do
+  it "does not mess with existing classes" do
     new_class = error_instance
     old_class = MyTestError.new("i am a message")
 
@@ -57,14 +56,14 @@ describe Canvas::Errors::Reporter do
     expect(old_class.respond_to?(:canvas_error_info)).to be false
   end
 
-  it "Should inherrit from existing class" do
+  it "inherrits from existing class" do
     new_class = error_instance
 
     expect(new_class.response_status).to be 401
   end
 
   it "Typical usecase" do
-    expect{typical_usage}.to raise_error(MyTestError)
+    expect { typical_usage }.to raise_error(MyTestError)
   end
 
   def extra_error_info
@@ -76,11 +75,9 @@ describe Canvas::Errors::Reporter do
   end
 
   def error_instance
-    begin
-      typical_usage
-    rescue MyTestError => err
-      return err
-    end
+    typical_usage
+  rescue MyTestError => e
+    e
   end
 
   def typical_usage

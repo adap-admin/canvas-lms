@@ -1,5 +1,5 @@
-# encoding: utf-8
-#
+# frozen_string_literal: true
+
 # Copyright (C) 2016 - present Instructure, Inc.
 #
 # This file is part of Canvas.
@@ -16,14 +16,14 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require File.expand_path(File.dirname(__FILE__) + '/cc_spec_helper')
+require_relative "cc_spec_helper"
 
-require 'nokogiri'
+require "nokogiri"
 
 describe CC::BasicLTILinks do
   subject { (Class.new { include CC::BasicLTILinks }).new }
 
-  let (:tool) do
+  let(:tool) do
     ContextExternalTool.new
   end
 
@@ -32,21 +32,20 @@ describe CC::BasicLTILinks do
   end
 
   describe "#create_blti_link" do
-
     let(:lti_doc) { Builder::XmlMarkup.new(target: xml, indent: 2) }
-    #this is the target for Builder::XmlMarkup. this is how you access the generated XML
-    let(:xml) { '' }
+    # this is the target for Builder::XmlMarkup. this is how you access the generated XML
+    let(:xml) { +"" }
 
     it "sets the encoding to 'UTF-8'" do
       subject.create_blti_link(tool, lti_doc)
       xml_doc = Nokogiri::XML(xml) { |c| c.nonet.strict }
-      expect(xml_doc.encoding).to eq 'UTF-8'
+      expect(xml_doc.encoding).to eq "UTF-8"
     end
 
     it "sets the version to '1.0'" do
       subject.create_blti_link(tool, lti_doc)
       xml_doc = Nokogiri::XML(xml) { |c| c.nonet.strict }
-      expect(xml_doc.version).to eq '1.0'
+      expect(xml_doc.version).to eq "1.0"
     end
 
     it "sets the namespaces correctly" do
@@ -90,22 +89,42 @@ describe CC::BasicLTILinks do
     end
 
     it "add an icon element if found in the tool settings" do
-      tool.settings[:icon_url] = "http://example.com/icon"
+      tool.icon_url = "http://example.com/icon"
       subject.create_blti_link(tool, lti_doc)
       xml_doc = Nokogiri::XML(xml) { |c| c.nonet.strict }
-      expect(xml_doc.at_xpath("//blti:icon").text).to eq tool.settings[:icon_url]
+      expect(xml_doc.at_xpath("//blti:icon").text).to eq tool.icon_url
+    end
+
+    context "with environment-specific overrides" do
+      before do
+        allow(ApplicationController).to receive(:test_cluster?).and_return(true)
+        allow(ApplicationController).to receive(:test_cluster_name).and_return("beta")
+        tool.settings[:environments] = {
+          domain: "example-beta.com"
+        }
+      end
+
+      let(:icon_url) { "https://example.com/lti/icon" }
+      let(:override_icon_url) { "https://example-beta.com/lti/icon" }
+
+      it "add an icon element if found in the tool settings" do
+        tool.icon_url = icon_url
+        subject.create_blti_link(tool, lti_doc)
+        xml_doc = Nokogiri::XML(xml) { |c| c.nonet.strict }
+        expect(xml_doc.at_xpath("//blti:icon").text).to eq override_icon_url
+      end
     end
 
     it "sets the vendor code to 'unknown'" do
       subject.create_blti_link(tool, lti_doc)
       xml_doc = Nokogiri::XML(xml) { |c| c.nonet.strict }
-      expect(xml_doc.at_xpath("//blti:vendor/lticp:code").text).to eq 'unknown'
+      expect(xml_doc.at_xpath("//blti:vendor/lticp:code").text).to eq "unknown"
     end
 
     it "sets the vendor name to 'unknown'" do
       subject.create_blti_link(tool, lti_doc)
       xml_doc = Nokogiri::XML(xml) { |c| c.nonet.strict }
-      expect(xml_doc.at_xpath("//blti:vendor/lticp:name").text).to eq 'unknown'
+      expect(xml_doc.at_xpath("//blti:vendor/lticp:name").text).to eq "unknown"
     end
 
     it "adds custom fields" do
@@ -122,7 +141,6 @@ describe CC::BasicLTILinks do
     end
 
     context "extensions" do
-
       it "creates an extensions node" do
         subject.create_blti_link(tool, lti_doc)
         xml_doc = Nokogiri::XML(xml) { |c| c.nonet.strict }
@@ -134,6 +152,12 @@ describe CC::BasicLTILinks do
         subject.create_blti_link(tool, lti_doc)
         xml_doc = Nokogiri::XML(xml) { |c| c.nonet.strict }
         expect(xml_doc.at_xpath('//blti:extensions/lticm:property[@name="tool_id"]').text).to eq tool.tool_id
+      end
+
+      it "adds the lti_version" do
+        subject.create_blti_link(tool, lti_doc)
+        xml_doc = Nokogiri::XML(xml) { |c| c.nonet.strict }
+        expect(xml_doc.at_xpath('//blti:extensions/lticm:property[@name="lti_version"]').text).to eq tool.lti_version
       end
 
       it "adds the privacy level if there is a workflow_state on the tool" do
@@ -168,33 +192,33 @@ describe CC::BasicLTILinks do
         tool.settings[:post_only] = "true"
         subject.create_blti_link(tool, lti_doc)
         xml_doc = Nokogiri::XML(xml) { |c| c.nonet.strict }
-        expect(xml_doc.at_xpath('//blti:extensions/lticm:property[@name="post_only"]').text).to eq 'true'
+        expect(xml_doc.at_xpath('//blti:extensions/lticm:property[@name="post_only"]').text).to eq "true"
       end
 
       it "doesn't add non placement extensions if their value is a collection" do
-        tool.settings[:my_list] = [1,2,3]
+        tool.settings[:my_list] = [1, 2, 3]
         subject.create_blti_link(tool, lti_doc)
         xml_doc = Nokogiri::XML(xml) { |c| c.nonet.strict }
         expect(xml_doc.at_xpath('//blti:extensions/lticm:property[@name="my_list"]')).to be_nil
       end
 
-      it 'does not add a client id' do
+      it "does not add a client id" do
         subject.create_blti_link(tool, lti_doc)
         xml_doc = Nokogiri::XML(xml) { |c| c.nonet.strict }
         expect(xml_doc.at_xpath('//blti:extensions/lticm:property[@name="my_list"]')).to be_nil
       end
 
-      context 'when the tool does not have a developer key' do
+      context "when the tool does not have a developer key" do
         let(:xml_doc) { Nokogiri::XML(xml) { |c| c.nonet.strict } }
 
         before { subject.create_blti_link(tool, lti_doc) }
 
-        it 'does not add the client_id property element' do
+        it "does not add the client_id property element" do
           expect(xml_doc.at_xpath('//blti:extensions/lticm:property[@name="client_id"]')).to be_nil
         end
       end
 
-      context 'when the tool has a developer key' do
+      context "when the tool has a developer key" do
         let(:developer_key) { DeveloperKey.create! }
         let(:xml_doc) { Nokogiri::XML(xml) { |c| c.nonet.strict } }
 
@@ -203,7 +227,7 @@ describe CC::BasicLTILinks do
           subject.create_blti_link(tool, lti_doc)
         end
 
-        it 'adds the client_id property element' do
+        it "adds the client_id property element" do
           expect(xml_doc.at_xpath('//blti:extensions/lticm:property[@name="client_id"]').text.to_i).to eq developer_key.global_id
         end
       end
@@ -238,7 +262,7 @@ describe CC::BasicLTILinks do
         end
 
         it "adds settings for placements" do
-          tool.settings[:course_navigation] = {custom_setting: "foo"}
+          tool.settings[:course_navigation] = { custom_setting: "foo" }
           subject.create_blti_link(tool, lti_doc)
           xml_doc = Nokogiri::XML(xml) { |c| c.nonet.strict }
           xpath = '//blti:extensions/lticm:options[@name="course_navigation"]/lticm:property[@name="custom_setting"]'
@@ -246,8 +270,8 @@ describe CC::BasicLTILinks do
         end
 
         it "adds labels correctly" do
-          labels = {en_US: "My Label"}
-          tool.settings[:course_navigation] = {labels: labels}
+          labels = { en_US: "My Label" }
+          tool.settings[:course_navigation] = { labels: }
           subject.create_blti_link(tool, lti_doc)
           xml_doc = Nokogiri::XML(xml) { |c| c.nonet.strict }
           xpath = '//blti:extensions/lticm:options[@name="course_navigation"]/lticm:options[@name="labels"]/lticm:property[@name="en_US"]'
@@ -259,7 +283,7 @@ describe CC::BasicLTILinks do
             "custom_key_name_1" => "custom_key_1",
             "custom_key_name_2" => "custom_key_2"
           }
-          tool.settings[:course_navigation] = {custom_fields: custom_fields}
+          tool.settings[:course_navigation] = { custom_fields: }
           subject.create_blti_link(tool, lti_doc)
           xml_doc = Nokogiri::XML(xml) { |c| c.nonet.strict }
           xpath = '//blti:extensions/lticm:options[@name="course_navigation"]/blti:custom/lticm:property'
@@ -270,7 +294,7 @@ describe CC::BasicLTILinks do
 
       context "vendor extensions" do
         it "adds vendor extensions" do
-          tool.settings[:vendor_extensions] = [{platform: "my vendor platform", custom_fields:{}}]
+          tool.settings[:vendor_extensions] = [{ platform: "my vendor platform", custom_fields: {} }]
           subject.create_blti_link(tool, lti_doc)
           xml_doc = Nokogiri::XML(xml) { |c| c.nonet.strict }
           expect(xml_doc.at_xpath('//blti:extensions[@platform="my vendor platform"]/@platform').text).to eq "my vendor platform"
@@ -281,14 +305,13 @@ describe CC::BasicLTILinks do
             "custom_key_name_1" => "custom_key_1",
             "custom_key_name_2" => "custom_key_2"
           }
-          tool.settings[:vendor_extensions] = [{platform: "my vendor platform", custom_fields:custom_fields}]
+          tool.settings[:vendor_extensions] = [{ platform: "my vendor platform", custom_fields: }]
           subject.create_blti_link(tool, lti_doc)
           xml_doc = Nokogiri::XML(xml) { |c| c.nonet.strict }
           xpath = '//blti:extensions[@platform="my vendor platform"]/lticm:property'
           parsed_custom_fields = xml_doc.xpath(xpath).each_with_object({}) { |x, h| h[x.attribute("name").text] = x.text }
           expect(parsed_custom_fields).to eq custom_fields
         end
-
       end
 
       context "content migrations" do
@@ -304,6 +327,20 @@ describe CC::BasicLTILinks do
           import_xpath = "#{cm_xpath}/lticm:property[@name=\"import_start_url\"]"
           expect(xml_doc.at_xpath(export_xpath).text).to eq tool.settings[:content_migration][:export_start_url]
           expect(xml_doc.at_xpath(import_xpath).text).to eq tool.settings[:content_migration][:import_start_url]
+        end
+
+        it "adds format settings" do
+          tool.settings[:content_migration] = {
+            export_format: "json",
+            import_format: "default"
+          }
+          subject.create_blti_link(tool, lti_doc)
+          xml_doc = Nokogiri::XML(xml) { |c| c.nonet.strict }
+          cm_xpath = '//blti:extensions/lticm:options[@name="content_migration"]'
+          export_xpath = "#{cm_xpath}/lticm:property[@name=\"export_format\"]"
+          import_xpath = "#{cm_xpath}/lticm:property[@name=\"import_format\"]"
+          expect(xml_doc.at_xpath(export_xpath).text).to eq tool.settings[:content_migration][:export_format]
+          expect(xml_doc.at_xpath(import_xpath).text).to eq tool.settings[:content_migration][:import_format]
         end
       end
     end

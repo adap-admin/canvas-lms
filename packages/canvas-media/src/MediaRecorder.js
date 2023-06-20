@@ -20,29 +20,24 @@ import React from 'react'
 
 import {Alert} from '@instructure/ui-alerts'
 import {canUseMediaCapture, MediaCapture} from '@instructure/media-capture'
-import {object, string} from 'prop-types'
+import {func, object, string} from 'prop-types'
 
-export default class MediaRecorder extends React.Component {
-  // saveFile = (file) => {
-  //   this.props.contentProps.saveMediaRecording(file, this.props.editor, this.props.dismiss)
-  // }
-
-  render() {
-    return (
-      <div>
-        {canUseMediaCapture() ? (
-          <MediaCapture translations={this.props.MediaCaptureStrings} onCompleted={this.saveFile} />
-        ) : (
-          <Alert variant="error" margin="small">
-            {this.props.errorMessage}
-          </Alert>
-        )}
-      </div>
-    )
-  }
+export default function MediaRecorder(props) {
+  return (
+    <div>
+      {canUseMediaCapture() ? (
+        <MediaCapture translations={props.MediaCaptureStrings} onCompleted={props.onSave} />
+      ) : (
+        <Alert variant="info" margin="small">
+          {props.errorMessage}
+        </Alert>
+      )}
+    </div>
+  )
 }
 
 MediaRecorder.propTypes = {
+  onSave: func.isRequired,
   errorMessage: string.isRequired,
-  MediaCaptureStrings: object // eslint-disable-line react/forbid-prop-types
+  MediaCaptureStrings: object
 }

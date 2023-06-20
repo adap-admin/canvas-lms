@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -108,14 +110,14 @@ class UsageRightsController < ApplicationController
   #
   # @returns UsageRights
   def set_usage_rights
-    if authorized_action(@context, @current_user, :manage_files)
+    if authorized_action(@context, @current_user, :manage_files_edit)
       return render json: { message: I18n.t("Must supply 'file_ids' and/or 'folder_ids' parameter") }, status: :bad_request unless params[:file_ids].present? || params[:folder_ids].present?
       return render json: { message: I18n.t("No 'usage_rights' object supplied") }, status: :bad_request unless params[:usage_rights].is_a?(ActionController::Parameters)
 
       usage_rights_params = params.require(:usage_rights).permit(:use_justification, :legal_copyright, :license)
       usage_rights = @context.usage_rights.where(usage_rights_params).first
       usage_rights ||= @context.usage_rights.create(usage_rights_params)
-      return render json: usage_rights.errors, status: :bad_request unless usage_rights && usage_rights.valid?
+      return render json: usage_rights.errors, status: :bad_request unless usage_rights&.valid?
 
       assign_usage_rights(usage_rights)
     end
@@ -131,7 +133,7 @@ class UsageRightsController < ApplicationController
   #   List of ids of folders. Usage rights will be removed from all files in these folders.
   #
   def remove_usage_rights
-    if authorized_action(@context, @current_user, :manage_files)
+    if authorized_action(@context, @current_user, :manage_files_delete)
       return render json: { message: I18n.t("Must supply 'file_ids' and/or 'folder_ids' parameter") }, status: :bad_request unless params[:file_ids].present? || params[:folder_ids].present?
 
       assign_usage_rights(nil)
@@ -151,28 +153,27 @@ class UsageRightsController < ApplicationController
     end
   end
 
-private
+  private
+
   # recursively enumerate file ids under a folder
   def enumerate_contents(folder)
-    ids = folder.active_sub_folders.inject([]) { |file_ids, folder| file_ids += enumerate_contents(folder) }
-    ids += folder.active_file_attachments.pluck(:id)
+    ids = folder.active_sub_folders.flat_map { |sub_folder| enumerate_contents(sub_folder) }
+    ids + folder.active_file_attachments.pluck(:id)
   end
 
   # assign the given usage rights to params[:file_ids] / params[:folder_ids]
   def assign_usage_rights(usage_rights)
     folder_ids = Array(params[:folder_ids]).map(&:to_i)
     folders = @context.folders.active.where(id: folder_ids).to_a
-    file_ids = folders.inject([]) { |file_ids, folder| file_ids += enumerate_contents(folder) }
+    file_ids = folders.flat_map { |folder| enumerate_contents(folder) }
     file_ids += @context.attachments.not_deleted.where(id: Array(params[:file_ids]).map(&:to_i)).pluck(:id)
-    update_attrs = {usage_rights_id: usage_rights&.id}
-    update_attrs.merge!(locked: false) if usage_rights.present? && value_to_boolean(params[:publish])
+    update_attrs = { usage_rights_id: usage_rights&.id }
+    update_attrs[:locked] = false if usage_rights.present? && value_to_boolean(params[:publish])
 
     count = @context.attachments.not_deleted.where(id: file_ids).update_all(update_attrs)
     result = usage_rights ? usage_rights_json(usage_rights, @current_user) : {}
-    result.merge!({
-      message: I18n.t({one: "1 file updated", other: "%{count} files updated"}, count: count ),
-      file_ids: file_ids
-    })
-    return render json: result
+    result[:message] = I18n.t({ one: "1 file updated", other: "%{count} files updated" }, count:)
+    result[:file_ids] = file_ids
+    render json: result
   end
 end

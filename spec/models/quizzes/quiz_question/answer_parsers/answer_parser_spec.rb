@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -16,11 +18,9 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../../../spec_helper.rb')
-require 'ostruct'
+require "ostruct"
 
 describe Quizzes::QuizQuestion::AnswerParsers::AnswerParser do
-
   context "#parse" do
     let(:answer_parser) { Quizzes::QuizQuestion::AnswerParsers::AnswerParser.new([]) }
 

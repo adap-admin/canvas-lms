@@ -4,6 +4,5 @@ lib
 coverage
 npm-debug*
 doc/*.js
-github-pages/*.js
-canvas
+github-pages/dist
 testcafe/build

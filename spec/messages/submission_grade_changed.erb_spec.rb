@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -16,10 +18,9 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/messages_helper')
+require_relative "messages_helper"
 
-describe 'submission_grade_changed' do
+describe "submission_grade_changed" do
   before :once do
     submission_model
   end
@@ -32,7 +33,7 @@ describe 'submission_grade_changed' do
   context ".email" do
     let(:path_type) { :email }
 
-    it "should only include the score if opted in (and still enabled on root account)" do
+    it "only includes the score if opted in (and still enabled on root account)" do
       @assignment.update_attribute(:points_possible, 10)
       @submission.update_attribute(:score, 5)
       message = generate_message(:submission_grade_changed, :summary, asset)
@@ -41,7 +42,7 @@ describe 'submission_grade_changed' do
       user = message.user
       user.preferences[:send_scores_in_emails] = true
       user.save!
-      message = generate_message(:submission_grade_changed, :summary, asset, user: user)
+      message = generate_message(:submission_grade_changed, :summary, asset, user:)
       expect(message.body).to match(/score:/)
 
       Account.default.tap do |a|
@@ -50,11 +51,11 @@ describe 'submission_grade_changed' do
       end
       asset.reload
 
-      message = generate_message(:submission_grade_changed, :summary, asset, user: user)
+      message = generate_message(:submission_grade_changed, :summary, asset, user:)
       expect(message.body).not_to match(/score:/)
     end
 
-    it "should include the submission's submitter name if receiver is not the submitter and has the setting turned on" do
+    it "includes the submission's submitter name if receiver is not the submitter and has the setting turned on" do
       observer = user_model
       message = generate_message(:submission_grade_changed, :summary, asset, user: observer)
       expect(message.body).not_to match("For #{@submission.user.name}")
@@ -63,6 +64,47 @@ describe 'submission_grade_changed' do
       observer.save!
       message = generate_message(:submission_grade_changed, :summary, asset, user: observer)
       expect(message.body).to match("For #{@submission.user.name}")
+    end
+  end
+
+  context "Restrict Quantitative Data" do
+    let(:student) { student_in_course(course: @assignment.course, active_all: true).user }
+    let(:course_root_account) { @assignment.course.root_account }
+
+    before do
+      # truthy feature flag
+      course_root_account.enable_feature! :restrict_quantitative_data
+
+      # truthy setting
+      course_root_account.settings[:restrict_quantitative_data] = { value: true, locked: true }
+      course_root_account.save!
+
+      asset.assignment.update_attribute(:points_possible, 10)
+      asset.update_attribute(:score, 5)
+      student.preferences[:send_scores_in_emails] = true
+      student.save!
+      asset.save!
+    end
+
+    it "shows only the letter grade when RQD is enabled - twitter" do
+      message = generate_message(:submission_grade_changed, :twitter, asset, user: student)
+      expect(message.body).to include("grade: F")
+    end
+
+    it "shows only the letter grade when RQD is enabled - sms" do
+      message = generate_message(:submission_grade_changed, :sms, asset, user: student)
+      expect(message.body).to include("grade: F")
+    end
+
+    it "shows only the letter grade when RQD is enabled - email" do
+      message = generate_message(:submission_grade_changed, :email, asset, user: student)
+      expect(message.body).to include("grade: F")
+      expect(message.html_body).to include("grade: F")
+    end
+
+    it "shows only the letter grade when RQD is enabled - summary" do
+      message = generate_message(:submission_grade_changed, :summary, asset, user: student)
+      expect(message.body).to include("grade: F")
     end
   end
 end

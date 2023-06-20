@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -110,9 +112,11 @@ class CommMessagesApiController < ApplicationController
   #
   # @argument start_time [DateTime]
   #   The beginning of the time range you want to retrieve message from.
+  #   Up to a year prior to the current date is available.
   #
   # @argument end_time [DateTime]
   #   The end of the time range you want to retrieve messages for.
+  #   Up to a year prior to the current date is available.
   #
   # @returns [CommMessage]
   def index
@@ -120,24 +124,25 @@ class CommMessagesApiController < ApplicationController
     start_time = CanvasTime.try_parse(params[:start_time])
     end_time = CanvasTime.try_parse(params[:end_time])
 
-    query = user.messages.order('created_at DESC')
+    query = user.messages.order("created_at DESC")
 
     # site admins see all, but if not a site admin...
-    if !Account.site_admin.grants_right?(@current_user, :read_messages)
+    unless Account.site_admin.grants_right?(@current_user, :read_messages)
       # ensure they can see the domain root account
       unless @domain_root_account.settings[:admins_can_view_notifications] &&
-        @domain_root_account.grants_right?(@current_user, :view_notifications)
+             @domain_root_account.grants_right?(@current_user, :view_notifications)
         return render_unauthorized_action
       end
+
       # and then scope to just the messages from that root account
       query = query.where(root_account_id: @domain_root_account)
     end
 
-    query = query.where('created_at >= ?', start_time) if start_time
-    query = query.where('created_at <= ?', end_time) if end_time
+    query = query.where("created_at >= ?", start_time) if start_time
+    query = query.where("created_at <= ?", end_time) if end_time
     messages = Api.paginate(query, self, api_v1_comm_messages_url)
 
     messages_json = messages.map { |m| comm_message_json(m) }
-    render :json => messages_json
+    render json: messages_json
   end
 end

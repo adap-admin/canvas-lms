@@ -17,9 +17,9 @@
  */
 
 import $ from 'jquery'
-import helpDialog from 'compiled/helpDialog'
+import helpDialog from '../../ui/boot/initializers/enableHelpDialog'
 import fakeENV from 'helpers/fakeENV'
-import 'vendor/jquery.ba-tinypubsub'
+import 'jquery-tinypubsub'
 
 // more tests are in spec/selenium/help_dialog_spec.rb
 
@@ -46,7 +46,7 @@ QUnit.module('HelpDialog', {
     $('[id^=ui-id-]').remove()
     $('#help-dialog').remove()
     $('#fixtures').empty()
-  }
+  },
 })
 
 test('init', () => {
@@ -58,14 +58,14 @@ test('init', () => {
   $tester.remove()
 })
 
-test('teacher feedback', function() {
+test('teacher feedback', function () {
   helpDialog.open()
   this.server.respond()
   helpDialog.switchTo('#teacher_feedback')
   ok(helpDialog.$dialog.find('#teacher-feedback-body').is(':visible'), 'textarea shows up')
 })
 
-test('focus management', function() {
+test('focus management', function () {
   helpDialog.open()
   this.server.respond()
   helpDialog.switchTo('#create_ticket')

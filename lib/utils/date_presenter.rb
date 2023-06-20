@@ -1,5 +1,5 @@
-# encoding: UTF-8
-#
+# frozen_string_literal: true
+
 # Copyright (C) 2014 - present Instructure, Inc.
 #
 # This file is part of Canvas.
@@ -18,18 +18,21 @@
 
 module Utils
   class DatePresenter
-    attr_reader :date, :raw_date, :zone
+    attr_reader :date, :raw_date, :zone, :with_weekday
 
-    def initialize(date, zone=nil)
+    def initialize(date, zone = nil, with_weekday: false)
       zone ||= Time.zone
       @raw_date = date
       @date = RelativeDate.new(date, zone)
       @zone = zone
+      @with_weekday = with_weekday
     end
 
-    def as_string(style=:normal)
+    def as_string(style = :normal)
       if style == :full
         return i18n_date(:full)
+      elsif style == :weekday
+        return i18n_date(:weekday)
       elsif style != :long
         if style != :no_words && special_value_type != :none
           string = special_string(special_value_type)
@@ -37,22 +40,26 @@ module Utils
         end
         return i18n_date(:short) if date.this_year? || style == :short
       end
-      return i18n_date(:medium)
+
+      i18n_date(:medium)
     end
 
     private
+
     def special_string(value_type)
       return nil if value_type == :none
+
       {
-        today: I18n.t('date.days.today', 'Today'),
-        tomorrow: I18n.t('date.days.tomorrow', 'Tomorrow'),
-        yesterday: I18n.t('date.days.yesterday', 'Yesterday'),
+        today: I18n.t("date.days.today", "Today"),
+        tomorrow: I18n.t("date.days.tomorrow", "Tomorrow"),
+        yesterday: I18n.t("date.days.yesterday", "Yesterday"),
         weekday: i18n_date(:weekday)
       }[value_type]
     end
 
     def i18n_date(format)
-      I18n.l(raw_date, format: I18n.send(:t, :"date.formats.#{format}"))
+      # Use send to prevent i18nliner trying to parse this
+      I18n.l(raw_date, format: I18n.send(:t, "date.formats.#{format}#{with_weekday ? "_with_weekday" : ""}"))
     end
 
     def special_value_type
@@ -68,6 +75,5 @@ module Utils
         :none
       end
     end
-
   end
 end

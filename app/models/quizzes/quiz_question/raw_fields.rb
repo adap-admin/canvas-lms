@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -16,26 +18,25 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'sanitize'
+require "sanitize"
 
 class Quizzes::QuizQuestion::RawFields
-
   class FieldTooLongError < RuntimeError; end
 
   def initialize(fields)
     @fields = fields
   end
 
-  def fetch_any(key, default="")
-    unless key.is_a?(Array)
-      @fields[key] || default
-    else
+  def fetch_any(key, default = "")
+    if key.is_a?(Array)
       found = key.find { |k| @fields.key?(k) }
       @fields[found] || default
+    else
+      @fields[key] || default
     end
   end
 
-  def fetch_with_enforced_length(key, opts={})
+  def fetch_with_enforced_length(key, opts = {})
     default = opts.fetch(:default, "")
     max_size = opts.fetch(:max_size, 16.kilobyte)
 
@@ -47,10 +48,12 @@ class Quizzes::QuizQuestion::RawFields
   end
 
   private
+
   def check_length(html, type, max)
     if html && html.length > max
-      raise FieldTooLongError.new("#{type} is too long, max length is #{max} characters" )
+      raise FieldTooLongError, "#{type} is too long, max length is #{max} characters"
     end
+
     html
   end
 

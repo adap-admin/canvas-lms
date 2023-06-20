@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -15,10 +17,10 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'canvas_partman/partition_manager'
-require 'canvas_partman/migration'
-require 'canvas_partman/dynamic_relation'
-require 'canvas_partman/concerns/partitioned'
+require "canvas_partman/partition_manager"
+require "canvas_partman/migration"
+require "canvas_partman/dynamic_relation"
+require "canvas_partman/concerns/partitioned"
 
 module CanvasPartman
   class << self
@@ -28,8 +30,20 @@ module CanvasPartman
     #   extension by dots.
     #
     #   Example: "partitions" => "20141215000000_add_something.partitions.rb"
-    attr_accessor :migrations_scope
+    #
+    # @property [Lambda, ->{ 90 }] timeout_seconds
+    #   A callable block that returns the number of seconds to timeout
+    #   during partition table creation/deletion so that the behavior
+    #   when partition management is happening can be bounded to avoid
+    #   operational impacts from long running transactions
+    attr_accessor :migrations_scope, :timeout_seconds, :after_create_callback
+
+    def timeout_value
+      timeout_seconds.call
+    end
   end
 
-  self.migrations_scope = 'partitions'
+  self.migrations_scope = "partitions"
+  self.timeout_seconds = -> { 90 }
+  self.after_create_callback = ->(parent_class, table) {}
 end

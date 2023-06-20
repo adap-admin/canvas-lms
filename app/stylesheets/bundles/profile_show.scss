@@ -130,7 +130,7 @@
   margin-top: 0;
 }
 .profileEnrollment__Items {
-  padding: $ic-sp/2 0;
+  padding: $ic-sp*0.5 0;
 }
 .profileLink {
   margin: 0;
@@ -139,7 +139,7 @@
   list-style: none;
   line-height: 2.0;
   & a {
-    padding-#{direction(left)}: $ic-sp/2;
+    padding-#{direction(left)}: $ic-sp*0.5;
   }
 }
 .profileHeader {
@@ -202,20 +202,6 @@
   background-position: -34px 0;
   &:hover {
     background-position: -34px -32px;
-  }
-}
-
-.linked_in {
-  background-position: -97px 0;
-  &:hover {
-    background-position: -97px -32px;
-  }
-}
-
-.delicious {
-  background-position: -129px 0;
-  &:hover {
-    background-position: -129px -32px;
   }
 }
 

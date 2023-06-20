@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -26,12 +28,12 @@ class ApiRouteSet
   end
   attr_accessor :mapper
 
-  def self.draw(router, prefix = self.prefix, &block)
+  def self.draw(router, prefix = self.prefix, &)
     @@prefixes ||= Set.new
     @@prefixes << prefix
-    route_set = self.new(prefix)
+    route_set = new(prefix)
     route_set.mapper = router
-    route_set.instance_eval(&block)
+    route_set.instance_eval(&)
   ensure
     route_set.mapper = nil
   end
@@ -45,15 +47,15 @@ class ApiRouteSet
   end
 
   def self.routes_for(prefix)
-    CanvasRails::Application.routes.set.select{|r| r.path.spec.to_s.start_with?(prefix)}
+    CanvasRails::Application.routes.set.select { |r| r.path.spec.to_s.start_with?(prefix) }
   end
 
   def self.segments_match(seg1, seg2)
-    seg1.size == seg2.size && seg1.each_with_index { |s,i| return false unless s.respond_to?(:value) && s.value == seg2[i].value }
+    seg1.size == seg2.size && seg1.each_with_index { |s, i| return false unless s.respond_to?(:value) && s.value == seg2[i].value }
   end
 
   def self.api_methods_for_controller_and_action(controller, action)
-    @routes ||= self.prefixes.map{|pfx| self.routes_for(pfx)}.flatten
+    @routes ||= prefixes.map { |pfx| routes_for(pfx) }.flatten
     @routes.find_all { |r| matches_controller_and_action?(r, controller, action) }
   end
 
@@ -62,9 +64,9 @@ class ApiRouteSet
   end
 
   def method_missing(m, *a, &b)
-    mapper.__send__(m, *a) {
-      self.instance_eval(&b) if b
-    }
+    mapper.__send__(m, *a) do
+      instance_eval(&b) if b
+    end
   end
 
   def get(path, opts = {})
@@ -87,7 +89,7 @@ class ApiRouteSet
     route(:patch, path, opts)
   end
 
-  def resources(resource_name, opts = {}, &block)
+  def resources(resource_name, opts = {})
     resource_name = resource_name.to_s
 
     path = opts.delete(:path) || resource_name
@@ -96,11 +98,11 @@ class ApiRouteSet
     only, except = opts.delete(:only), opts.delete(:except)
     maybe_action = ->(action) { (!only || Array(only).include?(action)) && (!except || !Array(except).include?(action)) }
 
-    get("#{path}", opts.merge(:action => :index, :as => "#{name_prefix}#{resource_name}")) if maybe_action[:index]
-    get("#{path}/:#{resource_name.singularize}_id", opts.merge(:action => :show, :as => "#{name_prefix}#{resource_name.singularize}")) if maybe_action[:show]
-    post( "#{path}", opts.merge(:action => :create, :as => (maybe_action[:index] ? nil : "#{name_prefix}#{resource_name}"))) if maybe_action[:create]
-    put("#{path}/:#{resource_name.singularize}_id", opts.merge(:action => :update)) if maybe_action[:update]
-    delete("#{path}/:#{resource_name.singularize}_id", opts.merge(:action => :destroy)) if maybe_action[:destroy]
+    get(path.to_s, opts.merge(action: :index, as: "#{name_prefix}#{resource_name}")) if maybe_action[:index]
+    get("#{path}/:#{resource_name.singularize}_id", opts.merge(action: :show, as: "#{name_prefix}#{resource_name.singularize}")) if maybe_action[:show]
+    post(path.to_s, opts.merge(action: :create, as: (maybe_action[:index] ? nil : "#{name_prefix}#{resource_name}"))) if maybe_action[:create]
+    put("#{path}/:#{resource_name.singularize}_id", opts.merge(action: :update)) if maybe_action[:update]
+    delete("#{path}/:#{resource_name.singularize}_id", opts.merge(action: :destroy)) if maybe_action[:destroy]
   end
 
   def mapper_prefix
@@ -112,8 +114,8 @@ class ApiRouteSet
     opts[:as] ||= opts.delete(:path_name)
     opts[:as] = "#{mapper_prefix}#{opts[:as]}" if opts[:as]
     opts[:constraints] ||= {}
-    opts[:constraints][:format] = 'json' if opts[:constraints].is_a? Hash
-    opts[:format] = 'json'
+    opts[:constraints][:format] = "json" if opts[:constraints].is_a? Hash
+    opts[:format] = "json"
     mapper.send(method, "#{prefix}/#{path}", opts)
   end
 
@@ -124,7 +126,7 @@ class ApiRouteSet
     # .json -- but see the api docs for info on sending hex-encoded sis ids,
     # which allows any string.
     ID_REGEX = %r{(?:[^/?.]|\.(?!json(?:\z|[/?])))+}
-    ID_PARAM = %r{^:(id|[\w]+_id)$}
+    ID_PARAM = /^:(id|\w+_id)$/
 
     def self.prefix
       "/api/v1"
@@ -136,7 +138,7 @@ class ApiRouteSet
 
     def route(method, path, opts)
       opts[:constraints] ||= {}
-      path.split('/').each { |segment| opts[:constraints][segment[1..-1].to_sym] = ID_REGEX if segment.match(ID_PARAM) }
+      path.split("/").each { |segment| opts[:constraints][segment[1..].to_sym] = ID_REGEX if segment.match(ID_PARAM) }
       super(method, path, opts)
     end
   end

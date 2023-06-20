@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -21,7 +23,7 @@ module SendToStream
     def self.extended(klass)
       klass.send(:class_attribute, :send_to_stream_block)
       klass.send(:class_attribute, :send_to_stream_update_block)
-      klass.has_one :stream_item, :as => :asset
+      klass.has_one :stream_item, as: :asset
     end
 
     def on_create_send_to_streams(&block)
@@ -42,22 +44,22 @@ module SendToStream
   module SendToStreamInstanceMethods
     def queue_create_stream_items
       block = self.class.send_to_stream_block rescue nil
-      stream_recipients = Array(self.instance_eval(&block)) if block
-      if stream_recipients && !stream_recipients.empty?
-        send_later_if_production_enqueue_args(:create_stream_items,
-                                              :priority => Delayed::LOW_PRIORITY)
+      stream_recipients = Array(instance_eval(&block)) if block
+      if stream_recipients.present?
+        delay_if_production(priority: Delayed::LOW_PRIORITY).create_stream_items
       end
       true
     end
 
     def create_stream_items
       return if stream_item_inactive?
+
       block = self.class.send_to_stream_block
-      stream_recipients = Array(self.instance_eval(&block)) if block
+      stream_recipients = Array(instance_eval(&block)) if block
       generate_stream_items(stream_recipients) if stream_recipients
     rescue => e
       if Rails.env.production?
-        Canvas::Errors.capture(e, {message: "SendToStream failure" })
+        Canvas::Errors.capture(e, { message: "SendToStream failure" })
       else
         raise
       end
@@ -65,18 +67,16 @@ module SendToStream
 
     def generate_stream_items(stream_recipients)
       @generated_stream_items ||= []
-      self.extend TextHelper
-      @stream_item_recipient_ids = stream_recipients.compact.map{|u| User.infer_id(u) }.compact.uniq
+      extend TextHelper
+      @stream_item_recipient_ids = stream_recipients.compact.filter_map { |u| User.infer_id(u) }.uniq
       @generated_stream_items = StreamItem.generate_all(self, @stream_item_recipient_ids)
     end
 
     def queue_update_stream_items
       block = self.class.send_to_stream_update_block
-      stream_recipients = Array(self.instance_eval(&block)) if block
-      if stream_recipients && !stream_recipients.empty?
-        send_later_if_production_enqueue_args(:generate_stream_items,
-                                              { :priority => 25 },
-                                              stream_recipients)
+      stream_recipients = Array(instance_eval(&block)) if block
+      if stream_recipients.present?
+        delay_if_production(priority: 25).generate_stream_items(stream_recipients)
         true
       end
     rescue => e
@@ -87,7 +87,7 @@ module SendToStream
     attr_reader :generated_stream_items, :stream_item_recipient_ids
 
     def stream_item_inactive?
-      (self.respond_to?(:workflow_state) && self.workflow_state == 'deleted') || (self.respond_to?(:deleted?) && self.deleted?)
+      (respond_to?(:workflow_state) && workflow_state == "deleted") || (respond_to?(:deleted?) && deleted?)
     end
 
     def clear_stream_items_on_destroy
@@ -97,13 +97,12 @@ module SendToStream
     def clear_stream_items
       # We need to pass the asset_string, not the asset itself, since we're about to delete the asset
       root_object = StreamItem.root_object(self)
-      StreamItem.send_later_if_production(:delete_all_for, [root_object.class.base_class.name, root_object.id], [self.class.base_class.name, self.id])
+      StreamItem.delay_if_production.delete_all_for([root_object.class.base_class.name, root_object.id], [self.class.base_class.name, id])
     end
   end
 
   def self.included(klass)
-    klass.send :include, SendToStreamInstanceMethods
+    klass.include SendToStreamInstanceMethods
     klass.extend SendToStreamClassMethods
   end
 end
-

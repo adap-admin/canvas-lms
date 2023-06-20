@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,50 +18,51 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '../../../import_helper')
+require_relative "../../import_helper"
 
 describe Course do
   describe "import_content" do
     before(:once) do
-      @course = course_factory()
+      @course = course_factory
     end
 
-    it "should import a whole json file" do
+    it "imports a whole json file" do
       local_storage!
 
       # TODO: pull this out into smaller tests... right now I'm using
       # the whole example JSON from Bracken because the formatting is
       # somewhat in flux
-      json = File.open(File.join(IMPORT_JSON_DIR, 'import_from_migration.json')).read
+      json = File.read(File.join(IMPORT_JSON_DIR, "import_from_migration.json"))
       data = JSON.parse(json).with_indifferent_access
-      data['all_files_export'] = {
-        'file_path' => File.join(IMPORT_JSON_DIR, 'import_from_migration_small.zip')
+      data["all_files_export"] = {
+        "file_path" => File.join(IMPORT_JSON_DIR, "import_from_migration_small.zip")
       }
-      migration = ContentMigration.create!(:context => @course, started_at: Time.zone.now)
+      migration = ContentMigration.create!(context: @course, started_at: Time.zone.now)
       allow(migration).to receive(:canvas_import?).and_return(true)
 
-      params = {:copy => {
-        :topics => {'1864019689002' => true, '1865116155002' => true},
-        :announcements => {'4488523052421' => true},
-        :files => {'1865116527002' => true, '1865116044002' => true, '1864019880002' => true, '1864019921002' => true},
-        :rubrics => {'4469882249231' => true},
-        :events => {},
-        :modules => {'1864019977002' => true, '1865116190002' => true},
-        :assignments => {
-          '1865116014002' => true,
-          '1865116155002' => true,
-          '4407365899221' => true,
-          '4469882339231' => true
+      params = { copy: {
+        topics: { "1864019689002" => true, "1865116155002" => true },
+        announcements: { "4488523052421" => true },
+        files: { "1865116527002" => true, "1865116044002" => true, "1864019880002" => true, "1864019921002" => true },
+        rubrics: { "4469882249231" => true },
+        events: {},
+        modules: { "1864019977002" => true, "1865116190002" => true },
+        assignments: {
+          "1865116014002" => true,
+          "1865116155002" => true,
+          "4407365899221" => true,
+          "4469882339231" => true
         },
-        :outline_folders => {'1865116206002' => true, '1865116207002' => true},
-        :quizzes => {'1865116175002' => true},
-        :all_groups => true,
-        :shift_dates=>"1",
-        :old_start_date=>"Jan 23, 2009",
-        :old_end_date=>"Apr 10, 2009",
-        :new_start_date=>"Jan 3, 2011",
-        :new_end_date=>"Apr 13, 2011"
-      }}.with_indifferent_access
+        outline_folders: { "1865116206002" => true, "1865116207002" => true },
+        quizzes: { "1865116175002" => true },
+        all_course_outline: true,
+        all_groups: true,
+        shift_dates: "1",
+        old_start_date: "Jan 23, 2009",
+        old_end_date: "Apr 10, 2009",
+        new_start_date: "Jan 3, 2011",
+        new_end_date: "Apr 13, 2011"
+      } }.with_indifferent_access
       migration.migration_ids_to_import = params
 
       expect(migration).to receive(:trigger_live_events!).once
@@ -72,7 +75,7 @@ describe Course do
 
       # discussion topic tests
       expect(@course.discussion_topics.length).to eq(3)
-      migration_ids = ["1864019689002", "1865116155002", "4488523052421"].sort
+      migration_ids = %w[1864019689002 1865116155002 4488523052421].sort
       added_migration_ids = @course.discussion_topics.map(&:migration_id).uniq.sort
       expect(added_migration_ids).to eq(migration_ids)
       topic = @course.discussion_topics.where(migration_id: "1864019689002").first
@@ -86,7 +89,7 @@ describe Course do
       # quizzes
       expect(@course.quizzes.length).to eq(1)
       quiz = @course.quizzes.first
-      quiz.migration_id = '1865116175002'
+      quiz.migration_id = "1865116175002"
       expect(quiz.title).to eq("Orientation Quiz")
 
       # wiki pages tests
@@ -111,7 +114,8 @@ describe Course do
       @course.reload
       expect(@course.assignments.length).to eq 4
       expect(@course.assignments.map(&:migration_id).sort).to(
-        eq(['1865116155002', '1865116014002', '4407365899221', '4469882339231'].sort))
+        eq(%w[1865116155002 1865116014002 4407365899221 4469882339231].sort)
+      )
       # assignment with due date
       assignment = @course.assignments.where(migration_id: "1865116014002").first
       expect(assignment).not_to be_nil
@@ -204,8 +208,8 @@ describe Course do
       expect(file.folder.full_name).to eq("course files/Course Content/Orientation/WebCT specific and old stuff")
     end
 
-    def build_migration(import_course, params, copy_options={})
-      migration = ContentMigration.create!(:context => import_course)
+    def build_migration(import_course, params, copy_options = {})
+      migration = ContentMigration.create!(context: import_course)
       migration.migration_settings[:migration_ids_to_import] = params
       migration.migration_settings[:copy_options] = copy_options
       migration.save!
@@ -213,7 +217,7 @@ describe Course do
     end
 
     def setup_import(import_course, filename, migration)
-      json = File.open(File.join(IMPORT_JSON_DIR, filename)).read
+      json = File.read(File.join(IMPORT_JSON_DIR, filename))
       data = JSON.parse(json).with_indifferent_access
       Importers::CourseContentImporter.import_content(
         import_course,
@@ -223,25 +227,25 @@ describe Course do
       )
     end
 
-    it "should not duplicate assessment questions in question banks" do
-      params = {:copy => {"everything" => true}}
+    it "does not duplicate assessment questions in question banks" do
+      params = { copy: { "everything" => true } }
       migration = build_migration(@course, params)
-      setup_import(@course, 'assessments.json', migration)
+      setup_import(@course, "assessments.json", migration)
 
       aqb1 = @course.assessment_question_banks.where(migration_id: "i05dab0b3d55dae214bd0c4787bd6d20f").first
       expect(aqb1.assessment_questions.count).to eq 3
       aqb2 = @course.assessment_question_banks.where(migration_id: "iaac763df0de1199ef143b2ab8f237e76").first
       expect(aqb2.assessment_questions.count).to eq 2
-      expect(migration.workflow_state).to eq('imported')
+      expect(migration.workflow_state).to eq("imported")
     end
 
-    it "should not create assessment question banks if they are not selected" do
-      params = {"copy" => {"assessment_question_banks" => {"i05dab0b3d55dae214bd0c4787bd6d20f" => true},
-                           "quizzes" => {"i7ed12d5eade40d9ee8ecb5300b8e02b2" => true,
-                                         "ife86eb19e30869506ee219b17a6a1d4e" => true}}}
+    it "does not create assessment question banks if they are not selected" do
+      params = { "copy" => { "assessment_question_banks" => { "i05dab0b3d55dae214bd0c4787bd6d20f" => true },
+                             "quizzes" => { "i7ed12d5eade40d9ee8ecb5300b8e02b2" => true,
+                                            "ife86eb19e30869506ee219b17a6a1d4e" => true } } }
 
       migration = build_migration(@course, params)
-      setup_import(@course, 'assessments.json', migration)
+      setup_import(@course, "assessments.json", migration)
 
       expect(@course.assessment_question_banks.count).to eq 1
       aqb1 = @course.assessment_question_banks.where(migration_id: "i05dab0b3d55dae214bd0c4787bd6d20f").first
@@ -250,51 +254,79 @@ describe Course do
 
       expect(@course.quizzes.count).to eq 2
       quiz1 = @course.quizzes.where(migration_id: "i7ed12d5eade40d9ee8ecb5300b8e02b2").first
-      quiz1.quiz_questions.preload(:assessment_question).each{|qq| expect(qq.assessment_question).not_to be_nil }
+      quiz1.quiz_questions.preload(:assessment_question).each { |qq| expect(qq.assessment_question).not_to be_nil }
 
       quiz2 = @course.quizzes.where(migration_id: "ife86eb19e30869506ee219b17a6a1d4e").first
-      quiz2.quiz_questions.preload(:assessment_question).each{|qq| expect(qq.assessment_question).to be_nil } # since the bank wasn't brought in
-      expect(migration.workflow_state).to eq('imported')
+      quiz2.quiz_questions.preload(:assessment_question).each { |qq| expect(qq.assessment_question).to be_nil } # since the bank wasn't brought in
+      expect(migration.workflow_state).to eq("imported")
     end
 
-    it "should lock announcements if 'lock_all_annoucements' setting is true" do
+    it "locks announcements if 'lock_all_annoucements' setting is true" do
       @course.update_attribute(:lock_all_announcements, true)
-      params = {"copy" => {"announcements" => {"4488523052421" => true}}}
+      params = { "copy" => { "announcements" => { "4488523052421" => true } } }
       migration = build_migration(@course, params, all_course_settings: true)
-      setup_import(@course, 'announcements.json', migration)
+      setup_import(@course, "announcements.json", migration)
 
       ann = @course.announcements.first
       expect(ann).to be_locked
-      expect(migration.workflow_state).to eq('imported')
+      expect(migration.workflow_state).to eq("imported")
     end
 
-    it "should not lock announcements if 'lock_all_annoucements' setting is false" do
+    it "does not lock announcements if 'lock_all_annoucements' setting is false" do
       @course.update_attribute(:lock_all_announcements, false)
-      params = {"copy" => {"announcements" => {"4488523052421" => true}}}
+      params = { "copy" => { "announcements" => { "4488523052421" => true } } }
       migration = build_migration(@course, params, all_course_settings: true)
-      setup_import(@course, 'announcements.json', migration)
+      setup_import(@course, "announcements.json", migration)
 
       ann = @course.announcements.first
       expect(ann).to_not be_locked
-      expect(migration.workflow_state).to eq('imported')
+      expect(migration.workflow_state).to eq("imported")
     end
 
-    it "runs DueDateCacher only twice" do
-      due_date_cacher = instance_double(DueDateCacher)
-      allow(DueDateCacher).to receive(:new).and_return(due_date_cacher)
-
-      # Once for course creation and once after the full import has completed
-      expect(due_date_cacher).to receive(:recompute).twice
-
-      params = {:copy => {"everything" => true}}
+    it "runs DueDateCacher never if no assignments are imported" do
+      params = { copy: { "everything" => true } }
       migration = build_migration(@course, params)
-      setup_import(@course, 'assessments.json', migration)
-      expect(migration.workflow_state).to eq('imported')
+      @course.reload # seems to be holding onto saved_changes for some reason
+
+      expect(DueDateCacher).not_to receive(:recompute_course)
+      setup_import(@course, "assessments.json", migration)
+      expect(migration.workflow_state).to eq("imported")
+    end
+
+    it "runs DueDateCacher once if assignments with dates are imported" do
+      params = { copy: { "everything" => true } }
+      migration = build_migration(@course, params)
+      @course.reload
+
+      expect(DueDateCacher).to receive(:recompute_course).once
+      json = File.read(File.join(IMPORT_JSON_DIR, "assignment.json"))
+      @data = { "assignments" => JSON.parse(json) }.with_indifferent_access
+      Importers::CourseContentImporter.import_content(
+        @course, @data, migration.migration_settings[:migration_ids_to_import], migration
+      )
+      expect(migration.workflow_state).to eq("imported")
+    end
+
+    it "automatically restores assignment groups for object assignment types (i.e. topics/quizzes)" do
+      params = { copy: { "assignments" => { "gf455e2add230724ba190bb20c1491aa9" => true } } }
+      migration = build_migration(@course, params)
+      setup_import(@course, "discussion_assignments.json", migration)
+      a1 = @course.assignments.where(migration_id: "gf455e2add230724ba190bb20c1491aa9").take
+      a1.assignment_group.destroy!
+
+      # import again but just the discus
+      params = { copy: { "discussion_topics" => { "g8bacee869e70bf19cd6784db3efade7e" => true } } }
+      migration = build_migration(@course, params)
+      setup_import(@course, "discussion_assignments.json", migration)
+      dt = @course.discussion_topics.where(migration_id: "g8bacee869e70bf19cd6784db3efade7e").take
+      expect(dt.assignment.assignment_group).to eq a1.assignment_group
+      expect(dt.assignment.assignment_group).to_not be_deleted
+      expect(a1.reload).to be_deleted # didn't restore the previously deleted assignment too
     end
 
     context "when it is a Quizzes.Next migration" do
       let(:migration) do
-        params = {:copy => {"everything" => true}}
+        params = { copy: { "everything" => true } }
         build_migration(@course, params)
       end
 
@@ -302,9 +334,9 @@ describe Course do
         allow(migration).to receive(:quizzes_next_migration?).and_return(true)
       end
 
-      it "shouldn't set workflow_state to imported" do
-        setup_import(@course, 'assessments.json', migration)
-        expect(migration.workflow_state).not_to eq('imported')
+      it "does not set workflow_state to imported" do
+        setup_import(@course, "assessments.json", migration)
+        expect(migration.workflow_state).not_to eq("imported")
       end
     end
 
@@ -314,7 +346,7 @@ describe Course do
       end
 
       it "sets the course to manually-posted when default_post_policy['post_manually'] is true" do
-        import_data = {"course": {"default_post_policy": {"post_manually": true}}}.with_indifferent_access
+        import_data = { course: { default_post_policy: { post_manually: true } } }.with_indifferent_access
         Importers::CourseContentImporter.import_content(@course, import_data, nil, migration)
 
         expect(@course.default_post_policy).to be_post_manually
@@ -322,7 +354,7 @@ describe Course do
 
       it "sets the course to auto-posted when default_post_policy['post_manually'] is false" do
         @course.default_post_policy.update!(post_manually: true)
-        import_data = {"course": {"default_post_policy": {"post_manually": false}}}.with_indifferent_access
+        import_data = { course: { default_post_policy: { post_manually: false } } }.with_indifferent_access
         Importers::CourseContentImporter.import_content(@course, import_data, nil, migration)
 
         expect(@course.default_post_policy).not_to be_post_manually
@@ -330,48 +362,93 @@ describe Course do
 
       it "does not update the course's post policy when default_post_policy['post_manually'] is missing" do
         @course.default_post_policy.update!(post_manually: true)
-        import_data = {"course": {}}.with_indifferent_access
+        import_data = { course: {} }.with_indifferent_access
         Importers::CourseContentImporter.import_content(@course, import_data, nil, migration)
 
         expect(@course.default_post_policy).to be_post_manually
       end
     end
+
+    describe "allow_final_grade_override" do
+      let(:migration) { build_migration(@course, {}, all_course_settings: true) }
+
+      it "is set to true when originally true" do
+        import_data = { course: { allow_final_grade_override: "true" } }.with_indifferent_access
+        Importers::CourseContentImporter.import_content(@course, import_data, nil, migration)
+
+        # Specifically check the setting instead of the "allow_final_grade_override?"
+        # method, since the method also checks for the feature flag (which isn't copied)
+        expect(@course.allow_final_grade_override).to eq "true"
+      end
+
+      it "is set to false when originally false" do
+        import_data = { course: { allow_final_grade_override: "false" } }.with_indifferent_access
+        Importers::CourseContentImporter.import_content(@course, import_data, nil, migration)
+
+        expect(@course.allow_final_grade_override).to eq "false"
+      end
+    end
+
+    describe "enable_course_paces" do
+      let(:migration) { build_migration(@course, {}, all_course_settings: true) }
+
+      it "is set to true when originally true" do
+        import_data = { course: { enable_course_paces: "true" } }.with_indifferent_access
+        Importers::CourseContentImporter.import_content(@course, import_data, nil, migration)
+        expect(@course.enable_course_paces).to be true
+      end
+
+      it "is set to false when originally true, but with the FF off" do
+        import_data = { course: { enable_course_paces: "true" } }.with_indifferent_access
+        @course.root_account.disable_feature!(:course_paces)
+        Importers::CourseContentImporter.import_content(@course, import_data, nil, migration)
+        expect(@course.enable_course_paces).to be false
+      end
+
+      it "is set to false when originally false" do
+        import_data = { course: { enable_course_paces: "false" } }.with_indifferent_access
+        Importers::CourseContentImporter.import_content(@course, import_data, nil, migration)
+        expect(@course.enable_course_paces).to be false
+      end
+    end
   end
 
   describe "shift_date_options" do
-    it "should default options[:time_zone] to the root account's time zone" do
+    it "defaults options[:time_zone] to the root account's time zone" do
       account = Account.default.sub_accounts.create!
-      course_with_teacher(account: account)
-      @course.root_account.default_time_zone = 'America/New_York'
+      course_with_teacher(account:)
+      @course.root_account.default_time_zone = "America/New_York"
       @course.start_at = 1.month.ago
       @course.conclude_at = 1.month.from_now
       options = Importers::CourseContentImporter.shift_date_options(@course, {})
-      expect(options[:time_zone]).to eq ActiveSupport::TimeZone['Eastern Time (US & Canada)']
+      expect(options[:time_zone]).to eq ActiveSupport::TimeZone["Eastern Time (US & Canada)"]
     end
   end
 
   describe "shift_date" do
-    it "should round sanely" do
+    it "rounds sanely" do
       course_factory
       @course.root_account.default_time_zone = Time.zone
       options = Importers::CourseContentImporter.shift_date_options(@course, {
-          old_start_date: '2014-3-2',  old_end_date: '2014-4-26',
-          new_start_date: '2014-5-11', new_end_date: '2014-7-5'
-      })
-      unlock_at = DateTime.new(2014, 3, 23,  0,  0)
+                                                                      old_start_date: "2014-3-2",
+                                                                      old_end_date: "2014-4-26",
+                                                                      new_start_date: "2014-5-11",
+                                                                      new_end_date: "2014-7-5"
+                                                                    })
+      unlock_at = DateTime.new(2014, 3, 23, 0, 0)
       due_at    = DateTime.new(2014, 3, 29, 23, 59)
-      lock_at   = DateTime.new(2014, 4,  1, 23, 59)
+      lock_at   = DateTime.new(2014, 4, 1, 23, 59)
 
       new_unlock_at = Importers::CourseContentImporter.shift_date(unlock_at, options)
       new_due_at    = Importers::CourseContentImporter.shift_date(due_at, options)
       new_lock_at   = Importers::CourseContentImporter.shift_date(lock_at, options)
 
-      expect(new_unlock_at).to eq DateTime.new(2014, 6,  1,  0,  0)
+      expect(new_unlock_at).to eq DateTime.new(2014, 6,  1, 0, 0)
       expect(new_due_at).to    eq DateTime.new(2014, 6,  7, 23, 59)
       expect(new_lock_at).to   eq DateTime.new(2014, 6, 10, 23, 59)
     end
 
-    it "should return error when removing dates and new_sis_integrations is enabled" do
+    it "returns error when removing dates and new_sis_integrations is enabled" do
       course_factory
       @course.root_account.enable_feature!(:new_sis_integrations)
       @course.root_account.settings[:sis_syncing] = true
@@ -388,8 +465,8 @@ describe Course do
       assignment.name = "lalala"
       assignment.save!
 
-      migration = ContentMigration.create!(:context => @course)
-      migration.migration_ids_to_import = {:copy => { :copy_options => { :all_assignments => "1" } }}.with_indifferent_access
+      migration = ContentMigration.create!(context: @course)
+      migration.migration_ids_to_import = { copy: { copy_options: { all_assignments: "1" } } }.with_indifferent_access
       migration.migration_settings[:date_shift_options] = Importers::CourseContentImporter.shift_date_options(@course, { remove_dates: true })
       migration.add_imported_item(assignment)
       migration.source_course = @course
@@ -405,17 +482,17 @@ describe Course do
 
   describe "import_media_objects" do
     before do
-      attachment_model(:uploaded_data => stub_file_data('test.m4v', 'asdf', 'video/mp4'))
+      attachment_model(uploaded_data: stub_file_data("test.m4v", "asdf", "video/mp4"))
     end
 
-    it "should wait for media objects on canvas cartridge import" do
-      migration = double(:canvas_import? => true)
+    it "waits for media objects on canvas cartridge import" do
+      migration = double(canvas_import?: true)
       expect(MediaObject).to receive(:add_media_files).with([@attachment], true)
       Importers::CourseContentImporter.import_media_objects([@attachment], migration)
     end
 
-    it "should not wait for media objects on other import" do
-      migration = double(:canvas_import? => false)
+    it "does not wait for media objects on other import" do
+      migration = double(canvas_import?: false)
       expect(MediaObject).to receive(:add_media_files).with([@attachment], false)
       Importers::CourseContentImporter.import_media_objects([@attachment], migration)
     end
@@ -426,54 +503,54 @@ describe Course do
       course_with_teacher
       @course.storage_quota = 1
       @cm = ContentMigration.create!(
-        :context => @course,
-        :user => @user,
-        :source_course => @course,
-        :copy_options => {:everything => "1"}
+        context: @course,
+        user: @user,
+        source_course: @course,
+        copy_options: { everything: "1" }
       )
     end
 
     context "with unauthorized user" do
-      it "should not adjust in course import" do
-        Importers::CourseContentImporter.import_settings_from_migration(@course, {:course=>{:storage_quota => 4}}, @cm)
+      it "does not adjust in course import" do
+        Importers::CourseContentImporter.import_settings_from_migration(@course, { course: { storage_quota: 4 } }, @cm)
         expect(@course.storage_quota).to eq 1
       end
 
-      it "should not adjust in course copy" do
-        @cm.migration_type = 'course_copy_importer'
-        Importers::CourseContentImporter.import_settings_from_migration(@course, {:course=>{:storage_quota => 4}}, @cm)
+      it "does not adjust in course copy" do
+        @cm.migration_type = "course_copy_importer"
+        Importers::CourseContentImporter.import_settings_from_migration(@course, { course: { storage_quota: 4 } }, @cm)
         expect(@course.storage_quota).to eq 1
       end
     end
 
     context "with account admin" do
       before :once do
-        account_admin_user(:user => @user)
+        account_admin_user(user: @user)
       end
 
-      it "should adjust in course import" do
-        Importers::CourseContentImporter.import_settings_from_migration(@course, {:course=>{:storage_quota => 4}}, @cm)
+      it "adjusts in course import" do
+        Importers::CourseContentImporter.import_settings_from_migration(@course, { course: { storage_quota: 4 } }, @cm)
         expect(@course.storage_quota).to eq 4
       end
 
-      it "should adjust in course copy" do
-        @cm.migration_type = 'course_copy_importer'
-        Importers::CourseContentImporter.import_settings_from_migration(@course, {:course=>{:storage_quota => 4}}, @cm)
+      it "adjusts in course copy" do
+        @cm.migration_type = "course_copy_importer"
+        Importers::CourseContentImporter.import_settings_from_migration(@course, { course: { storage_quota: 4 } }, @cm)
         expect(@course.storage_quota).to eq 4
       end
     end
   end
 
   describe "audit logging" do
-    it "should log content migration in audit logs" do
+    it "logs content migration in audit logs" do
       course_factory
 
-      json = File.open(File.join(IMPORT_JSON_DIR, 'assessments.json')).read
+      json = File.read(File.join(IMPORT_JSON_DIR, "assessments.json"))
       data = JSON.parse(json).with_indifferent_access
 
-      params = {"copy" => {"quizzes" => {"i7ed12d5eade40d9ee8ecb5300b8e02b2" => true}}}
+      params = { "copy" => { "quizzes" => { "i7ed12d5eade40d9ee8ecb5300b8e02b2" => true } } }
 
-      migration = ContentMigration.create!(:context => @course)
+      migration = ContentMigration.create!(context: @course)
       migration.migration_settings[:migration_ids_to_import] = params
       migration.source_course = @course
       migration.initiated_source = :manual
@@ -486,34 +563,168 @@ describe Course do
     end
   end
 
-  it 'should be able to i18n without keys' do
-    expect { Importers::CourseContentImporter.translate('stuff') }.not_to raise_error
+  describe "insert into module" do
+    before :once do
+      course_factory
+      @module = @course.context_modules.create! name: "test"
+      @module.add_item(type: "context_module_sub_header", title: "blah")
+      @params = { "copy" => { "assignments" => { "1865116198002" => true } } }
+      json = File.read(File.join(IMPORT_JSON_DIR, "import_from_migration.json"))
+      @data = JSON.parse(json).with_indifferent_access
+    end
+
+    it "appends imported items to a module" do
+      migration = @course.content_migrations.build
+      migration.migration_settings[:migration_ids_to_import] = @params
+      migration.migration_settings[:insert_into_module_id] = @module.id
+      migration.save!
+
+      Importers::CourseContentImporter.import_content(@course, @data, @params, migration)
+      expect(@module.content_tags.order("position").pluck(:content_type)).to eq(%w[ContextModuleSubHeader Assignment])
+    end
+
+    it "can insert items from one module to an existing module" do
+      migration = @course.content_migrations.build
+      @params["copy"]["context_modules"] = { "1864019962002" => true }
+      migration.migration_settings[:migration_ids_to_import] = @params
+      migration.migration_settings[:insert_into_module_id] = @module.id
+      migration.save!
+
+      Importers::CourseContentImporter.import_content(@course, @data, @params, migration)
+      expect(migration.migration_issues.count).to eq 0
+      expect(@course.context_modules.where.not(migration_id: nil).count).to eq 0 # doesn't import other modules
+      expect(@module.content_tags.last.content.migration_id).to eq "1865116198002"
+    end
+
+    it "inserts imported items into a module" do
+      migration = @course.content_migrations.build
+      migration.migration_settings[:migration_ids_to_import] = @params
+      migration.migration_settings[:insert_into_module_id] = @module.id
+      migration.migration_settings[:insert_into_module_position] = 1
+      migration.save!
+
+      Importers::CourseContentImporter.import_content(@course, @data, @params, migration)
+      expect(@module.content_tags.order("position").pluck(:content_type)).to eq(%w[Assignment ContextModuleSubHeader])
+    end
+
+    it "respects insert_into_module_type" do
+      @params["copy"]["discussion_topics"] = { "1864019689002" => true }
+      migration = @course.content_migrations.build
+      migration.migration_settings[:migration_ids_to_import] = @params
+      migration.migration_settings[:insert_into_module_id] = @module.id
+      migration.migration_settings[:insert_into_module_type] = "assignment"
+      migration.save!
+      Importers::CourseContentImporter.import_content(@course, @data, @params, migration)
+      expect(@module.content_tags.order("position").pluck(:content_type)).to eq(%w[ContextModuleSubHeader Assignment])
+    end
   end
 
-  it "shouldn't create missing link migration issues if the link got sanitized away" do
-    data = {:assignments => [
-      {:migration_id => "broken", :description => "heres a normal bad link <a href='/badness'>blah</a>"},
-      {:migration_id => "kindabroken", :description => "here's a link that's going to go away in a bit <link rel=\"stylesheet\" href=\"/badness\"/>"}
-    ]}.with_indifferent_access
+  describe "move to assignment group" do
+    before :once do
+      course_factory
+      @course.require_assignment_group
+      @new_group = @course.assignment_groups.create!(name: "new group")
+      @params = { copy: {
+        assignments: { "1865116014002" => true },
+        quizzes: { "1865116160002" => true }
+      } }.with_indifferent_access
+      json = File.read(File.join(IMPORT_JSON_DIR, "import_from_migration.json"))
+      @data = JSON.parse(json).with_indifferent_access
+      @migration = @course.content_migrations.build
+      @migration.migration_settings[:migration_ids_to_import] = @params
+      @migration.migration_settings[:move_to_assignment_group_id] = @new_group.id
+      @migration.save!
+    end
+
+    it "puts a new assignment into assignment group" do
+      @course.assignments.create! title: "other", assignment_group: @new_group
+      Importers::CourseContentImporter.import_content(@course, @data, @params, @migration)
+      new_assign = @course.assignments.where(migration_id: "1865116014002").take
+      expect(new_assign.assignment_group_id).to eq @new_group.id
+    end
+
+    it "moves existing assignment into assignment group" do
+      existing_assign = @course.assignments.create! title: "blah", migration_id: "1865116014002"
+      expect(existing_assign.assignment_group_id).not_to eq @new_group.id
+      Importers::CourseContentImporter.import_content(@course, @data, @params, @migration)
+      expect(existing_assign.reload.assignment_group_id).to eq @new_group.id
+    end
+
+    it "moves classic quiz assignment into new group" do
+      Importers::CourseContentImporter.import_content(@course, @data, @params, @migration)
+      quiz = @course.quizzes.where(migration_id: "1865116160002").take
+      expect(quiz.reload.assignment_group_id).to eq @new_group.id
+      expect(quiz.assignment.reload.assignment_group_id).to eq @new_group.id
+    end
+  end
+
+  it "is able to i18n without keys" do
+    expect { Importers::CourseContentImporter.translate("stuff") }.not_to raise_error
+  end
+
+  it "does not create missing link migration issues if the link got sanitized away" do
+    data = { assignments: [
+      { migration_id: "broken", description: "heres a normal bad link <a href='/badness'>blah</a>" },
+      { migration_id: "kindabroken", description: "here's a link that's going to go away in a bit <link rel=\"stylesheet\" href=\"/badness\"/>" }
+    ] }.with_indifferent_access
 
     course_factory
     migration = @course.content_migrations.create!
     Importers::CourseContentImporter.import_content(@course, data, {}, migration)
 
-    broken_assmt = @course.assignments.where(:migration_id => "broken").first
-    unbroken_assmt = @course.assignments.where(:migration_id => "kindabroken").first
+    broken_assmt = @course.assignments.where(migration_id: "broken").first
+    unbroken_assmt = @course.assignments.where(migration_id: "kindabroken").first
     expect(unbroken_assmt.description).to_not include("stylesheet")
 
     expect(migration.migration_issues.count).to eq 1 # should ignore the sanitized one
     expect(migration.migration_issues.first.fix_issue_html_url).to eq "/courses/#{@course.id}/assignments/#{broken_assmt.id}"
   end
+
+  describe "metrics logging" do
+    subject { Importers::CourseContentImporter.import_content(@course, {}, {}, migration) }
+
+    before do
+      allow(InstStatsd::Statsd).to receive(:increment)
+      allow(InstStatsd::Statsd).to receive(:timing)
+    end
+
+    before :once do
+      course_factory
+    end
+
+    let(:migration) { @course.content_migrations.create! migration_type: "atypeofmigration" }
+
+    it "logs import successes" do
+      subject
+      expect(InstStatsd::Statsd).to have_received(:increment).with("content_migrations.import_success").once
+    end
+
+    it "logs import duration" do
+      subject
+      expect(InstStatsd::Statsd).to have_received(:timing).with("content_migrations.import_duration", anything, {
+                                                                  tags: { migration_type: "atypeofmigration" }
+                                                                }).once
+    end
+
+    it "logs import failures" do
+      allow(Auditors::Course).to receive(:record_copied).and_raise("Something went wrong at the last minute")
+      expect { subject }.to raise_error("Something went wrong at the last minute")
+      expect(InstStatsd::Statsd).to have_received(:increment).with("content_migrations.import_failure").once
+    end
+
+    it "Does not log duration on failures" do
+      allow(Auditors::Course).to receive(:record_copied).and_raise("Something went wrong at the last minute")
+      expect { subject }.to raise_error("Something went wrong at the last minute")
+      expect(InstStatsd::Statsd).to_not have_received(:timing).with("content_migrations.import_failure")
+    end
+  end
 end
 
 def from_file_path(path, course)
-  list = path.split("/").select{|f| !f.empty? }
+  list = path.split("/").reject(&:empty?)
   filename = list.pop
-  folder = Folder.assert_path(list.join('/'), course)
-  file = folder.file_attachments.build(:display_name => filename, :filename => filename, :content_type => "text/plain")
+  folder = Folder.assert_path(list.join("/"), course)
+  file = folder.file_attachments.build(display_name: filename, filename:, content_type: "text/plain")
   file.uploaded_data = StringIO.new("fake data")
   file.context = course
   file.save!

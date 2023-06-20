@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -20,8 +22,8 @@ class AddLatestOutcomeImportToContexts < ActiveRecord::Migration[5.0]
 
   def change
     add_column :accounts, :latest_outcome_import_id, :integer, limit: 8
-    add_foreign_key :accounts, :outcome_imports, column: 'latest_outcome_import_id'
+    add_foreign_key :accounts, :outcome_imports, column: "latest_outcome_import_id"
     add_column :courses, :latest_outcome_import_id, :integer, limit: 8
-    add_foreign_key :courses, :outcome_imports, column: 'latest_outcome_import_id'
+    add_foreign_key :courses, :outcome_imports, column: "latest_outcome_import_id"
   end
 end

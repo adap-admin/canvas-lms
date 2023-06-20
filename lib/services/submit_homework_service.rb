@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -36,7 +38,7 @@ module Services
       end
     end
 
-    CopyWorker = Struct.new(:attachment_id, :progress_id, :eula_agreement_timestamp, :clone_url_executor) do
+    CopyWorker = Struct.new(:attachment_id, :progress_id, :clone_url_executor) do
       def progress
         @progress ||= Progress.find(progress_id)
       end
@@ -49,11 +51,11 @@ module Services
         progress.start! unless progress.running?
         clone_url_executor.execute(attachment)
 
-        raise(CloneUrlError, attachment.upload_error_message) if attachment.file_state == 'errored'
+        raise(CloneUrlError, attachment.upload_error_message) if attachment.file_state == "errored"
 
         progress.complete! unless progress.failed?
-      rescue => error
-        mark_as_failure(error)
+      rescue => e
+        mark_as_failure(e)
       end
 
       def on_permanent_failure(error)
@@ -70,7 +72,7 @@ module Services
       end
     end
 
-    SubmitWorker = Struct.new(:attachment_id, :progress_id, :eula_agreement_timestamp, :clone_url_executor) do
+    SubmitWorker = Struct.new(:attachment_id, :progress_id, :eula_agreement_timestamp, :comment, :clone_url_executor) do
       def progress
         @progress ||= Progress.find(progress_id)
       end
@@ -85,15 +87,16 @@ module Services
 
       def perform
         return unless attachment
+
         homework_service.start!
         clone_url_executor.execute(attachment)
 
-        raise(CloneUrlError, attachment.upload_error_message) if attachment.file_state == 'errored'
+        raise(CloneUrlError, attachment.upload_error_message) if attachment.file_state == "errored"
 
-        homework_service.submit(eula_agreement_timestamp)
+        homework_service.submit(eula_agreement_timestamp, comment)
         homework_service.success!
-      rescue => error
-        mark_as_failure(error)
+      rescue => e
+        mark_as_failure(e)
       end
 
       def on_permanent_failure(error)
@@ -112,15 +115,15 @@ module Services
         CloneUrlExecutor.new(url, duplicate_handling, check_quota, opts)
       end
 
-      def submit_job(attachment, progress, eula_agreement_timestamp, executor, submit_assignment)
+      def submit_job(attachment, progress, eula_agreement_timestamp, comment, executor, submit_assignment)
         if progress.context.is_a?(Assignment) && submit_assignment
-          SubmitWorker.
-            new(attachment.id, progress.id, eula_agreement_timestamp, executor).
-            tap { |worker| enqueue_attachment_job(worker) }
+          SubmitWorker
+            .new(attachment.id, progress.id, eula_agreement_timestamp, comment, executor)
+            .tap { |worker| enqueue_attachment_job(worker) }
         else
-          CopyWorker.
-            new(attachment.id, progress.id, eula_agreement_timestamp, executor).
-            tap { |worker| enqueue_attachment_job(worker) }
+          CopyWorker
+            .new(attachment.id, progress.id, executor)
+            .tap { |worker| enqueue_attachment_job(worker) }
         end
       end
 
@@ -138,15 +141,16 @@ module Services
       @progress = progress
     end
 
-    def submit(eula_agreement_timestamp)
+    def submit(eula_agreement_timestamp, comment)
       start!
 
       if @attachment
         opts = {
-          submission_type: 'online_upload',
+          submission_type: "online_upload",
           submitted_at: @progress.created_at,
           attachments: [@attachment],
-          eula_agreement_timestamp: eula_agreement_timestamp
+          eula_agreement_timestamp:,
+          comment:
         }
 
         @progress.context.submit_homework(@progress.user, opts)
@@ -172,16 +176,16 @@ module Services
     def failure_email
       display_name = @attachment.display_name
       assignment_name = @progress.context.name
-      body = "Your file, #{display_name}, failed to upload to your "\
-             "Canvas assignment, #{assignment_name}. Please re-submit to "\
-             "the assignment or contact your instructor if you are no "\
+      body = "Your file, #{display_name}, failed to upload to your " \
+             "Canvas assignment, #{assignment_name}. Please re-submit to " \
+             "the assignment or contact your instructor if you are no " \
              "longer able to do so."
 
       message = OpenStruct.new(
-        from_name: 'notifications@instructure.com',
+        from_name: "notifications@instructure.com",
         subject: "Submission upload failed: #{assignment_name}",
         to: @progress.user.email,
-        body: body
+        body:
       )
       queue_email(message)
     end
@@ -197,7 +201,7 @@ module Services
 
     def progress_success!(progress, attachment)
       progress.reload
-      progress.set_results('id' => attachment.id) if attachment
+      progress.set_results("id" => attachment.id) if attachment
       progress.complete!
     end
 

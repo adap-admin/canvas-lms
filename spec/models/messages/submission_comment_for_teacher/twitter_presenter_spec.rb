@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -20,12 +22,12 @@ require "spec_helper"
 
 describe Messages::SubmissionCommentForTeacher::TwitterPresenter do
   let_once(:course) { course_model(name: "MATH-101") }
-  let_once(:teacher) { course_with_teacher(course: course, active_all: true).user }
+  let_once(:teacher) { course_with_teacher(course:, active_all: true).user }
   let_once(:submitter) do
-    course_with_user("StudentEnrollment", course: course, name: "Adam Jones", active_all: true).user
+    course_with_user("StudentEnrollment", course:, name: "Adam Jones", active_all: true).user
   end
   let_once(:commenter) do
-    course_with_user("StudentEnrollment", course: course, name: "Betty Ford", active_all: true).user
+    course_with_user("StudentEnrollment", course:, name: "Betty Ford", active_all: true).user
   end
 
   let(:assignment) { course.assignments.create!(name: "Introductions", due_at: 1.day.ago) }
@@ -48,7 +50,7 @@ describe Messages::SubmissionCommentForTeacher::TwitterPresenter do
     end
 
     context "when the assignment is anonymously graded" do
-      before(:each) do
+      before do
         assignment.update!(anonymous_grading: true)
       end
 
@@ -77,7 +79,7 @@ describe Messages::SubmissionCommentForTeacher::TwitterPresenter do
       end
 
       context "when grades have been posted" do
-        before(:each) do
+        before do
           assignment.unmute!
         end
 
@@ -106,7 +108,7 @@ describe Messages::SubmissionCommentForTeacher::TwitterPresenter do
     end
 
     context "when the assignment is anonymously graded" do
-      before(:each) do
+      before do
         assignment.update!(anonymous_grading: true)
       end
 
@@ -135,7 +137,7 @@ describe Messages::SubmissionCommentForTeacher::TwitterPresenter do
       end
 
       context "when grades have been posted" do
-        before(:each) do
+        before do
           assignment.unmute!
         end
 

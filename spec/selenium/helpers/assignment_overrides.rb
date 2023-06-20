@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -21,7 +23,7 @@ module AssignmentOverridesSeleniumHelper
   end
 
   def fill_assignment_title(title)
-    replace_content(f('#assignment_name'), title.to_s)
+    replace_content(f("#assignment_name"), title.to_s)
   end
 
   def fill_assignment_overrides
@@ -34,7 +36,7 @@ module AssignmentOverridesSeleniumHelper
   end
 
   def update_assignment!
-    expect_new_page_load { submit_form('#edit_assignment_form') }
+    expect_new_page_load { submit_form("#edit_assignment_form") }
   end
 
   def due_at
@@ -57,10 +59,11 @@ module AssignmentOverridesSeleniumHelper
 
   def create_assignment!
     @course.assignments.create!(
-      title: 'due tomorrow',
-      due_at: due_at,
-      unlock_at: unlock_at,
-      lock_at: lock_at)
+      title: "due tomorrow",
+      due_at:,
+      unlock_at:,
+      lock_at:
+    )
   end
 
   def visit_assignment_edit_page(assign)
@@ -92,40 +95,41 @@ module AssignmentOverridesSeleniumHelper
   end
 
   def add_override
-    f('#add_due_date').click
+    f("#add_due_date").click
     wait_for_ajaximations
   end
 
   def select_last_override_section(override_name)
-    fj('.ic-tokeninput-input:last').send_keys(override_name)
-    fj(".ic-tokeninput-option:visible:last").click
-    fj('.ic-tokeninput-input:last').send_keys(:tab) # hide the menu so it doesn't interfere with later actions
+    fj(".ic-tokeninput-input:last").send_keys(override_name)
+    wait_for_ajaximations
+    ffxpath("//div[contains(text(),'#{override_name}')]").last.click
   end
 
   def select_first_override_section(override_name)
-    fj('.ic-tokeninput-input:first').send_keys(override_name)
-    fj(".ic-tokeninput-option:visible:first").click
-    fj('.ic-tokeninput-input:first').send_keys(:tab) # hide the menu so it doesn't interfere with later actions
+    fj(".ic-tokeninput-input:first").send_keys(override_name)
+    wait_for_ajaximations
+    ffxpath("//div[contains(text(),'#{override_name}')]").first.click
   end
 
   def select_first_override_header(override_name)
     driver.switch_to.default_content
-    fj('.ic-tokeninput-input:first').send_keys(override_name)
+    fj(".ic-tokeninput-input:first").send_keys(override_name)
     wait_for_ajaximations
     fj(".ic-tokeninput-list [role='option']:visible:first").click
     wait_for_ajaximations
   end
 
   def assign_dates_for_first_override_section(opts = {})
-    first_due_at_element.send_keys(opts.fetch(:due_at, Time.zone.now.advance(days:3)))
-    first_unlock_at_element.send_keys(opts.fetch(:unlock_at, Time.zone.now.advance(days:-1)))
-    first_lock_at_element.send_keys(opts.fetch(:lock_at, Time.zone.now.advance(days:3)))
+    first_due_at_element.send_keys(opts.fetch(:due_at, Time.zone.now.advance(days: 3)))
+    first_unlock_at_element.send_keys(opts.fetch(:unlock_at, Time.zone.now.advance(days: -1)))
+    first_lock_at_element.send_keys(opts.fetch(:lock_at, Time.zone.now.advance(days: 3)))
   end
 
   def assign_dates_for_last_override_section(opts = {})
-    last_due_at_element.send_keys(opts.fetch(:due_at, Time.zone.now.advance(days:5)))
-    last_unlock_at_element.send_keys(opts.fetch(:unlock_at, Time.zone.now.advance(days:-1)))
-    last_lock_at_element.send_keys(opts.fetch(:lock_at, Time.zone.now.advance(days:5)))
+    last_due_at_element.send_keys(opts.fetch(:due_at, Time.zone.now.advance(days: 5)))
+    last_unlock_at_element.send_keys(opts.fetch(:unlock_at, Time.zone.now.advance(days: -1)))
+    last_lock_at_element.send_keys(opts.fetch(:lock_at, Time.zone.now.advance(days: 5)))
+    last_lock_at_element.send_keys(:tab)
   end
 
   def find_vdd_time(override_context)
@@ -134,9 +138,9 @@ module AssignmentOverridesSeleniumHelper
     @unlock_at_time = format_time_for_view(override_context.unlock_at)
   end
 
-  def add_due_date_override(assignment, due_at = Time.zone.now.advance(days:1))
+  def add_due_date_override(assignment, due_at = Time.zone.now.advance(days: 1))
     user = @user
-    new_section = @course.course_sections.create!(name: 'New Section')
+    new_section = @course.course_sections.create!(name: "New Section")
     student_in_section(new_section)
     override = assignment.assignment_overrides.build
     override.set = new_section
@@ -148,15 +152,15 @@ module AssignmentOverridesSeleniumHelper
 
   def add_user_specific_due_date_override(assignment, opts = {})
     user = @user
-    new_section = opts.fetch(:section, @course.course_sections.create!(name: 'New Section'))
+    new_section = opts.fetch(:section, @course.course_sections.create!(name: "New Section"))
     student_in_section(new_section)
     override = assignment.assignment_overrides.build
     override.set = new_section
-    override.due_at = opts.fetch(:due_at, Time.zone.now.advance(days:3))
+    override.due_at = opts.fetch(:due_at, Time.zone.now.advance(days: 3))
     override.due_at_overridden = true
-    override.lock_at = opts.fetch(:lock_at, Time.zone.now.advance(days:3))
+    override.lock_at = opts.fetch(:lock_at, Time.zone.now.advance(days: 3))
     override.lock_at_overridden = true
-    override.unlock_at = opts.fetch(:unlock_at, Time.zone.now.advance(days:-1))
+    override.unlock_at = opts.fetch(:unlock_at, Time.zone.now.advance(days: -1))
     override.unlock_at_overridden = true
     override.save!
     @user = user
@@ -166,24 +170,24 @@ module AssignmentOverridesSeleniumHelper
 
   def prepare_vdd_scenario
     @course = course_model
-    @course.name = 'VDD Course'
+    @course.name = "VDD Course"
     @course.offer!
 
     # must have two sections: A and B
-    @section_a = @course.course_sections.create!(name: 'Section A')
-    @section_b = @course.course_sections.create!(name: 'Section B')
+    @section_a = @course.course_sections.create!(name: "Section A")
+    @section_b = @course.course_sections.create!(name: "Section B")
 
     # must have a published quiz with variable due dates
     create_quiz_with_vdd
   end
 
   def enroll_section_a_student
-    @student1 = user_with_pseudonym(username: 'student1@example.com', active_all: 1)
+    @student1 = user_with_pseudonym(username: "student1@example.com", active_all: 1)
     @course.self_enroll_student(@student1, section: @section_a)
   end
 
   def enroll_section_b_student
-    @student2 = user_with_pseudonym(username: 'student2@example.com', active_all: 1)
+    @student2 = user_with_pseudonym(username: "student2@example.com", active_all: 1)
     @course.self_enroll_student(@student2, section: @section_b)
   end
 
@@ -194,19 +198,19 @@ module AssignmentOverridesSeleniumHelper
     enroll_section_b_student
 
     # 1 observer linked to both students
-    @observer1 = user_with_pseudonym(username: 'observer1@example.com', active_all: 1)
+    @observer1 = user_with_pseudonym(username: "observer1@example.com", active_all: 1)
     @course.enroll_user(
       @observer1,
-      'ObserverEnrollment',
-      enrollment_state: 'active',
+      "ObserverEnrollment",
+      enrollment_state: "active",
       allow_multiple_enrollments: true,
       section: @section_a,
       associated_user_id: @student1.id
     )
     @course.enroll_user(
       @observer1,
-      'ObserverEnrollment',
-      enrollment_state: 'active',
+      "ObserverEnrollment",
+      enrollment_state: "active",
       allow_multiple_enrollments: true,
       section: @section_b,
       associated_user_id: @student2.id
@@ -219,11 +223,11 @@ module AssignmentOverridesSeleniumHelper
     enroll_section_b_student
 
     # 1 observer linked to student enrolled in Section B
-    @observer2 = user_with_pseudonym(username: 'observer2@example.com', active_all: 1)
+    @observer2 = user_with_pseudonym(username: "observer2@example.com", active_all: 1)
     @course.enroll_user(
       @observer2,
-      'ObserverEnrollment',
-      enrollment_state: 'active',
+      "ObserverEnrollment",
+      enrollment_state: "active",
       section: @section_b,
       associated_user_id: @student2.id
     )
@@ -242,7 +246,7 @@ module AssignmentOverridesSeleniumHelper
   def prepare_vdd_scenario_for_teacher
     prepare_vdd_scenario
 
-    @teacher1 = user_with_pseudonym(username: 'teacher1@example.com', active_all: 1)
+    @teacher1 = user_with_pseudonym(username: "teacher1@example.com", active_all: 1)
     @course.enroll_teacher(@teacher1, section: @section_a).accept!
     @course.enroll_teacher(@teacher1, section: @section_b, allow_multiple_enrollments: true).accept!
   end
@@ -250,7 +254,7 @@ module AssignmentOverridesSeleniumHelper
   def prepare_vdd_scenario_for_ta
     prepare_vdd_scenario
 
-    @ta1 = user_with_pseudonym(username: 'ta1@example.com', active_all: 1)
+    @ta1 = user_with_pseudonym(username: "ta1@example.com", active_all: 1)
     @course.enroll_ta(@ta1, section: @section_a).accept!
     @course.enroll_ta(@ta1, section: @section_b, allow_multiple_enrollments: true).accept!
   end
@@ -319,18 +323,18 @@ module AssignmentOverridesSeleniumHelper
     date
   end
 
-  def obtain_date_from_quiz_show_page(row_number, cell_number, load_page=false)
+  def obtain_date_from_quiz_show_page(row_number, cell_number, load_page = false)
     get "/accounts/#{@account.id}/courses/#{@course.id}/quizzes/#{@quiz.id}" if load_page
     f("tr:nth-child(#{row_number}) td:nth-child(#{cell_number}) .screenreader-only")
   end
 
   def validate_quiz_show_page(message)
-    expect(f('#quiz_show')).to include_text("#{message}")
+    expect(f("#quiz_show")).to include_text(message)
   end
 
   def validate_vdd_quiz_tooltip_dates(context_selector, message)
-    driver.mouse.move_to fln('Multiple Dates', f("#{context_selector}"))
-    expect(fj('.ui-tooltip:visible')).to include_text("#{message}")
+    driver.action.move_to(fln("Multiple Dates", f(context_selector.to_s))).perform
+    expect(fj(".ui-tooltip:visible")).to include_text(message.to_s)
   end
 
   def create_assignment_override(assignment, section, due_date)

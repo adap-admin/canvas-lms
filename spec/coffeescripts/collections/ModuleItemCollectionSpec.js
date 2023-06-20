@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import ModuleItemCollection from 'compiled/collections/ModuleItemCollection'
+import ModuleItemCollection from '@canvas/modules/backbone/collections/ModuleItemCollection'
 
 QUnit.module('ModuleItemCollection')
 
@@ -25,7 +25,7 @@ test('generates the correct fetch url', () => {
   const module_id = 10
   const collection = new ModuleItemCollection([], {
     course_id,
-    module_id
+    module_id,
   })
   equal(collection.url(), `/api/v1/courses/${course_id}/modules/${module_id}/items`)
 })

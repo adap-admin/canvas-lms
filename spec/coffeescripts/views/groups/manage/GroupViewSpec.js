@@ -17,12 +17,12 @@
  */
 
 import $ from 'jquery'
-import GroupView from 'compiled/views/groups/manage/GroupView'
-import GroupUsersView from 'compiled/views/groups/manage/GroupUsersView'
-import GroupDetailView from 'compiled/views/groups/manage/GroupDetailView'
-import GroupCollection from 'compiled/collections/GroupCollection'
-import GroupUserCollection from 'compiled/collections/GroupUserCollection'
-import Group from 'compiled/models/Group'
+import GroupView from 'ui/features/manage_groups/backbone/views/GroupView'
+import GroupUsersView from 'ui/features/manage_groups/backbone/views/GroupUsersView'
+import GroupDetailView from 'ui/features/manage_groups/backbone/views/GroupDetailView'
+import GroupCollection from '@canvas/groups/backbone/collections/GroupCollection'
+import GroupUserCollection from '@canvas/groups/backbone/collections/GroupUserCollection'
+import Group from '@canvas/groups/backbone/models/Group'
 import fakeENV from 'helpers/fakeENV'
 import assertions from 'helpers/assertions'
 
@@ -33,23 +33,24 @@ let users = null
 QUnit.module('GroupView', {
   setup() {
     fakeENV.setup()
+    ENV.permissions = {can_add_groups: true}
     group = new Group({
       id: 42,
       name: 'Foo Group',
-      members_count: 7
+      members_count: 7,
     })
     users = new GroupUserCollection(
       [
         {
           id: 1,
           name: 'bob',
-          sortable_name: 'bob'
+          sortable_name: 'bob',
         },
         {
           id: 2,
           name: 'joe',
-          sortable_name: 'joe'
-        }
+          sortable_name: 'joe',
+        },
       ],
       {group}
     )
@@ -59,16 +60,16 @@ QUnit.module('GroupView', {
     group.set('leader', {id: 1})
     const groupUsersView = new GroupUsersView({
       model: group,
-      collection: users
+      collection: users,
     })
     const groupDetailView = new GroupDetailView({
       model: group,
-      users
+      users,
     })
     view = new GroupView({
       groupUsersView,
       groupDetailView,
-      model: group
+      model: group,
     })
     view.render()
     view.$el.appendTo($('#fixtures'))
@@ -77,33 +78,27 @@ QUnit.module('GroupView', {
     fakeENV.teardown()
     view.remove()
     document.getElementById('fixtures').innerHTML = ''
-  }
+  },
 })
 
 test('it should be accessible', assert => {
   const done = assert.async()
   assertions.isAccessible(view, done, {a11yReport: true})
 })
-const assertCollapsed = function(view) {
+const assertCollapsed = function (view) {
   ok(view.$el.hasClass('group-collapsed'), 'expand visible')
   ok(!view.$el.hasClass('group-expanded'), 'collapse hidden')
 }
-const assertExpanded = function(view) {
+const assertExpanded = function (view) {
   ok(!view.$el.hasClass('group-collapsed'), 'expand hidden')
   ok(view.$el.hasClass('group-expanded'), 'collapse visible')
 }
 test('initial state should be collapsed', () => assertCollapsed(view))
 
 test('expand/collpase buttons', () => {
-  view
-    .$('.toggle-group')
-    .eq(0)
-    .click()
+  view.$('.toggle-group').eq(0).click()
   assertExpanded(view)
-  view
-    .$('.toggle-group')
-    .eq(0)
-    .click()
+  view.$('.toggle-group').eq(0).click()
   assertCollapsed(view)
 })
 
@@ -113,7 +108,7 @@ test('renders groupUsers', () => {
   ok(view.$('.set-as-leader').length === 1)
 })
 
-test('removes the group after successful deletion', function() {
+test('removes the group after successful deletion', () => {
   const url = `/api/v1/groups/${view.model.get('id')}`
   const server = sinon.fakeServer.create()
   server.respondWith(url, [200, {'Content-Type': 'application/json'}, JSON.stringify({})])

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,11 +18,10 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/../../views_helper')
+require_relative "../../views_helper"
 
-describe "/shared/errors/500_message" do
-  it "should render" do
+describe "shared/errors/500_message" do
+  it "renders" do
     course_with_student
     view_context
     begin
@@ -32,4 +33,3 @@ describe "/shared/errors/500_message" do
     expect(response).not_to be_nil
   end
 end
-

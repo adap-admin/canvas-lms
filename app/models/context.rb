@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -19,44 +21,43 @@
 # These methods are mixed into the classes that can be considered a "context".
 # See Context::CONTEXT_TYPES below.
 module Context
-
-  CONTEXT_TYPES = [:Account, :Course, :User, :Group].freeze
+  CONTEXT_TYPES = %i[Account Course CourseSection User Group].freeze
 
   ASSET_TYPES = {
-      Announcement: :Announcement,
-      AssessmentQuestion: :AssessmentQuestion,
-      AssessmentQuestionBank: :AssessmentQuestionBank,
-      Assignment: :Assignment,
-      AssignmentGroup: :AssignmentGroup,
-      Attachment: :Attachment,
-      CalendarEvent: :CalendarEvent,
-      Collaboration: :Collaboration,
-      ContentTag: :ContentTag,
-      ContextExternalTool: :ContextExternalTool,
-      ContextModule: :ContextModule,
-      DiscussionEntry: :DiscussionEntry,
-      DiscussionTopic: :DiscussionTopic,
-      Folder: :Folder,
-      LearningOutcome: :LearningOutcome,
-      LearningOutcomeGroup: :LearningOutcomeGroup,
-      MediaObject: :MediaObject,
-      Progress: :Progress,
-      Quiz: :"Quizzes::Quiz",
-      QuizGroup: :"Quizzes::QuizGroup",
-      QuizQuestion: :"Quizzes::QuizQuestion",
-      QuizSubmission: :"Quizzes::QuizSubmission",
-      Rubric: :Rubric,
-      RubricAssociation: :RubricAssociation,
-      Submission: :Submission,
-      WebConference: :WebConference,
-      Wiki: :Wiki,
-      WikiPage: :WikiPage,
-      Eportfolio: :Eportfolio
+    Announcement: :Announcement,
+    AssessmentQuestion: :AssessmentQuestion,
+    AssessmentQuestionBank: :AssessmentQuestionBank,
+    Assignment: :Assignment,
+    AssignmentGroup: :AssignmentGroup,
+    Attachment: :Attachment,
+    CalendarEvent: :CalendarEvent,
+    Collaboration: :Collaboration,
+    ContentTag: :ContentTag,
+    ContextExternalTool: :ContextExternalTool,
+    ContextModule: :ContextModule,
+    DiscussionEntry: :DiscussionEntry,
+    DiscussionTopic: :DiscussionTopic,
+    Folder: :Folder,
+    LearningOutcome: :LearningOutcome,
+    LearningOutcomeGroup: :LearningOutcomeGroup,
+    MediaObject: :MediaObject,
+    Progress: :Progress,
+    Quiz: :"Quizzes::Quiz",
+    QuizGroup: :"Quizzes::QuizGroup",
+    QuizQuestion: :"Quizzes::QuizQuestion",
+    QuizSubmission: :"Quizzes::QuizSubmission",
+    Rubric: :Rubric,
+    RubricAssociation: :RubricAssociation,
+    Submission: :Submission,
+    WebConference: :WebConference,
+    Wiki: :Wiki,
+    WikiPage: :WikiPage,
+    Eportfolio: :Eportfolio
   }.freeze
 
   def clear_cached_short_name
     self.class.connection.after_transaction_commit do
-      Rails.cache.delete(['short_name_lookup', self.asset_string].cache_key)
+      Rails.cache.delete(["short_name_lookup", asset_string].cache_key)
     end
   end
 
@@ -65,50 +66,50 @@ module Context
       user = entry.user || feed.user
       # If already existed and has been updated
       if entry.entry_changed? && entry.asset
-        entry.asset.update_attributes(
-          :title => entry.title,
-          :message => entry.message
+        entry.asset.update(
+          title: entry.title,
+          message: entry.message
         )
       elsif !entry.asset
-        announcement = self.announcements.build(
-          :title => entry.title,
-          :message => entry.message
+        announcement = announcements.build(
+          title: entry.title,
+          message: entry.message
         )
         announcement.external_feed_id = feed.id
         announcement.user = user
         announcement.save
-        entry.update_attributes(:asset => announcement)
+        entry.update(asset: announcement)
       end
     end
   end
 
-  def self.sorted_rubrics(user, context)
-    associations = RubricAssociation.bookmarked.for_context_codes(context.asset_string).preload(:rubric => :context)
-    Canvas::ICU.collate_by(associations.to_a.uniq(&:rubric_id).select{|r| r.rubric }) { |r| r.rubric.title || CanvasSort::Last }
+  def self.sorted_rubrics(context)
+    associations = RubricAssociation.active.bookmarked.for_context_codes(context.asset_string).preload(rubric: :context)
+    Canvas::ICU.collate_by(associations.to_a.uniq(&:rubric_id).select(&:rubric)) { |r| r.rubric.title || CanvasSort::Last }
   end
 
   def rubric_contexts(user)
     associations = []
-    course_ids = [self.id]
-    course_ids = (course_ids + user.participating_instructor_course_with_concluded_ids.map{|id| Shard.relative_id_for(id, user.shard, Shard.current)}).uniq if user
+    course_ids = [id]
+    course_ids = (course_ids + user.participating_instructor_course_with_concluded_ids.map { |id| Shard.relative_id_for(id, user.shard, Shard.current) }).uniq if user
     Shard.partition_by_shard(course_ids) do |sharded_course_ids|
-      context_codes = sharded_course_ids.map{|id| "course_#{id}"}
-      if Shard.current == self.shard
+      context_codes = sharded_course_ids.map { |id| "course_#{id}" }
+      if Shard.current == shard
         context = self
-        while context && context.respond_to?(:account) || context.respond_to?(:parent_account)
+        while context.respond_to?(:account) || context.respond_to?(:parent_account)
           context = context.respond_to?(:account) ? context.account : context.parent_account
           context_codes << context.asset_string if context
         end
       end
-      associations += RubricAssociation.bookmarked.for_context_codes(context_codes).include_rubric.preload(:context).to_a
+      associations += RubricAssociation.active.bookmarked.for_context_codes(context_codes).include_rubric.preload(:context).to_a
     end
 
-    associations = associations.select(&:rubric).uniq{|a| [a.rubric_id, a.context.asset_string] }
-    contexts = associations.group_by{|a| a.context.asset_string}.map do |code, code_associations|
+    associations = associations.select(&:rubric).uniq { |a| [a.rubric_id, a.context.asset_string] }
+    contexts = associations.group_by { |a| a.context.asset_string }.map do |code, code_associations|
       {
-        :rubrics => code_associations.length,
-        :context_code => code,
-        :name => code_associations.first.context_name
+        rubrics: code_associations.length,
+        context_code: code,
+        name: code_associations.first.context_name
       }
     end
     Canvas::ICU.collate_by(contexts) { |r| r[:name] }
@@ -120,27 +121,30 @@ module Context
     return @active_record_types[only_check] if @active_record_types[only_check]
 
     possible_types = {
-      files: -> { self.respond_to?(:attachments) && self.attachments.active.exists? },
-      modules: -> { self.respond_to?(:context_modules) && self.context_modules.active.exists? },
-      quizzes: -> { self.respond_to?(:quizzes) && self.quizzes.active.exists? },
-      assignments: -> { self.respond_to?(:assignments) && self.assignments.active.exists? },
-      pages: -> { self.respond_to?(:wiki_pages) && self.wiki_pages.active.exists? },
-      conferences: -> { self.respond_to?(:web_conferences) && self.web_conferences.active.exists? },
-      announcements: -> { self.respond_to?(:announcements) && self.announcements.active.exists? },
-      outcomes: -> { self.respond_to?(:has_outcomes?) && self.has_outcomes? },
-      discussions: -> { self.respond_to?(:discussion_topics) && self.discussion_topics.only_discussion_topics.except(:preload).exists? }
+      files: -> { respond_to?(:attachments) && attachments.active.exists? },
+      modules: -> { respond_to?(:context_modules) && context_modules.active.exists? },
+      quizzes: lambda do
+                 (respond_to?(:quizzes) && quizzes.active.exists?) ||
+                   (respond_to?(:assignments) && assignments.active.quiz_lti.exists?)
+               end,
+      assignments: -> { respond_to?(:assignments) && assignments.active.exists? },
+      pages: -> { respond_to?(:wiki_pages) && wiki_pages.active.exists? },
+      conferences: -> { respond_to?(:web_conferences) && web_conferences.active.exists? },
+      announcements: -> { respond_to?(:announcements) && announcements.active.exists? },
+      outcomes: -> { respond_to?(:has_outcomes?) && has_outcomes? },
+      discussions: -> { respond_to?(:discussion_topics) && discussion_topics.only_discussion_topics.except(:preload).exists? }
     }
 
     types_to_check = if only_check
-      possible_types.select { |k| only_check.include?(k) }
-    else
-      possible_types
-    end
+                       possible_types.select { |k| only_check.include?(k) }
+                     else
+                       possible_types
+                     end
 
     raise ArgumentError, "only_check is either an empty array or you are aking for invalid types" if types_to_check.empty?
 
-    base_cache_key = 'active_record_types3'
-    cache_key = [base_cache_key, (only_check.present? ? only_check : 'everything'), self].cache_key
+    base_cache_key = "active_record_types3"
+    cache_key = [base_cache_key, (only_check.presence || "everything"), self].cache_key
 
     # if it exists in redis, return that
     if (cached = Rails.cache.read(cache_key))
@@ -148,16 +152,14 @@ module Context
     end
 
     # if we're only asking for a subset but the full set is cached return that, but filtered with just what we want
-    if only_check.present? && (cache_with_everything = Rails.cache.read([base_cache_key, 'everything', self].cache_key))
-      return @active_record_types[only_check] = cache_with_everything.select { |k,_v| only_check.include?(k) }
+    if only_check.present? && (cache_with_everything = Rails.cache.read([base_cache_key, "everything", self].cache_key))
+      return @active_record_types[only_check] = cache_with_everything.select { |k, _v| only_check.include?(k) }
     end
 
     # otherwise compute it and store it in the cache
     value_to_cache = nil
     ActiveRecord::Base.uncached do
-      value_to_cache = types_to_check.each_with_object({}) do |(key, type_to_check), memo|
-        memo[key] = type_to_check.call
-      end
+      value_to_cache = types_to_check.transform_values(&:call)
     end
     Rails.cache.write(cache_key, value_to_cache)
     @active_record_types[only_check] = value_to_cache
@@ -167,8 +169,9 @@ module Context
     false
   end
 
-  def find_asset(asset_string, allowed_types=nil)
+  def find_asset(asset_string, allowed_types = nil)
     return nil unless asset_string
+
     res = Context.find_asset_by_asset_string(asset_string, self, allowed_types)
     res = nil if res.respond_to?(:deleted?) && res.deleted?
     res
@@ -179,105 +182,146 @@ module Context
     ids_by_type = Hash.new([])
     context_types_and_ids.each do |type, id|
       next unless type && CONTEXT_TYPES.include?(type.to_sym)
+
       ids_by_type[type] += [id]
     end
 
     result = {}
     ids_by_type.each do |type, ids|
       klass = Object.const_get(type, false)
-      klass.where(:id => ids).pluck(:id, :name).map {|id, name| result[[type, id]] = name}
+      klass.where(id: ids).pluck(:id, :name).map { |id, name| result[[type, id]] = name }
     end
     result
   end
 
   def self.context_code_for(record)
     raise ArgumentError unless record.respond_to?(:context_type) && record.respond_to?(:context_id)
+
     "#{record.context_type.underscore}_#{record.context_id}"
   end
 
   def self.find_by_asset_string(string)
-    from_context_codes([string]).first
+    ActiveRecord::Base.find_by_asset_string(string, CONTEXT_TYPES.map(&:to_s))
   end
 
-  def self.from_context_codes(context_codes)
-    contexts = {}
-    context_codes.each do |cc|
-      type, _, id = cc.rpartition('_')
-      if CONTEXT_TYPES.include?(type.camelize.to_sym)
-        contexts[type.camelize] = [] unless contexts[type.camelize]
-        contexts[type.camelize] << id
-      end
-    end
-    contexts.reduce([]) do |memo, (context, ids)|
-      memo + context.constantize.where(id: ids)
-    end
+  def self.find_all_by_asset_string(strings)
+    ActiveRecord::Base.find_all_by_asset_string(strings, CONTEXT_TYPES.map(&:to_s))
   end
 
   def self.asset_type_for_string(string)
     ASSET_TYPES[string.to_sym].to_s.constantize if ASSET_TYPES.key?(string.to_sym)
   end
 
-  def self.find_asset_by_asset_string(string, context=nil, allowed_types=nil)
-    opts = string.split("_")
-    id = opts.pop
-    type = opts.join('_').classify
+  def self.find_asset_by_asset_string(string, context = nil, allowed_types = nil)
+    type, id = ActiveRecord::Base.parse_asset_string(string)
     klass = asset_type_for_string(type)
     klass = nil if allowed_types && !allowed_types.include?(klass.to_s.underscore.to_sym)
     return nil unless klass
+
     res = nil
     if context && klass == ContextExternalTool
       res = klass.find_external_tool_by_id(id, context)
-    elsif context && (klass.column_names & ['context_id', 'context_type']).length == 2
-      res = klass.where(context_id: context, context_type: context.class.to_s, id: id).first
+    elsif context && (klass.column_names & ["context_id", "context_type"]).length == 2
+      res = klass.where(context:, id:).first
     else
-      res = klass.where(id: id).first
-      res = nil if context && res && res.respond_to?(:context) && res.context != context
+      res = klass.find_by(id:)
+      res = nil if context && res.respond_to?(:context_id) && res.context_id != context.id
     end
     res
-  rescue => e
+  rescue
+    nil
+  end
+
+  def self.get_front_wiki_page_for_course_from_url(url)
+    params = Rails.application.routes.recognize_path(url)
+    if params[:controller] == "courses" && params[:action] == "show"
+      course = Course.find(params[:id])
+      if course.default_view == "wiki"
+        course.wiki.front_page
+      end
+    end
+  rescue
     nil
   end
 
   def self.find_asset_by_url(url)
     object = nil
-    params = Rails.application.routes.recognize_path(url)
+    uri = URI.parse(url)
+    params = Rails.application.routes.recognize_path(uri.path)
     course = Course.find(params[:course_id]) if params[:course_id]
     group = Group.find(params[:group_id]) if params[:group_id]
     user = User.find(params[:user_id]) if params[:user_id]
     context = course || group || user
+
+    media_obj = MediaObject.where(media_id: params[:media_object_id]).first if params[:media_object_id]
+    context = media_obj.context if media_obj
+
     return nil unless context
+
     case params[:controller]
-    when 'files'
+    when "files"
       rel_path = params[:file_path]
       object = rel_path && Folder.find_attachment_in_context_with_path(course, CGI.unescape(rel_path))
       file_id = params[:file_id] || params[:id]
-      query = URI.parse(url)&.query
-      file_id ||= query && CGI.parse(URI.parse(url)&.query)&.send(:[], "preview")&.first
-      object ||= context.attachments.find_by_id(file_id) # attachments.find_by_id uses the replacement hackery
-    when 'wiki_pages'
+      file_id ||= uri.query && CGI.parse(uri.query).send(:[], "preview")&.first
+      object ||= context.attachments.find_by(id: file_id) # attachments.find_by(id:) uses the replacement hackery
+      full_path = params[:full_path]
+      folder = full_path && Folder.find_by(name: full_path)
+      object ||= folder if folder && folder.context == context
+    when "wiki_pages"
       object = context.wiki.find_page(CGI.unescape(params[:id]), include_deleted: true)
       if !object && params[:id].to_s.include?("+") # maybe it really is a "+"
         object = context.wiki.find_page(CGI.unescape(params[:id].to_s.gsub("+", "%2B")), include_deleted: true)
       end
-    when 'external_tools'
+    when "external_tools"
       if params[:action] == "retrieve"
-        tool_url = CGI.parse(URI.parse(url).query)["url"].first rescue nil
-        object = ContextExternalTool.find_external_tool(tool_url, context) if tool_url
+        query_params = CGI.parse(uri.query)
+        tool_url = query_params["url"]&.first
+        resource_link_lookup_uuid = query_params["resource_link_lookup_uuid"]&.first
+        object = if tool_url
+                   ContextExternalTool.find_external_tool(tool_url, context)
+                 elsif resource_link_lookup_uuid
+                   Lti::ResourceLink.where(
+                     lookup_uuid: resource_link_lookup_uuid,
+                     context:
+                   ).active.take&.current_external_tool(context)
+                 end
       elsif params[:id]
         object = ContextExternalTool.find_external_tool_by_id(params[:id], context)
       end
-    when 'context_modules'
-      if %w(item_redirect item_redirect_mastery_paths choose_mastery_path).include?(params[:action])
-        object = context.context_module_tags.find_by(id: params[:id])
-      else
-        object = context.context_modules.find_by(id: params[:id])
-      end
+    when "context_modules"
+      object = if %w[item_redirect item_redirect_mastery_paths choose_mastery_path].include?(params[:action])
+                 context.context_module_tags.find_by(id: params[:id])
+               else
+                 context.context_modules.find_by(id: params[:id])
+               end
+    when "media_objects"
+      object = media_obj
+    when "context"
+      object = context.users.find(params[:id]) if params[:action] == "roster_user" && params[:id]
     else
-      object = context.try(params[:controller].sub(/^.+\//, ''))&.find_by(id: params[:id])
+      object = context.try(params[:controller].sub(%r{^.+/}, ""))&.find_by(id: params[:id])
     end
     object
-  rescue => e
+  rescue
     nil
+  end
+
+  def self.api_type_name(klass)
+    case klass.to_s
+    when "Announcement"
+      "announcements"
+    when "Attachment"
+      "files"
+    when "ContextModule"
+      "modules"
+    when "ContentTag"
+      "module_items"
+    when "WikiPage"
+      "pages"
+    else
+      klass.table_name
+    end
   end
 
   def self.asset_name(asset)
@@ -285,7 +329,8 @@ module Context
     name ||= asset.title.presence if asset.respond_to?(:title)
     name ||= asset.short_description.presence if asset.respond_to?(:short_description)
     name ||= asset.name if asset.respond_to?(:name)
-    name || ''
+    name ||= asset.asset_name if asset.respond_to?(:asset_name)
+    name || ""
   end
 
   def self.asset_body(asset)
@@ -305,16 +350,16 @@ module Context
     end
   end
 
-  def self.get_account_or_parent_account(context)
+  def self.get_account_or_parent_account_global_id(context)
     case context
     when Account
-      context.root_account? ? context : context.parent_account
+      context.root_account? ? context.global_id : context.global_parent_account_id
     when Course
-      get_account(context.account)
+      context.global_account_id
     when CourseSection
-      get_account(context.course)
+      get_account_or_parent_account_global_id(context.course)
     when Group
-      get_account(context.context)
+      get_account_or_parent_account_global_id(context.context)
     end
   end
 
@@ -335,16 +380,32 @@ module Context
     false
   end
 
-  def nickname_for(_user, fallback = :name)
-    self.send fallback if fallback
+  def nickname_for(_user, fallback = :name, prefer_friendly_name: true)
+    send fallback if fallback
   end
 
-  def self.last_updated_at(klass, ids)
-    raise ArgumentError unless CONTEXT_TYPES.include?(klass.class_name.to_sym)
-    klass.where(id: ids)
-         .where.not(updated_at: nil)
-         .order("updated_at DESC")
-         .limit(1)
-         .pluck(:updated_at)&.first
+  def self.last_updated_at(klasses_to_ids)
+    scopes = []
+
+    klasses_to_ids.each do |(klass, ids)|
+      next if ids.empty?
+
+      scopes << klass
+                .shard(Shard.current) # prevent it switching shards on us
+                .where(id: ids)
+                .order(updated_at: :desc)
+                .select(:updated_at)
+                .limit(1)
+    end
+
+    return nil if scopes.empty?
+
+    final_scope = scopes.first if scopes.length == 1
+    final_scope ||= scopes.first.union(*scopes[1..], from: true)
+    final_scope.order(updated_at: :desc).limit(1).pluck(:updated_at)&.first
+  end
+
+  def resolved_root_account_id
+    root_account_id if respond_to? :root_account_id
   end
 end

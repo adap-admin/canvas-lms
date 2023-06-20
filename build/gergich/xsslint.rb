@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -21,8 +23,8 @@ class Gergich::XSSLint
     # e.g. alerts.js:110: possibly XSS-able argument to `append()`
     pattern = /^([^:\n]+):(\d+): (.*)$/
 
-    output.scan(pattern).map { |file, line, error|
+    output.scan(pattern).filter_map do |file, line, error|
       { path: file, message: "[xsslint] #{error}", position: line.to_i, severity: "error" }
-    }.compact
+    end
   end
 end

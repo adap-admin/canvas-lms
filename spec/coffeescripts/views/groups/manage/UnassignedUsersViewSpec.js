@@ -17,12 +17,12 @@
  */
 
 import $ from 'jquery'
-import UnassignedUsersView from 'compiled/views/groups/manage/UnassignedUsersView'
-import AssignToGroupMenu from 'compiled/views/groups/manage/AssignToGroupMenu'
-import GroupCollection from 'compiled/collections/GroupCollection'
-import UnassignedGroupUserCollection from 'compiled/collections/UnassignedGroupUserCollection'
-import Group from 'compiled/models/Group'
-import GroupCategory from 'compiled/models/GroupCategory'
+import UnassignedUsersView from 'ui/features/manage_groups/backbone/views/UnassignedUsersView'
+import AssignToGroupMenu from 'ui/features/manage_groups/backbone/views/AssignToGroupMenu'
+import GroupCollection from '@canvas/groups/backbone/collections/GroupCollection'
+import UnassignedGroupUserCollection from '@canvas/groups/backbone/collections/UnassignedGroupUserCollection'
+import Group from '@canvas/groups/backbone/models/Group'
+import GroupCategory from '@canvas/groups/backbone/models/GroupCategory'
 import fakeENV from 'helpers/fakeENV'
 import 'helpers/jquery.simulate'
 
@@ -38,14 +38,17 @@ QUnit.module('UnassignedUsersView', {
     clock = sinon.useFakeTimers()
     groups = new GroupCollection([new Group({name: 'a group'}), new Group({name: 'another group'})])
     users = new UnassignedGroupUserCollection(
-      [{id: 1, name: 'bob', sortable_name: 'bob'}, {id: 2, name: 'joe', sortable_name: 'joe'}],
+      [
+        {id: 1, name: 'bob', sortable_name: 'bob'},
+        {id: 2, name: 'joe', sortable_name: 'joe'},
+      ],
       {category: new GroupCategory()}
     )
     const menu = new AssignToGroupMenu({collection: groups})
     view = new UnassignedUsersView({
       collection: users,
       groupsCollection: groups,
-      assignToGroupMenu: menu
+      assignToGroupMenu: menu,
     })
     view.render()
     $('#fixtures')
@@ -59,14 +62,11 @@ QUnit.module('UnassignedUsersView', {
     clock.restore()
     view.remove()
     $('#fixtures').empty()
-  }
+  },
 })
 
-test('opens the assignToGroupMenu', function() {
-  view
-    .$('.assign-to-group')
-    .eq(0)
-    .simulate('click')
+test('opens the assignToGroupMenu', () => {
+  view.$('.assign-to-group').eq(0).simulate('click')
   clock.tick(100)
   const $menu = $('.assign-to-group-menu').filter(':visible')
   equal($menu.length, 1)

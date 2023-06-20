@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -86,7 +88,7 @@ module GreatExpectations
       GreatExpectations.expectation_checked(self, matcher)
       super
     end
-    alias to_not not_to
+    alias_method :to_not, :not_to
   end
 
   class << self
@@ -153,11 +155,13 @@ module GreatExpectations
 
     def assert_not_early!
       return if current_example
+
       generate_error config[:EARLY], "Don't `expect` outside of the spec itself. `before`/`after` should only be used for setup/teardown"
     end
 
     def assert_not_unchecked!
       return if unchecked_expectations.empty?
+
       generate_error config[:UNCHECKED], "This spec has unchecked expectations, i.e. you forgot to call `to` or `not_to`", current_example.location
     end
 
@@ -182,8 +186,8 @@ module GreatExpectations
       if action == :raise
         raise Error.for(message, location)
       else
-        $stderr.puts "\e[31mWarning: #{message}"
-        $stderr.puts "See: " + (location || CallStackUtils.best_line_for(caller).join("\n")) + "\e[0m"
+        warn "\e[31mWarning: #{message}"
+        warn "See: " + (location || CallStackUtils.best_line_for(caller).join("\n")) + "\e[0m"
       end
     end
   end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -21,12 +23,16 @@ require "spec_helper"
 describe Messages::AssignmentSubmittedLate::TwitterPresenter do
   let(:course) { course_model(name: "MATH-101") }
   let(:assignment) { course.assignments.create!(name: "Introductions", due_at: 1.day.ago) }
-  let(:teacher) { course_with_teacher(course: course, active_all: true).user }
+  let(:teacher) { course_with_teacher(course:, active_all: true).user }
 
   let(:student) do
-    course_with_user("StudentEnrollment", course: course, name: "Adam Jones", active_all: true).user
+    course_with_user("StudentEnrollment", course:, name: "Adam Jones", active_all: true).user
   end
-  let(:submission) { assignment.submit_homework(student) }
+  let(:submission) do
+    @submission = assignment.submit_homework(student)
+    assignment.grade_student(student, grade: 5, grader: teacher)
+    @submission.reload
+  end
 
   describe "Presenter instance" do
     let(:message) { Message.new(context: submission, user: teacher) }
@@ -45,7 +51,7 @@ describe Messages::AssignmentSubmittedLate::TwitterPresenter do
     end
 
     context "when the assignment is anonymously graded" do
-      before(:each) do
+      before do
         assignment.update!(anonymous_grading: true)
       end
 
@@ -62,7 +68,8 @@ describe Messages::AssignmentSubmittedLate::TwitterPresenter do
       end
 
       context "when grades have been posted" do
-        before(:each) do
+        before do
+          submission
           assignment.unmute!
         end
 
@@ -97,7 +104,7 @@ describe Messages::AssignmentSubmittedLate::TwitterPresenter do
     end
 
     context "when the assignment is anonymously graded" do
-      before(:each) do
+      before do
         assignment.update!(anonymous_grading: true)
       end
 
@@ -112,7 +119,8 @@ describe Messages::AssignmentSubmittedLate::TwitterPresenter do
       end
 
       context "when grades have been posted" do
-        before(:each) do
+        before do
+          submission
           assignment.unmute!
         end
 

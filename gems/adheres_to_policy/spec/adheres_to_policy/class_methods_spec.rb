@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -16,40 +18,40 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'spec_helper'
+require "spec_helper"
 
 describe AdheresToPolicy::ClassMethods do
-  before(:each) do
+  before do
     @some_class = Class.new do
       extend AdheresToPolicy::ClassMethods
     end
   end
 
-  it "should filter policy_block through a block filter with set_policy" do
+  it "filters policy_block through a block filter with set_policy" do
     expect(@some_class).to respond_to(:set_policy)
     expect { @some_class.set_policy(1) }.to raise_error(ArgumentError)
-    b = lambda { 1 }
+    b = -> { 1 }
     expect { @some_class.set_policy(&b) }.not_to raise_error
   end
 
-  it "should use set_permissions as set_policy" do
+  it "uses set_permissions as set_policy" do
     expect(@some_class).to respond_to(:set_permissions)
     expect { @some_class.set_permissions(1) }.to raise_error(ArgumentError)
-    b = lambda { 1 }
+    b = -> { 1 }
     expect { @some_class.set_permissions(&b) }.not_to raise_error
   end
 
-  it "should provide a Policy instance through policy" do
+  it "provides a Policy instance through policy" do
     @some_class.set_policy { 1 }
     expect(@some_class.policy).to be_is_a(AdheresToPolicy::Policy)
   end
 
-  it "should continue to use the same Policy instance (an important check, since this is also a constructor)" do
+  it "continues to use the same Policy instance (an important check, since this is also a constructor)" do
     @some_class.set_policy { 1 }
     expect(@some_class.policy).to eql(@some_class.policy)
   end
 
-  it "should apply all given policy blocks to the Policy instance" do
+  it "applies all given policy blocks to the Policy instance" do
     @some_class.set_policy do
       given { |_| true }
       can :read
@@ -61,7 +63,7 @@ describe AdheresToPolicy::ClassMethods do
     end
 
     some_class = @some_class.new
-    expect(some_class.grants_right?(nil, :read)).to eq true
-    expect(some_class.grants_right?(nil, :write)).to eq true
+    expect(some_class.grants_right?(nil, :read)).to be true
+    expect(some_class.grants_right?(nil, :write)).to be true
   end
 end

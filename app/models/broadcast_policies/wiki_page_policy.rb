@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -28,7 +30,8 @@ module BroadcastPolicies
         return false if wiki_page.context.concluded?
         return false if wiki_page.context.respond_to?(:unpublished?) && wiki_page.wiki.context.unpublished?
       end
-      return false unless created_before?(1.minutes.ago)
+      return false unless created_before?(1.minute.ago)
+
       changed_while_published? || wiki_page.changed_state(:active)
     end
 

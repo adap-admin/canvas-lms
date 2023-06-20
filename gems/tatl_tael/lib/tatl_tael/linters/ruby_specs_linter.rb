@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module TatlTael
   module Linters
     # TODO: inherit from SimpleLinter
@@ -15,6 +17,7 @@ module TatlTael
 
       def comment_msg
         return unless missing_ruby_specs?
+
         if selenium_specs?
           config[:messages][:ruby_changes_with_only_selenium]
         else
@@ -36,7 +39,7 @@ module TatlTael
 
       def ruby_specs?
         changes_exist?(include: config[:globs][:ruby_spec],
-                       whitelist: config[:globs][:selenium_spec])
+                       allowlist: config[:globs][:selenium_spec])
       end
 
       def selenium_specs?

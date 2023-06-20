@@ -17,31 +17,31 @@
  */
 
 import $ from 'jquery'
-import GroupCategoriesView from 'compiled/views/groups/manage/GroupCategoriesView'
-import GroupCategoryCollection from 'compiled/collections/GroupCategoryCollection'
-import GroupCategory from 'compiled/models/GroupCategory'
+import GroupCategoriesView from 'ui/features/manage_groups/backbone/views/GroupCategoriesView'
+import GroupCategoryCollection from '@canvas/groups/backbone/collections/GroupCategoryCollection'
+import GroupCategory from '@canvas/groups/backbone/models/GroupCategory'
 import fakeENV from 'helpers/fakeENV'
 
 let clock = null
 let view = null
 let categories = null
 let wrapper = null
-const sanbox = null
 
 QUnit.module('GroupCategoriesView', {
   setup() {
     fakeENV.setup()
     ENV.group_categories_url = '/api/v1/courses/1/group_categories'
+    ENV.permissions = {can_add_groups: true}
     clock = sinon.useFakeTimers()
     categories = new GroupCategoryCollection([
       {
         id: 1,
-        name: 'group set 1'
+        name: 'group set 1',
       },
       {
         id: 2,
-        name: 'group set 2'
-      }
+        name: 'group set 2',
+      },
     ])
     sandbox.stub(categories, 'fetch').returns([])
     view = new GroupCategoriesView({collection: categories})
@@ -55,7 +55,7 @@ QUnit.module('GroupCategoriesView', {
     clock.restore()
     view.remove()
     wrapper.innerHTML = ''
-  }
+  },
 })
 
 test('render tab and panel elements', () => {
@@ -70,7 +70,7 @@ test('adding new GroupCategory should display new tab and panel', () => {
   categories.add(
     new GroupCategory({
       id: 3,
-      name: 'Newly Added'
+      name: 'Newly Added',
     })
   )
   equal(view.$el.find('.collectionViewItems > li').length, 3)

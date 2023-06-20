@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -28,9 +30,10 @@ module CC::Exporter::Epub
     end
 
     def filter_content_to_module(module_id)
-      current_mod = cartridge_json[:modules].find{|mod| mod[:identifier] == module_id}
+      current_mod = cartridge_json[:modules].find { |mod| mod[:identifier] == module_id }
       current_mod[:items].each do |item|
         next unless item
+
         merge_with_original_item_data!(item)
 
         if current_mod[:locked]
@@ -44,16 +47,13 @@ module CC::Exporter::Epub
     end
 
     private
+
     def module_ids
-      cartridge_json[:modules].map{|mod| mod[:identifier]}
+      cartridge_json[:modules].pluck(:identifier)
     end
 
     def module_item_ids
-      @_module_item_ids ||= cartridge_json[:modules].map do |mod|
-        mod[:items]
-      end.flatten.map do |module_item|
-        module_item[:linked_resource_id]
-      end.uniq
+      @_module_item_ids ||= cartridge_json[:modules].pluck(:items).flatten.pluck(:linked_resource_id).uniq
     end
 
     def merge_with_original_item_data!(module_item)
@@ -62,7 +62,7 @@ module CC::Exporter::Epub
       original_item_data = get_item(resource_type, identifier)
 
       module_item.reverse_merge!(original_item_data)
-      update_item(resource_type, identifier, {href: module_item[:href]})
+      update_item(resource_type, identifier, { href: module_item[:href] })
     end
   end
 end

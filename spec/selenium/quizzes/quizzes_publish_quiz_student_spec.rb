@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -15,16 +17,16 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_relative '../common'
-require_relative '../helpers/quizzes_common'
+require_relative "../common"
+require_relative "../helpers/quizzes_common"
 
-describe 'when a quiz is published' do
+describe "when a quiz is published" do
   include_context "in-process server selenium tests"
 
-  context 'as a student' do
+  context "as a student" do
     include QuizzesCommon
 
-    before(:each) do
+    before do
       course_with_student_logged_in
       create_quiz_with_due_date(
         course: @course,
@@ -32,12 +34,12 @@ describe 'when a quiz is published' do
       )
     end
 
-    context 'when on the course home page' do
-      before(:each) { get "/courses/#{@course.id}" }
+    context "when on the course home page" do
+      before { get "/courses/#{@course.id}" }
 
-      it 'To Do List includes published, untaken quizzes that are due soon for students', priority: "1", test_id: 140613 do
+      it "To Do List includes published, untaken quizzes that are due soon for students", priority: "1" do
         wait_for_ajaximations
-        expect(f('#planner-todosidebar-item-list')).to include_text 'Test Quiz'
+        expect(f("#planner-todosidebar-item-list")).to include_text "Test Quiz"
       end
     end
   end

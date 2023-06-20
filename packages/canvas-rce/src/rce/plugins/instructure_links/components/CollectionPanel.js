@@ -27,18 +27,18 @@ export default function CollectionPanel(props) {
     collection: props.collection,
     onToggle: props.onChangeAccordion,
     expanded: props.selectedAccordionIndex === props.collection,
-    label: props.label
+    label: props.label,
   }
 
   function fetchInitialPage() {
-    if(props.fetchInitialPage) {
-      props.fetchInitialPage(props.collection)
+    if (props.fetchInitialPage) {
+      props.fetchInitialPage(props.collection, props.searchString)
     }
   }
 
   function fetchNextPage() {
     if (props.fetchNextPage) {
-      props.fetchNextPage(props.collection)
+      props.fetchNextPage(props.collection, props.searchString)
     }
   }
   return (
@@ -51,15 +51,20 @@ export default function CollectionPanel(props) {
           collection={props.collections[props.collection]}
           onLinkClick={props.onLinkClick}
           suppressRenderEmpty={props.suppressRenderEmpty}
+          contextType={props.contextType}
+          searchString={props.searchString}
+          editing={props.editing}
+          onEditClick={props.onEditClick}
         />
       </AccordionSection>
     </div>
-  );
+  )
 }
 
 CollectionPanel.propTypes = {
   contextId: string.isRequired,
   contextType: string.isRequired,
+  searchString: string,
   collections: collectionsShape.isRequired,
   collection: string.isRequired,
   label: string.isRequired,
@@ -71,10 +76,13 @@ CollectionPanel.propTypes = {
   newPageLinkExpanded: bool,
   toggleNewPageForm: func,
   onChangeAccordion: func.isRequired,
-  selectedAccordionIndex: string
-};
+  selectedAccordionIndex: string,
+  editing: bool,
+  onEditClick: func,
+}
 
 CollectionPanel.defaultProps = {
   renderNewPageLink: false,
-  suppressRenderEmpty: false
-};
+  suppressRenderEmpty: false,
+  editing: false,
+}

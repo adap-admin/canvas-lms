@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -16,9 +18,9 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'aws-sdk-s3'
-require 'aws-sdk-sqs'
-require_relative 'configurable_timeout'
+require "aws-sdk-s3"
+require "aws-sdk-sqs"
+require_relative "configurable_timeout"
 
 module IncomingMailProcessor
   class SqsMailbox
@@ -26,26 +28,22 @@ module IncomingMailProcessor
 
     attr_reader :config
 
-    POLL_PARAMS = %i{idle_timeout wait_time_seconds visibility_timeout}.freeze
+    POLL_PARAMS = %i[idle_timeout wait_time_seconds visibility_timeout].freeze
 
-    def initialize(opts={})
+    def initialize(opts = {})
       @config = opts
       wrap_with_timeout(self, [:connect, :move_message])
     end
 
     def connect
-      @sqs = Aws::SQS::Client.new(config.slice(:access_key_id,
-                                               :secret_access_key,
-                                               :endpoint,
-                                               :region))
+      @sqs = Aws::SQS::Client.new(config.slice(:credentials, :endpoint, :region))
       @queue_url = @sqs.get_queue_url(queue_name: config[:incoming_mail_queue_name]).queue_url
       @incoming_mail_queue = Aws::SQS::QueuePoller.new(@queue_url, client: @sqs)
     end
 
-    def disconnect
-    end
+    def disconnect; end
 
-    def each_message(opts={})
+    def each_message(*)
       start_time = Time.now
       iteration_high_water = config[:iteration_high_water] || 300
       @incoming_mail_queue.before_request do |_stats|
@@ -78,18 +76,18 @@ module IncomingMailProcessor
     def unprocessed_message_count
       connect
       @sqs.get_queue_attributes(attribute_names: ["ApproximateNumberOfMessages"],
-                                queue_url: @queue_url).
-          attributes["ApproximateNumberOfMessages"].to_i
+                                queue_url: @queue_url)
+          .attributes["ApproximateNumberOfMessages"].to_i
     end
 
     private
 
     def raw_contents(msg)
       sqs_body = JSON.parse(msg.body)
-      sns_body = JSON.parse(sqs_body['Message'])
-      key = sns_body['mail']['messageId']
-      s3 = Aws::S3::Resource.new(access_key_id: config[:access_key_id], secret_access_key: config[:secret_access_key],
-        region: config[:region] || 'us-east-1')
+      sns_body = JSON.parse(sqs_body["Message"])
+      key = sns_body["mail"]["messageId"]
+      s3 = Aws::S3::Resource.new(credentials: config[:credentials],
+                                 region: config[:region] || "us-east-1")
       obj = s3.bucket(config[:incoming_mail_bucket]).object(key)
       obj.get.body.read
     end

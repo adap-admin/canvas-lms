@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -19,8 +21,10 @@
 module GroupsHelper
   def group_avatar_url(group)
     attachment = group.avatar_attachment
-    attachment ?
-      thumbnail_image_url(attachment) :
+    if attachment
+      thumbnail_image_url(attachment)
+    else
       "/images/group-placeholder.png"
+    end
   end
 end

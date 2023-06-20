@@ -1,7 +1,5 @@
-source 'https://rubygems.org'
+# frozen_string_literal: true
 
-gem 'simplecov', '0.14.1', :require => false
-
-gem 'byebug', require: false
+source "https://rubygems.org"
 
 gemspec

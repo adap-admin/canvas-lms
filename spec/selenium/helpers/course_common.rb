@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -15,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require File.expand_path(File.dirname(__FILE__) + '/../common')
+require_relative "../common"
 
 module CourseCommon
   # for helper methods than can be used throughout the entire course.
@@ -25,10 +27,10 @@ module CourseCommon
   # feel free to note any other uses.
   def delete_via_gear_menu(num = 0)
     # Clicks the gear menu for announcement num
-    ff('.al-trigger-gray')[num].click
+    ff(".al-trigger-gray")[num].click
     wait_for_ajaximations
     # Clicks delete menu item
-    f('.icon-trash.ui-corner-all').click
+    f(".icon-trash.ui-corner-all").click
     driver.switch_to.alert.accept
     wait_for_animations
   end

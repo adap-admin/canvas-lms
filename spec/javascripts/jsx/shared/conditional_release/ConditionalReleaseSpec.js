@@ -21,7 +21,7 @@ import React from 'react'
 import ReactDOM from 'react-dom'
 import TestUtils from 'react-dom/test-utils'
 import $ from 'jquery'
-import ConditionalRelease from 'jsx/shared/conditional_release/ConditionalRelease'
+import ConditionalRelease from '@canvas/conditional-release-editor'
 
 let editor = null
 class ConditionalReleaseEditor {
@@ -32,7 +32,7 @@ class ConditionalReleaseEditor {
       saveRule: sinon.stub(),
       getErrors: sinon.stub(),
       focusOnError: sinon.stub(),
-      env
+      env,
     }
     return editor
   }
@@ -44,7 +44,7 @@ const createComponent = submitCallback => {
   component = TestUtils.renderIntoDocument(
     <ConditionalRelease.Editor env={assignmentEnv} type="foo" />
   )
-  component.createEditor()
+  component.createNativeEditor()
 }
 
 const makePromise = () => {
@@ -55,9 +55,9 @@ const makePromise = () => {
 }
 
 let ajax = null
-const assignmentEnv = {assignment: {id: 1}, editor_url: 'editorurl', jwt: 'foo'}
-const noAssignmentEnv = {edit_rule_url: 'about:blank', jwt: 'foo'}
-const assignmentNoIdEnv = {assignment: {foo: 'bar'}, edit_rule_url: 'about:blank', jwt: 'foo'}
+const assignmentEnv = {assignment: {id: 1}, course_id: 1}
+const noAssignmentEnv = {edit_rule_url: 'about:blank'}
+const assignmentNoIdEnv = {assignment: {foo: 'bar'}, course_id: 1}
 
 QUnit.module('Conditional Release component', {
   setup: () => {
@@ -75,12 +75,7 @@ QUnit.module('Conditional Release component', {
     component = null
     editor = null
     ajax.restore()
-  }
-})
-
-test('it loads a cyoe editor on mount', () => {
-  ok(ajax.calledOnce)
-  ok(ajax.calledWithMatch({url: 'editorurl'}))
+  },
 })
 
 test('it creates a cyoe editor', () => {
@@ -96,7 +91,7 @@ test('it transforms validations', () => {
   editor.getErrors.returns([
     {index: 0, error: 'foo bar'},
     {index: 0, error: 'baz bat'},
-    {index: 1, error: 'foo baz'}
+    {index: 1, error: 'foo baz'},
   ])
   const transformed = component.validateBeforeSave()
   deepEqual(transformed, [{message: 'foo bar'}, {message: 'baz bat'}, {message: 'foo baz'}])
@@ -148,7 +143,7 @@ test('it times out', assert => {
 
 test('it updates assignments', assert => {
   component.updateAssignment({
-    points_possible: 100
+    points_possible: 100,
   })
   ok(editor.updateAssignment.calledWithMatch({points_possible: 100}))
 })

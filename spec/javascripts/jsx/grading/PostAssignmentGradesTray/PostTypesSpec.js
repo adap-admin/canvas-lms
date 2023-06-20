@@ -19,25 +19,25 @@
 import React from 'react'
 import ReactDOM from 'react-dom'
 
-import PostTypes from 'jsx/grading/PostAssignmentGradesTray/PostTypes'
+import PostTypes from '@canvas/post-assignment-grades-tray/react/PostTypes'
 
 QUnit.module('PostAssignmentGradesTray PostTypes', suiteHooks => {
   let $container
   let context
 
   function getLabel(text) {
-    return [...$container.querySelectorAll('label')].find($label =>
-      $label.textContent === text
-    )
+    return [...$container.querySelectorAll('label')].find($label => $label.textContent === text)
   }
 
   function getGradedPostType() {
-    const labelText = 'GradedGrades will be made visible to students with graded submissions'
+    const labelText =
+      'GradedStudents who have received a grade or a submission comment will be able to see their grade and/or submission comments.'
     return document.getElementById(getLabel(labelText).htmlFor)
   }
 
   function getEveryonePostType() {
-    const labelText = 'EveryoneGrades will be made visible to all students'
+    const labelText =
+      'EveryoneAll students will be able to see their grade and/or submission comments.'
     return document.getElementById(getLabel(labelText).htmlFor)
   }
 
@@ -57,7 +57,7 @@ QUnit.module('PostAssignmentGradesTray PostTypes', suiteHooks => {
       anonymousGrading: false,
       defaultValue: 'everyone',
       disabled: false,
-      postTypeChanged: () => {}
+      postTypeChanged: () => {},
     }
   })
 
@@ -68,13 +68,15 @@ QUnit.module('PostAssignmentGradesTray PostTypes', suiteHooks => {
 
   test('"Everyone" type includes description"', () => {
     mountComponent()
-    const labelText = 'EveryoneGrades will be made visible to all students'
+    const labelText =
+      'EveryoneAll students will be able to see their grade and/or submission comments.'
     ok(getLabel(labelText))
   })
 
   test('"Graded" type includes description"', () => {
     mountComponent()
-    const labelText = 'GradedGrades will be made visible to students with graded submissions'
+    const labelText =
+      'GradedStudents who have received a grade or a submission comment will be able to see their grade and/or submission comments.'
     ok(getLabel(labelText))
   })
 
@@ -110,13 +112,19 @@ QUnit.module('PostAssignmentGradesTray PostTypes', suiteHooks => {
   QUnit.module('"disabled" prop', () => {
     test('inputs are enabled when false', () => {
       mountComponent()
-      strictEqual(getPostTypeInputs().every($input => !$input.disabled), true)
+      strictEqual(
+        getPostTypeInputs().every($input => !$input.disabled),
+        true
+      )
     })
 
     test('inputs are disabled when true', () => {
       context.disabled = true
       mountComponent()
-      strictEqual(getPostTypeInputs().every($input => $input.disabled), true)
+      strictEqual(
+        getPostTypeInputs().every($input => $input.disabled),
+        true
+      )
     })
   })
 })

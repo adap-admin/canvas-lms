@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -18,7 +20,13 @@
 
 class HostUrl
   class << self
-    attr_accessor :outgoing_email_address, :outgoing_email_domain, :outgoing_email_default_name
+    attr_accessor :outgoing_email_domain
+    attr_writer :outgoing_email_address, :outgoing_email_default_name
+
+    # See ActionDispatch::HostAuthorization; HostUrl is added as an object to config.hosts
+    def ===(host)
+      host == default_host || host == file_host(Account.default)
+    end
 
     @@default_host = nil
     @@file_host = nil
@@ -30,7 +38,7 @@ class HostUrl
     end
 
     def domain_config
-      if !@@domain_config
+      unless @@domain_config
         @@domain_config = ConfigFile.load("domain")
         @@domain_config ||= {}
       end
@@ -39,14 +47,14 @@ class HostUrl
 
     # returns "http" or "https" depending on whether this instance of canvas runs over ssl
     def protocol
-      if !@@protocol
-        if domain_config.key?('ssl')
-          is_secure = domain_config['ssl']
-        elsif Attachment.file_store_config.key?('secure')
-          is_secure = Attachment.file_store_config['secure']
-        else
-          is_secure = Rails.env.production?
-        end
+      unless @@protocol
+        is_secure = if domain_config.key?("ssl")
+                      domain_config["ssl"]
+                    elsif Attachment.file_store_config.key?("secure")
+                      Attachment.file_store_config["secure"]
+                    else
+                      Rails.env.production?
+                    end
 
         @@protocol = is_secure ? "https" : "http"
       end
@@ -54,27 +62,28 @@ class HostUrl
       @@protocol
     end
 
-    def context_host(context=nil, current_host=nil)
+    def context_host(_context = nil, _current_host = nil)
       default_host
     end
 
-    def context_hosts(context=nil, current_host=nil)
+    def context_hosts(context = nil, current_host = nil)
       Array(context_host(context, current_host))
     end
 
     def default_host
-      if !@@default_host
-        @@default_host = domain_config[:domain] if domain_config.has_key?(:domain)
+      if !@@default_host && domain_config.key?(:domain)
+        @@default_host = domain_config[:domain]
       end
       res = @@default_host
-      res ||= ENV['RAILS_HOST_WITH_PORT']
+      res ||= ENV["RAILS_HOST_WITH_PORT"]
       res
     end
-    
-    def file_host_with_shard(account, current_host = nil)
+
+    def file_host_with_shard(account, _current_host = nil)
       return [@@file_host, Shard.default] if @@file_host
+
       res = nil
-      res = @@file_host = domain_config[:files_domain] if domain_config.has_key?(:files_domain)
+      res = @@file_host = domain_config[:files_domain] if domain_config.key?(:files_domain)
       Rails.logger.warn("No separate files host specified for account id #{account.id}.  This is a potential security risk.") unless res || !Rails.env.production?
       res ||= @@file_host = default_host
       [res, Shard.default]
@@ -87,12 +96,12 @@ class HostUrl
     def cdn_host
       # by default only set it for development. useful so that gravatar can
       # proxy our fallback urls
-      host = ENV['CANVAS_CDN_HOST']
+      host = ENV["CANVAS_CDN_HOST"]
       host ||= "canvas.instructure.com" if Rails.env.development?
       host
     end
 
-    def outgoing_email_address(preferred_user="notifications")
+    def outgoing_email_address(preferred_user = "notifications")
       @outgoing_email_address.presence || "#{preferred_user}@#{outgoing_email_domain}"
     end
 
@@ -107,7 +116,7 @@ class HostUrl
     def default_host=(val)
       @@default_host = val
     end
-    
+
     def is_file_host?(domain)
       safer_host = file_host(Account.default)
       safer_host != default_host && domain == safer_host

@@ -17,8 +17,8 @@
  */
 
 import $ from 'jquery'
-import Backbone from 'Backbone'
-import CollectionView from 'compiled/views/CollectionView'
+import Backbone from '@canvas/backbone'
+import CollectionView from '@canvas/backbone-collection-view'
 import fakeENV from 'helpers/fakeENV'
 
 let collection = null
@@ -28,6 +28,7 @@ class Collection extends Backbone.Collection {
   static initClass() {
     this.prototype.model = Backbone.Model
   }
+
   comparator(a, b) {
     if (a.get('id') < b.get('id')) {
       return 1
@@ -42,9 +43,11 @@ class ItemView extends Backbone.View {
   static initClass() {
     this.prototype.tagName = 'li'
   }
+
   template({name}) {
     return name
   }
+
   remove() {
     super.remove(...arguments)
     if (this.constructor['testing removed'] == null) {
@@ -58,13 +61,16 @@ ItemView.initClass()
 QUnit.module('CollectionView', {
   setup() {
     fakeENV.setup()
-    collection = new Collection([{name: 'Jon', id: 24}, {name: 'Ryan', id: 56}])
+    collection = new Collection([
+      {name: 'Jon', id: 24},
+      {name: 'Ryan', id: 56},
+    ])
     view = new CollectionView({
       collection,
       emptyMessage() {
         return 'No Results'
       },
-      itemView: ItemView
+      itemView: ItemView,
     })
     view.$el.appendTo($('#fixtures'))
     view.render()
@@ -73,14 +79,16 @@ QUnit.module('CollectionView', {
     fakeENV.teardown()
     ItemView['testing removed'] = 0
     view.remove()
-  }
+  },
 })
 
 // asserts match and order of rendered items
 function assertRenderedItems(names = []) {
   const items = view.$list.children()
   equal(items.length, names.length, 'items length matches')
-  const joinedItems = Array.from(items).map(el => el.innerHTML).join(' ')
+  const joinedItems = Array.from(items)
+    .map(el => el.innerHTML)
+    .join(' ')
   const joinedNames = names.join(' ')
   const joinedModels = collection.map(item => item.get('name')).join(' ')
   equal(joinedModels, joinedNames, 'collection order matches')

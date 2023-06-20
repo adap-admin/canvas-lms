@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -45,9 +47,9 @@ class MustViewModuleProgressor
         if (progression = mod.find_or_create_progression(user)&.evaluate)
           { status: progression.workflow_state }
         elsif mod.grants_right?(user, :read)
-          { status: 'unlocked' }
+          { status: "unlocked" }
         else
-          { status: 'locked' }
+          { status: "locked" }
         end
       progress[mod.id][:items] = items_current_progress(mod, progression)
     end
@@ -78,14 +80,16 @@ class MustViewModuleProgressor
     content = item.content
     return true if content.respond_to?(:locked_for?) && content.locked_for?(user, deep_check_if_needed: true)
     return true unless item.context_module.completion_requirement_for(:read, item)
+
     false
   end
 
   def progress_random_access_module(mod)
     items = mod.content_tags
     items.each do |item|
-       next if random_access_should_skip?(item)
-       progress_item(item)
+      next if random_access_should_skip?(item)
+
+      progress_item(item)
     end
   end
 
@@ -93,6 +97,7 @@ class MustViewModuleProgressor
     mod.content_tags.each do |item|
       next if always_skippable?(item)
       break if sequential_access_should_stop?(item)
+
       progress_item(item)
     end
   end
@@ -108,5 +113,4 @@ class MustViewModuleProgressor
     end
     progress
   end
-
 end

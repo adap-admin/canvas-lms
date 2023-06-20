@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -18,13 +20,14 @@
 
 module Courses
   module ItemVisibilityHelper
-    ITEM_TYPES = [:assignment, :discussion, :page, :quiz].freeze
+    ITEM_TYPES = %i[assignment discussion page quiz].freeze
 
     def visible_item_ids_for_users(item_type, user_ids)
       # return all the item ids that are visible to _any_ of the users
       raise "unknown item type" unless ITEM_TYPES.include?(item_type)
+
       cache_visibilities_for_users(item_type, user_ids)
-      user_ids.flat_map{|user_id| @cached_visibilities[item_type][user_id]}.uniq
+      user_ids.flat_map { |user_id| @cached_visibilities[item_type][user_id] }.uniq
     end
 
     def cache_item_visibilities_for_user_ids(user_ids)
@@ -52,13 +55,13 @@ module Courses
     end
 
     def get_visibilities_for_user_ids(item_type, user_ids)
-      Shackles.activate(:slave) do
-        opts = {user_id: user_ids, course_id: [self.id]}
+      GuardRail.activate(:secondary) do
+        opts = { user_id: user_ids, course_id: [id] }
         case item_type
         when :assignment
           AssignmentStudentVisibility.visible_assignment_ids_in_course_by_user(opts)
         when :discussion
-          DiscussionTopic.visible_ids_by_user(opts.merge(:item_type => item_type))
+          DiscussionTopic.visible_ids_by_user(opts.merge(item_type:))
         when :page
           WikiPage.visible_ids_by_user(opts)
         when :quiz

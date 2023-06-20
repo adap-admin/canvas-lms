@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -134,18 +136,18 @@ module Polling
     def create
       poll_session_params = get_poll_session_params
 
-      if course_id = poll_session_params.delete(:course_id)
+      if (course_id = poll_session_params.delete(:course_id))
         @course = Course.find(course_id)
       end
 
-      raise ActiveRecord::RecordNotFound.new(I18n.t("polling.poll_sessions.errors.course_required", "Course is required.")) unless @course
+      raise ActiveRecord::RecordNotFound, I18n.t("polling.poll_sessions.errors.course_required", "Course is required.") unless @course
 
-      if course_section_id = poll_session_params.delete(:course_section_id)
+      if (course_section_id = poll_session_params.delete(:course_section_id))
         @course_section = @course.course_sections.find(course_section_id)
       end
 
       @poll_session = @course.poll_sessions.build(poll_session_params.merge(poll: @poll,
-                                                                          course_section: @course_section))
+                                                                            course_section: @course_section))
 
       @poll_session.has_public_results = false if poll_session_params[:has_public_results].blank?
 
@@ -179,7 +181,7 @@ module Polling
     def update
       @poll_session = @poll.poll_sessions.find(params[:id])
       if authorized_action(@poll, @current_user, :update)
-        if @poll_session.update_attributes(get_poll_session_params)
+        if @poll_session.update(get_poll_session_params)
           render json: serialize_jsonapi(@poll_session)
         else
           render json: @poll_session.errors, status: :bad_request
@@ -262,31 +264,31 @@ module Polling
     end
 
     protected
-    def paginate_for(poll_sessions, api_url="")
+
+    def paginate_for(poll_sessions, api_url = "")
       meta = {}
       json = if accepts_jsonapi?
-              poll_sessions, meta = Api.jsonapi_paginate(poll_sessions, self, api_url)
-              meta[:primaryCollection] = 'poll_sessions'
-              poll_sessions
+               poll_sessions, meta = Api.jsonapi_paginate(poll_sessions, self, api_url)
+               meta[:primaryCollection] = "poll_sessions"
+               poll_sessions
              else
                Api.paginate(poll_sessions, self, api_url)
              end
 
-      return json, meta
+      [json, meta]
     end
-
 
     def serialize_jsonapi(poll_sessions, meta = {})
       poll_sessions = Array.wrap(poll_sessions)
 
       Canvas::APIArraySerializer.new(poll_sessions, {
-        each_serializer: Polling::PollSessionSerializer,
-        controller: self,
-        root: :poll_sessions,
-        meta: meta,
-        scope: @current_user,
-        include_root: false
-      }).as_json
+                                       each_serializer: Polling::PollSessionSerializer,
+                                       controller: self,
+                                       root: :poll_sessions,
+                                       meta:,
+                                       scope: @current_user,
+                                       include_root: false
+                                     }).as_json
     end
 
     def get_poll_session_params

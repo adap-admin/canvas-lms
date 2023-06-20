@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -16,7 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require_relative '../spec_helper'
+require_relative "../spec_helper"
 
 describe PostPolicy do
   describe "relationships" do
@@ -29,15 +31,15 @@ describe PostPolicy do
 
   describe "validation" do
     let(:course) { Course.create! }
-    let(:assignment) { course.assignments.create!(title: '!!!') }
+    let(:assignment) { course.assignments.create!(title: "!!!") }
 
     it "is valid if a valid course and assignment are specified" do
-      post_policy = PostPolicy.new(course: course, assignment: assignment)
+      post_policy = PostPolicy.new(course:, assignment:)
       expect(post_policy).to be_valid
     end
 
     it "is valid if a valid course is specified without an assignment" do
-      post_policy = PostPolicy.new(course: course)
+      post_policy = PostPolicy.new(course:)
       expect(post_policy).to be_valid
     end
 
@@ -48,7 +50,7 @@ describe PostPolicy do
 
   describe "callbacks" do
     let(:course) { Course.create! }
-    let(:assignment) { course.assignments.create!(title: '!!!') }
+    let(:assignment) { course.assignments.create!(title: "!!!") }
 
     context "when the policy is for a specific assignment" do
       let(:policy) { assignment.post_policy }
@@ -58,9 +60,9 @@ describe PostPolicy do
 
         save_time = Time.zone.now
         Timecop.freeze(save_time) do
-          expect {
+          expect do
             policy.update!(post_manually: true)
-          }.to change { assignment.updated_at }.to(save_time)
+          end.to change { assignment.updated_at }.to(save_time)
         end
       end
 
@@ -68,9 +70,9 @@ describe PostPolicy do
         course.update!(updated_at: 1.day.ago)
 
         Timecop.freeze(Time.zone.now) do
-          expect {
+          expect do
             policy.update!(post_manually: true)
-          }.not_to change { course.updated_at }
+          end.not_to change { course.updated_at }
         end
       end
     end
@@ -83,42 +85,29 @@ describe PostPolicy do
         save_time = Time.zone.now
 
         Timecop.freeze(save_time) do
-          expect {
+          expect do
             policy.update!(post_manually: true)
-          }.to change { course.updated_at }.to(save_time)
+          end.to change { course.updated_at }.to(save_time)
         end
       end
     end
   end
 
-  describe "post policies feature" do
-    describe ".feature_enabled?" do
-      it "returns true if the post_policies_enabled setting is set to true" do
-        Setting.set("post_policies_enabled", true)
-        expect(PostPolicy).to be_feature_enabled
-      end
+  describe "root account ID" do
+    let_once(:root_account) { Account.create! }
+    let_once(:subaccount) { Account.create(root_account:) }
+    let_once(:course) { Course.create!(account: subaccount) }
 
-      it "returns false if the post_policies_enabled setting is set to any other value" do
-        Setting.set("post_policies_enabled", "NO")
-        expect(PostPolicy).not_to be_feature_enabled
-      end
-
-      it "returns false if no value is set for the setting" do
-        expect(PostPolicy).not_to be_feature_enabled
+    context "for a post policy associated with a course" do
+      it "is set to the course's root account ID" do
+        expect(course.default_post_policy.root_account_id).to eq root_account.id
       end
     end
 
-    describe ".enable_feature!" do
-      it "sets the post_policies_enabled setting to 'true'" do
-        PostPolicy.enable_feature!
-        expect(Setting.get("post_policies_enabled", false)).to eq "true"
-      end
-    end
-
-    describe ".disable_feature!" do
-      it "sets the post_policies_enabled setting to 'false'" do
-        PostPolicy.disable_feature!
-        expect(Setting.get("post_policies_enabled", false)).to eq "false"
+    context "for a post policy associated with an assignment" do
+      it "is set to the associated course's root account ID" do
+        assignment = course.assignments.create!
+        expect(assignment.post_policy.root_account_id).to eq root_account.id
       end
     end
   end

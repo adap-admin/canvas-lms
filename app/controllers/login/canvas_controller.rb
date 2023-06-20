@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -27,10 +29,12 @@ class Login::CanvasController < ApplicationController
   protect_from_forgery except: :create, with: :exception
 
   def new
+    @allow_robot_indexing = true unless @domain_root_account&.disable_login_search_indexing?
     @pseudonym_session = PseudonymSession.new
     @headers = false
     flash.now[:error] = params[:message] if params[:message]
-    flash.now[:notice] = t('Your password has been changed.') if params[:password_changed] == '1'
+    flash.now[:notice] = t("Your password has been changed.") if params[:password_changed] == "1"
+    @include_recaptcha = recaptcha_enabled?
 
     maybe_render_mobile_login
   end
@@ -61,7 +65,7 @@ class Login::CanvasController < ApplicationController
     params[:pseudonym_session][:unique_id].try(:strip!)
 
     # Try to use authlogic's built-in login approach first
-    found = @domain_root_account.pseudonyms.scoping do
+    found = PseudonymSession.with_scope(find_options: @domain_root_account.pseudonyms) do
       @pseudonym_session = PseudonymSession.new(params[:pseudonym_session].permit(:unique_id, :password, :remember_me).to_h)
       @pseudonym_session.remote_ip = request.remote_ip
       @pseudonym_session.save
@@ -69,11 +73,12 @@ class Login::CanvasController < ApplicationController
 
     # look for LDAP pseudonyms where we get the unique_id back from LDAP, or if we're doing JIT provisioning
     if !found && !@pseudonym_session.attempted_record
-      found = @domain_root_account.authentication_providers.active.where(auth_type: 'ldap').any? do |aac|
+      found = @domain_root_account.authentication_providers.active.where(auth_type: "ldap").any? do |aac|
         next unless aac.identifier_format.present? || aac.jit_provisioning?
 
         res = aac.ldap_bind_result(params[:pseudonym_session][:unique_id], params[:pseudonym_session][:password])
         next unless res
+
         unique_id = if aac.identifier_format.present?
                       res.first[aac.identifier_format].first
                     else
@@ -86,6 +91,7 @@ class Login::CanvasController < ApplicationController
         next unless pseudonym
 
         pseudonym.instance_variable_set(:@ldap_result, res.first)
+        pseudonym.infer_auth_provider(aac)
         @pseudonym_session = PseudonymSession.new(pseudonym, params[:pseudonym_session][:remember_me] == "1")
         @pseudonym_session.save
         session[:login_aac] = aac.id
@@ -96,10 +102,15 @@ class Login::CanvasController < ApplicationController
       pseudonym = Pseudonym.authenticate(params[:pseudonym_session],
                                          @domain_root_account.trusted_account_ids,
                                          request.remote_ip)
-      if pseudonym && pseudonym != :too_many_attempts
+      if pseudonym && ![:too_many_attempts, :impossible_credentials].include?(pseudonym)
         @pseudonym_session = PseudonymSession.new(pseudonym, params[:pseudonym_session][:remember_me] == "1")
         found = @pseudonym_session.save
       end
+    end
+
+    if pseudonym == :impossible_credentials
+      unsuccessful_login t("Invalid username or password")
+      return
     end
 
     if pseudonym == :too_many_attempts || @pseudonym_session.too_many_attempts?
@@ -107,7 +118,7 @@ class Login::CanvasController < ApplicationController
       return
     end
 
-    pseudonym = @pseudonym_session && @pseudonym_session.record
+    pseudonym = @pseudonym_session&.record
     # If the user's @domain_root_account has been deleted, feel free to share that information
     if pseudonym && (!pseudonym.user || pseudonym.user.unavailable?)
       unsuccessful_login t("That user account has been deleted.  Please contact your system administrator to have your account re-activated.")
@@ -115,29 +126,42 @@ class Login::CanvasController < ApplicationController
     end
 
     # If the user is registered and logged in, redirect them to their dashboard page
-    if found
+    if found && (user = pseudonym.login_assertions_for_user)
       # Call for some cleanups that should be run when a user logs in
-      user = pseudonym.login_assertions_for_user
-      session[:login_aac] ||= pseudonym.authentication_provider_id ||
-        @domain_root_account.canvas_authentication_provider&.id ||
-        @domain_root_account.authentication_providers.active.where(auth_type: 'ldap').first&.id
+
+      ap = pseudonym.authentication_provider
+
+      session[:login_aac] ||= ap.id
       successful_login(user, pseudonym)
     else
-      unsuccessful_login t("Invalid username or password")
+      link_url = Setting.get("invalid_login_faq_url", nil)
+      if link_url
+        unsuccessful_login t(
+          "Invalid username or password. Trouble logging in? *Check out our Login FAQs*.",
+          wrapper: view_context.link_to('\1', link_url)
+        )
+      else
+        unsuccessful_login t("Invalid username or password")
+      end
     end
   end
 
   protected
 
   def validate_auth_type
-    @domain_root_account.authentication_providers.where(auth_type: params[:controller].sub(%r{^login/}, '')).active.take!
+    @domain_root_account.authentication_providers.where(auth_type: params[:controller].sub(%r{^login/}, "")).active.take!
   end
 
   def unsuccessful_login(message)
     if request.format.json?
-      return render :json => {:errors => [message]}, :status => :bad_request
+      return render json: { errors: [message] }, status: :bad_request
     end
-    flash[:error] = message
+
+    flash[:error] = if mobile_device?
+                      message
+                    else
+                      { html: message, timeout: 15_000 }
+                    end
     @errored = true
     @headers = false
     maybe_render_mobile_login :bad_request
@@ -147,10 +171,10 @@ class Login::CanvasController < ApplicationController
     if mobile_device?
       @login_handle_name = @domain_root_account.login_handle_name_with_inference
       @login_handle_is_email = @login_handle_name == AuthenticationProvider.default_login_handle_name
-      render :mobile_login, layout: 'mobile_auth', status: status
+      render :mobile_login, layout: "mobile_auth", status:
     else
       @aacs_with_buttons = @domain_root_account.authentication_providers.active.select { |aac| aac.class.login_button? }
-      render :new, status: status
+      render :new, status:
     end
   end
 end

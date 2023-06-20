@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -16,7 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 class CanvasTwitterConfig
-
   def self.call
     settings = Canvas::Plugin.find(:twitter).try(:settings)
     if settings
@@ -25,11 +26,9 @@ class CanvasTwitterConfig
         secret_key: settings[:consumer_secret_dec]
       }.with_indifferent_access
     else
-      ConfigFile.load('twitter')
+      Rails.application.credentials.twitter_creds&.with_indifferent_access || {}
     end
-
   end
 end
-
 
 Twitter::Connection.config = CanvasTwitterConfig

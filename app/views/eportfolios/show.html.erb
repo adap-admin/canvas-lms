@@ -17,7 +17,6 @@
 %>
 
 <% provide :page_title do %><%= join_title @page.name, @category.name, @portfolio.name %><% end %>
-<% js_env({ SECTION_COUNT_IDX: @page.content_sections.count }) %>
 
 <% provide :left_side do %>
   <div class="eportfolio-name">
@@ -65,14 +64,31 @@
         </div>
       </div>
     </div>
-    <div style="display: none">
-      <%= render :partial => "shared/wiki_sidebar" %>
-    </div>
     <% end %>
   </div>
 <% end %>
 
 <% if @owner_view %>
+  <% if @portfolio.flagged_as_possible_spam? %>
+    <p>
+      <div class="ic-flash-warning eportfolio_spam_message">
+        <div class="ic-flash__icon" aria-hidden="true">
+          <i class="icon-warning"></i>
+        </div>
+        <%= t("This ePortfolio has been flagged as possible spam. Until it has been reviewed by an administrator, it will only be visible to you. Please contact an administrator if you have any questions.") %>
+      </div>
+    </p>
+  <% elsif @portfolio.spam?(include_possible_spam: false) %>
+    <p>
+      <div class="ic-flash-error eportfolio_spam_message">
+        <div class="ic-flash__icon" aria-hidden="true">
+          <i class="icon-warning"></i>
+        </div>
+        <%= t("This ePortfolio has been identified as spam, and is only visible to you. Please contact an administrator if you have any questions.") %>
+      </div>
+    </p>
+  <% end %>
+
   <h2><%= t('headers.welcome', "Welcome to Your ePortfolio") %></h2>
   <p><%= t(:welcome, <<-DETAILS)
     If this is your first time here, you may want to pop up the wizard and see
@@ -81,7 +97,7 @@
     DETAILS
   %></p>
   <ul class="unstyled_list" style="padding-<%= direction('left') %>: 20px; margin-bottom: 20px; line-height: 1.8em; font-size: 1.2em;">
-    <li><a href="#" class="wizard_popup_link icon-question"><%= t('links.wizard', "Getting Started Wizard") %></a></li>
+    <li><a href="?view=wizard_box" class="wizard_popup_link icon-question"><%= t('links.wizard', "Getting Started Wizard") %></a></li>
     <li><a href="?view=preview" class="icon-arrow-right"><%= t('links.portfolio', "Go to the Actual ePortfolio") %></a></li>
   </ul>
 
@@ -104,20 +120,23 @@
     %></p>
     <p>
     <%= t('links.share', "Copy and share this link to give others access to your private ePortfolio:") %><br />
-    <a href="<%= eportfolio_path(@portfolio.id, :verifier => @portfolio.uuid) %>" id="eportfolio_share_link">
-      <%= eportfolio_url(@portfolio.id, :verifier => @portfolio.uuid) %>
-    </a>
+      <a
+        href="<%= eportfolio_path(@portfolio.id, :verifier => @portfolio.uuid) %>"
+        id="eportfolio_share_link"
+        style="overflow-wrap: break-word;"
+      >
+        <%= eportfolio_url(@portfolio.id, :verifier => @portfolio.uuid) %>
+      </a>
     </p>
   <% end %>
 
   <h3><%= t('headers.recent_submissions', "Recent Submissions") %></h3>
   <p><%= t(:recent_submissions, "Click any submission to add it to a new page in your ePortfolio.") %></p>
-  <% if @portfolio.user.submissions.empty? %>
+  <% if @recent_submissions.empty? %>
     <div style="margin: 5px 20px;"><%= t(:no_submissions, "No Submissions Found") %></div>
   <% end %>
   <ul class="submission_list" id="recent_submissions" style="max-height: 200px; overflow: auto;">
     <% @recent_submissions.each do |submission| %>
-      <% next unless submission.assignment.published? && submission.context.published? %>
       <% already_used = (@used_submission_ids.include?(submission.id) rescue false) %>
       <li class="clearfix submission <%= 'already_used' if already_used %>" title="<%= t('titles.already_used', "This submission is already included in your portfolio") if already_used %>" id="recent_submission_<%= submission.id %>" tabindex="0">
         <a href="<%= eportfolio_entry_preview_submission_path(@portfolio, @page, submission.id) %>"
@@ -142,7 +161,7 @@
     <% end %>
   </ul>
   <ul id="eportfolio_structure" style="display: none;">
-    <% @portfolio.eportfolio_categories.each do |category| %>
+    <% @categories.each do |category| %>
       <li id="structure_category_<%= category.id %>" class="category">
         <ul class="entry_list">
           <% category.eportfolio_entries.each do |entry| %>
@@ -179,7 +198,7 @@
         <td><%= before_label(:section, "Section") %></td>
         <td>
           <select id="category_select" name="eportfolio_entry[eportfolio_category_id]">
-            <% @portfolio.eportfolio_categories.each do |category| %>
+            <% @categories.each do |category| %>
               <option value="<%= category.id %>" id="category_select_<%= category.id %>"><%= category.name %></option>
             <% end %>
           </select>
@@ -214,6 +233,45 @@
 <% else %>
   <% if can_do(@portfolio, @current_user, :manage) %>
   <div style="float: <%= direction('right') %>; display: none;"><a href="#" class="edit_content_link icon-edit"><%= edit_link_text %></a></div>
+  <% end %>
+  <% if @portfolio.spam? && @portfolio.grants_right?(@current_user, :moderate)%>
+    <% if @portfolio.flagged_as_possible_spam? %>
+      <p>
+        <div class="ic-flash-warning eportfolio_spam_message">
+          <div class="ic-flash__icon" aria-hidden="true">
+            <i class="icon-warning"></i>
+          </div>
+          <%= t("This ePortfolio has been identified as possible spam. It is currently only visible to administrators and the author. If you're sure this content is not spam, you can mark it as safe. Otherwise, you can confirm it as spam.") %>
+        </div>
+      </p>
+    <% else %>
+      <p>
+        <div class="ic-flash-error eportfolio_spam_message">
+          <div class="ic-flash__icon" aria-hidden="true">
+            <i class="icon-warning"></i>
+          </div>
+          <%= t("This ePortfolio has been identified as spam. It is currently only visible to administrators and the author. If you're sure this content is not spam, you can mark it as safe.") %>
+        </div>
+      </p>
+    <% end %>
+  <% elsif @portfolio.flagged_as_possible_spam? && @portfolio.user == @current_user %>
+    <p>
+      <div class="ic-flash-warning eportfolio_spam_message">
+        <div class="ic-flash__icon" aria-hidden="true">
+          <i class="icon-warning"></i>
+        </div>
+        <%= t("This ePortfolio has been flagged as possible spam. Until it has been reviewed by an administrator, it will only be visible to you. Please contact an administrator if you have any questions.") %>
+      </div>
+    </p>
+  <% elsif @portfolio.spam?(include_possible_spam: false) && @portfolio.user == @current_user %>
+    <p>
+      <div class="ic-flash-error eportfolio_spam_message">
+        <div class="ic-flash__icon" aria-hidden="true">
+          <i class="icon-warning"></i>
+        </div>
+        <%= t("This ePortfolio has been identified as spam, and is only visible to you. Please contact an administrator if you have any questions.") %>
+      </div>
+    </p>
   <% end %>
   <h2 id="eportfolio_entry_<%= @page.id %>"><span class="name"><%= @page.name %></span></h2>
   <%= form_for @page, :url => eportfolio_entry_url(@portfolio, @page), :html => {:id => "edit_page_form" } do |f| %>
@@ -269,18 +327,19 @@
     </div>
     <div class="edit_submission_content form_content" style="display: none;">
       <%= before_label(:choose_submission, "Select an assignment submission to embed in this page") %><br/>
-      <% if @portfolio.user.submissions.empty? %>
+      <% submissions = @recent_submissions %>
+      <% if submissions.empty? %>
         <div style="margin: 5px 20px;"><%= t(:no_submissions, "No Submissions Found") %></div>
       <% end %>
       <ul class="submission_list">
-        <% @portfolio.user.submissions.each do |submission| %>
+        <% submissions.each do |submission| %>
           <li class="submission <%= 'already_used' if (@used_submission_ids.include?(submission.id) rescue false) %>" id="submission_<%= submission.id %>">
             <a href="<%= eportfolio_entry_preview_submission_path(@portfolio, @page, submission.id) %>"
               style="display: none;"
               class="submission_info">
               <%= submission.assignment.title %>, <%= submission.assignment.context.name %>
             </a>
-            <span role="button" tabindex="0" class="text" style="font-size: 1.2em;">
+            <span role="button" class="Button Button--link" style="font-size: 1.2em;" tabindex="0">
               <%= submission.assignment.title %>, <%= submission.assignment.context.name %>
               <span class="screenreader-only">
                 <%=t "click to select" %>

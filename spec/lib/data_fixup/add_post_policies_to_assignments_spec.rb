@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -15,11 +17,13 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'spec_helper'
-
 describe DataFixup::AddPostPoliciesToAssignments do
   let_once(:course) { Course.create! }
-  let_once(:assignment) { course.assignments.create! }
+  let_once(:assignment) do
+    @assignment = course.assignments.create!
+    @assignment.unmute!
+    @assignment
+  end
 
   let_once(:teacher) { course.enroll_teacher(User.create!, enrollment_state: "active").user }
   let_once(:student1) { course.enroll_student(User.create!, enrollment_state: "active").user }
@@ -31,7 +35,7 @@ describe DataFixup::AddPostPoliciesToAssignments do
   end
 
   def run_for_courses
-    DataFixup::AddPostPoliciesToAssignments.create_post_policies(course.id, course.id+1)
+    DataFixup::AddPostPoliciesToAssignments.create_post_policies(course.id, course.id + 1)
   end
 
   def clear_post_policy(assignment:)
@@ -41,22 +45,25 @@ describe DataFixup::AddPostPoliciesToAssignments do
 
   describe ".set_submission_posted_at_dates" do
     before(:once) do
-      clear_post_policy(assignment: assignment)
+      clear_post_policy(assignment:)
     end
 
     context "for an assignment that would receive a manual post policy" do
       it "sets the posted_at of submissions to nil" do
         run_for_submissions
-        expect(assignment.submission_for_student(student1).posted_at).to eq nil
+        expect(assignment.submission_for_student(student1).posted_at).to be_nil
       end
     end
 
     context "for an assignment that would receive an automatic post policy" do
       it "sets the posted_at of graded submissions to their graded_at time" do
         assignment.grade_student(student1, grader: teacher, score: 10)
+        assignment.unmute!
         student1_submission = assignment.submission_for_student(student1)
 
         student1_submission.update!(posted_at: nil)
+        assignment.reload.update!(muted: false)
+        clear_post_policy(assignment:)
         run_for_submissions
 
         expect(student1_submission.reload.posted_at).to eq(student1_submission.graded_at)
@@ -64,14 +71,14 @@ describe DataFixup::AddPostPoliciesToAssignments do
 
       it "sets the posted_at of ungraded submissions to nil" do
         run_for_submissions
-        expect(assignment.submission_for_student(student1).reload.posted_at).to eq nil
+        expect(assignment.submission_for_student(student1).reload.posted_at).to be_nil
       end
     end
 
     it "does not update submissions for an assignment that already has a post policy" do
-      expect {
+      expect do
         run_for_submissions
-      }.not_to change {
+      end.not_to change {
         assignment.submission_for_student(student1).reload.updated_at
       }
     end
@@ -80,9 +87,9 @@ describe DataFixup::AddPostPoliciesToAssignments do
       it "does not update the submissions associated with the assignment" do
         assignment.ensure_post_policy(post_manually: true)
 
-        expect {
+        expect do
           run_for_submissions
-        }.not_to change {
+        end.not_to change {
           assignment.submission_for_student(student1).reload.updated_at
         }
       end
@@ -93,7 +100,7 @@ describe DataFixup::AddPostPoliciesToAssignments do
     context "when a course does not have an existing post policy" do
       before(:once) do
         course.default_post_policy.destroy
-        clear_post_policy(assignment: assignment)
+        clear_post_policy(assignment:)
       end
 
       describe "assignment post policy creation" do
@@ -119,7 +126,7 @@ describe DataFixup::AddPostPoliciesToAssignments do
 
         it "creates a manual post policy when the assignment is muted" do
           assignment.mute!
-          clear_post_policy(assignment: assignment)
+          clear_post_policy(assignment:)
 
           run_for_courses
           expect(assignment.reload.post_policy).to be_post_manually
@@ -133,10 +140,10 @@ describe DataFixup::AddPostPoliciesToAssignments do
         it "does not update assignments that already have a post policy" do
           assignment.ensure_post_policy(post_manually: true)
 
-          expect {
+          expect do
             run_for_courses
-          }.not_to change {
-            PostPolicy.find_by!(assignment: assignment).updated_at
+          end.not_to change {
+            PostPolicy.find_by!(assignment:).updated_at
           }
         end
       end
@@ -155,21 +162,20 @@ describe DataFixup::AddPostPoliciesToAssignments do
       end
 
       it "does not update the course post policy" do
-        expect {
+        expect do
           run_for_courses
-        }.not_to change {
-          PostPolicy.find_by!(course: course, assignment: nil).updated_at
+        end.not_to change {
+          PostPolicy.find_by!(course:, assignment: nil).updated_at
         }
       end
 
       it "does not update assignments within the course" do
-        expect {
+        expect do
           run_for_courses
-        }.not_to change {
-          PostPolicy.find_by!(assignment: assignment).updated_at
+        end.not_to change {
+          PostPolicy.find_by!(assignment:).updated_at
         }
       end
     end
   end
-
 end

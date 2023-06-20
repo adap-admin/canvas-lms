@@ -16,7 +16,13 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {fireEvent, getByLabelText, getByText, getAllByText, queryByLabelText, wait} from '@testing-library/dom'
+import {
+  fireEvent,
+  getByLabelText,
+  getAllByText,
+  queryByLabelText,
+  waitFor,
+} from '@testing-library/dom'
 
 function getSizeOptions($sizeSelect) {
   const controlledId = $sizeSelect.getAttribute('aria-controls')
@@ -30,10 +36,16 @@ function getSizeOptions($sizeSelect) {
 export default class ImageOptionsTrayDriver {
   static find() {
     const $tray = queryByLabelText(document.body, 'Image Options Tray')
-    if ($tray == null) {
-      return null
+    if ($tray !== null) {
+      return new ImageOptionsTrayDriver($tray)
     }
-    return new ImageOptionsTrayDriver($tray)
+
+    const $trayForIcons = queryByLabelText(document.body, 'Icon Options Tray')
+    if ($trayForIcons !== null) {
+      return new ImageOptionsTrayDriver($trayForIcons)
+    }
+
+    return null
   }
 
   constructor($element) {
@@ -44,12 +56,16 @@ export default class ImageOptionsTrayDriver {
     return this.$element.getAttribute('aria-label')
   }
 
+  get $urlField() {
+    return this.$element.querySelector('input[name="file-url"]')
+  }
+
   get $altTextField() {
     return this.$element.querySelector('textarea')
   }
 
-  get $noAltTextCheckbox() {
-    return getByLabelText(this.$element, 'No Alt Text', {exact: false})
+  get $isDecorativeCheckbox() {
+    return getByLabelText(this.$element, 'Decorative Image', {exact: false})
   }
 
   get $displayAsField() {
@@ -57,13 +73,17 @@ export default class ImageOptionsTrayDriver {
   }
 
   get $sizeSelect() {
-    return getByLabelText(this.$element, 'Size')
+    return getByLabelText(this.$element, /Size.*/)
   }
 
   get $doneButton() {
     return [...this.$element.querySelectorAll('button,[role="button"]')].find(
       $button => $button.textContent.trim() === 'Done'
     )
+  }
+
+  get urlText() {
+    return this.$urlField.value
   }
 
   get altText() {
@@ -75,15 +95,19 @@ export default class ImageOptionsTrayDriver {
   }
 
   get isDecorativeImage() {
-    return this.$noAltTextCheckbox.checked
+    return this.$isDecorativeCheckbox.checked
   }
 
   get isDecorativeImageDisabled() {
-    return this.$noAltTextCheckbox.disabled
+    return this.$isDecorativeCheckbox.disabled
   }
 
   get displayAs() {
     return this.$displayAsField.querySelector('input[type="radio"]:checked').value
+  }
+
+  get isDisplayAsDisabled() {
+    return this.$displayAsField.querySelectorAll('input[disabled]').length === 2
   }
 
   get size() {
@@ -100,7 +124,7 @@ export default class ImageOptionsTrayDriver {
 
   setIsDecorativeImage(isDecorativeImage) {
     if (this.isDecorativeImage !== isDecorativeImage) {
-      this.$noAltTextCheckbox.click()
+      this.$isDecorativeCheckbox.click()
     }
   }
 
@@ -111,8 +135,12 @@ export default class ImageOptionsTrayDriver {
 
   async setSize(sizeText) {
     this.$sizeSelect.click()
-    await wait(() => getSizeOptions(this.$sizeSelect))
+    await waitFor(() => getSizeOptions(this.$sizeSelect))
     const $options = getSizeOptions(this.$sizeSelect)
     $options.find($option => $option.textContent.trim().includes(sizeText)).click()
+  }
+
+  async setUrl(url) {
+    fireEvent.change(this.$urlField, {target: {value: url}})
   }
 }

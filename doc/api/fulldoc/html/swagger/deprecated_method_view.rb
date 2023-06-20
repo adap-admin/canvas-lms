@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -16,8 +18,8 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require_relative 'canvas_api/deprecatable'
-require 'hash_view'
+require_relative "canvas_api/deprecatable"
+require "hash_view"
 
 class DeprecatedMethodView < HashView
   include CanvasAPI::Deprecatable
@@ -25,6 +27,7 @@ class DeprecatedMethodView < HashView
   attr_reader :description, :effective_date, :notice_date
 
   def initialize(tag)
+    super()
     @deprecated_date_key = :NOTICE
     @effective_date_key = :EFFECTIVE
     @tag_declaration_line = tag.text
@@ -35,7 +38,7 @@ class DeprecatedMethodView < HashView
   private
 
   def parse_line(text)
-    description = (text || '').split("\n", 2).second
+    description = (text || "").split("\n", 2).second
     @description = description && format(description.strip)
     parse_deprecation_info(text)
   end

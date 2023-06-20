@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -15,18 +17,15 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'spec_helper'
-
 describe DataFixup::BackfillModerationGraders do
   before(:once) do
     @root_account = account_model
-    @root_account.enable_feature!(:anonymous_moderated_marking)
     course_factory(account: @root_account)
     @student = User.create!
     @course.enroll_student(@student)
     @teacher = User.create!
     @course.enroll_teacher(@teacher)
-    @assignment = @course.assignments.create!(title: 'test')
+    @assignment = @course.assignments.create!(title: "test")
     @assignment.update_columns(moderated_grading: true, grader_count: 1)
     @assignment.grade_student(@student, grade: 90, provisional: true, grader: @teacher)
 
@@ -35,7 +34,7 @@ describe DataFixup::BackfillModerationGraders do
   end
 
   def do_backfill
-    DataFixup::BackfillModerationGraders.run(@assignment.id, @assignment.id+1)
+    DataFixup::BackfillModerationGraders.run(@assignment.id, @assignment.id + 1)
   end
   private :do_backfill
 

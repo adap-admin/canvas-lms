@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -28,8 +30,9 @@ module SupportHelpers
 
       def fix
         tool_proxies.find_each do |tp|
-          next if tp.raw_data.dig('security_contract', 'tool_service').blank?
-          tp.raw_data['security_contract']['tool_service'] << ims_service(@service, @actions)
+          next if tp.raw_data.dig("security_contract", "tool_service").blank?
+
+          tp.raw_data["security_contract"]["tool_service"] << ims_service(@service, @actions)
           tp.save!
         end
       end
@@ -50,7 +53,7 @@ module SupportHelpers
             vendor_code: @vendor_code,
             product_code: @product_code
           )
-          Lti::ToolProxy.where(product_family: product_family).active
+          Lti::ToolProxy.where(product_family:).active
         end
       end
     end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -16,38 +18,36 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper')
-
 describe AdobeConnectConference do
-  CONNECT_CONFIG = {
-    :domain => 'http://connect.example.com',
-    :username => 'user',
-    :password => 'password',
-    :password_dec => 'password',
-    :meeting_container => 'canvas_meetings'
-  }
-
-  before(:each) do
-    @conference = AdobeConnectConference.new
-    allow(@conference).to receive(:config).and_return(CONNECT_CONFIG)
+  let(:connect_config) do
+    {
+      domain: "http://connect.example.com",
+      username: "user",
+      password: "password",
+      password_dec: "password",
+      meeting_container: "canvas_meetings"
+    }
   end
 
-  subject { AdobeConnectConference.new }
+  before do
+    @conference = AdobeConnectConference.new
+    allow(@conference).to receive(:config).and_return(connect_config)
+  end
 
-  context 'with an admin participant' do
-    before(:each) do
-      @user = User.new(:name => 'Don Draper')
-      allow(AdobeConnect::Service).to receive(:user_session).and_return('CookieValue')
+  context "with an admin participant" do
+    before do
+      @user = User.new(name: "Don Draper")
+      allow(AdobeConnect::Service).to receive(:user_session).and_return("CookieValue")
       expect(@conference).to receive(:add_host).with(@user).and_return(@user)
     end
 
-    it 'should generate an admin url using unique format if stored' do
-      stored_url = 'canvas-mtg-ACCOUNT_ID-ID-CREATED_SECONDS'
+    it "generates an admin url using unique format if stored" do
+      stored_url = "canvas-mtg-ACCOUNT_ID-ID-CREATED_SECONDS"
       @conference.settings[:meeting_url_id] = stored_url
       expect(@conference.admin_join_url(@user)).to eq "http://connect.example.com/#{stored_url}"
     end
 
-    it 'should generate an admin url using legacy format' do
+    it "generates an admin url using legacy format" do
       expect(@conference.admin_join_url(@user)).to eq "http://connect.example.com/canvas-meeting-#{@conference.id}"
     end
   end

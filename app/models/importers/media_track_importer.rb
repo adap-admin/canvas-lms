@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -15,38 +17,55 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-require_dependency 'importers'
 
 module Importers
   class MediaTrackImporter < Importer
-
     self.item_class = MediaTrack
 
     def self.process_migration(data, migration)
       return unless data.present?
+
+      media_attachments = migration.context.attachments.where.not(media_entry_id: nil).preload(:media_object_by_media_id)
       data.each do |file_id, track_list|
-        file = migration.context.attachments.where(migration_id: file_id).first
-        if file && file.media_object
-          track_list.each do |track|
-            import_from_migration(file.media_object, track, migration)
-          end
+        media_attachment = media_attachments.find { |ma| ma.migration_id == file_id }
+        media_attachment.mark_as_importing!(migration)
+        next unless (media_object = media_attachment&.media_object_by_media_id)
+
+        track_list.each do |track|
+          import_from_migration(media_attachment, media_object, track, migration)
+        end
+
+        if media_attachment.editing_restricted?(:content)
+          media_attachment.media_tracks.where.not(locale: track_list.pluck("locale")).destroy_all
         end
       end
     end
 
-    def self.import_from_migration(media_object, track, migration)
-      file = migration.context.attachments.where(migration_id: track[:migration_id]).first
-      return unless file
-      mt = media_object.media_tracks.build
-      mt.kind = track['kind']
-      mt.locale = track['locale']
-      content = ''
-      file.open { |data| content << data }
-      mt.content = content
-      mt.save!
-      # remove temporary file
-      file.destroy if file.full_path.starts_with?(File.join(Folder::ROOT_FOLDER_NAME, CC::CCHelper::MEDIA_OBJECTS_FOLDER) + '/')
-    end
+    def self.import_from_migration(attachment, media_object, track, migration)
+      content = track["content"]
+      unless content.present?
+        file = migration.context.attachments.where(migration_id: track[:migration_id]).first
+        return unless file
 
+        content = +""
+        file.open { |data| content << data }
+      end
+
+      mt = attachment.media_tracks.find_or_initialize_by(media_object:, locale: track["locale"])
+      mt.mark_as_importing!(migration)
+      return if attachment.downstream_changes?(migration, "media_tracks_content") && !attachment.editing_restricted?(:content)
+
+      mt.kind = track["kind"]
+      mt.content = content
+      begin
+        mt.save!
+      rescue => e
+        er = Canvas::Errors.capture_exception(:import_media_tracks, e)[:error_report]
+        error_message = t("Subtitles could not be imported from %{file}", file: file.display_name)
+        migration.add_warning(error_message, error_report_id: er)
+      end
+      # remove temporary file
+      file.destroy if file&.full_path&.starts_with?(File.join(Folder::ROOT_FOLDER_NAME, CC::CCHelper::MEDIA_OBJECTS_FOLDER) + "/")
+    end
   end
 end

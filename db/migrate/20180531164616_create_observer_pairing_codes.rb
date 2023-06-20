@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -20,10 +22,10 @@ class CreateObserverPairingCodes < ActiveRecord::Migration[5.1]
   tag :predeploy
   def change
     create_table :observer_pairing_codes do |t|
-      t.belongs_to :user, :null => false, :foreign_key => true
-      t.string :code, :null => false, :limit => 10
-      t.timestamp :expires_at, :null => false, :index => true
-      t.string :workflow_state, :default => 'active', :null => false, :index => true
+      t.belongs_to :user, null: false, foreign_key: true
+      t.string :code, null: false, limit: 10
+      t.timestamp :expires_at, null: false, index: true
+      t.string :workflow_state, default: "active", null: false, index: true
 
       t.timestamps
     end

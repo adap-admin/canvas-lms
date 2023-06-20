@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -16,18 +18,16 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'spec_helper'
-
 describe Submissions::PreviewsController do
-  describe 'GET :show' do
+  describe "GET :show" do
     before do
       course_with_student_and_submitted_homework
       @context = @course
-      user_session(@student)
     end
 
-    it "should render show_preview" do
-      get :show, params: {course_id: @context.id, assignment_id: @assignment.id, id: @student.id, preview: true}
+    it "renders show_preview" do
+      user_session(@student)
+      get :show, params: { course_id: @context.id, assignment_id: @assignment.id, id: @student.id, preview: true }
       expect(response).to render_template(:show_preview)
     end
 
@@ -36,8 +36,9 @@ describe Submissions::PreviewsController do
         quiz_with_submission
       end
 
-      it "should redirect to course_quiz_url" do
-        get :show, params: {course_id: @context.id, assignment_id: @quiz.assignment.id, id: @student.id, preview: true}
+      it "redirects to course_quiz_url" do
+        user_session(@student)
+        get :show, params: { course_id: @context.id, assignment_id: @quiz.assignment.id, id: @student.id, preview: true }
         expect(response).to redirect_to(course_quiz_url(@context, @quiz, headless: 1))
       end
 
@@ -50,49 +51,77 @@ describe Submissions::PreviewsController do
           end
         end
 
-        it "should redirect to course_quiz_history_url" do
-          get :show, params: {course_id: @context.id, assignment_id: @quiz.assignment.id, id: @student.id, preview: true}
+        it "redirects to course_quiz_history_url" do
+          get :show, params: { course_id: @context.id, assignment_id: @quiz.assignment.id, id: @student.id, preview: true }
           expect(response).to redirect_to(course_quiz_history_url(@context, @quiz, {
-            headless: 1,
-            user_id: @student.id,
-            version: assigns(:submission).quiz_submission_version
-          }))
+                                                                    headless: 1,
+                                                                    user_id: @student.id,
+                                                                    version: assigns(:submission).quiz_submission_version
+                                                                  }))
         end
 
-        it "should favor params[:version] when set" do
+        it "favors params[:version] when set" do
           version = 1
           get :show, params: {
             course_id: @context.id,
             assignment_id: @quiz.assignment.id,
             id: @student.id,
             preview: true,
-            version: version
+            version:
           }
           expect(response).to redirect_to(course_quiz_history_url(@context, @quiz, {
-            headless: 1,
-            user_id: @student.id,
-            version: version
-          }))
+                                                                    headless: 1,
+                                                                    user_id: @student.id,
+                                                                    version:
+                                                                  }))
         end
       end
     end
 
-    it "returns unauthorized when the viewer is a teacher and the assignment is currently anonymizing students" do
-      assignment = @course.assignments.create!(title: 'shhh', anonymous_grading: true)
-      user_session(@teacher)
+    context "anonymous assignments" do
+      let(:observer) do
+        course_with_observer(
+          course: @course,
+          associated_user_id: @student.id,
+          active_all: true
+        ).user
+      end
 
-      get :show, params: {course_id: @course.id, assignment_id: assignment.id, id: @student.id, preview: true}
-      expect(response).to be_unauthorized
-    end
+      it "allows observers of the submission's owner to view the preview" do
+        assignment = @course.assignments.create!(title: "shhh", anonymous_grading: true)
+        user_session(observer)
 
-    it "returns unauthorized when the viewer is a peer reviewer and anonymous peer reviews are enabled" do
-      assignment = @course.assignments.create!(title: 'ok', peer_reviews: true, anonymous_peer_reviews: true)
-      reviewer = @course.enroll_student(User.create!, enrollment_state: 'active').user
-      assignment.assign_peer_review(reviewer, @student)
-      user_session(reviewer)
+        get :show, params: { course_id: @course.id, assignment_id: assignment.id, id: @student.id, preview: true }
+        expect(response).to be_successful
+      end
 
-      get :show, params: {course_id: @course.id, assignment_id: assignment.id, id: @student.id, preview: true}
-      expect(response).to be_unauthorized
+      it "does not allow observers not observing the submission's owner to view the preview" do
+        new_student = User.create!
+        @course.enroll_student(new_student, enrollment_state: "active")
+        assignment = @course.assignments.create!(title: "shhh", anonymous_grading: true)
+        user_session(observer)
+
+        get :show, params: { course_id: @course.id, assignment_id: assignment.id, id: new_student.id, preview: true }
+        expect(response).to be_unauthorized
+      end
+
+      it "returns unauthorized when the viewer is a teacher and the assignment is currently anonymizing students" do
+        assignment = @course.assignments.create!(title: "shhh", anonymous_grading: true)
+        user_session(@teacher)
+
+        get :show, params: { course_id: @course.id, assignment_id: assignment.id, id: @student.id, preview: true }
+        expect(response).to be_unauthorized
+      end
+
+      it "returns unauthorized when the viewer is a peer reviewer and anonymous peer reviews are enabled" do
+        assignment = @course.assignments.create!(title: "ok", peer_reviews: true, anonymous_peer_reviews: true)
+        reviewer = @course.enroll_student(User.create!, enrollment_state: "active").user
+        assignment.assign_peer_review(reviewer, @student)
+        user_session(reviewer)
+
+        get :show, params: { course_id: @course.id, assignment_id: assignment.id, id: @student.id, preview: true }
+        expect(response).to be_unauthorized
+      end
     end
   end
 end

@@ -1,5 +1,5 @@
-source 'https://rubygems.org'
-gem 'simplecov', '0.14.1', :require => false
+# frozen_string_literal: true
 
-# Specify your gem's dependencies in canvas_sanitize.gemspec
+source "https://rubygems.org"
+
 gemspec

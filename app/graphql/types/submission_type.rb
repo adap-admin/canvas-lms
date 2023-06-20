@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -16,32 +18,52 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
+#############################################################################
+# NOTE: In most cases you shouldn't add new fields here, instead they should
+#       be added to interfaces/submission_interface.rb so that they work for
+#       both submissions and submission histories
+#############################################################################
+
 module Types
   class SubmissionHistoryFilterInputType < Types::BaseInputObject
-    graphql_name 'SubmissionHistoryFilterInput'
+    graphql_name "SubmissionHistoryFilterInput"
 
-    argument :states, [SubmissionStateType], required: false,
-      default_value: DEFAULT_SUBMISSION_HISTORY_STATES
+    argument :states,
+             [SubmissionStateType],
+             required: false,
+             default_value: DEFAULT_SUBMISSION_HISTORY_STATES
 
-    argument :include_current_submission, Boolean, <<~DESC, required: false, default_value: true
+    argument :include_current_submission, Boolean, <<~MD, required: false, default_value: true
       If the most current submission should be included in the submission
       history results. Defaults to true.
-    DESC
+    MD
   end
 
   class SubmissionType < ApplicationObjectType
-    graphql_name 'Submission'
+    graphql_name "Submission"
 
     implements GraphQL::Types::Relay::Node
     implements Interfaces::TimestampInterface
     implements Interfaces::SubmissionInterface
+    implements Interfaces::LegacyIDInterface
 
-    field :_id, ID, 'legacy canvas id', method: :id, null: false
     global_id_field :id
 
-    # NOTE: In most cases you shouldn't add new fields here, instead they should
-    #       be added to interfaces/submission_interface.rb so that they work for
-    #       both submissions and submission histories
+    field :read_state, String, null: true
+    def read_state
+      object.read_state(current_user)
+    end
+
+    field :hide_grade_from_student, Boolean, null: true
+    def hide_grade_from_student
+      object.hide_grade_from_student?
+    end
+
+    field :grading_period_id, ID, null: true
+
+    field :redo_request, Boolean, null: true
+
+    field :user_id, ID, null: false
 
     field :submission_histories_connection, SubmissionHistoryType.connection_type, null: true do
       argument :filter, SubmissionHistoryFilterInputType, required: false, default_value: {}
@@ -51,12 +73,12 @@ module Types
       states, include_current_submission = filter.values_at(:states, :include_current_submission)
 
       Promise.all([
-        load_association(:versions),
-        load_association(:assignment)
-      ]).then do
+                    load_association(:versions),
+                    load_association(:assignment)
+                  ]).then do
         histories = object.submission_history
         histories.pop unless include_current_submission
-        histories.select{ |h| states.include?(h.workflow_state) }
+        histories.select { |h| states.include?(h.workflow_state) }
       end
     end
   end

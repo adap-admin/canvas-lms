@@ -16,21 +16,35 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 %>
 
-<% provide :page_title, t('titles.courses', 'Courses') %>
+<%
+  if k5_user?
+    all_courses_title = t('All Subjects')
+    courses_title = t('Subjects')
+    course_label = t('Subject')
+    add_course_aria_label = t('Add a Subject')
+  else
+    all_courses_title = t('headings.my_courses', %{All Courses})
+    courses_title = t('titles.courses', 'Courses')
+    course_label = t('Course')
+    add_course_aria_label = t('Add a Course')
+  end
+%>
+
+<% provide :page_title, courses_title %>
 <% provide_blank :right_side %>
 
 <% load_enrollments_for_index %>
 <% @visible_groups ||= @current_user.visible_groups %>
 
 <% @favorite_course_ids = @current_user.courses_with_primary_enrollment(:favorite_courses).map(&:id) %>
-<% @show_star_column = true %>
+<% @show_star_column = show_favorites_col_for_index?(:current) %>
   <div class="header-bar">
-    <h2><%= t('headings.my_courses', %{All Courses}) %></h2>
+    <h1><%= all_courses_title %></h1>
   </div>
 
   <div class="ic-Action-header content--hasMarginTop">
     <div class="ic-Action-header__Secondary">
-      <% if @domain_root_account.feature_enabled?(:course_catalog) %>
+      <% if @domain_root_account.enable_course_catalog? %>
         <%= link_to t('browse_more_courses', 'Browse More Courses'), "/search/all_courses/", class:"Button" %>
       <% end %>
 
@@ -39,9 +53,14 @@
                   id="start_new_course"
                   class="Button element_toggler"
                   aria-controls="new_course_form"
-                  aria-label="<%= t('Add a Course') %>">
-                  <i class="icon-plus"></i> <%= t('start_new_course', 'Course') %></button>
-          <%= render :partial => 'shared/new_course_form' %>
+                  aria-label="<%= add_course_aria_label %>"
+          >
+                  <i class="icon-plus"></i> <%= course_label %></button>
+          <% if k5_user? || @domain_root_account.feature_enabled?(:create_course_subaccount_picker) %>
+            <div id="create_subject_modal_container"></div>
+          <% else %>
+            <%= render :partial => 'shared/new_course_form' %>
+          <% end %>
       <% end %>
     </div>
   </div>
@@ -52,8 +71,8 @@
   <table id="my_courses_table" class="ic-Table ic-Table--bordered course-list-table">
     <thead>
       <tr>
-        <th scope="col" class="course-list-star-column"><span class="screenreader-only"><%= t ('Favorites') %></span></th>
-        <th scope="col" class="course-list-course-title-column course-list-no-left-border"><%= t ('Course') %></th>
+        <% if @show_star_column %><th scope="col" class="course-list-star-column"><span class="screenreader-only"><%= t ('Favorites') %></span></th><% end %>
+        <th scope="col" class="course-list-course-title-column course-list-no-left-border"><%= course_label %></th>
         <th scope="col" class="course-list-nickname-column course-list-no-left-border"><%= t ('Nickname') %></th>
         <th scope="col" class="course-list-term-column course-list-no-left-border"><%= t ('Term') %></th>
         <th scope="col" class="course-list-enrolled-as-column course-list-no-left-border"><%= t ('Enrolled as') %></th>
@@ -62,13 +81,13 @@
     </thead>
     <tbody>
       <% enrollments_for_index(:current).each do |enrollment| %>
-        <%= render :partial => "shared/current_enrollment", :object => enrollment %>
+        <%= render :partial => "shared/current_enrollment", :object => enrollment, :locals => { :is_current_term => true } %>
       <% end %>
     </tbody>
   </table>
 <% end %>
 
-<% @show_star_column = true %>
+<% @show_star_column = show_favorites_col_for_index?(:past) %>
 <% unless enrollments_for_index(:past).empty? %>
   <div class="content--hasMarginTop">
     <h2><%= t('headings.past_enrollments', %{Past Enrollments}) %></h2>
@@ -76,8 +95,8 @@
   <table id="past_enrollments_table" class="ic-Table ic-Table--bordered course-list-table">
     <thead>
       <tr>
-        <th scope="col" class="course-list-star-column"><span class="screenreader-only"><%= t ('Favorites') %></span></th>
-        <th scope="col" class="course-list-course-title-column course-list-no-left-border"><%= t ('Course') %></th>
+        <% if @show_star_column %><th scope="col" class="course-list-star-column"><span class="screenreader-only"><%= t ('Favorites') %></span></th><% end %>
+        <th scope="col" class="course-list-course-title-column course-list-no-left-border"><%= course_label %></th>
         <th scope="col" class="course-list-nickname-column course-list-no-left-border"><%= t ('Nickname') %></th>
         <th scope="col" class="course-list-term-column course-list-no-left-border"><%= t ('Term') %></th>
         <th scope="col" class="course-list-enrolled-as-column course-list-no-left-border"><%= t ('Enrolled as') %></th>
@@ -92,6 +111,7 @@
   </table>
 <% end %>
 
+<% @show_star_column = show_favorites_col_for_index?(:future) %>
 <% unless enrollments_for_index(:future).empty? %>
   <div class="content--hasMarginTop">
     <h2><%= t('headings.future_enrollments', 'Future Enrollments') %></h2>
@@ -99,8 +119,8 @@
   <table id="future_enrollments_table" class="ic-Table ic-Table--bordered course-list-table">
     <thead>
       <tr>
-        <th scope="col" class="course-list-star-column"><span class="screenreader-only"><%= t ('Favorites') %></span></th>
-        <th scope="col" class="course-list-course-title-column course-list-no-left-border"><%= t ('Course') %></th>
+        <% if @show_star_column %><th scope="col" class="course-list-star-column"><span class="screenreader-only"><%= t ('Favorites') %></span></th><% end %>
+        <th scope="col" class="course-list-course-title-column course-list-no-left-border"><%= course_label %></th>
         <th scope="col" class="course-list-nickname-column course-list-no-left-border"><%= t ('Nickname') %></th>
         <th scope="col" class="course-list-term-column course-list-no-left-border"><%= t ('Term') %></th>
         <th scope="col" class="course-list-enrolled-as-column course-list-no-left-border"><%= t ('Enrolled as') %></th>

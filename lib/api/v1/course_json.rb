@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -17,28 +19,42 @@
 
 module Api::V1
   class CourseJson
+    BASE_ATTRIBUTES = %w[id
+                         name
+                         course_code
+                         account_id
+                         created_at
+                         start_at
+                         default_view
+                         enrollment_term_id
+                         is_public
+                         grading_standard_id
+                         root_account_id
+                         uuid
+                         license
+                         grade_passback_setting].freeze
 
-    BASE_ATTRIBUTES = %w(id name course_code account_id created_at start_at default_view enrollment_term_id is_public
-                         grading_standard_id root_account_id uuid license).freeze
+    INCLUDE_CHECKERS = { grading: "needs_grading_count",
+                         syllabus: "syllabus_body",
+                         url: "html_url",
+                         description: "public_description",
+                         permissions: "permissions" }.freeze
 
-    INCLUDE_CHECKERS = {grading: 'needs_grading_count', syllabus: 'syllabus_body',
-                        url: 'html_url', description: 'public_description', permissions: 'permissions'}.freeze
-
-    OPTIONAL_FIELDS = %w(needs_grading_count public_description enrollments).freeze
+    OPTIONAL_FIELDS = %w[needs_grading_count public_description enrollments].freeze
 
     attr_reader :course, :user, :includes, :enrollments, :hash
 
     def initialize(course, user, includes, enrollments, precalculated_permissions: nil)
       @course = course
       @user = user
-      @includes = includes.map{ |include_key| include_key.to_sym }
+      @includes = includes.map(&:to_sym)
       @enrollments = enrollments
       @precalculated_permissions = precalculated_permissions
-      if block_given?
-        @hash = yield(self, self.allowed_attributes, self.methods_to_send, self.permissions_to_include)
-      else
-        @hash = {}
-      end
+      @hash = if block_given?
+                yield(self, allowed_attributes, methods_to_send, permissions_to_include)
+              else
+                {}
+              end
     end
 
     def allowed_attributes
@@ -46,39 +62,40 @@ module Api::V1
     end
 
     def methods_to_send
-      methods = ['end_at', 'public_syllabus', 'public_syllabus_to_auth', 'storage_quota_mb', 'is_public_to_auth_users']
-      methods << 'hide_final_grades' if @includes.include?(:hide_final_grades)
-      methods << 'storage_quota_used_mb' if @includes.include?(:storage_quota_used_mb)
+      methods = %w[end_at public_syllabus public_syllabus_to_auth storage_quota_mb is_public_to_auth_users homeroom_course course_color friendly_name]
+      methods << "hide_final_grades" if @includes.include?(:hide_final_grades)
+      methods << "storage_quota_used_mb" if @includes.include?(:storage_quota_used_mb)
+      methods << "account_name" if @includes.include?(:account_name)
       methods
     end
 
     def to_hash
       set_sis_course_id(@hash)
       set_integration_id(@hash)
-      @hash['enrollments'] = extract_enrollments(@enrollments)
-      @hash['needs_grading_count'] = needs_grading_count(@enrollments, @course)
-      @hash['public_description'] = description(@course)
-      @hash['hide_final_grades'] = @course.hide_final_grades?
-      @hash['workflow_state'] = @course.api_state
-      @hash['course_format'] = @course.course_format if @course.course_format.present?
-      @hash['restrict_enrollments_to_course_dates'] = !!@course.restrict_enrollments_to_course_dates
-      if visibility = @course.overridden_course_visibility
-        @hash['overridden_course_visibility'] = visibility
+      @hash["enrollments"] = extract_enrollments(@enrollments)
+      @hash["needs_grading_count"] = needs_grading_count(@enrollments, @course)
+      @hash["public_description"] = description(@course)
+      @hash["hide_final_grades"] = @course.hide_final_grades?
+      @hash["workflow_state"] = @course.api_state
+      @hash["course_format"] = @course.course_format if @course.course_format.present?
+      @hash["restrict_enrollments_to_course_dates"] = !!@course.restrict_enrollments_to_course_dates
+      if (visibility = @course.overridden_course_visibility)
+        @hash["overridden_course_visibility"] = visibility
       end
       if @includes.include?(:current_grading_period_scores)
-        @hash['has_grading_periods'] = @course.grading_periods?
-        @hash['multiple_grading_periods_enabled'] = @hash['has_grading_periods'] # for backwards compatibility
-        @hash['has_weighted_grading_periods'] = @course.weighted_grading_periods?
+        @hash["has_grading_periods"] = @course.grading_periods?
+        @hash["multiple_grading_periods_enabled"] = @hash["has_grading_periods"] # for backwards compatibility
+        @hash["has_weighted_grading_periods"] = @course.weighted_grading_periods?
       end
       clear_unneeded_fields(@hash)
     end
 
     def self.to_hash(course, user, includes, enrollments, precalculated_permissions: nil, &block)
-      self.new(course, user, includes, enrollments, precalculated_permissions: precalculated_permissions, &block).to_hash
+      new(course, user, includes, enrollments, precalculated_permissions:, &block).to_hash
     end
 
     def clear_unneeded_fields(hash)
-      hash.reject{|k, v| (OPTIONAL_FIELDS.include?(k) && v.nil?) }
+      hash.reject { |k, v| (OPTIONAL_FIELDS.include?(k) && v.nil?) }
     end
 
     def description(course)
@@ -87,7 +104,7 @@ module Api::V1
 
     def has_permission?(*permissions)
       permissions.any? do |permission|
-        if @precalculated_permissions&.has_key?(permission)
+        if @precalculated_permissions&.key?(permission)
           @precalculated_permissions[permission]
         else
           @course.grants_right?(@user, permission)
@@ -97,34 +114,35 @@ module Api::V1
 
     def set_sis_course_id(hash)
       if has_permission?(:read_sis, :manage_sis)
-        hash['sis_course_id'] = @course.sis_source_id
+        hash["sis_course_id"] = @course.sis_source_id
       end
       if has_permission?(:manage_sis)
-        hash['sis_import_id'] = @course.sis_batch_id
+        hash["sis_import_id"] = @course.sis_batch_id
       end
     end
 
     def set_integration_id(hash)
       if has_permission?(:read_sis, :manage_sis)
-        hash['integration_id'] = @course.integration_id
+        hash["integration_id"] = @course.integration_id
       end
     end
 
     def needs_grading_count(enrollments, course)
-      if include_grading && enrollments && enrollments.any? { |e| e.participating_instructor? }
+      if include_grading && enrollments && enrollments.any?(&:participating_instructor?)
         proxy = Assignments::NeedsGradingCountQuery::CourseProxy.new(course, user)
-        course.assignments.active.to_a.sum{|a| Assignments::NeedsGradingCountQuery.new(a, user, proxy).count }
+        course.assignments.active.to_a.sum { |a| Assignments::NeedsGradingCountQuery.new(a, user, proxy).count }
       end
     end
 
     def permissions_to_include
-      [ :create_discussion_topic, :create_announcement ] if include_permissions
+      [:create_discussion_topic, :create_announcement] if include_permissions
     end
 
     def extract_enrollments(enrollments)
       return unless enrollments
+
       if include_total_scores?
-        ActiveRecord::Associations::Preloader.new.preload(enrollments, :scores)
+        ActiveRecord::Associations.preload(enrollments, :scores)
       end
       enrollments.map { |e| enrollment_hash(e) }
     end
@@ -137,6 +155,7 @@ module Api::V1
 
     def include_total_scores?
       return @include_total_scores unless @include_total_scores.nil?
+
       @include_total_scores = @includes.include?(:total_scores) && !@course.hide_final_grades?
     end
 
@@ -152,11 +171,12 @@ module Api::V1
 
     def default_enrollment_attributes(enrollment)
       {
-        :type => enrollment.sis_type,
-        :role => enrollment.role.name,
-        :role_id => enrollment.role.id,
-        :user_id => enrollment.user_id,
-        :enrollment_state => enrollment.workflow_state
+        type: enrollment.sis_type,
+        role: enrollment.role.name,
+        role_id: enrollment.role.id,
+        user_id: enrollment.user_id,
+        enrollment_state: enrollment.workflow_state,
+        limit_privileges_to_course_section: enrollment.limit_privileges_to_course_section
       }
     end
 
@@ -180,6 +200,9 @@ module Api::V1
       else
         scores[:computed_current_grade] = student_enrollment.effective_current_grade
         scores[:computed_current_score] = student_enrollment.effective_current_score
+        # score_to_grade will return nil if user is not quantitative data restricted.
+        # consumers can continue using :computed_current_grade instead
+        scores[:computed_current_letter_grade] = @course.score_to_grade(student_enrollment.effective_current_score, user: @user)
         scores[:computed_final_grade] = student_enrollment.effective_final_grade
         scores[:computed_final_score] = student_enrollment.effective_final_score
       end
@@ -241,10 +264,10 @@ module Api::V1
       return nil unless current_grading_period
 
       prefix = if @course.grants_any_right?(@user, :manage_grades, :view_all_grades)
-        unposted ? "unposted" : "computed"
-      else
-        "effective"
-      end
+                 unposted ? "unposted" : "computed"
+               else
+                 "effective"
+               end
 
       enrollment.send(
         "#{prefix}_#{current_or_final}_#{score_or_grade}",
@@ -261,12 +284,14 @@ module Api::V1
 
     def include_current_grading_period_scores?
       return @include_current_grading_period_scores unless @include_current_grading_period_scores.nil?
+
       @include_current_grading_period_scores =
         include_total_scores? && @includes.include?(:current_grading_period_scores)
     end
 
     def include_grading_period_info?
       return @include_grading_period_info unless @include_grading_period_info.nil?
+
       @include_grading_period_info =
         @includes.include?(:current_grading_period_scores) && @includes.include?(:total_scores)
     end

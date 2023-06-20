@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -17,36 +19,25 @@
 #
 
 class DeveloperKeyAccountBinding < ApplicationRecord
-  ALLOW_STATE = 'allow'.freeze
-  ON_STATE = 'on'.freeze
-  OFF_STATE = 'off'.freeze
-  DEFAULT_STATE = OFF_STATE
+  include Workflow
+  workflow do
+    state :off
+    state :on
+    state :allow
+  end
 
   belongs_to :account
   belongs_to :developer_key
+  belongs_to :root_account, class_name: "Account"
 
   validates :account, :developer_key, presence: true
-  validates :workflow_state, inclusion: { in: [OFF_STATE, ALLOW_STATE, ON_STATE] }
 
-  before_validation :infer_workflow_state
+  before_save :set_root_account
   after_update :clear_cache_if_site_admin
   after_update :update_tools!
 
-  scope :active_in_account, -> (account) do
-    where(account_id: account.account_chain_ids).
-      where(workflow_state: ON_STATE)
-  end
-
-  # run this once on the local shard and again on site_admin to get all avaiable dev_keys with
-  # tool configurations
-  scope :lti_1_3_tools, -> (bindings) do
-    bindings.joins(developer_key: :tool_configuration).
-      where(developer_keys: { visible: true, workflow_state: 'active' }).
-      eager_load(developer_key: :tool_configuration)
-  end
-
-  # Find a DeveloperKeyAccountBinding in order of account_ids. The search for a binding will
-  # be prioritized by the order of account_ids. If a binding is found for the first account
+  # Find a DeveloperKeyAccountBinding in order of accounts. The search for a binding will
+  # be prioritized by the order of accounts. If a binding is found for the first account
   # that binding will be returned, otherwise the next account will be searched and so on.
   #
   # By default only bindings with a workflow set to “on” or “off” are considered. To include
@@ -62,32 +53,37 @@ class DeveloperKeyAccountBinding < ApplicationRecord
   #
   # find_in_account_priority([1, 2, 3, 4], developer_key.id, false) would return the binding for
   # account 2.
-  def self.find_in_account_priority(account_ids, developer_key_id, explicitly_set = true)
-    raise 'Account ids must be integers' if account_ids.any? { |id| !id.is_a?(Integer) }
-    account_ids_string = "{#{account_ids.join(',')}}"
-    binding_id = DeveloperKeyAccountBinding.connection.select_values(<<-SQL)
-      SELECT b.*
-      FROM
-          unnest('#{account_ids_string}'::int8[]) WITH ordinality AS i (id, ord)
-          JOIN #{DeveloperKeyAccountBinding.quoted_table_name} b ON i.id = b.account_id
-      WHERE
-          b."developer_key_id" = #{developer_key_id}
-      AND
-          b."workflow_state" <> '#{explicitly_set.present? ? ALLOW_STATE : "NULL"}'
-      ORDER BY i.ord ASC LIMIT 1
-    SQL
-    self.find_by(id: binding_id)
+  #
+  # With a cross-shard account at some point in the account chain, bindings are searched for across
+  # each shard of each account.
+  def self.find_in_account_priority(accounts, developer_key, explicitly_set: true)
+    bindings = Shard.partition_by_shard(accounts) do |accounts_by_shard|
+      account_ids_string = "{#{accounts_by_shard.map(&:id).join(",")}}"
+      relation = DeveloperKeyAccountBinding
+                 .joins(sanitize_sql("JOIN unnest('#{account_ids_string}'::int8[]) WITH ordinality AS i (id, ord) ON i.id=account_id"))
+                 .where(developer_key:)
+                 .order(:ord)
+      relation = relation.where.not(workflow_state: "allow") if explicitly_set
+      relation.take
+    end
+
+    # Still need to order by priority -- if, given accounts [1,2,3], accounts 1
+    # and 3 were on shard A and account 2 was on shard B, and accounts 2 and 3
+    # had bindings, bindings.first would be for account 3
+    accounts_to_index = accounts.map(&:global_id).each_with_index.to_a.to_h
+    bindings.compact.min_by { |b| accounts_to_index[b.global_account_id] }
   end
 
   def self.find_site_admin_cached(developer_key)
     # Site admin bindings don't exists for non-site admin developer keys
     return nil if developer_key.account_id.present?
+
     Shard.default.activate do
       MultiCache.fetch(site_admin_cache_key(developer_key)) do
-        Shackles.activate(:slave) do
-          binding = self.where.not(workflow_state: ALLOW_STATE).find_by(
+        GuardRail.activate(:secondary) do
+          binding = where.not(workflow_state: "allow").find_by(
             account: Account.site_admin,
-            developer_key: developer_key
+            developer_key:
           )
           binding
         end
@@ -105,19 +101,13 @@ class DeveloperKeyAccountBinding < ApplicationRecord
     "accounts/site_admin/developer_key_account_bindings/#{developer_key.global_id}"
   end
 
-  def on?
-    self.workflow_state == ON_STATE
-  end
-
-  def off?
-    self.workflow_state == OFF_STATE
-  end
-
-  def allowed?
-    self.workflow_state == ALLOW_STATE
-  end
+  alias_method :allowed?, :allow?
 
   private
+
+  def set_root_account
+    self.root_account_id ||= account&.resolved_root_account_id
+  end
 
   def update_tools!
     if disable_tools?
@@ -143,9 +133,5 @@ class DeveloperKeyAccountBinding < ApplicationRecord
 
   def clear_cache_if_site_admin
     self.class.clear_site_admin_cache(developer_key) if account.site_admin?
-  end
-
-  def infer_workflow_state
-    self.workflow_state ||= DEFAULT_STATE
   end
 end

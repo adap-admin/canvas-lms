@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -15,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_relative '../../common'
+require_relative "../../common"
 
 class ModeratePage
   class << self
@@ -41,22 +43,22 @@ class ModeratePage
     end
 
     def click_page_number(page_number)
-      page_buttons.find {|e| e.text == page_number.to_s}.click
+      page_buttons.find { |e| e.text == page_number.to_s }.click
     end
 
     def enter_custom_grade(student, grade)
       grade_input(student).click
       grade_input(student).send_keys(:backspace, grade)
-      grade_input_dropdown_list(student).find {|k| k.text == "#{grade} (Custom)"}.click
+      grade_input_dropdown_list(student).find { |k| k.text == "#{grade} (Custom)" }.click
     end
 
     def click_student_link(student)
-      wait_for_new_page_load{ student_link(student).click }
+      wait_for_new_page_load { student_link(student).click }
     end
 
     def fetch_selected_final_grade_text(student)
       grade_input(student).click
-      text = grade_input_dropdown_list(student).find{|e| e.attribute('aria-selected') == "true"}.text
+      text = grade_input_dropdown_list(student).find { |e| e.attribute("aria-selected") == "true" }.text
       # close the menu
       grade_input(student).send_keys(:escape)
       text
@@ -105,11 +107,11 @@ class ModeratePage
     end
 
     def student_table_headers
-      ff('.GradesGrid__GraderHeader')
+      ff(".GradesGrid__GraderHeader")
     end
 
     def student_table_row_headers
-      ff('.GradesGrid__BodyRowHeader')
+      ff(".GradesGrid__BodyRowHeader")
     end
 
     def student_table_row_by_displayed_name(name)
@@ -137,19 +139,23 @@ class ModeratePage
     end
 
     def grades(student)
-      ff('.GradesGrid__ProvisionalGradeCell', student_table_row_by_displayed_name(student.name))
+      ff(".GradesGrid__ProvisionalGradeCell", student_table_row_by_displayed_name(student.name))
     end
 
     def grade_input(student)
-      f('.GradesGrid__FinalGradeCell input', student_table_row_by_displayed_name(student.name))
+      f(".GradesGrid__FinalGradeCell input", student_table_row_by_displayed_name(student.name))
+    end
+
+    def selected_grade
+      ff("[data-testid='moderated-graded-select']")[0].attribute("value")
     end
 
     def grade_input_dropdown_list(student)
-      ff("ul##{grade_input(student).attribute('aria-controls')} li")
+      ff("ul##{grade_input(student).attribute("aria-controls")} li span[role='option']")
     end
 
     def grade_input_dropdown(student)
-      f("ul##{grade_input(student).attribute('aria-controls')}")
+      f("ul##{grade_input(student).attribute("aria-controls")}")
     end
 
     def student_link(student_name)

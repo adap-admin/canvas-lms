@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -135,25 +137,26 @@ module AttachmentFu # :nodoc:
     # You can retrieve the bucket name using the <tt>bucket_name</tt> method.
     module S3Backend
       class RequiredLibraryNotFoundError < StandardError; end
+
       class ConfigFileNotFoundError < StandardError; end
 
       mattr_reader :bucket
 
-      def self.included(base) #:nodoc:
-        require 'aws-sdk-s3'
+      def self.included(base) # :nodoc:
+        require "aws-sdk-s3"
 
         s3_config = load_s3_config(base.attachment_options[:s3_config_path])
         bucket_name = s3_config.delete(:bucket_name)
 
-        s3 = Aws::S3::Resource.new(Canvas::AWS.validate_v2_config(s3_config, 'amazon_s3.yml'))
+        s3 = Aws::S3::Resource.new(Canvas::AWS.validate_v2_config(s3_config, "amazon_s3.yml"))
         @@bucket = s3.bucket(bucket_name)
 
         base.before_update :rename_file
       end
 
       def self.load_s3_config(path = nil)
-        s3_config_path = path || (Rails.root + 'config/amazon_s3.yml')
-        YAML.load(ERB.new(File.read(s3_config_path)).result)[Rails.env].symbolize_keys
+        s3_config_path = path || Rails.root.join("config/amazon_s3.yml")
+        YAML.safe_load(ERB.new(File.read(s3_config_path)).result)[Rails.env].symbolize_keys
       end
 
       # Overwrites the base filename writer in order to store the old filename
@@ -163,16 +166,14 @@ module AttachmentFu # :nodoc:
       end
 
       def sanitize_filename(filename)
-        if self.respond_to?(:root_attachment) && self.root_attachment && self.root_attachment.filename
-          filename = self.root_attachment.filename
+        if respond_to?(:root_attachment) && root_attachment && root_attachment.filename
+          root_attachment.filename
         else
-          filename = Attachment.truncate_filename(filename, 255) do |component, len|
+          Attachment.truncate_filename(filename, 255) do |component, len|
             CanvasTextHelper.cgi_escape_truncate(component, len)
           end
         end
-        filename
       end
-
 
       # The attachment ID used in the full path of a file
       def attachment_path_id
@@ -181,8 +182,8 @@ module AttachmentFu # :nodoc:
 
       # INSTRUCTURE: fallback to old path style if there is no cluster attribute
       def namespaced_path
-        obj = (respond_to?(:root_attachment) && self.root_attachment) || self
-        if namespace = obj.read_attribute(:namespace)
+        obj = (respond_to?(:root_attachment) && root_attachment) || self
+        if (namespace = obj.read_attribute(:namespace))
           File.join(namespace, obj.attachment_options[:path_prefix])
         else
           obj.attachment_options[:path_prefix]
@@ -200,7 +201,7 @@ module AttachmentFu # :nodoc:
       def full_filename(thumbnail = nil)
         # the old AWS::S3 gem would not encode +'s, causing S3 to interpret
         # them as spaces. Continue that behavior.
-        basename = thumbnail_name_for(thumbnail).gsub('+', ' ')
+        basename = thumbnail_name_for(thumbnail).tr("+", " ")
         File.join(base_path, basename)
       end
 
@@ -221,7 +222,7 @@ module AttachmentFu # :nodoc:
       def s3_url(thumbnail = nil)
         s3object(thumbnail).public_url
       end
-      alias :public_filename :s3_url
+      alias_method :public_filename, :s3_url
 
       # All private objects are accessible via an authenticated GET request to the S3 servers. You can generate an
       # authenticated url for an object like this:
@@ -250,10 +251,8 @@ module AttachmentFu # :nodoc:
       def authenticated_s3_url(*args)
         thumbnail = args.first.is_a?(String) ? args.first : nil
         options   = args.last.is_a?(Hash)    ? args.last  : {}
-        unless options[:expires_in].nil?
-          if options[:expires_in].is_a? ActiveSupport::Duration
-            options[:expires_in] = options[:expires_in].to_i
-          end
+        if !options[:expires_in].nil? && options[:expires_in].is_a?(ActiveSupport::Duration)
+          options[:expires_in] = options[:expires_in].to_i
         end
         s3object(thumbnail).presigned_url(:get, options)
       end
@@ -267,60 +266,45 @@ module AttachmentFu # :nodoc:
       end
 
       protected
-        # Called in the after_destroy callback
-        def destroy_file
-          # INSTRUCTURE: We don't want to actually delete objects from s3 (at
-          # least not due to the Attachment being destroyed). With our root
-          # attachment deduplication scheme it just gets too messy and buggy.
-          # We'll just GC them later.
-          true
-        end
 
-        def rename_file
-          # INSTRUCTURE: We don't actually want to rename Attachments.
-          # The problem is that we're re-using our s3 storage if you copy
-          # a file or if two files have the same md5 and size.  In that case
-          # there are multiple attachments pointing to the same place on s3
-          # and we don't want to get rid of the original...
-          # TODO: we'll just have to figure out a different way to clean out
-          # the cruft that happens because of this
-          return
-          return unless @old_filename && @old_filename != filename
+      # Called in the after_destroy callback
+      def destroy_file
+        # INSTRUCTURE: We don't want to actually delete objects from s3 (at
+        # least not due to the Attachment being destroyed). With our root
+        # attachment deduplication scheme it just gets too messy and buggy.
+        # We'll just GC them later.
+        true
+      end
 
-          old_full_filename = File.join(base_path, @old_filename)
+      def rename_file
+        # INSTRUCTURE: We don't actually want to rename Attachments.
+        # The problem is that we're re-using our s3 storage if you copy
+        # a file or if two files have the same md5 and size.  In that case
+        # there are multiple attachments pointing to the same place on s3
+        # and we don't want to get rid of the original...
+        # TODO: we'll just have to figure out a different way to clean out
+        # the cruft that happens because of this
+        false
+      end
 
-          # INSTRUCTURE: this dies when the file did not already exist,
-          # but we need it to not throw an angry exception in production.
-          # I've added some additional provisions in Attachment.rb, but
-          # it looks like they're not always working for some reason
-          begin
-            bucket.object(old_full_filename).move_to(full_filename, :acl => attachment_options[:s3_access])
-          rescue => e
-            filename = @old_filename
+      def save_to_storage
+        if save_attachment_from_temp_path?
+          options = {
+            content_type:,
+            acl: attachment_options[:s3_access]
+          }
+          options.merge!(attachment_options.slice(:cache_control, :expires, :metadata))
+          if temp_path
+            s3object.upload_file(temp_path, options)
+          else
+            options[:body] = temp_data
+            s3object.put(options)
           end
-
-          @old_filename = nil
-          true
         end
 
-        def save_to_storage
-          if save_attachment?
-            options = {
-              content_type: content_type,
-              acl: attachment_options[:s3_access]
-            }
-            options.merge!(attachment_options.slice(:cache_control, :expires, :metadata))
-            if temp_path
-              s3object.upload_file(temp_path, options)
-            else
-              options[:body] = temp_data
-              s3object.put(options)
-            end
-          end
-
-          @old_filename = nil
-          true
-        end
+        @old_filename = nil
+        true
+      end
     end
   end
 end

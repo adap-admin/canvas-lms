@@ -16,18 +16,24 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import FileOptionsCollection from 'compiled/react_files/modules/FileOptionsCollection'
+import FileOptionsCollection from '@canvas/files/react/modules/FileOptionsCollection'
 
 const mockFile = (name, type = 'application/image') => ({
   get(attr) {
     if (attr === 'display_name') return name
   },
-  type
+  type,
 })
 
 function setupFolderWith(names) {
   const mockFiles = names.map(name => mockFile(name))
   const folder = {files: {models: mockFiles}}
+  return FileOptionsCollection.setFolder(folder)
+}
+
+function setupModelLessFolderWith(names) {
+  const mockFiles = names.map(name => mockFile(name))
+  const folder = {files: mockFiles}
   return FileOptionsCollection.setFolder(folder)
 }
 
@@ -50,11 +56,16 @@ QUnit.module(
     },
     teardown() {
       FileOptionsCollection.resetState()
-    }
+    },
   },
 
   test('findMatchingFile correctly finds existing files by display_name', () => {
     setupFolderWith(['foo', 'bar', 'baz'])
+    ok(FileOptionsCollection.findMatchingFile('foo'))
+  }),
+
+  test('findMatchingFile correctly finds existing files without model attribute', () => {
+    setupModelLessFolderWith(['foo', 'bar', 'baz'])
     ok(FileOptionsCollection.findMatchingFile('foo'))
   }),
 
@@ -63,7 +74,7 @@ QUnit.module(
     equal(FileOptionsCollection.findMatchingFile('xyz') != null, false)
   }),
 
-  test('segregateOptionBuckets divides files into collsion and resolved buckets', () => {
+  test('segregateOptionBuckets divides files into collision and resolved buckets', () => {
     setupFolderWith(['foo', 'bar', 'baz'])
     const one = createFileOption('file_name.txt', 'overwrite', 'option_name.txt')
     const two = createFileOption('foo')
@@ -94,7 +105,7 @@ QUnit.module(
     setupFolderWith(['foo', 'bar', 'baz'])
     const one = createFileOption('other.zip')
     one.file.type = 'application/zip'
-    const {collisions, resolved, zips} = FileOptionsCollection.segregateOptionBuckets([one])
+    const {resolved, zips} = FileOptionsCollection.segregateOptionBuckets([one])
     equal(resolved.length, 0)
     equal(zips[0].file.name, 'other.zip')
   }),
@@ -104,7 +115,7 @@ QUnit.module(
     const one = createFileOption('other.zip')
     one.file.type = 'application/zip'
     one.expandZip = false
-    const {collisions, resolved, zips} = FileOptionsCollection.segregateOptionBuckets([one])
+    const {resolved, zips} = FileOptionsCollection.segregateOptionBuckets([one])
     equal(resolved.length, 1)
     equal(zips.length, 0)
   }),
@@ -114,6 +125,35 @@ QUnit.module(
     const one = createFileOption('other.zip')
     one.file.type = 'application/zip'
     one.expandZip = true
+    const {collisions, resolved, zips} = FileOptionsCollection.segregateOptionBuckets([one])
+    equal(resolved.length, 1)
+    equal(collisions.length, 0)
+    equal(zips.length, 0)
+  }),
+
+  test('segregateOptionBuckets skips files', () => {
+    setupFolderWith(['foo', 'bar', 'baz'])
+    const one = createFileOption('foo', 'skip')
+    const {collisions, resolved} = FileOptionsCollection.segregateOptionBuckets([one])
+    equal(collisions.length, 0)
+    equal(resolved.length, 0)
+  }),
+
+  test('segregateOptionBuckets treats zip files like regular files if alwaysUploadZips is true', () => {
+    setupFolderWith(['other.zip', 'bar', 'baz'])
+    const one = createFileOption('other.zip')
+    one.file.type = 'application/zip'
+    FileOptionsCollection.setUploadOptions({alwaysUploadZips: true})
+    const {collisions, resolved, zips} = FileOptionsCollection.segregateOptionBuckets([one])
+    equal(resolved.length, 0)
+    equal(collisions.length, 1)
+    equal(zips.length, 0)
+  }),
+
+  test('segregateOptionBuckets automaticaly renames files when alwaysRename is true', () => {
+    setupFolderWith(['foo', 'bar', 'baz'])
+    const one = createFileOption('foo')
+    FileOptionsCollection.setUploadOptions({alwaysRename: true})
     const {collisions, resolved, zips} = FileOptionsCollection.segregateOptionBuckets([one])
     equal(resolved.length, 1)
     equal(collisions.length, 0)

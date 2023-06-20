@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -16,18 +18,45 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-class OnlineSubmissionType < Types::BaseEnum
-  graphql_name 'OnlineSubmissionType'
-  description 'Types that can be submitted online'
-  value('online_upload')
+module Types
+  class OnlineSubmissionType < Types::BaseEnum
+    VALID_SUBMISSION_TYPES = %w[
+      basic_lti_launch
+      student_annotation
+      media_recording
+      online_text_entry
+      online_upload
+      online_url
+    ].freeze
+
+    graphql_name "OnlineSubmissionType"
+    description "Types that can be submitted online"
+
+    VALID_SUBMISSION_TYPES.each { |type| value(type) }
+  end
 end
 
 class Mutations::CreateSubmission < Mutations::BaseMutation
-  graphql_name 'CreateSubmission'
+  graphql_name "CreateSubmission"
 
-  argument :assignment_id, ID, required: true, prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func('Assignment')
-  argument :file_ids, [ID], required: false, prepare: GraphQLHelpers.relay_or_legacy_ids_prepare_func('Attachment')
-  argument :submission_type, OnlineSubmissionType, required: true
+  argument :annotatable_attachment_id,
+           ID,
+           required: false,
+           prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func("Attachment")
+  argument :assignment_id,
+           ID,
+           required: true,
+           prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func("Assignment")
+  argument :body, String, required: false
+  argument :file_ids,
+           [ID],
+           required: false,
+           prepare: GraphQLHelpers.relay_or_legacy_ids_prepare_func("Attachment")
+  argument :media_id, ID, required: false
+  argument :resource_link_lookup_uuid, String, required: false
+  argument :submission_type, Types::OnlineSubmissionType, required: true
+  argument :url, String, required: false
+  argument :student_id, ID, required: false
 
   field :submission, Types::SubmissionType, null: true
 
@@ -35,83 +64,142 @@ class Mutations::CreateSubmission < Mutations::BaseMutation
     assignment = Assignment.active.find(input[:assignment_id])
     assignment = assignment.overridden_for(current_user)
     context = assignment.context
-
     submission_type = input[:submission_type]
-    file_ids = (input[:file_ids] || []).compact.uniq
 
     verify_authorized_action!(assignment, :read)
-    verify_authorized_action!(assignment, :submit)
-
-    attachments = current_user.attachments.active.where(id: file_ids)
-    unless file_ids.size == attachments.size
-      attachment_ids = attachments.map(&:id)
-      return graphql_error(
-        I18n.t(
-          'No attachments found for the following ids: %{ids}',
-          { ids: file_ids - attachment_ids.map(&:to_s) }
-        )
-      )
+    if input[:student_id]
+      verify_authorized_action!(assignment.course, :proxy_assignment_submission)
+    else
+      verify_authorized_action!(assignment, :submit)
     end
 
-    upload_errors = validate_online_upload(assignment, attachments) if submission_type == 'online_upload'
-    return upload_errors if upload_errors
-
     submission_params = {
-      body: 'Graphql dummy submission text entry',
-      submission_type: submission_type
+      annotatable_attachment_id: assignment.annotatable_attachment_id,
+      attachments: [],
+      body: "",
+      require_submission_type_is_valid: true,
+      submission_type:,
+      url: nil
     }
-    submission_params[:attachments] = copy_attachments_to_submissions_folder(context, attachments)
+    case submission_type
+    when "basic_lti_launch"
+      if input[:url].blank?
+        return validation_error(I18n.t("LTI submissions require a URL to submit"))
+      end
+
+      submission_params[:url] = input[:url]
+      submission_params[:resource_link_lookup_uuid] = input[:resource_link_lookup_uuid]
+    when "student_annotation"
+      if assignment.annotatable_attachment_id.blank?
+        return(
+          validation_error(
+            I18n.t("Student Annotation submissions require an annotatable_attachment_id to submit")
+          )
+        )
+      end
+    when "media_recording"
+      unless input[:media_id]
+        return(
+          validation_error(
+            I18n.t(
+              "%{media_recording} submissions require a %{media_id} to submit",
+              { media_recording: "media_recording", media_id: "media_id" }
+            )
+          )
+        )
+      end
+      media_object = MediaObject.by_media_id(input[:media_id]).first
+      unless media_object
+        return(
+          validation_error(
+            I18n.t(
+              "The %{media_id} does not correspond to an existing media object",
+              { media_id: "media_id" }
+            )
+          )
+        )
+      end
+      submission_params[:media_comment_type] = media_object.media_type
+      submission_params[:media_comment_id] = input[:media_id]
+    when "online_text_entry"
+      submission_params[:body] = input[:body]
+    when "online_upload"
+      owning_user = nil
+      if input[:student_id]
+        owning_user =
+          User
+          .joins(:submissions)
+          .where(submissions: { assignment: })
+          .find(input[:student_id])
+        submission_params[:proxied_student] = owning_user
+      else
+        owning_user = current_user
+      end
+      file_ids = (input[:file_ids] || []).compact.uniq
+
+      attachments = owning_user&.submittable_attachments&.active&.where(id: file_ids) || []
+      unless file_ids.size == attachments.size
+        attachment_ids = attachments.map(&:id)
+        return(
+          validation_error(
+            I18n.t(
+              "No attachments found for the following ids: %{ids}",
+              { ids: file_ids - attachment_ids.map(&:to_s) }
+            ),
+            attribute: "file_ids"
+          )
+        )
+      end
+
+      upload_errors =
+        validate_online_upload(assignment, attachments, is_proxy: !!input[:student_id])
+      return upload_errors if upload_errors
+
+      submission_params[:attachments] =
+        Attachment.copy_attachments_to_submissions_folder(context, attachments)
+    when "online_url"
+      submission_params[:url] = input[:url]
+    end
 
     submission = assignment.submit_homework(current_user, submission_params)
-    {submission: submission}
+    { submission: }
   rescue ActiveRecord::RecordNotFound
-    raise GraphQL::ExecutionError, 'not found'
-  rescue ActiveRecord::RecordInvalid => invalid
-    errors_for(invalid.record)
+    raise GraphQL::ExecutionError, "not found"
+  rescue ActiveRecord::RecordInvalid => e
+    errors_for(e.record)
   end
 
   private
 
   # TODO: move file validation to the model
-  def validate_online_upload(assignment, attachments)
-    return graphql_error(I18n.t('You must attach at least one file to this assignment')) if attachments.blank?
-
-    # Probably a superfluous check considering how we retrieve the attachments
-    attachments.each do |attachment|
-      verify_authorized_action!(attachment, :read)
+  def validate_online_upload(assignment, attachments, is_proxy: false)
+    if attachments.blank?
+      return(
+        validation_error(
+          I18n.t("You must attach at least one file to this assignment"),
+          attribute: "file_ids"
+        )
+      )
     end
 
-    graphql_error(I18n.t('Invalid file type')) unless extensions_allowed?(assignment, attachments)
+    # Probably a superfluous check considering how we retrieve the attachments
+    attachments.each { |attachment| verify_authorized_action!(attachment, :read) } unless is_proxy
+
+    unless extensions_allowed?(assignment, attachments)
+      validation_error(I18n.t("Invalid file type"), attribute: "file_ids")
+    end
   end
 
   def extensions_allowed?(assignment, attachments)
     return true if assignment.allowed_extensions.blank?
 
-    return false unless attachments.all? do |attachment|
-      attachment_extension = attachment.after_extension || ''
-      assignment.allowed_extensions.include?(attachment_extension.downcase)
+    unless attachments.all? do |attachment|
+             attachment_extension = attachment.after_extension || ""
+             assignment.allowed_extensions.include?(attachment_extension.downcase)
+           end
+      return false
     end
 
     true
-  end
-
-  def copy_attachments_to_submissions_folder(assignment_context, attachments)
-    attachments.map do |attachment|
-      if attachment&.folder&.for_submissions?
-        attachment # already in a submissions folder
-      elsif attachment.context.respond_to?(:submissions_folder)
-        attachment.copy_to_folder!(attachment.context.submissions_folder(assignment_context))
-      else
-        attachment # in a weird context; leave it alone
-      end
-    end
-  end
-
-  def graphql_error(message)
-    {
-      errors: {
-        message: message
-      }
-    }
   end
 end

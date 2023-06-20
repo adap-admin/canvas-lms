@@ -20,14 +20,14 @@ import $ from 'jquery'
 import React from 'react'
 import ReactDOM from 'react-dom'
 import TestUtils from 'react-dom/test-utils'
-import ZipFileOptionsForm from 'jsx/files/ZipFileOptionsForm'
+import ZipFileOptionsForm from '@canvas/files/react/components/ZipFileOptionsForm'
 
 QUnit.module('ZipFileOptionsForm')
 
 test('creates a display message based on fileOptions ', () => {
   const props = {
     fileOptions: {file: {name: 'neat_file'}},
-    onZipOptionsResolved() {}
+    onZipOptionsResolved() {},
   }
   const zFOF = TestUtils.renderIntoDocument(<ZipFileOptionsForm {...props} />)
   equal(
@@ -38,18 +38,18 @@ test('creates a display message based on fileOptions ', () => {
   ReactDOM.unmountComponentAtNode(ReactDOM.findDOMNode(zFOF).parentNode)
 })
 
-test('handleExpandClick expands zip', function() {
+test('handleExpandClick expands zip', () => {
   const zipOptionsResolvedStub = sinon.stub()
   const props = {
     fileOptions: {file: 'the_file_obj'},
-    onZipOptionsResolved: zipOptionsResolvedStub
+    onZipOptionsResolved: zipOptionsResolvedStub,
   }
   const zFOF = TestUtils.renderIntoDocument(<ZipFileOptionsForm {...props} />)
   TestUtils.Simulate.click($('.btn-primary:contains("Upload It")')[0])
   ok(
     zipOptionsResolvedStub.calledWithMatch({
       file: 'the_file_obj',
-      expandZip: false
+      expandZip: false,
     }),
     'resolves with correct options'
   )
@@ -59,20 +59,20 @@ test('handleExpandClick expands zip', function() {
 // skip if webpack: CNVS-33471
 // note: does not fail when only this spec is run
 if (window.hasOwnProperty('define')) {
-  test('handleUploadClick uploads zip', function() {
+  test('handleUploadClick uploads zip', () => {
     const zipOptionsResolvedStub = sinon.stub()
     const props = {
       fileOptions: {file: 'the_file_obj'},
       onZipOptionsResolved(options) {
         return zipOptionsResolvedStub(options)
-      }
+      },
     }
     const zFOF = TestUtils.renderIntoDocument(<ZipFileOptionsForm {...props} />)
     TestUtils.Simulate.click($('.btn')[0])
     ok(
       zipOptionsResolvedStub.calledWithMatch({
         file: 'the_file_obj',
-        expandZip: true
+        expandZip: true,
       }),
       'resolves with correct options'
     )

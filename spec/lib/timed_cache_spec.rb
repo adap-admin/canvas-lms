@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,24 +18,21 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper.rb')
-
 describe "TimedCache" do
-  it "should expire the cache if older than specified" do
+  it "expires the cache if older than specified" do
     cleared = 0
     Timecop.freeze do
       cache = TimedCache.new(-> { 60.seconds.ago }) do
         cleared += 1
       end
 
-      expect(cache.clear).to eq false
+      expect(cache.clear).to be false
       expect(cleared).to eq 0
 
       Timecop.travel(70.seconds) do
-        expect(cache.clear).to eq true
+        expect(cache.clear).to be true
         expect(cleared).to eq 1
       end
     end
   end
 end
-

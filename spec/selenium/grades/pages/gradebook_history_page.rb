@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -15,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_relative '../../common'
+require_relative "../../common"
 
 class GradeBookHistory
   class << self
@@ -51,7 +53,7 @@ class GradeBookHistory
     end
 
     def enter_assignment_name(assignment_name)
-      assignment_name_textfield.send_keys(assignment_name)
+      replace_content(assignment_name_textfield, assignment_name)
       wait_for_ajaximations
     end
 
@@ -96,6 +98,11 @@ class GradeBookHistory
       click_filter_button
     end
 
+    def search_final_grade_override_only
+      final_grade_override_checkbox.click
+      click_filter_button
+    end
+
     def search_with_all_data(type_ahead, student, grader, assignment)
       select_student_name(type_ahead, student)
       select_grader_name(grader)
@@ -105,8 +112,8 @@ class GradeBookHistory
 
     def check_current_col_for_history(assignment_name)
       row_elements = results_table_rows
-      current_grade_arr=Array.[]
-      for index in 1...row_elements.size
+      current_grade_arr = Array.[]
+      (1...row_elements.size).each do |index|
         if results_table_assignment_col(index).text == assignment_name
           current_grade_arr[index] = results_table_current_col(index).text
         end
@@ -117,7 +124,7 @@ class GradeBookHistory
     def check_table_for_assignment_name(string_in_row)
       row_elements = results_table_rows
       test_passed = true
-      for index in 1...row_elements.size
+      (1...row_elements.size).each do |index|
         if results_table_assignment_col(index).text != string_in_row
           test_passed = false
         end
@@ -125,10 +132,18 @@ class GradeBookHistory
       test_passed
     end
 
+    def contains_final_grade_override_entries?
+      (1...results_table_rows.size + 1).any? { |idx| results_table_assignment_col(idx).text == "Final Grade Override" }
+    end
+
+    def contains_only_final_grade_override_entries?
+      (1...results_table_rows.size + 1).all? { |idx| results_table_assignment_col(idx).text == "Final Grade Override" }
+    end
+
     def check_table_for_grader_name(string_in_row)
       row_elements = results_table_rows
       test_passed = true
-      for index in 1...row_elements.size
+      (1...row_elements.size).each do |index|
         if results_table_grader_col(index).text != string_in_row
           test_passed = false
         end
@@ -139,7 +154,7 @@ class GradeBookHistory
     def check_table_for_student_name(string_in_row)
       row_elements = results_table_rows
       test_passed = true
-      for index in 1...row_elements.size
+      (1...row_elements.size).each do |index|
         if results_table_student_col(index).text != string_in_row
           test_passed = false
         end
@@ -156,15 +171,19 @@ class GradeBookHistory
     end
 
     def student_name_textfield
-      f('#students')
+      f("#students")
     end
 
     def grader_name_textfield
-      f('#graders')
+      f("#graders")
     end
 
     def assignment_name_textfield
-      f('#assignments')
+      f("#assignments")
+    end
+
+    def final_grade_override_checkbox
+      f('div[data-testid="show-final-grade-overrides-only-checkbox"]')
     end
 
     def start_date_textfield
@@ -180,11 +199,11 @@ class GradeBookHistory
     end
 
     def filter_button
-      find_button('Filter')
+      find_button("Filter")
     end
 
     def results_table
-      find_table('Grade Changes')
+      find_table("Grade Changes")
     end
 
     def results_table_rows

@@ -22,77 +22,70 @@
  * which is necessary until we have a package for sharing components
  * among canvas' sub-packages.
  */
-import React, { Component } from 'react';
-import { node, object } from 'prop-types';
+import React, {Component} from 'react'
+import {func, node, oneOfType, string} from 'prop-types'
 
-import {Button} from '@instructure/ui-buttons';
-import {ScreenReaderContent} from '@instructure/ui-a11y';
+import {IconButton} from '@instructure/ui-buttons'
+
+const hideStyle = {
+  position: 'absolute',
+  left: '-9999px',
+}
 
 export default class ShowOnFocusButton extends Component {
   static propTypes = {
-    buttonProps: object,
-    srProps: object,
-    children: node.isRequired
-  };
-
-  static defaultProps = {
-    buttonRef: () =>{}
-  };
+    children: oneOfType([node, func]).isRequired, // func === functional component
+    onClick: func,
+    screenReaderLabel: string.isRequired,
+    margin: string,
+    id: string.isRequired,
+  }
 
   state = {
-    visible: false
+    visible: false,
   }
 
   handleFocus = () => {
-    this.setState({
-      visible: true
-    }, () => {
-      if(!this.btnRef.focused) {
-        this.btnRef.focus()
-      }
-    });
+    this.setState({visible: true})
   }
 
   handleBlur = () => {
-    this.setState({
-      visible: false
-    });
+    this.setState({visible: false})
   }
 
   focus() {
     this.btnRef.focus()
+    this.setState({visible: true})
   }
 
-  renderButton () {
-    const { buttonProps, children } = this.props;
+  renderButton() {
     return (
-      <Button
+      <IconButton
+        id={this.props.id}
         data-testid="ShowOnFocusButton__button"
-        variant="link"
-        ref={(btn) => { this.btnRef = btn}}
+        color="primary"
+        aria-haspopup="dialog"
+        margin={this.props.margin}
+        ref={btn => {
+          this.btnRef = btn
+        }}
         onFocus={this.handleFocus}
         onBlur={this.handleBlur}
-        {...buttonProps}
+        onClick={this.props.onClick}
+        screenReaderLabel={this.props.screenReaderLabel}
+        withBackground={false}
+        withBorder={false}
       >
-        {children}
-      </Button>
-    );
+        {this.props.children}
+      </IconButton>
+    )
   }
 
-  renderInvisibleButton () {
-    const { srProps } = this.props;
+  render() {
     return (
-      <ScreenReaderContent {...srProps} data-testid="ShowOnFocusButton__sronly">
+      <div data-testid="ShowOnFocusButton__wrapper" style={this.state.visible ? null : hideStyle}>
         {this.renderButton()}
-      </ScreenReaderContent>
-    );
-  }
-
-  render () {
-    if (this.state.visible) {
-      return this.renderButton();
-    } else {
-      return this.renderInvisibleButton();
-    }
+      </div>
+    )
   }
 }

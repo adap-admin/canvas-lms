@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -46,7 +48,8 @@
 #     }
 class Bookmarks::BookmarksController < ApplicationController
   before_action :require_user
-  before_action :find_bookmark, :only => [:show, :update, :destroy]
+  around_action :activate_user_shard
+  before_action :find_bookmark, only: %i[show update destroy]
 
   # @API List bookmarks
   # Returns the paginated list of bookmarks.
@@ -58,8 +61,11 @@ class Bookmarks::BookmarksController < ApplicationController
   #
   # @returns [Bookmark]
   def index
-    @bookmarks = Bookmarks::Bookmark.where(user_id: user_id).order(:position)
-    @bookmarks = Api.paginate(@bookmarks, self, api_v1_bookmarks_url)
+    GuardRail.activate(:secondary) do
+      @bookmarks = Bookmarks::Bookmark.where(user_id:).ordered
+      @bookmarks = Api.paginate(@bookmarks, self, api_v1_bookmarks_url)
+    end
+
     render json: @bookmarks.as_json
   end
 
@@ -131,7 +137,7 @@ class Bookmarks::BookmarksController < ApplicationController
   #
   # @returns Folder
   def update
-    if @bookmark.update_attributes(valid_params) && set_position
+    if @bookmark.update(valid_params) && set_position
       show
     else
       render_errors
@@ -158,14 +164,20 @@ class Bookmarks::BookmarksController < ApplicationController
     @current_user.id
   end
 
+  def activate_user_shard(&)
+    @current_user.shard.activate(&)
+  end
+
   def find_bookmark
-    unless (@bookmark = Bookmarks::Bookmark.where(id: params[:id], user_id: user_id).first)
-      head 404
+    GuardRail.activate(:secondary) do
+      @bookmark = Bookmarks::Bookmark.where(id: params[:id], user_id:).take
     end
+
+    return head :not_found unless @bookmark.present?
   end
 
   def valid_params
-    params.permit(:name, :url, data: strong_anything).merge(user_id: user_id)
+    params.permit(:name, :url, data: strong_anything).merge(user_id:)
   end
 
   def set_position
@@ -173,6 +185,6 @@ class Bookmarks::BookmarksController < ApplicationController
   end
 
   def render_errors
-    render :json => {errors: @bookmark.errors}, :status => :bad_request
+    render json: { errors: @bookmark.errors }, status: :bad_request
   end
 end

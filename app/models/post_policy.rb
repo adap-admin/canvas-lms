@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -22,6 +24,7 @@ class PostPolicy < ActiveRecord::Base
   validates :post_manually, inclusion: [true, false]
 
   before_validation :set_course_from_assignment
+  before_save :set_root_account_id
 
   after_update :update_owning_course, if: -> { assignment.blank? }
 
@@ -30,20 +33,17 @@ class PostPolicy < ActiveRecord::Base
   # addition to the setting, a course must also have New Gradebook enabled to
   # have post policies be active.
   def self.feature_enabled?
-    Setting.get("post_policies_enabled", false) == "true"
-  end
-
-  def self.enable_feature!
-    Setting.set("post_policies_enabled", true)
-  end
-
-  def self.disable_feature!
-    Setting.set("post_policies_enabled", false)
+    true
   end
 
   private
+
   def set_course_from_assignment
     self.course_id = assignment.context_id if assignment.present? && course.blank?
+  end
+
+  def set_root_account_id
+    self.root_account_id ||= course.root_account_id
   end
 
   def update_owning_course

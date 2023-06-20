@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -15,8 +17,6 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'spec_helper'
-
 describe DataFixup::ReassociateGradingPeriodGroups do
   let(:root_account_grading_period_group) { GradingPeriodGroup.find_by(account_id: @root_account) }
   let(:root_account_grading_period) { root_account_grading_period_group.grading_periods.first }
@@ -26,8 +26,8 @@ describe DataFixup::ReassociateGradingPeriodGroups do
   let(:group_helper) { Factories::GradingPeriodGroupHelper.new }
   let(:period_helper) { Factories::GradingPeriodHelper.new }
 
-  before(:each) do
-    @root_account = Account.create(name: 'new account')
+  before do
+    @root_account = Account.create(name: "new account")
     group = group_helper.create_for_account(@root_account)
     period_helper.create_presets_for_group(group, :current)
     @root_account.enrollment_terms.create!
@@ -43,8 +43,8 @@ describe DataFixup::ReassociateGradingPeriodGroups do
 
   context "pre-fixup" do
     it "root account enrollment terms do not have an associated grading period group" do
-      expect(first_term.grading_period_group).to eq nil
-      expect(second_term.grading_period_group).to eq nil
+      expect(first_term.grading_period_group).to be_nil
+      expect(second_term.grading_period_group).to be_nil
     end
 
     it "root account enrollment terms do not have associated grading periods" do
@@ -53,7 +53,7 @@ describe DataFixup::ReassociateGradingPeriodGroups do
     end
 
     it "sub account enrollment terms do not have an associated grading period group" do
-      expect(sub_account_term.grading_period_group).to eq nil
+      expect(sub_account_term.grading_period_group).to be_nil
     end
 
     it "sub account enrollment terms do not have associated grading periods" do
@@ -62,12 +62,12 @@ describe DataFixup::ReassociateGradingPeriodGroups do
   end
 
   context "post-fixup" do
-    before(:each) do
+    before do
       DataFixup::ReassociateGradingPeriodGroups.run
     end
 
     it "root account enrollment terms belong to the root account's grading period group after the fixup " \
-    "(and not the sub account grading period group or course grading period group)" do
+       "(and not the sub account grading period group or course grading period group)" do
       expect(first_term.grading_period_group).to eq root_account_grading_period_group
       expect(second_term.grading_period_group).to eq root_account_grading_period_group
     end
@@ -78,7 +78,7 @@ describe DataFixup::ReassociateGradingPeriodGroups do
     end
 
     it "sub account enrollment terms do not have an associated grading period group" do
-      expect(sub_account_term.grading_period_group).to eq nil
+      expect(sub_account_term.grading_period_group).to be_nil
     end
 
     it "sub account enrollment terms do not have associated grading periods" do

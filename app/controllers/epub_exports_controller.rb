@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -94,19 +96,19 @@ class EpubExportsController < ApplicationController
   include Api::V1::EpubExport
 
   before_action :require_user
-  before_action :require_context, :only => [:create]
+  before_action :require_context, only: [:create]
   before_action :check_feature_enabled
 
   def check_feature_enabled
     if !@domain_root_account.feature_allowed?(:epub_export) ||
-      @domain_root_account.enable_offline_web_export?
+       @domain_root_account.enable_offline_web_export?
       respond_to do |format|
         format.html do
-          render status: 404, template: 'shared/errors/404_message'
+          render status: :not_found, template: "shared/errors/404_message"
         end
-        format.json { render status: 404 }
+        format.json { render status: :not_found }
       end
-      return false
+      false
     end
   end
 
@@ -151,8 +153,8 @@ class EpubExportsController < ApplicationController
         format.json do
           @course.latest_epub_export = @service.offline_export
           render({
-            status: status, json: course_epub_export_json(@course)
-          })
+                   status:, json: course_epub_export_json(@course)
+                 })
         end
       end
     end

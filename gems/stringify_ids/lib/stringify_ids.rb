@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -30,13 +32,16 @@ module StringifyIds
 
   def self.stringify_ids(value, opts = {})
     return unless value.is_a?(Hash)
-    value.keys.each do |key|
-      if key =~ /(^|_)id$/
+
+    value.each_key do |key|
+      next unless key.is_a?(String) || key.is_a?(Symbol)
+
+      if /(^|_)id$/i.match?(key)
         # id, foo_id, etc.
         value[key] = stringify_id(value[key], opts)
-      elsif key =~ /(^|_)ids$/ && value[key].is_a?(Array)
+      elsif key =~ /(^|_)ids$/i && value[key].is_a?(Array)
         # ids, foo_ids, etc.
-        value[key].map!{ |id| stringify_id(id, opts) }
+        value[key].map! { |id| stringify_id(id, opts) }
       end
     end
   end

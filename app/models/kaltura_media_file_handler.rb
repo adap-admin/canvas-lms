@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -19,18 +21,19 @@
 class KalturaMediaFileHandler
   def add_media_files(attachments, wait_for_completion)
     return unless CanvasKaltura::ClientV3.config
+
     attachments = Array(attachments)
     client = CanvasKaltura::ClientV3.new
     client.startSession(CanvasKaltura::SessionType::ADMIN)
     files = []
-    root_account_id = attachments.map{|a| a.root_account_id }.compact.first
-    attachments.select{|a| !a.media_object }.each do |attachment|
+    root_account_id = attachments.filter_map(&:root_account_id).first
+    attachments.reject(&:media_object_by_media_id).each do |attachment|
       files << {
-                  :name       => attachment.display_name,
-                  :url        => attachment.public_download_url,
-                  :media_type => (attachment.content_type || "").match(/\Avideo/) ? 'video' : 'audio',
-                  :partner_data  => build_partner_data(attachment)
-               }
+        name: attachment.display_name,
+        url: attachment.public_download_url,
+        media_type: attachment.content_type&.start_with?("video") ? "video" : "audio",
+        partner_data: build_partner_data(attachment)
+      }
     end
     return nil if files.empty?
 
@@ -57,21 +60,21 @@ class KalturaMediaFileHandler
     end
 
     partner_data.merge!({
-      attachment_id: attachment.id.to_s,
-      context_source: "file_upload",
-      root_account_id: Shard.global_id_for(attachment.root_account_id).to_s,
-    })
+                          attachment_id: attachment.id.to_s,
+                          context_source: "file_upload",
+                          root_account_id: Shard.global_id_for(attachment.root_account_id).to_s,
+                        })
     Rack::Utils.build_nested_query(partner_data)
   end
 
   def handle_bulk_upload_response(res, client, wait_for_completion, attachments, root_account_id)
-    if !res[:ready]
+    unless res[:ready]
       if wait_for_completion
         bulk_upload_id = res[:id]
         Rails.logger.debug "waiting for bulk upload id: #{bulk_upload_id}"
         started_at = Time.now
-        timeout = Setting.get('media_bulk_upload_timeout', 30.minutes.to_s).to_i
-        while !res[:ready]
+        timeout = Setting.get("media_bulk_upload_timeout", 30.minutes.to_s).to_i
+        until res[:ready]
           if Time.now > started_at + timeout
             refresh_later(res[:id], attachments, root_account_id)
             break
@@ -92,10 +95,11 @@ class KalturaMediaFileHandler
   end
 
   def refresh_later(bulk_upload_id, attachments, root_account_id)
-    MediaObject.send_later_enqueue_args(:refresh_media_files, {:run_at => 1.minute.from_now, :priority => Delayed::LOW_PRIORITY}, bulk_upload_id, attachments.map(&:id), root_account_id)
+    MediaObject.delay(run_at: 1.minute.from_now, priority: Delayed::LOW_PRIORITY)
+               .refresh_media_files(bulk_upload_id, attachments.map(&:id), root_account_id)
   end
 
   def send_sis_data_to_kaltura?
-    CanvasKaltura::ClientV3.config['kaltura_sis'] == "1"
+    CanvasKaltura::ClientV3.config["kaltura_sis"] == "1"
   end
 end

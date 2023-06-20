@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module LtiAdvantage::Messages
   # Class represeting an LTI 1.3 LtiResourceLinkRequest.
   class ResourceLinkRequest < JwtMessage
@@ -8,9 +10,9 @@ module LtiAdvantage::Messages
       resource_link: LtiAdvantage::Claims::ResourceLink
     )
 
-    attr_accessor *(REQUIRED_CLAIMS + [:resource_link])
+    attr_accessor(*(REQUIRED_CLAIMS + [:resource_link]))
 
-    validates_presence_of *REQUIRED_CLAIMS
+    validates_presence_of(*REQUIRED_CLAIMS)
     validates_with LtiAdvantage::TypeValidator
 
     # Returns a new instance of LtiResourceLinkRequest.

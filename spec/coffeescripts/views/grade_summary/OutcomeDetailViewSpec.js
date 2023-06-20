@@ -16,12 +16,12 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Backbone from 'Backbone'
-import CollectionView from 'compiled/views/CollectionView'
-import OutcomeResultCollection from 'compiled/collections/OutcomeResultCollection'
-import Outcome from 'compiled/models/grade_summary/Outcome'
-import Group from 'compiled/models/grade_summary/Group'
-import OutcomeDetailView from 'compiled/views/grade_summary/OutcomeDetailView'
+import Backbone from '@canvas/backbone'
+import CollectionView from '@canvas/backbone-collection-view'
+import OutcomeResultCollection from 'ui/features/grade_summary/backbone/collections/OutcomeResultCollection'
+import Outcome from '@canvas/grade-summary/backbone/models/Outcome'
+import Group from 'ui/features/grade_summary/backbone/models/Group'
+import OutcomeDetailView from 'ui/features/grade_summary/backbone/views/OutcomeDetailView'
 import fakeENV from 'helpers/fakeENV'
 
 QUnit.module('OutcomeDetailViewSpec', {
@@ -35,15 +35,13 @@ QUnit.module('OutcomeDetailViewSpec', {
     this.outcome = new Outcome({
       id: 2,
       mastery_points: 3,
-      points_possible: 5
+      points_possible: 5,
     })
     this.outcome.group = new Group({title: 'Outcome Group Title'})
-    this.url = `/api/v1/courses/${this.course_id}/outcome_results?user_ids[]=${
-      this.user_id
-    }&outcome_ids[]=${this.outcome.id}&include[]=alignments&per_page=100`
+    this.url = `/api/v1/courses/${this.course_id}/outcome_results?user_ids[]=${this.user_id}&outcome_ids[]=${this.outcome.id}&include[]=alignments&per_page=100`
     this.outcomeDetailView = new OutcomeDetailView({
       course_id: this.course_id,
-      user_id: this.user_id
+      user_id: this.user_id,
     })
     this.server = sinon.fakeServer.create()
     this.response =
@@ -52,10 +50,10 @@ QUnit.module('OutcomeDetailViewSpec', {
   teardown() {
     fakeENV.teardown()
     return this.server.restore()
-  }
+  },
 })
 
-test('#initialize', function() {
+test('#initialize', function () {
   ok(
     this.outcomeDetailView.alignmentsForView instanceof Backbone.Collection,
     'alignmentsForView should be an instance of Backbone.Collection'
@@ -66,11 +64,11 @@ test('#initialize', function() {
   )
 })
 
-test('#render', function() {
+test('#render', function () {
   this.server.respondWith('GET', this.url, [
     200,
     {'Content-Type': 'application/json'},
-    this.response
+    this.response,
   ])
   this.outcomeDetailView.show(this.outcome)
   this.outcomeDetailView.render()

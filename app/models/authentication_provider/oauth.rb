@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,12 +18,11 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'oauth2'
-require 'canvas/core_ext/oauth2'
+require "oauth2"
+require "canvas/core_ext/oauth2"
 
-class AuthenticationProvider::Oauth < AuthenticationProvider::Delegated
-
-  SENSITIVE_PARAMS = [ :consumer_secret ].freeze
+class AuthenticationProvider::OAuth < AuthenticationProvider::Delegated
+  SENSITIVE_PARAMS = [:consumer_secret].freeze
 
   # rename DB fields to something that makes sense for OAuth2
   def consumer_key=(val)
@@ -36,7 +37,7 @@ class AuthenticationProvider::Oauth < AuthenticationProvider::Delegated
   alias_method :consumer_secret, :auth_decrypted_password
 
   def consumer
-    @client ||= OAuth::Consumer.new(consumer_key, consumer_secret, consumer_options)
+    @client ||= ::OAuth::Consumer.new(consumer_key, consumer_secret, consumer_options)
   end
 
   def provider_attributes

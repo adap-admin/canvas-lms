@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -29,22 +31,18 @@ class DiscussionTopicPresenter
     end
   end
 
-  # Public: Determine if the given user has permissions to manage this discussion.
-  #
-  # Returns a boolean.
-  def has_manage_actions?(user)
-    can_grade?(user) || show_peer_reviews?(user) || should_show_rubric?(user)
-  end
-
   # Public: Determine if the given user can grade the discussion's assignment.
   #
   # user - The user whose permissions we're testing.
   #
   # Returns a boolean.
-  def can_grade?(user=@user)
+  def show_all_dates?
     topic.for_assignment? &&
-    (assignment.grants_right?(user, :grade) ||
-      assignment.context.grants_right?(user, :manage_assignments))
+      (assignment.grants_right?(user, :grade) || assignment.context.grants_any_right?(user, *RoleOverride::GRANULAR_MANAGE_ASSIGNMENT_PERMISSIONS))
+  end
+
+  def can_direct_share?
+    topic.context.grants_right?(@user, :direct_share)
   end
 
   # Public: Determine if the given user has permissions to view peer reviews.
@@ -62,10 +60,10 @@ class DiscussionTopicPresenter
   end
 
   def peer_reviews_for(user)
-    reviews = user.assigned_submission_assessments.for_assignment(assignment.id).to_a
+    reviews = user.assigned_submission_assessments.shard(assignment.shard).for_assignment(assignment.id).to_a
     if reviews.any?
-      valid_student_ids = assignment.context.participating_students.where(:id => reviews.map(&:user_id)).pluck(:id).to_set
-      reviews = reviews.select{|r| valid_student_ids.include?(r.user_id)}
+      valid_student_ids = assignment.context.participating_students.where(id: reviews.map(&:user_id)).pluck(:id).to_set
+      reviews = reviews.select { |r| valid_student_ids.include?(r.user_id) }
     end
     reviews
   end
@@ -74,7 +72,7 @@ class DiscussionTopicPresenter
   #
   # Returns a boolean.
   def has_attached_rubric?
-    !!assignment.rubric_association.try(:rubric)
+    !!assignment.rubric
   end
 
   # Public: Determine if the given user can manage rubrics.
@@ -93,9 +91,7 @@ class DiscussionTopicPresenter
   # Public: Determine if comment feature is disabled for the context/announcement.
   #
   # Returns a boolean.
-  def comments_disabled?
-    topic.comments_disabled?
-  end
+  delegate :comments_disabled?, to: :topic
 
   # Public: Determine if the discussion's context has a large roster flag set.
   #
@@ -124,17 +120,16 @@ class DiscussionTopicPresenter
     if topic.context.is_a?(Course)
       student_enrollment = topic.user.enrollments.active.where(
         course_id: topic.context.id,
-        type: "StudentEnrollment",
+        type: "StudentEnrollment"
       ).first
 
       if student_enrollment
         attrs[:"data-student_id"] = student_enrollment.user_id
         attrs[:"data-course_id"] = student_enrollment.course_id
-        attrs[:class] << " student_context_card_trigger"
+        attrs[:class] = "author student_context_card_trigger"
       end
     end
 
     attrs
   end
-
 end

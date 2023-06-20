@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -15,18 +17,18 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-class RequestError < ::RuntimeError
+class RequestError < RuntimeError
   attr_accessor :response_status
 
-  def initialize(message, status=:bad_request)
+  def initialize(message, status = :bad_request)
     self.response_status = Rack::Utils.status_code(status)
     super(message)
   end
 
   def error_json
     {
-      status: (Rack::Utils::SYMBOL_TO_STATUS_CODE.key(self.response_status) || :internal_server_error).to_s,
-      message: self.message
+      status: (Rack::Utils::SYMBOL_TO_STATUS_CODE.key(response_status) || :internal_server_error).to_s,
+      message:
     }
   end
 end

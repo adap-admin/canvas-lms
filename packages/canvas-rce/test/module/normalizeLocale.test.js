@@ -16,28 +16,33 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import assert from "assert";
-import normalizeLocale from "../../src/rce/normalizeLocale";
+import assert from 'assert'
+import normalizeLocale from '../../src/rce/normalizeLocale'
 
-describe("normalizeLocale", () => {
+describe('normalizeLocale', () => {
   it("returns 'en' for null/undefined", () => {
-    assert.equal(normalizeLocale(null), "en");
-    assert.equal(normalizeLocale(undefined), "en");
-  });
+    assert.equal(normalizeLocale(null), 'en')
+    assert.equal(normalizeLocale(undefined), 'en')
+  })
 
-  it("maps old-style canvas locales to new-style", () => {
-    assert.equal(normalizeLocale("he-IL"), "he");
-  });
+  it('maps unknown region locale to the base locale', () => {
+    assert.equal(normalizeLocale('he-IL'), 'he')
+    assert.equal(normalizeLocale('en-US'), 'en')
+  })
 
-  it("reduces unrecognized custom locales to the base locale", () => {
-    assert.equal(normalizeLocale("en-GB-x-bogus"), "en-GB");
-  });
+  it('maps known substitutions', () => {
+    assert.equal(normalizeLocale('fa'), 'fa-IR')
+  })
+
+  it('reduces unrecognized custom locales to the base locale', () => {
+    assert.equal(normalizeLocale('en-GB-x-bogus'), 'en-GB')
+  })
 
   it("recognizes known custom locales and doesn't reduce them", () => {
-    assert.equal(normalizeLocale("en-GB-x-lbs"), "en-GB-x-lbs");
-  });
+    assert.equal(normalizeLocale('en-GB-x-ukhe'), 'en-GB-x-ukhe')
+  })
 
-  it("otherwise just return en", () => {
-    assert.equal(normalizeLocale("some-locale"), "en");
-  });
-});
+  it('otherwise just return en', () => {
+    assert.equal(normalizeLocale('some-locale'), 'en')
+  })
+})

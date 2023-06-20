@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -37,7 +39,6 @@
 # "id" field in the question records are updated to point to the newly created
 # question object(s).
 class Quizzes::QuizSubmission::QuestionReferenceDataFixer
-
   # This method is re-entrant. If QuizSubmission#question_references_fixed is
   # true, the fix won't be re-applied.
   #
@@ -52,20 +53,20 @@ class Quizzes::QuizSubmission::QuestionReferenceDataFixer
 
     modified = false
 
-    Shackles.activate(:master) do
+    GuardRail.activate(:primary) do
       connection = quiz_submission.class.connection
       connection.transaction do
         Quizzes::QuizQuestion.transaction(requires_new: true) do
           if relink_or_create_questions(quiz_submission)
             modified = true
 
-            Quizzes::QuizSubmission.where(id: quiz_submission).update_all <<-SQL
-            quiz_data = '#{connection.quote_string(quiz_submission.quiz_data.to_yaml)}',
-            submission_data = '#{connection.quote_string(quiz_submission.submission_data.to_yaml)}',
-            question_references_fixed = TRUE
+            Quizzes::QuizSubmission.where(id: quiz_submission).update_all <<~SQL.squish
+              quiz_data = '#{connection.quote_string(quiz_submission.quiz_data.to_yaml)}',
+              submission_data = '#{connection.quote_string(quiz_submission.submission_data.to_yaml)}',
+              question_references_fixed = TRUE
             SQL
           else
-            quiz_submission.update_column('question_references_fixed', true)
+            quiz_submission.update_column("question_references_fixed", true)
           end
 
           # Now pass over all the version models:
@@ -77,12 +78,11 @@ class Quizzes::QuizSubmission::QuestionReferenceDataFixer
               version.update_column("yaml", model.attributes.to_yaml)
             end
           end
-
         end # QuizQuestion#transaction
       end # QuizSubmission#transaction
     end
 
-    return modified
+    modified
   end
 
   protected
@@ -106,24 +106,24 @@ class Quizzes::QuizSubmission::QuestionReferenceDataFixer
     # objects for later access:
     erratic_ids = quiz_data.select do |question_data|
       question_data[:id] == question_data[:assessment_question_id]
-    end.map { |question_data| question_data[:id] }
+    end.pluck(:id)
 
     return false if erratic_ids.empty?
 
     assessment_questions = AssessmentQuestion.where({
-      id: erratic_ids
-    }).select([ :id, :question_data ])
+                                                      id: erratic_ids
+                                                    }).select([:id, :question_data])
 
     quiz_questions = Quizzes::QuizQuestion.where({
-      quiz_id: quiz_id,
-      assessment_question_id: assessment_questions.map(&:id)
-    }).select([ :id, :quiz_id, :assessment_question_id ]).to_a
+                                                   quiz_id:,
+                                                   assessment_question_id: assessment_questions.map(&:id)
+                                                 }).select(%i[id quiz_id assessment_question_id]).to_a
 
     quiz_data.each do |question_data|
       # 1. the "id" must point to the assessment question's:
       next if question_data[:id] != question_data[:assessment_question_id]
 
-      qq = quiz_questions.detect do |qq|
+      quiz_question = quiz_questions.detect do |qq|
         qq.assessment_question_id == question_data[:assessment_question_id]
       end
 
@@ -132,21 +132,23 @@ class Quizzes::QuizSubmission::QuestionReferenceDataFixer
       # Otherwise, we simply need to link to it by rewriting the ID.
       #
       # a) Create the quiz question for *this* quiz if it doesn't exist:
-      aq = assessment_questions.detect { |aq| aq.id == question_data[:id] }
-      unless qq
-        qq = aq.create_quiz_question(quiz_id)
+      assessment_question = assessment_questions.detect do |aq|
+        aq.id == question_data[:id]
+      end
+      unless quiz_question
+        quiz_question = assessment_question.create_quiz_question(quiz_id)
 
         # track it for later if needed
-        quiz_questions.unshift(qq)
+        quiz_questions.unshift(quiz_question)
       end
 
       # b) Link to the QuizQuestion instead:
-      if qq.id != question_data[:id]
-        question_data[:id] = qq.id
+      if quiz_question.id != question_data[:id]
+        question_data[:id] = quiz_question.id
       end
 
       # keep track of id changes to fix submission_data
-      id_map[aq.id] = qq.id
+      id_map[assessment_question.id] = quiz_question.id
     end
 
     if quiz_submission.graded?
@@ -161,7 +163,7 @@ class Quizzes::QuizSubmission::QuestionReferenceDataFixer
   # has side-effects on submission data
   def process_graded_submission_data(submission_data, id_map)
     submission_data.each do |grading_record|
-      if id_map.has_key?(grading_record[:question_id])
+      if id_map.key?(grading_record[:question_id])
         grading_record[:question_id] = id_map[grading_record[:question_id]]
       end
     end
@@ -176,17 +178,13 @@ class Quizzes::QuizSubmission::QuestionReferenceDataFixer
     #  - question_xxx_marked
     #  - _question_xxx_read
     #
-    submission_data.keys.each do |key|
-      new_key = key.sub(/question_(\d+)/) { "question_#{id_map[$1.to_i] || $1}" }
-
-      if new_key != key
-        submission_data[new_key] = submission_data.delete(key)
-      end
+    submission_data.transform_keys! do |key|
+      key.sub(/question_(\d+)/) { "question_#{id_map[$1.to_i] || $1}" }
     end
 
     # Adjust the "next_question_path" for OQAAT quizzes. This is a URL entry
     # that ends with a question ID, like "/courses/1/quizzes/1/questions/1"
-    if submission_data.has_key?("next_question_path")
+    if submission_data.key?("next_question_path")
       submission_data["next_question_path"].sub!(/(\d+)$/) do |id|
         id_map[id.to_i] || id
       end
@@ -195,15 +193,14 @@ class Quizzes::QuizSubmission::QuestionReferenceDataFixer
     # Adjust the "last_question_id" entry for OQAAT quizzes that have
     # the Can't Go Back option on. This is an ID entry that may be a string
     # or an integer.
-    if last_question_id = submission_data["last_question_id"]
-      if mapped_last_question_id = id_map[last_question_id.to_i]
-        # don't change the type.. if it was a string, keep it that way
-        submission_data["last_question_id"] = if last_question_id.is_a?(String)
-          "#{mapped_last_question_id}"
-        else
-          mapped_last_question_id
-        end
-      end
+    if (last_question_id = submission_data["last_question_id"]) &&
+       (mapped_last_question_id = id_map[last_question_id.to_i])
+      # don't change the type.. if it was a string, keep it that way
+      submission_data["last_question_id"] = if last_question_id.is_a?(String)
+                                              mapped_last_question_id.to_s
+                                            else
+                                              mapped_last_question_id
+                                            end
     end
   end
 end

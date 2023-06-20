@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -20,7 +22,7 @@
 #
 # @model AuthenticationProvider
 #     {
-#       "id": "1",
+#       "id": "AuthenticationProvider",
 #       "description": "",
 #       "properties": {
 #         "identifier_format": {
@@ -110,6 +112,10 @@
 #         },
 #         "federated_attributes": {
 #           "$ref": "FederatedAttributesConfig"
+#         },
+#         "mfa_required": {
+#           "description": "If multi-factor authentication is required when logging in with this authentication provider. The account must not have MFA disabled.",
+#           "type": "boolean"
 #         }
 #       }
 #     }
@@ -144,6 +150,7 @@
 #
 # @model FederatedAttributesConfig
 #     {
+#       "id" : "FederatedAttributesConfig",
 #       "description": "A mapping of Canvas attribute names to attribute names that a provider may send, in order to update the value of these attributes when a user logs in. The values can be a FederatedAttributeConfig, or a raw string corresponding to the \"attribute\" property of a FederatedAttributeConfig. In responses, full FederatedAttributeConfig objects are returned if JIT provisioning is enabled, otherwise just the attribute names are returned.",
 #       "properties": {
 #         "admin_roles": {
@@ -195,6 +202,7 @@
 #
 # @model FederatedAttributeConfig
 #     {
+#       "id": "FederatedAttributeConfig",
 #       "description": "A single attribute name to be federated when a user logs in",
 #       "properties": {
 #         "attribute": {
@@ -212,7 +220,9 @@
 #     }
 #
 class AuthenticationProvidersController < ApplicationController
-  before_action :require_context, :require_root_account_management
+  before_action :require_context
+  before_action :require_root_account_management, except: :show
+  before_action :require_user, only: :show
   include Api::V1::AuthenticationProvider
 
   # @API List authentication providers
@@ -235,19 +245,37 @@ class AuthenticationProvidersController < ApplicationController
   # @API Add authentication provider
   #
   # Add external authentication provider(s) for the account.
-  # Services may be CAS, Facebook, GitHub, Google, LDAP, LinkedIn,
+  # Services may be Apple, CAS, Facebook, GitHub, Google, LDAP, LinkedIn,
   # Microsoft, OpenID Connect, SAML, or Twitter.
   #
   # Each authentication provider is specified as a set of parameters as
   # described below. A provider specification must include an 'auth_type'
-  # parameter with a value of 'canvas', 'cas', 'clever', 'facebook', 'github', 'google',
-  # 'ldap', 'linkedin', 'microsoft', 'openid_connect', 'saml', or 'twitter'. The other
-  # recognized parameters depend on this auth_type; unrecognized parameters are discarded.
-  # Provider specifications not specifying a valid auth_type are ignored.
+  # parameter with a value of 'apple', 'canvas', 'cas', 'clever', 'facebook',
+  # 'github', 'google', 'ldap', 'linkedin', 'microsoft', 'openid_connect',
+  # 'saml', or 'twitter'. The other recognized parameters depend on this
+  # auth_type; unrecognized parameters are discarded. Provider specifications
+  # not specifying a valid auth_type are ignored.
   #
-  # You can set the 'position' for any configuration. The config in the 1st position
-  # is considered the default. You can set 'jit_provisioning' for any configuration
-  # besides Canvas.
+  # You can set the 'position' for any provider. The config in the 1st position
+  # is considered the default. You can set 'jit_provisioning' for any provider
+  # besides Canvas. You can set 'mfa_required' for any provider.
+  #
+  # For Apple, the additional recognized parameters are:
+  #
+  # - client_id [Required]
+  #
+  #   The developer’s client identifier, as provided by WWDR. Not available if
+  #   configured globally for Canvas.
+  #
+  # - login_attribute [Optional]
+  #
+  #   The attribute to use to look up the user's login in Canvas. Either
+  #   'sub' (the default), or 'email'
+  #
+  # - federated_attributes [Optional]
+  #
+  #   See FederatedAttributesConfig. Valid provider attributes are 'email',
+  #   'firstName', 'lastName', and 'sub'.
   #
   # For Canvas, the additional recognized parameter is:
   #
@@ -635,8 +663,19 @@ class AuthenticationProvidersController < ApplicationController
   # @returns AuthenticationProvider
   def create
     aac_data = params.fetch(:authentication_provider, params)
+
+    unless AuthenticationProvider.valid_auth_types.include?(aac_data[:auth_type])
+      msg =
+        "invalid or missing auth_type '#{aac_data[:auth_type]}', must be one of #{
+          AuthenticationProvider.valid_auth_types.join(",")
+        }"
+      return render(status: :bad_request, json: { errors: [{ message: msg }] })
+    end
+
     position = aac_data.delete(:position)
-    data = filter_data(aac_data)
+    # this may seem odd, but we need to ensure that account is set before
+    # mfa_required might be set, and ruby maintains insertion order in hashes
+    data = { account: @account }.merge(filter_data(aac_data))
     deselect_parent_registration(data)
     account_config = @account.authentication_providers.build(data)
     if account_config.class.singleton? && @account.authentication_providers.active.where(auth_type: account_config.auth_type).exists?
@@ -649,7 +688,7 @@ class AuthenticationProvidersController < ApplicationController
         end
         format.json do
           msg = "duplicate provider #{account_config.auth_type}"
-          render json: { errors: [ { message: msg } ] }, status: 422
+          render json: { errors: [{ message: msg }] }, status: :unprocessable_entity
         end
       end
       return
@@ -699,11 +738,11 @@ class AuthenticationProvidersController < ApplicationController
 
     if aac.auth_type != data[:auth_type]
       render(json: {
-               message: t('no_changing_auth_types',
-                           'Can not change type of authorization config, '\
-                           'please delete and create new config.')
+               message: t("no_changing_auth_types",
+                          "Can not change type of authorization config, " \
+                          "please delete and create new config.")
              },
-             status: 400)
+             status: :bad_request)
       return
     end
 
@@ -741,8 +780,14 @@ class AuthenticationProvidersController < ApplicationController
   #
   # @returns AuthenticationProvider
   def show
-    aac = @account.authentication_providers.active.find params[:id]
+    aac = @account.authentication_providers.active.find(params[:id])
+    return if aac.auth_type != "canvas" && !require_root_account_management
+
     render json: aac_json(aac)
+  rescue ActiveRecord::RecordNotFound
+    return unless require_root_account_management
+
+    raise
   end
 
   # @API Delete authentication provider
@@ -811,9 +856,9 @@ class AuthenticationProvidersController < ApplicationController
   # @returns SSOSettings
   def update_sso_settings
     sets = params.require(:sso_settings).permit(:login_handle_name,
-                                                       :change_password_url,
-                                                       :auth_discovery_url,
-                                                       :unknown_user_url)
+                                                :change_password_url,
+                                                :auth_discovery_url,
+                                                :unknown_user_url)
     update_account_settings_from_hash(sets)
 
     respond_to do |format|
@@ -828,24 +873,24 @@ class AuthenticationProvidersController < ApplicationController
     results = []
     ldap_providers(@account).each do |config|
       h = {
-        :account_authorization_config_id => config.id,
-        :ldap_connection_test => config.test_ldap_connection
+        account_authorization_config_id: config.id,
+        ldap_connection_test: config.test_ldap_connection
       }
-      results << h.merge({:errors => config.errors.map {|attr,err| {attr => err.message}}})
+      results << h.merge({ errors: config.errors.map { |attr, err| { attr => err.message } } })
     end
-    render :json => results
+    render json: results
   end
 
   def test_ldap_bind
     results = []
     ldap_providers(@account).each do |config|
       h = {
-        :account_authorization_config_id => config.id,
-        :ldap_bind_test => config.test_ldap_bind
+        account_authorization_config_id: config.id,
+        ldap_bind_test: config.test_ldap_bind
       }
-      results << h.merge({:errors => config.errors.map {|attr,err| {attr => err.message}}})
+      results << h.merge({ errors: config.errors.map { |attr, err| { attr => err.message } } })
     end
-    render :json => results
+    render json: results
   end
 
   def test_ldap_search
@@ -853,47 +898,47 @@ class AuthenticationProvidersController < ApplicationController
     ldap_providers(@account).each do |config|
       res = config.test_ldap_search
       h = {
-        :account_authorization_config_id => config.id,
-        :ldap_search_test => res
+        account_authorization_config_id: config.id,
+        ldap_search_test: res
       }
-      results << h.merge({:errors => config.errors.map {|attr,err| {attr => err.message}}})
+      results << h.merge({ errors: config.errors.map { |attr, err| { attr => err.message } } })
     end
-    render :json => results
+    render json: results
   end
 
   def test_ldap_login
     results = []
     unless params[:username]
       return render(
-        :json => {:errors => {:login => t(:login_required, 'must be supplied')}},
-        :status_code => 400
+        json: { errors: { login: t(:login_required, "must be supplied") } },
+        status_code: 400
       )
     end
     unless params[:password]
       return render(
-        :json => {:errors => {:password => t(:password_required, 'must be supplied')}},
-        :status_code => 400
+        json: { errors: { password: t(:password_required, "must be supplied") } },
+        status_code: 400
       )
     end
 
     ldap_providers(@account).each do |config|
       h = {
-        :account_authorization_config_id => config.id,
-        :ldap_login_test => config.test_ldap_login(params[:username], params[:password])
+        account_authorization_config_id: config.id,
+        ldap_login_test: config.test_ldap_login(params[:username], params[:password])
       }
-      results << h.merge({:errors => config.errors.map {|attr,msg| {attr => msg}}})
+      results << h.merge({ errors: config.errors.map { |attr, msg| { attr => msg } } })
     end
 
     if results.empty?
       return render(
-        :json => {:errors => {:account => t(:account_required, 'must be LDAP-authenticated')}},
-        :status_code => 400
+        json: { errors: { account: t(:account_required, "must be LDAP-authenticated") } },
+        status_code: 400
       )
     end
 
     render(
-      :json => results,
-      :status_code => 200
+      json: results,
+      status_code: 200
     )
   end
 
@@ -905,7 +950,8 @@ class AuthenticationProvidersController < ApplicationController
   def start_debugging
     ap = @account.authentication_providers.active.find(params[:authentication_provider_id])
 
-    return render(status: 400, json: { errors: ["Unsupported authentication type"] }) unless ap.class.supports_debugging?
+    return render(status: :bad_request, json: { errors: ["Unsupported authentication type"] }) unless ap.class.supports_debugging?
+
     ap.start_debugging
     debug_data(ap)
   end
@@ -913,19 +959,19 @@ class AuthenticationProvidersController < ApplicationController
   def debug_data(ap = nil)
     unless ap
       ap = @account.authentication_providers.active.find(params[:authentication_provider_id])
-      return render(status: 400, json: { errors: ["Provider is not currently debugging"] }) unless ap.debugging?
+      return render(status: :bad_request, json: { errors: ["Provider is not currently debugging"] }) unless ap.debugging?
     end
 
     respond_to do |format|
       format.html do
-        render partial: 'debug_data',
+        render partial: "debug_data",
                locals: { provider: ap },
                layout: false
       end
       format.json do
         render json: {
           debugging: ap.debugging?,
-          debug_data: render_to_string(partial: 'debug_data',
+          debug_data: render_to_string(partial: "debug_data",
                                        locals: { provider: ap },
                                        formats: [:html],
                                        layout: false)
@@ -941,18 +987,26 @@ class AuthenticationProvidersController < ApplicationController
   end
 
   protected
+
   def filter_data(data)
     auth_type = data.delete(:auth_type)
     klass = AuthenticationProvider.find_sti_class(auth_type)
     federated_attributes = data[:federated_attributes]
     federated_attributes = {} if federated_attributes == ""
     federated_attributes = federated_attributes.to_unsafe_h if federated_attributes.is_a?(ActionController::Parameters)
-    data = data.permit(klass.recognized_params)
+    # mfa_option is so we can keep mfa_required a boolean for backwards compatibility but still use a radio input for it
+    data = data.permit(klass.recognized_params + [:mfa_option])
+    data = data.reject { |k, _| klass.site_admin_params.include?(k.to_sym) } unless @domain_root_account.grants_right?(@current_user, :manage_site_settings)
     data[:federated_attributes] = federated_attributes if federated_attributes
     data[:auth_type] = auth_type
-    if data[:auth_type] == 'ldap'
-      data[:auth_over_tls] = 'start_tls' unless data.key?(:auth_over_tls)
-      data[:auth_over_tls] = AuthenticationProvider::LDAP.auth_over_tls_setting(data[:auth_over_tls])
+    if data[:auth_type] == "ldap"
+      data[:auth_over_tls] = "start_tls" unless data.key?(:auth_over_tls)
+      data[:auth_over_tls] = AuthenticationProvider::LDAP.auth_over_tls_setting(data[:auth_over_tls], tls_required: @account.feature_enabled?(:verify_ldap_certs))
+    end
+    if data[:mfa_option]
+      data[:mfa_required] = data[:mfa_option] == "required"
+      data[:skip_internal_mfa] = data[:mfa_option] == "bypass"
+      data.delete(:mfa_option)
     end
     data
   end
@@ -970,6 +1024,7 @@ class AuthenticationProvidersController < ApplicationController
 
   def update_account_settings_from_hash(data)
     return if data.empty?
+
     data.each do |setting, value|
       @account.public_send("#{setting}=".to_sym, value.presence)
     end
@@ -977,14 +1032,14 @@ class AuthenticationProvidersController < ApplicationController
   end
 
   def deselect_parent_registration(data, aac = nil)
-    if data[:parent_registration] == 'true' || data[:parent_registration] == '1'
+    if data[:parent_registration] == "true" || data[:parent_registration] == "1"
       auth_providers = @account.authentication_providers
-      auth_providers = auth_providers.where('id <> ?', aac) if aac
+      auth_providers = auth_providers.where.not(id: aac) if aac
       auth_providers.update_all(parent_registration: false)
     end
   end
 
   def ldap_providers(account)
-    account.authentication_providers.active.where(auth_type: 'ldap')
+    account.authentication_providers.active.where(auth_type: "ldap")
   end
 end

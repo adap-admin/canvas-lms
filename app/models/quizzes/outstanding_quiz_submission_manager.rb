@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -26,36 +28,33 @@
 #
 module Quizzes
   class OutstandingQuizSubmissionManager
-
     def initialize(quiz)
       @quiz = quiz
     end
 
     def self.grade_by_course(course)
-      Quizzes::QuizSubmission.where('quizzes.context_id =?', course.id)
-        .eager_load(:quiz)
-        .needs_grading
-        .each do |quiz_submission|
-          Quizzes::SubmissionGrader.new(quiz_submission).grade_submission({
-            finished_at: quiz_submission.finished_at_fallback
-          })
-        end
+      Quizzes::QuizSubmission.where("quizzes.context_id =?", course.id)
+                             .where(user: course.gradable_students)
+                             .eager_load(:quiz)
+                             .needs_grading
+                             .each do |quiz_submission|
+        Quizzes::SubmissionGrader.new(quiz_submission).grade_submission({
+                                                                          finished_at: quiz_submission.finished_at_fallback
+                                                                        })
+      end
     end
 
     def grade_by_ids(quiz_submission_ids)
       quiz_submissions = @quiz.quiz_submissions.where(id: quiz_submission_ids)
       quiz_submissions.select(&:needs_grading?).each do |quiz_submission|
         Quizzes::SubmissionGrader.new(quiz_submission).grade_submission({
-          finished_at: quiz_submission.finished_at_fallback
-        })
+                                                                          finished_at: quiz_submission.finished_at_fallback
+                                                                        })
       end
     end
 
     def find_by_quiz
-      # Find these in batches, so as to reduce the memory load
-      outstanding_qs = []
-      outstanding_qs = Quizzes::QuizSubmission.where("quiz_id = ?", @quiz.id).preload(:user).needs_grading
-      outstanding_qs
+      Quizzes::QuizSubmission.where(quiz_id: @quiz).preload(:user).needs_grading
     end
   end
 end

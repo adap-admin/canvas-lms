@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -18,12 +20,46 @@
 
 module Types
   class ApplicationObjectType < GraphQL::Schema::Object
+    include ApolloFederation::Object
+
+    field_class BaseField
+
+    # this is using graphql-ruby's built-in authorization framework
+    #
+    # we are purposely not using it anywhere else in the app for performance
+    # reasons (we don't want to accidentally run permission checks on a long
+    # list of objects, for example)
+    def self.authorized?(_value, context)
+      super && AuthenticationMethods.graphql_type_authorized?(context[:access_token], graphql_name)
+    end
+
+    # convenience method for giving this type an `@key(fields: "id")` directive
+    # in the federation subgraph schema.  assumes your `id` field is a
+    # Relay-style `global_id_field`.  if you need to add additional `@key`
+    # directives, then you'll need to customize your `self.resolve_reference`,
+    # ergo you should not use this helper.
+    def self.key_field_id
+      key fields: "id"
+      define_singleton_method(:resolve_reference) do |reference, context|
+        legacy_id = GraphQLHelpers.parse_relay_id(reference[:id], graphql_name)
+        GraphQLNodeLoader.load(graphql_name, legacy_id, context)
+      end
+    end
+
     def current_user
       context[:current_user]
     end
 
+    def domain_root_account
+      context[:domain_root_account]
+    end
+
     def session
       context[:session]
+    end
+
+    def request
+      context[:request]
     end
 
     def load_association(assoc)

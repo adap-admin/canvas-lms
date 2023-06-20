@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -16,53 +18,52 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/../../views_helper')
+require_relative "../../views_helper"
 
-describe "/quizzes/quizzes/_quiz_edit" do
+describe "quizzes/quizzes/_quiz_edit" do
   before do
     course_with_student
     view_context
     assign(:quiz, @course.quizzes.create!)
-    assign(:js_env, {quiz_max_combination_count: 200})
+    assign(:js_env, { quiz_max_combination_count: 200 })
   end
 
-  it "should render" do
-    render :partial => "quizzes/quizzes/quiz_edit"
+  it "renders" do
+    render partial: "quizzes/quizzes/quiz_edit"
     expect(response).not_to be_nil
   end
 
-  it 'should include conditional content if configured' do
+  it "includes conditional content if configured" do
     allow(ConditionalRelease::Service).to receive(:enabled_in_context?).and_return(true)
-    render :partial => "quizzes/quizzes/quiz_edit"
-    expect(response.body).to match /conditional_release/
+    render partial: "quizzes/quizzes/quiz_edit"
+    expect(response.body).to match(/conditional_release/)
   end
 
-  it 'should not include conditional content if not configured' do
+  it "does not include conditional content if not configured" do
     allow(ConditionalRelease::Service).to receive(:enabled_in_context?).and_return(false)
-    render :partial => "quizzes/quizzes/quiz_edit"
-    expect(response.body).not_to match /conditional_release/
+    render partial: "quizzes/quizzes/quiz_edit"
+    expect(response.body).not_to match(/conditional_release/)
   end
 
-  it 'should include quiz details' do
-    render :partial => "quizzes/quizzes/quiz_edit"
-    expect(response.body).to match /options_tab/
+  it "includes quiz details" do
+    render partial: "quizzes/quizzes/quiz_edit"
+    expect(response.body).to match(/options_tab/)
   end
 
-  it 'should include quiz questions' do
-    render :partial => "quizzes/quizzes/quiz_edit"
-    expect(response.body).to match /questions_tab/
+  it "includes quiz questions" do
+    render partial: "quizzes/quizzes/quiz_edit"
+    expect(response.body).to match(/questions_tab/)
   end
 
-  it 'should warn about existing submission data' do
+  it "warns about existing submission data" do
     assign(:has_student_submissions, true)
-    render :partial => "quizzes/quizzes/quiz_edit"
-    expect(response.body).to match /student_submissions_warning/
+    render partial: "quizzes/quizzes/quiz_edit"
+    expect(response.body).to match(/student_submissions_warning/)
   end
 
-  it 'should not warn if no existing data' do
+  it "does not warn if no existing data" do
     assign(:has_student_submissions, false)
-    render :partial => "quizzes/quizzes/quiz_edit"
-    expect(response.body).not_to match /student_submissions_warning/
+    render partial: "quizzes/quizzes/quiz_edit"
+    expect(response.body).not_to match(/student_submissions_warning/)
   end
 end

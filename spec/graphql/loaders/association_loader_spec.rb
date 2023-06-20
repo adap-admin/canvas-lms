@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -16,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper')
-
 describe Loaders::AssociationLoader do
   before(:once) do
     @c1 = Course.create! name: "asdf"
@@ -29,9 +29,9 @@ describe Loaders::AssociationLoader do
     @a3 = @c3.assignments.create! name: "zxcv"
   end
 
-  around(:each) do |example|
+  around do |example|
     @query_count = 0
-    subscription = ActiveSupport::Notifications.subscribe('sql.active_record') do |_, _, _, _, data|
+    subscription = ActiveSupport::Notifications.subscribe("sql.active_record") do
       @query_count += 1
     end
 
@@ -46,16 +46,16 @@ describe Loaders::AssociationLoader do
 
     puts @query_count
 
-    expect {
+    expect do
       GraphQL::Batch.batch do
-        Loaders::AssociationLoader.for(Assignment, :context).load(a1).then { |course|
+        Loaders::AssociationLoader.for(Assignment, :context).load(a1).then do |course|
           expect(course).to eq @c1
-        }
-        Loaders::AssociationLoader.for(Assignment, :context).load(a2).then { |course|
+        end
+        Loaders::AssociationLoader.for(Assignment, :context).load(a2).then do |course|
           expect(course).to eq @c2
-        }
+        end
       end
-    }.to change{@query_count}.by(1)
+    end.to change { @query_count }.by(1)
   end
 
   it "batch loads when the association is already loaded on first object" do
@@ -69,10 +69,10 @@ describe Loaders::AssociationLoader do
     # determining whether or not to run)
     a1.course
 
-    expect {
+    expect do
       GraphQL::Batch.batch do
         Loaders::AssociationLoader.for(Assignment, :context).load_many([a1, a2, a3])
       end
-    }.to change{@query_count}.by(1)
+    end.to change { @query_count }.by(1)
   end
 end

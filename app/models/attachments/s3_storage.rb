@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -26,9 +28,7 @@ class Attachments::S3Storage
     @attachment = attachment
   end
 
-  def bucket
-    attachment.bucket
-  end
+  delegate :bucket, to: :attachment
 
   def exists?
     attachment.s3object.exists?
@@ -38,8 +38,10 @@ class Attachments::S3Storage
     # copying rather than moving to avoid unhappy accidents
     # note that GC of the S3 bucket isn't yet implemented,
     # so there's a bit of a cost here
-    if !exists?
-      if !attachment.size
+    return if attachment.instfs_hosted?
+
+    unless exists?
+      unless attachment.size
         attachment.size = bucket.object(old_full_filename).content_length
       end
       options = { acl: attachment.attachment_options[:s3_access] }
@@ -51,39 +53,39 @@ class Attachments::S3Storage
     end
   end
 
-  def initialize_ajax_upload_params(local_upload_url, s3_success_url, options)
+  def initialize_ajax_upload_params(_local_upload_url, s3_success_url, options)
     {
-        :upload_url => bucket.url,
-        :file_param => 'file',
-        :success_url => s3_success_url,
-        :upload_params => cred_params(options[:datetime])
+      upload_url: bucket.url,
+      file_param: "file",
+      success_url: s3_success_url,
+      upload_params: cred_params(options[:datetime])
     }
   end
 
-  def amend_policy_conditions(policy, datetime:, pseudonym: nil)
-    policy['conditions'].unshift({'bucket' => bucket.name})
+  def amend_policy_conditions(policy, datetime:)
+    policy["conditions"].unshift({ "bucket" => bucket.name })
     cred_params(datetime).each do |k, v|
-      policy['conditions'] << { k => v }
+      policy["conditions"] << { k => v }
     end
     policy
   end
 
   def cred_params(datetime)
     access_key = bucket.client.config.access_key_id
-    day_string = datetime[0,8]
+    day_string = datetime[0, 8]
     region = bucket.client.config.region
     credential = "#{access_key}/#{day_string}/#{region}/s3/aws4_request"
     {
-      'x-amz-credential' => credential,
-      'x-amz-algorithm' => "AWS4-HMAC-SHA256",
-      'x-amz-date' => datetime
+      "x-amz-credential" => credential,
+      "x-amz-algorithm" => "AWS4-HMAC-SHA256",
+      "x-amz-date" => datetime
     }
   end
 
   def shared_secret(datetime)
     config = bucket.client.config
-    sha256 = OpenSSL::Digest::SHA256.new
-    date_key = OpenSSL::HMAC.digest(sha256, "AWS4#{config.secret_access_key}", datetime[0,8])
+    sha256 = OpenSSL::Digest.new("SHA256")
+    date_key = OpenSSL::HMAC.digest(sha256, "AWS4#{config.secret_access_key}", datetime[0, 8])
     date_region_key = OpenSSL::HMAC.digest(sha256, date_key, config.region)
     date_region_service_key = OpenSSL::HMAC.digest(sha256, date_region_key, "s3")
     OpenSSL::HMAC.digest(sha256, date_region_service_key, "aws4_request")
@@ -91,30 +93,23 @@ class Attachments::S3Storage
 
   def sign_policy(policy_encoded, datetime)
     signature = OpenSSL::HMAC.hexdigest(
-      OpenSSL::Digest.new('sha256'), shared_secret(datetime), policy_encoded
+      OpenSSL::Digest.new("sha256"), shared_secret(datetime), policy_encoded
     )
-    ['x-amz-signature', signature]
+    ["x-amz-signature", signature]
   end
 
-  def open(opts, &block)
-    # TODO: !need_local_file -- net/http and thus AWS::S3::S3Object don't
-    # natively support streaming the response, except when a block is given.
-    # so without Fibers, there's not a great way to return an IO-like object
-    # that streams the response. A separate thread, I guess. Bleck. Need to
-    # investigate other options.
-    if opts[:temp_folder].present? && !File.exist?(opts[:temp_folder])
-      FileUtils.mkdir_p(opts[:temp_folder])
-    end
-    tempfile = attachment.create_tempfile(opts) do |file|
+  def open(temp_folder: nil, integrity_check: false)
+    tempfile = attachment.create_tempfile(temp_folder:) do |file|
       attachment.s3object.get(response_target: file)
     end
+    attachment.validate_hash { |hash_context| hash_context&.file(tempfile.path) } if integrity_check
 
     if block_given?
-      File.open(tempfile.path, 'rb') do |file|
-        chunk = file.read(64000)
+      File.open(tempfile.path, "rb") do |file|
+        chunk = file.read(64_000)
         while chunk
           yield chunk
-          chunk = file.read(64000)
+          chunk = file.read(64_000)
         end
       end
     end

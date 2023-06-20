@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -15,22 +17,19 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'spec_helper'
-
 describe Quizzes::QuizRegradeRun do
-
   it "validates presence of quiz_regrade_id" do
     expect(Quizzes::QuizRegradeRun.new(quiz_regrade_id: 1)).to be_valid
     expect(Quizzes::QuizRegradeRun.new(quiz_regrade_id: nil)).not_to be_valid
   end
 
   describe "#perform" do
-    before(:each) do
+    before do
       @course = Course.create!
-      @quiz = Quizzes::Quiz.create!(:context => @course)
+      @quiz = Quizzes::Quiz.create!(context: @course)
       @user = User.create!
 
-      @regrade = Quizzes::QuizRegrade.create(:user_id => @user.id, :quiz_id => @quiz.id, :quiz_version => 1)
+      @regrade = Quizzes::QuizRegrade.create(user_id: @user.id, quiz_id: @quiz.id, quiz_version: 1)
     end
 
     it "creates a new quiz regrade run" do

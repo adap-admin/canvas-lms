@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -15,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_relative '../../common'
+require_relative "../../common"
 
 class PermissionsIndex
   class << self
@@ -26,8 +28,12 @@ class PermissionsIndex
     end
 
     # ---------------------- Controls ----------------------
-    def permission_tab(tab_name)
-      f(".#{tab_name}")
+    def course_roles_tab
+      f("#tab-tab-panel-course")
+    end
+
+    def account_roles_tab
+      f("#tab-tab-panel-account")
     end
 
     def search_box
@@ -45,11 +51,11 @@ class PermissionsIndex
     end
 
     def add_role_button
-      f('#add_role')
+      f("#add_role")
     end
 
     def role_header
-      f('.ic-permissions__top-header')
+      f(".ic-permissions__top-header")
     end
 
     def role_link_css(role_name)
@@ -63,6 +69,7 @@ class PermissionsIndex
     def role_header_by_id(role)
       f("#role_#{role.id}")
     end
+
     # this is the button/link that opens the tray
     def permission_link(permission_name)
       f("#permission_#{permission_name}")
@@ -77,6 +84,10 @@ class PermissionsIndex
       f(".ic-permissions_role_tray ##{permission_name}_#{role_id}")
     end
 
+    def permissions_tray_viewable_permissions
+      ff(".ic-permissions__table tbody tr")
+    end
+
     def permission_menu_item(item_name)
       f("#permission_table_#{item_name}_menu_item")
     end
@@ -86,7 +97,7 @@ class PermissionsIndex
     end
 
     def new_role_name_input
-      f('#new_role_name')
+      f("#new_role_name")
     end
 
     def edit_role_icon
@@ -114,11 +125,12 @@ class PermissionsIndex
     end
 
     def role_tray_permission_state(permission, role)
-      icon = fj("##{permission}_#{role} svg:first").attribute('name')
+      icon = fj("##{permission}_#{role} svg:first").attribute("name")
       state = ""
-      if icon == "IconTrouble"
+      case icon
+      when "IconTrouble"
         state = "Disabled"
-      elsif icon == "IconPublish"
+      when "IconPublish"
         state = "Enabled"
       end
       state
@@ -126,9 +138,9 @@ class PermissionsIndex
 
     def grid_permission_state(permission, role)
       icons = ff("##{permission}_#{role} svg")
-      if icons[icons.length - 2].attribute('name') == "IconTrouble"
+      if icons[icons.length - 2].attribute("name") == "IconTrouble"
         state = "Disabled"
-      elsif icons[cons.length - 2].attribute('name') == "IconPublish"
+      elsif icons[cons.length - 2].attribute("name") == "IconPublish"
         state = "Enabled"
       end
       state
@@ -136,23 +148,33 @@ class PermissionsIndex
 
     def permission_state(permission_name, role)
       state = ""
-      icons = ff('svg', permission_cell(permission_name, role))
+      icons = ff("svg", permission_cell(permission_name, role))
       icons.each do |icon|
-        if icon.name == "IconPublish"
+        case icon.name
+        when "IconPublish"
           state = "Enabled" + state
-        elsif icon.name == "IconTrouble"
+        when "IconTrouble"
           state = "Disabled" + state
-        elsif icon.name == "IconLock"
+        when "IconLock"
           state += " Locked"
         end
       end
     end
 
-    # eventually add a section for the expanded permissions
+    def manage_wiki_button
+      f("button[data-testid='expand_manage_wiki']")
+    end
+
+    def expand_manage_wiki
+      scroll_to_element(manage_wiki_button)
+      manage_wiki_button.click
+    end
 
     # ---------------------- Actions ----------------------
     def choose_tab(tab_name)
-      permission_tab(tab_name).click
+      name = tab_name.to_s.downcase
+      tab = (name == "account") ? account_roles_tab : course_roles_tab
+      tab.click
     end
 
     def close_role_tray_button
@@ -173,7 +195,7 @@ class PermissionsIndex
 
     def disable_tray_permission(permission_name, role_id)
       permission_tray_button(permission_name, role_id).click
-      permission_menu_item('disable').click
+      permission_menu_item("disable").click
       wait_for_ajaximations
     end
 
@@ -183,25 +205,25 @@ class PermissionsIndex
     # on the close button. Wait for it here.
     def wait_for_tray_ready
       keep_trying_until(2) do
-        disable_implicit_wait{ yield == current_active_element }
+        disable_implicit_wait { yield == current_active_element }
       end
     end
 
     def open_edit_role_tray(role)
       role_name(role).click
-      wait_for_tray_ready{ close_role_tray_button }
+      wait_for_tray_ready { close_role_tray_button }
 
       keep_trying_until do
-        disable_implicit_wait{edit_role_icon.click}
-        disable_implicit_wait{edit_name_box.displayed?}
+        disable_implicit_wait { edit_role_icon.click }
+        disable_implicit_wait { edit_name_box.displayed? }
       end
       # sometimes the input loads and the value takes longer, wait for value
-      wait_for(method: nil, timeout: 1) { edit_name_box.attribute('value') == role.name }
+      wait_for(method: nil, timeout: 1) { edit_name_box.attribute("value") == role.name }
     end
 
     def add_role(name)
       add_role_button.click
-      wait_for_tray_ready{ close_add_role_tray_button }
+      wait_for_tray_ready { close_add_role_tray_button }
       add_role_input.click
       set_value(add_role_input, name)
       add_role_submit_button.click
@@ -237,7 +259,7 @@ class PermissionsIndex
 
     def open_permission_tray(permission_name)
       permission_link(permission_name).click
-      wait_for_tray_ready{ close_permission_tray_button }
+      wait_for_tray_ready { close_permission_tray_button }
     end
   end
 end

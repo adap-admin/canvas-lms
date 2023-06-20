@@ -27,45 +27,35 @@ exports[`renders 1`] = `
   variant="default"
 >
   <ModalHeader
+    spacing="default"
     variant="default"
   >
     <Heading
       border="none"
       color="inherit"
-      ellipsis={false}
       level="h2"
     >
-      <Button
-        as="button"
-        buttonRef={[Function]}
-        cursor="pointer"
-        fluidWidth={false}
+      <Link
+        color="link"
         href="http://example.com"
-        margin="0"
+        iconPlacement="start"
+        isWithinText={false}
         size="large"
-        theme={
-          Object {
-            "largeHeight": "normal",
-            "largePadding": "0",
-          }
-        }
-        type="button"
-        variant="link"
       >
         event title
-      </Button>
+      </Link>
     </Heading>
     <CloseButton
-      buttonRef={[Function]}
+      as="button"
+      cursor="pointer"
       margin="0"
       offset="x-small"
       onClick={[MockFunction]}
       placement="end"
+      screenReaderLabel="Close"
       size="small"
-      variant="icon"
-    >
-      Close
-    </CloseButton>
+      type="button"
+    />
   </ModalHeader>
   <ModalBody
     as="div"
@@ -75,12 +65,18 @@ exports[`renders 1`] = `
     <List
       as="ul"
       delimiter="none"
+      elementRef={[Function]}
+      isUnstyled={true}
       itemSpacing="small"
-      margin="none"
       size="medium"
-      variant="unstyled"
     >
-      <ListItem>
+      <ListItem
+        delimiter="none"
+        elementRef={[Function]}
+        padding="none"
+        size="medium"
+        spacing="none"
+      >
         <Text
           as="span"
           letterSpacing="normal"
@@ -91,17 +87,16 @@ exports[`renders 1`] = `
           Calendar:
         </Text>
         <View
-          borderColor="default"
-          debug={false}
+          borderColor="primary"
           display="auto"
           focusColor="info"
           focusPosition="offset"
-          focused={false}
           margin="0 0 0 x-small"
           overflowX="visible"
           overflowY="visible"
           position="static"
           shouldAnimateFocus={true}
+          withVisualDebug={false}
         >
           <Text
             as="span"
@@ -113,7 +108,13 @@ exports[`renders 1`] = `
           </Text>
         </View>
       </ListItem>
-      <ListItem>
+      <ListItem
+        delimiter="none"
+        elementRef={[Function]}
+        padding="none"
+        size="medium"
+        spacing="none"
+      >
         <Text
           as="span"
           letterSpacing="normal"
@@ -124,17 +125,16 @@ exports[`renders 1`] = `
           Date & Time:
         </Text>
         <View
-          borderColor="default"
-          debug={false}
+          borderColor="primary"
           display="auto"
           focusColor="info"
           focusPosition="offset"
-          focused={false}
           margin="0 0 0 x-small"
           overflowX="visible"
           overflowY="visible"
           position="static"
           shouldAnimateFocus={true}
+          withVisualDebug={false}
         >
           <Text
             as="span"
@@ -146,7 +146,13 @@ exports[`renders 1`] = `
           </Text>
         </View>
       </ListItem>
-      <ListItem>
+      <ListItem
+        delimiter="none"
+        elementRef={[Function]}
+        padding="none"
+        size="medium"
+        spacing="none"
+      >
         <Text
           as="span"
           letterSpacing="normal"
@@ -157,17 +163,16 @@ exports[`renders 1`] = `
           Location:
         </Text>
         <View
-          borderColor="default"
-          debug={false}
+          borderColor="primary"
           display="auto"
           focusColor="info"
           focusPosition="offset"
-          focused={false}
           margin="0 0 0 x-small"
           overflowX="visible"
           overflowY="visible"
           position="static"
           shouldAnimateFocus={true}
+          withVisualDebug={false}
         >
           <Text
             as="span"
@@ -179,7 +184,13 @@ exports[`renders 1`] = `
           </Text>
         </View>
       </ListItem>
-      <ListItem>
+      <ListItem
+        delimiter="none"
+        elementRef={[Function]}
+        padding="none"
+        size="medium"
+        spacing="none"
+      >
         <Text
           as="span"
           letterSpacing="normal"
@@ -190,17 +201,16 @@ exports[`renders 1`] = `
           Address:
         </Text>
         <View
-          borderColor="default"
-          debug={false}
+          borderColor="primary"
           display="auto"
           focusColor="info"
           focusPosition="offset"
-          focused={false}
           margin="0 0 0 x-small"
           overflowX="visible"
           overflowY="visible"
           position="static"
           shouldAnimateFocus={true}
+          withVisualDebug={false}
         >
           <Text
             as="span"
@@ -213,7 +223,12 @@ exports[`renders 1`] = `
         </View>
       </ListItem>
       <ListItem
+        delimiter="none"
+        elementRef={[Function]}
         margin="large 0 0 0"
+        padding="none"
+        size="medium"
+        spacing="none"
       >
         <Text
           as="span"
@@ -264,45 +279,35 @@ exports[`renders with allDay 1`] = `
   variant="default"
 >
   <ModalHeader
+    spacing="default"
     variant="default"
   >
     <Heading
       border="none"
       color="inherit"
-      ellipsis={false}
       level="h2"
     >
-      <Button
-        as="button"
-        buttonRef={[Function]}
-        cursor="pointer"
-        fluidWidth={false}
+      <Link
+        color="link"
         href="http://example.com"
-        margin="0"
+        iconPlacement="start"
+        isWithinText={false}
         size="large"
-        theme={
-          Object {
-            "largeHeight": "normal",
-            "largePadding": "0",
-          }
-        }
-        type="button"
-        variant="link"
       >
         event title
-      </Button>
+      </Link>
     </Heading>
     <CloseButton
-      buttonRef={[Function]}
+      as="button"
+      cursor="pointer"
       margin="0"
       offset="x-small"
       onClick={[MockFunction]}
       placement="end"
+      screenReaderLabel="Close"
       size="small"
-      variant="icon"
-    >
-      Close
-    </CloseButton>
+      type="button"
+    />
   </ModalHeader>
   <ModalBody
     as="div"
@@ -312,12 +317,18 @@ exports[`renders with allDay 1`] = `
     <List
       as="ul"
       delimiter="none"
+      elementRef={[Function]}
+      isUnstyled={true}
       itemSpacing="small"
-      margin="none"
       size="medium"
-      variant="unstyled"
     >
-      <ListItem>
+      <ListItem
+        delimiter="none"
+        elementRef={[Function]}
+        padding="none"
+        size="medium"
+        spacing="none"
+      >
         <Text
           as="span"
           letterSpacing="normal"
@@ -328,17 +339,16 @@ exports[`renders with allDay 1`] = `
           Calendar:
         </Text>
         <View
-          borderColor="default"
-          debug={false}
+          borderColor="primary"
           display="auto"
           focusColor="info"
           focusPosition="offset"
-          focused={false}
           margin="0 0 0 x-small"
           overflowX="visible"
           overflowY="visible"
           position="static"
           shouldAnimateFocus={true}
+          withVisualDebug={false}
         >
           <Text
             as="span"
@@ -350,7 +360,13 @@ exports[`renders with allDay 1`] = `
           </Text>
         </View>
       </ListItem>
-      <ListItem>
+      <ListItem
+        delimiter="none"
+        elementRef={[Function]}
+        padding="none"
+        size="medium"
+        spacing="none"
+      >
         <Text
           as="span"
           letterSpacing="normal"
@@ -361,17 +377,16 @@ exports[`renders with allDay 1`] = `
           Date & Time:
         </Text>
         <View
-          borderColor="default"
-          debug={false}
+          borderColor="primary"
           display="auto"
           focusColor="info"
           focusPosition="offset"
-          focused={false}
           margin="0 0 0 x-small"
           overflowX="visible"
           overflowY="visible"
           position="static"
           shouldAnimateFocus={true}
+          withVisualDebug={false}
         >
           <Text
             as="span"
@@ -383,7 +398,13 @@ exports[`renders with allDay 1`] = `
           </Text>
         </View>
       </ListItem>
-      <ListItem>
+      <ListItem
+        delimiter="none"
+        elementRef={[Function]}
+        padding="none"
+        size="medium"
+        spacing="none"
+      >
         <Text
           as="span"
           letterSpacing="normal"
@@ -394,17 +415,16 @@ exports[`renders with allDay 1`] = `
           Location:
         </Text>
         <View
-          borderColor="default"
-          debug={false}
+          borderColor="primary"
           display="auto"
           focusColor="info"
           focusPosition="offset"
-          focused={false}
           margin="0 0 0 x-small"
           overflowX="visible"
           overflowY="visible"
           position="static"
           shouldAnimateFocus={true}
+          withVisualDebug={false}
         >
           <Text
             as="span"
@@ -416,7 +436,13 @@ exports[`renders with allDay 1`] = `
           </Text>
         </View>
       </ListItem>
-      <ListItem>
+      <ListItem
+        delimiter="none"
+        elementRef={[Function]}
+        padding="none"
+        size="medium"
+        spacing="none"
+      >
         <Text
           as="span"
           letterSpacing="normal"
@@ -427,17 +453,16 @@ exports[`renders with allDay 1`] = `
           Address:
         </Text>
         <View
-          borderColor="default"
-          debug={false}
+          borderColor="primary"
           display="auto"
           focusColor="info"
           focusPosition="offset"
-          focused={false}
           margin="0 0 0 x-small"
           overflowX="visible"
           overflowY="visible"
           position="static"
           shouldAnimateFocus={true}
+          withVisualDebug={false}
         >
           <Text
             as="span"
@@ -450,7 +475,12 @@ exports[`renders with allDay 1`] = `
         </View>
       </ListItem>
       <ListItem
+        delimiter="none"
+        elementRef={[Function]}
         margin="large 0 0 0"
+        padding="none"
+        size="medium"
+        spacing="none"
       >
         <Text
           as="span"
@@ -501,45 +531,35 @@ exports[`renders with only the startTime 1`] = `
   variant="default"
 >
   <ModalHeader
+    spacing="default"
     variant="default"
   >
     <Heading
       border="none"
       color="inherit"
-      ellipsis={false}
       level="h2"
     >
-      <Button
-        as="button"
-        buttonRef={[Function]}
-        cursor="pointer"
-        fluidWidth={false}
+      <Link
+        color="link"
         href="http://example.com"
-        margin="0"
+        iconPlacement="start"
+        isWithinText={false}
         size="large"
-        theme={
-          Object {
-            "largeHeight": "normal",
-            "largePadding": "0",
-          }
-        }
-        type="button"
-        variant="link"
       >
         event title
-      </Button>
+      </Link>
     </Heading>
     <CloseButton
-      buttonRef={[Function]}
+      as="button"
+      cursor="pointer"
       margin="0"
       offset="x-small"
       onClick={[MockFunction]}
       placement="end"
+      screenReaderLabel="Close"
       size="small"
-      variant="icon"
-    >
-      Close
-    </CloseButton>
+      type="button"
+    />
   </ModalHeader>
   <ModalBody
     as="div"
@@ -549,12 +569,18 @@ exports[`renders with only the startTime 1`] = `
     <List
       as="ul"
       delimiter="none"
+      elementRef={[Function]}
+      isUnstyled={true}
       itemSpacing="small"
-      margin="none"
       size="medium"
-      variant="unstyled"
     >
-      <ListItem>
+      <ListItem
+        delimiter="none"
+        elementRef={[Function]}
+        padding="none"
+        size="medium"
+        spacing="none"
+      >
         <Text
           as="span"
           letterSpacing="normal"
@@ -565,17 +591,16 @@ exports[`renders with only the startTime 1`] = `
           Calendar:
         </Text>
         <View
-          borderColor="default"
-          debug={false}
+          borderColor="primary"
           display="auto"
           focusColor="info"
           focusPosition="offset"
-          focused={false}
           margin="0 0 0 x-small"
           overflowX="visible"
           overflowY="visible"
           position="static"
           shouldAnimateFocus={true}
+          withVisualDebug={false}
         >
           <Text
             as="span"
@@ -587,7 +612,13 @@ exports[`renders with only the startTime 1`] = `
           </Text>
         </View>
       </ListItem>
-      <ListItem>
+      <ListItem
+        delimiter="none"
+        elementRef={[Function]}
+        padding="none"
+        size="medium"
+        spacing="none"
+      >
         <Text
           as="span"
           letterSpacing="normal"
@@ -598,17 +629,16 @@ exports[`renders with only the startTime 1`] = `
           Date & Time:
         </Text>
         <View
-          borderColor="default"
-          debug={false}
+          borderColor="primary"
           display="auto"
           focusColor="info"
           focusPosition="offset"
-          focused={false}
           margin="0 0 0 x-small"
           overflowX="visible"
           overflowY="visible"
           position="static"
           shouldAnimateFocus={true}
+          withVisualDebug={false}
         >
           <Text
             as="span"
@@ -620,7 +650,13 @@ exports[`renders with only the startTime 1`] = `
           </Text>
         </View>
       </ListItem>
-      <ListItem>
+      <ListItem
+        delimiter="none"
+        elementRef={[Function]}
+        padding="none"
+        size="medium"
+        spacing="none"
+      >
         <Text
           as="span"
           letterSpacing="normal"
@@ -631,17 +667,16 @@ exports[`renders with only the startTime 1`] = `
           Location:
         </Text>
         <View
-          borderColor="default"
-          debug={false}
+          borderColor="primary"
           display="auto"
           focusColor="info"
           focusPosition="offset"
-          focused={false}
           margin="0 0 0 x-small"
           overflowX="visible"
           overflowY="visible"
           position="static"
           shouldAnimateFocus={true}
+          withVisualDebug={false}
         >
           <Text
             as="span"
@@ -653,7 +688,13 @@ exports[`renders with only the startTime 1`] = `
           </Text>
         </View>
       </ListItem>
-      <ListItem>
+      <ListItem
+        delimiter="none"
+        elementRef={[Function]}
+        padding="none"
+        size="medium"
+        spacing="none"
+      >
         <Text
           as="span"
           letterSpacing="normal"
@@ -664,17 +705,16 @@ exports[`renders with only the startTime 1`] = `
           Address:
         </Text>
         <View
-          borderColor="default"
-          debug={false}
+          borderColor="primary"
           display="auto"
           focusColor="info"
           focusPosition="offset"
-          focused={false}
           margin="0 0 0 x-small"
           overflowX="visible"
           overflowY="visible"
           position="static"
           shouldAnimateFocus={true}
+          withVisualDebug={false}
         >
           <Text
             as="span"
@@ -687,7 +727,12 @@ exports[`renders with only the startTime 1`] = `
         </View>
       </ListItem>
       <ListItem
+        delimiter="none"
+        elementRef={[Function]}
         margin="large 0 0 0"
+        padding="none"
+        size="medium"
+        spacing="none"
       >
         <Text
           as="span"
@@ -738,45 +783,35 @@ exports[`renders with user displayName for calendar 1`] = `
   variant="default"
 >
   <ModalHeader
+    spacing="default"
     variant="default"
   >
     <Heading
       border="none"
       color="inherit"
-      ellipsis={false}
       level="h2"
     >
-      <Button
-        as="button"
-        buttonRef={[Function]}
-        cursor="pointer"
-        fluidWidth={false}
+      <Link
+        color="link"
         href="http://example.com"
-        margin="0"
+        iconPlacement="start"
+        isWithinText={false}
         size="large"
-        theme={
-          Object {
-            "largeHeight": "normal",
-            "largePadding": "0",
-          }
-        }
-        type="button"
-        variant="link"
       >
         event title
-      </Button>
+      </Link>
     </Heading>
     <CloseButton
-      buttonRef={[Function]}
+      as="button"
+      cursor="pointer"
       margin="0"
       offset="x-small"
       onClick={[MockFunction]}
       placement="end"
+      screenReaderLabel="Close"
       size="small"
-      variant="icon"
-    >
-      Close
-    </CloseButton>
+      type="button"
+    />
   </ModalHeader>
   <ModalBody
     as="div"
@@ -786,12 +821,18 @@ exports[`renders with user displayName for calendar 1`] = `
     <List
       as="ul"
       delimiter="none"
+      elementRef={[Function]}
+      isUnstyled={true}
       itemSpacing="small"
-      margin="none"
       size="medium"
-      variant="unstyled"
     >
-      <ListItem>
+      <ListItem
+        delimiter="none"
+        elementRef={[Function]}
+        padding="none"
+        size="medium"
+        spacing="none"
+      >
         <Text
           as="span"
           letterSpacing="normal"
@@ -802,17 +843,16 @@ exports[`renders with user displayName for calendar 1`] = `
           Calendar:
         </Text>
         <View
-          borderColor="default"
-          debug={false}
+          borderColor="primary"
           display="auto"
           focusColor="info"
           focusPosition="offset"
-          focused={false}
           margin="0 0 0 x-small"
           overflowX="visible"
           overflowY="visible"
           position="static"
           shouldAnimateFocus={true}
+          withVisualDebug={false}
         >
           <Text
             as="span"
@@ -824,7 +864,13 @@ exports[`renders with user displayName for calendar 1`] = `
           </Text>
         </View>
       </ListItem>
-      <ListItem>
+      <ListItem
+        delimiter="none"
+        elementRef={[Function]}
+        padding="none"
+        size="medium"
+        spacing="none"
+      >
         <Text
           as="span"
           letterSpacing="normal"
@@ -835,17 +881,16 @@ exports[`renders with user displayName for calendar 1`] = `
           Date & Time:
         </Text>
         <View
-          borderColor="default"
-          debug={false}
+          borderColor="primary"
           display="auto"
           focusColor="info"
           focusPosition="offset"
-          focused={false}
           margin="0 0 0 x-small"
           overflowX="visible"
           overflowY="visible"
           position="static"
           shouldAnimateFocus={true}
+          withVisualDebug={false}
         >
           <Text
             as="span"
@@ -857,7 +902,13 @@ exports[`renders with user displayName for calendar 1`] = `
           </Text>
         </View>
       </ListItem>
-      <ListItem>
+      <ListItem
+        delimiter="none"
+        elementRef={[Function]}
+        padding="none"
+        size="medium"
+        spacing="none"
+      >
         <Text
           as="span"
           letterSpacing="normal"
@@ -868,17 +919,16 @@ exports[`renders with user displayName for calendar 1`] = `
           Location:
         </Text>
         <View
-          borderColor="default"
-          debug={false}
+          borderColor="primary"
           display="auto"
           focusColor="info"
           focusPosition="offset"
-          focused={false}
           margin="0 0 0 x-small"
           overflowX="visible"
           overflowY="visible"
           position="static"
           shouldAnimateFocus={true}
+          withVisualDebug={false}
         >
           <Text
             as="span"
@@ -890,7 +940,13 @@ exports[`renders with user displayName for calendar 1`] = `
           </Text>
         </View>
       </ListItem>
-      <ListItem>
+      <ListItem
+        delimiter="none"
+        elementRef={[Function]}
+        padding="none"
+        size="medium"
+        spacing="none"
+      >
         <Text
           as="span"
           letterSpacing="normal"
@@ -901,17 +957,16 @@ exports[`renders with user displayName for calendar 1`] = `
           Address:
         </Text>
         <View
-          borderColor="default"
-          debug={false}
+          borderColor="primary"
           display="auto"
           focusColor="info"
           focusPosition="offset"
-          focused={false}
           margin="0 0 0 x-small"
           overflowX="visible"
           overflowY="visible"
           position="static"
           shouldAnimateFocus={true}
+          withVisualDebug={false}
         >
           <Text
             as="span"
@@ -924,7 +979,12 @@ exports[`renders with user displayName for calendar 1`] = `
         </View>
       </ListItem>
       <ListItem
+        delimiter="none"
+        elementRef={[Function]}
         margin="large 0 0 0"
+        padding="none"
+        size="medium"
+        spacing="none"
       >
         <Text
           as="span"
@@ -975,45 +1035,35 @@ exports[`renders without address 1`] = `
   variant="default"
 >
   <ModalHeader
+    spacing="default"
     variant="default"
   >
     <Heading
       border="none"
       color="inherit"
-      ellipsis={false}
       level="h2"
     >
-      <Button
-        as="button"
-        buttonRef={[Function]}
-        cursor="pointer"
-        fluidWidth={false}
+      <Link
+        color="link"
         href="http://example.com"
-        margin="0"
+        iconPlacement="start"
+        isWithinText={false}
         size="large"
-        theme={
-          Object {
-            "largeHeight": "normal",
-            "largePadding": "0",
-          }
-        }
-        type="button"
-        variant="link"
       >
         event title
-      </Button>
+      </Link>
     </Heading>
     <CloseButton
-      buttonRef={[Function]}
+      as="button"
+      cursor="pointer"
       margin="0"
       offset="x-small"
       onClick={[MockFunction]}
       placement="end"
+      screenReaderLabel="Close"
       size="small"
-      variant="icon"
-    >
-      Close
-    </CloseButton>
+      type="button"
+    />
   </ModalHeader>
   <ModalBody
     as="div"
@@ -1023,12 +1073,18 @@ exports[`renders without address 1`] = `
     <List
       as="ul"
       delimiter="none"
+      elementRef={[Function]}
+      isUnstyled={true}
       itemSpacing="small"
-      margin="none"
       size="medium"
-      variant="unstyled"
     >
-      <ListItem>
+      <ListItem
+        delimiter="none"
+        elementRef={[Function]}
+        padding="none"
+        size="medium"
+        spacing="none"
+      >
         <Text
           as="span"
           letterSpacing="normal"
@@ -1039,17 +1095,16 @@ exports[`renders without address 1`] = `
           Calendar:
         </Text>
         <View
-          borderColor="default"
-          debug={false}
+          borderColor="primary"
           display="auto"
           focusColor="info"
           focusPosition="offset"
-          focused={false}
           margin="0 0 0 x-small"
           overflowX="visible"
           overflowY="visible"
           position="static"
           shouldAnimateFocus={true}
+          withVisualDebug={false}
         >
           <Text
             as="span"
@@ -1061,7 +1116,13 @@ exports[`renders without address 1`] = `
           </Text>
         </View>
       </ListItem>
-      <ListItem>
+      <ListItem
+        delimiter="none"
+        elementRef={[Function]}
+        padding="none"
+        size="medium"
+        spacing="none"
+      >
         <Text
           as="span"
           letterSpacing="normal"
@@ -1072,17 +1133,16 @@ exports[`renders without address 1`] = `
           Date & Time:
         </Text>
         <View
-          borderColor="default"
-          debug={false}
+          borderColor="primary"
           display="auto"
           focusColor="info"
           focusPosition="offset"
-          focused={false}
           margin="0 0 0 x-small"
           overflowX="visible"
           overflowY="visible"
           position="static"
           shouldAnimateFocus={true}
+          withVisualDebug={false}
         >
           <Text
             as="span"
@@ -1094,7 +1154,13 @@ exports[`renders without address 1`] = `
           </Text>
         </View>
       </ListItem>
-      <ListItem>
+      <ListItem
+        delimiter="none"
+        elementRef={[Function]}
+        padding="none"
+        size="medium"
+        spacing="none"
+      >
         <Text
           as="span"
           letterSpacing="normal"
@@ -1105,17 +1171,16 @@ exports[`renders without address 1`] = `
           Location:
         </Text>
         <View
-          borderColor="default"
-          debug={false}
+          borderColor="primary"
           display="auto"
           focusColor="info"
           focusPosition="offset"
-          focused={false}
           margin="0 0 0 x-small"
           overflowX="visible"
           overflowY="visible"
           position="static"
           shouldAnimateFocus={true}
+          withVisualDebug={false}
         >
           <Text
             as="span"
@@ -1128,7 +1193,12 @@ exports[`renders without address 1`] = `
         </View>
       </ListItem>
       <ListItem
+        delimiter="none"
+        elementRef={[Function]}
         margin="large 0 0 0"
+        padding="none"
+        size="medium"
+        spacing="none"
       >
         <Text
           as="span"
@@ -1179,45 +1249,35 @@ exports[`renders without details 1`] = `
   variant="default"
 >
   <ModalHeader
+    spacing="default"
     variant="default"
   >
     <Heading
       border="none"
       color="inherit"
-      ellipsis={false}
       level="h2"
     >
-      <Button
-        as="button"
-        buttonRef={[Function]}
-        cursor="pointer"
-        fluidWidth={false}
+      <Link
+        color="link"
         href="http://example.com"
-        margin="0"
+        iconPlacement="start"
+        isWithinText={false}
         size="large"
-        theme={
-          Object {
-            "largeHeight": "normal",
-            "largePadding": "0",
-          }
-        }
-        type="button"
-        variant="link"
       >
         event title
-      </Button>
+      </Link>
     </Heading>
     <CloseButton
-      buttonRef={[Function]}
+      as="button"
+      cursor="pointer"
       margin="0"
       offset="x-small"
       onClick={[MockFunction]}
       placement="end"
+      screenReaderLabel="Close"
       size="small"
-      variant="icon"
-    >
-      Close
-    </CloseButton>
+      type="button"
+    />
   </ModalHeader>
   <ModalBody
     as="div"
@@ -1227,12 +1287,18 @@ exports[`renders without details 1`] = `
     <List
       as="ul"
       delimiter="none"
+      elementRef={[Function]}
+      isUnstyled={true}
       itemSpacing="small"
-      margin="none"
       size="medium"
-      variant="unstyled"
     >
-      <ListItem>
+      <ListItem
+        delimiter="none"
+        elementRef={[Function]}
+        padding="none"
+        size="medium"
+        spacing="none"
+      >
         <Text
           as="span"
           letterSpacing="normal"
@@ -1243,17 +1309,16 @@ exports[`renders without details 1`] = `
           Calendar:
         </Text>
         <View
-          borderColor="default"
-          debug={false}
+          borderColor="primary"
           display="auto"
           focusColor="info"
           focusPosition="offset"
-          focused={false}
           margin="0 0 0 x-small"
           overflowX="visible"
           overflowY="visible"
           position="static"
           shouldAnimateFocus={true}
+          withVisualDebug={false}
         >
           <Text
             as="span"
@@ -1265,7 +1330,13 @@ exports[`renders without details 1`] = `
           </Text>
         </View>
       </ListItem>
-      <ListItem>
+      <ListItem
+        delimiter="none"
+        elementRef={[Function]}
+        padding="none"
+        size="medium"
+        spacing="none"
+      >
         <Text
           as="span"
           letterSpacing="normal"
@@ -1276,17 +1347,16 @@ exports[`renders without details 1`] = `
           Date & Time:
         </Text>
         <View
-          borderColor="default"
-          debug={false}
+          borderColor="primary"
           display="auto"
           focusColor="info"
           focusPosition="offset"
-          focused={false}
           margin="0 0 0 x-small"
           overflowX="visible"
           overflowY="visible"
           position="static"
           shouldAnimateFocus={true}
+          withVisualDebug={false}
         >
           <Text
             as="span"
@@ -1298,7 +1368,13 @@ exports[`renders without details 1`] = `
           </Text>
         </View>
       </ListItem>
-      <ListItem>
+      <ListItem
+        delimiter="none"
+        elementRef={[Function]}
+        padding="none"
+        size="medium"
+        spacing="none"
+      >
         <Text
           as="span"
           letterSpacing="normal"
@@ -1309,17 +1385,16 @@ exports[`renders without details 1`] = `
           Location:
         </Text>
         <View
-          borderColor="default"
-          debug={false}
+          borderColor="primary"
           display="auto"
           focusColor="info"
           focusPosition="offset"
-          focused={false}
           margin="0 0 0 x-small"
           overflowX="visible"
           overflowY="visible"
           position="static"
           shouldAnimateFocus={true}
+          withVisualDebug={false}
         >
           <Text
             as="span"
@@ -1331,7 +1406,13 @@ exports[`renders without details 1`] = `
           </Text>
         </View>
       </ListItem>
-      <ListItem>
+      <ListItem
+        delimiter="none"
+        elementRef={[Function]}
+        padding="none"
+        size="medium"
+        spacing="none"
+      >
         <Text
           as="span"
           letterSpacing="normal"
@@ -1342,17 +1423,16 @@ exports[`renders without details 1`] = `
           Address:
         </Text>
         <View
-          borderColor="default"
-          debug={false}
+          borderColor="primary"
           display="auto"
           focusColor="info"
           focusPosition="offset"
-          focused={false}
           margin="0 0 0 x-small"
           overflowX="visible"
           overflowY="visible"
           position="static"
           shouldAnimateFocus={true}
+          withVisualDebug={false}
         >
           <Text
             as="span"
@@ -1396,45 +1476,35 @@ exports[`renders without location 1`] = `
   variant="default"
 >
   <ModalHeader
+    spacing="default"
     variant="default"
   >
     <Heading
       border="none"
       color="inherit"
-      ellipsis={false}
       level="h2"
     >
-      <Button
-        as="button"
-        buttonRef={[Function]}
-        cursor="pointer"
-        fluidWidth={false}
+      <Link
+        color="link"
         href="http://example.com"
-        margin="0"
+        iconPlacement="start"
+        isWithinText={false}
         size="large"
-        theme={
-          Object {
-            "largeHeight": "normal",
-            "largePadding": "0",
-          }
-        }
-        type="button"
-        variant="link"
       >
         event title
-      </Button>
+      </Link>
     </Heading>
     <CloseButton
-      buttonRef={[Function]}
+      as="button"
+      cursor="pointer"
       margin="0"
       offset="x-small"
       onClick={[MockFunction]}
       placement="end"
+      screenReaderLabel="Close"
       size="small"
-      variant="icon"
-    >
-      Close
-    </CloseButton>
+      type="button"
+    />
   </ModalHeader>
   <ModalBody
     as="div"
@@ -1444,12 +1514,18 @@ exports[`renders without location 1`] = `
     <List
       as="ul"
       delimiter="none"
+      elementRef={[Function]}
+      isUnstyled={true}
       itemSpacing="small"
-      margin="none"
       size="medium"
-      variant="unstyled"
     >
-      <ListItem>
+      <ListItem
+        delimiter="none"
+        elementRef={[Function]}
+        padding="none"
+        size="medium"
+        spacing="none"
+      >
         <Text
           as="span"
           letterSpacing="normal"
@@ -1460,17 +1536,16 @@ exports[`renders without location 1`] = `
           Calendar:
         </Text>
         <View
-          borderColor="default"
-          debug={false}
+          borderColor="primary"
           display="auto"
           focusColor="info"
           focusPosition="offset"
-          focused={false}
           margin="0 0 0 x-small"
           overflowX="visible"
           overflowY="visible"
           position="static"
           shouldAnimateFocus={true}
+          withVisualDebug={false}
         >
           <Text
             as="span"
@@ -1482,7 +1557,13 @@ exports[`renders without location 1`] = `
           </Text>
         </View>
       </ListItem>
-      <ListItem>
+      <ListItem
+        delimiter="none"
+        elementRef={[Function]}
+        padding="none"
+        size="medium"
+        spacing="none"
+      >
         <Text
           as="span"
           letterSpacing="normal"
@@ -1493,17 +1574,16 @@ exports[`renders without location 1`] = `
           Date & Time:
         </Text>
         <View
-          borderColor="default"
-          debug={false}
+          borderColor="primary"
           display="auto"
           focusColor="info"
           focusPosition="offset"
-          focused={false}
           margin="0 0 0 x-small"
           overflowX="visible"
           overflowY="visible"
           position="static"
           shouldAnimateFocus={true}
+          withVisualDebug={false}
         >
           <Text
             as="span"
@@ -1515,7 +1595,13 @@ exports[`renders without location 1`] = `
           </Text>
         </View>
       </ListItem>
-      <ListItem>
+      <ListItem
+        delimiter="none"
+        elementRef={[Function]}
+        padding="none"
+        size="medium"
+        spacing="none"
+      >
         <Text
           as="span"
           letterSpacing="normal"
@@ -1526,17 +1612,16 @@ exports[`renders without location 1`] = `
           Address:
         </Text>
         <View
-          borderColor="default"
-          debug={false}
+          borderColor="primary"
           display="auto"
           focusColor="info"
           focusPosition="offset"
-          focused={false}
           margin="0 0 0 x-small"
           overflowX="visible"
           overflowY="visible"
           position="static"
           shouldAnimateFocus={true}
+          withVisualDebug={false}
         >
           <Text
             as="span"
@@ -1549,7 +1634,12 @@ exports[`renders without location 1`] = `
         </View>
       </ListItem>
       <ListItem
+        delimiter="none"
+        elementRef={[Function]}
         margin="large 0 0 0"
+        padding="none"
+        size="medium"
+        spacing="none"
       >
         <Text
           as="span"

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -18,7 +20,7 @@
 # Initialize BookmarkedCollection gem
 
 Rails.configuration.to_prepare do
-  BookmarkedCollection.best_unicode_collation_key_proc = lambda { |col|
+  BookmarkedCollection.best_unicode_collation_key_proc = lambda do |col|
     ActiveRecord::Base.best_unicode_collation_key(col)
-  }
+  end
 end

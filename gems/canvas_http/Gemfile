@@ -1,7 +1,8 @@
-source 'https://rubygems.org'
+# frozen_string_literal: true
 
-# Specify your gem's dependencies in canvas_http.gemspec
+source "https://rubygems.org"
+
 gemspec
 
-gem 'multipart', path: '../multipart'
 gem "canvas_slug", path: "../canvas_slug"
+gem "multipart", path: "../multipart"

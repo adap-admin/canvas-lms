@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -16,9 +18,9 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 module CanvasQuizStatistics
-  require 'canvas_quiz_statistics/version'
-  require 'canvas_quiz_statistics/util'
-  require 'canvas_quiz_statistics/analyzers'
+  require "canvas_quiz_statistics/version"
+  require "canvas_quiz_statistics/util"
+  require "canvas_quiz_statistics/analyzers"
 
   def self.can_analyze?(question_data)
     Analyzers[question_data[:question_type]] != Analyzers::Base

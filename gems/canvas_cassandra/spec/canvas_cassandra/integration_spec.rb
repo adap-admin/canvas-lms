@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -19,22 +21,23 @@
 require "spec_helper"
 
 class TestLogger
-  def debug(*args)
-  end
+  def debug(*); end
 end
 
+# TODO: this spec that interacts directly with the parent app should probably go
+# live in the parent app, not here in the gem...
 describe "execute and update" do
-  let(:config_path) { File.expand_path("../../../../../config/cassandra.yml", __FILE__) }
+  before do
+    target_location = Pathname.new(File.expand_path("../../../..", __dir__))
+    allow(Rails).to receive(:root).and_return(target_location)
+  end
+
   let(:cassandra_configured?) do
-    File.exist?(config_path) &&
-        YAML.load(ERB.new(File.read(config_path)).result) &&
-        YAML.load(ERB.new(File.read(config_path)).result)['test'] &&
-        YAML.load(ERB.new(File.read(config_path)).result)['test']['page_views']
+    ConfigFile.load("page_views", "test")
   end
   let(:db) do
-    # TODO: ConfigFile.load really deserves to be its own Config component that we could use here
-    test_config = YAML.load(ERB.new(File.read(config_path)).result)['test']['page_views']
-    CanvasCassandra::Database.new("test_conn", test_config['servers'], {keyspace: test_config['keyspace'], cql_version: '3.0.0'}, TestLogger.new)
+    test_config = ConfigFile.load("page_views", "test")
+    CanvasCassandra::Database.new("test_conn", test_config["servers"], { keyspace: test_config["keyspace"], cql_version: "3.0.0" }, TestLogger.new)
   end
 
   before do
@@ -43,6 +46,7 @@ describe "execute and update" do
     begin
       db.execute("drop table page_views")
     rescue CassandraCQL::Error::InvalidRequestException
+      nil
     end
     db.execute("create table page_views (request_id text primary key, user_id bigint)")
   end
@@ -52,13 +56,13 @@ describe "execute and update" do
   end
 
   it "returns the result from execute" do
-    expect(db.execute("select count(*) from page_views").fetch['count']).to eq 0
+    expect(db.execute("select count(*) from page_views").fetch["count"]).to eq 0
     expect(db.select_value("select count(*) from page_views")).to eq 0
-    expect(db.execute("insert into page_views (request_id, user_id) values (?, ?)", "test", 0)).to eq nil
+    expect(db.execute("insert into page_views (request_id, user_id) values (?, ?)", "test", 0)).to be_nil
   end
 
   it "returns nothing from update" do
-    expect(db.update("select count(*) from page_views")).to eq nil
-    expect(db.update("insert into page_views (request_id, user_id) values (?, ?)", "test", 0)).to eq nil
+    expect(db.update("select count(*) from page_views")).to be_nil
+    expect(db.update("insert into page_views (request_id, user_id) values (?, ?)", "test", 0)).to be_nil
   end
 end

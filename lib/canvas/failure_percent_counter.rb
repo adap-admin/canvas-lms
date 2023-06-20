@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -27,7 +29,7 @@ module Canvas
 
     def self.lua
       @lua ||= ::Redis::Scripting::Module.new(nil,
-        File.join(File.dirname(__FILE__), "failure_percent_counter"))
+                                              File.join(File.dirname(__FILE__), "failure_percent_counter"))
     end
 
     def increment_count
@@ -40,16 +42,21 @@ module Canvas
 
     def failure_rate
       now = Time.now.utc.to_i
-      result = FailurePercentCounter.lua.run(:failure_rate, [@count_key],
-        [@fail_key, now, @period, @min_samples], @redis)
+      result = FailurePercentCounter.lua.run(:failure_rate,
+                                             [@count_key],
+                                             [@fail_key, now, @period, @min_samples],
+                                             @redis)
       result.to_f
     end
 
     private
+
     def increment(key)
       now = Time.now.utc.to_i
-      FailurePercentCounter.lua.run(:increment_counter, [@count_key],
-        [key, now, SecureRandom.uuid, @period.ceil], @redis)
+      FailurePercentCounter.lua.run(:increment_counter,
+                                    [@count_key],
+                                    [key, now, SecureRandom.uuid, @period.ceil],
+                                    @redis)
     end
   end
 end

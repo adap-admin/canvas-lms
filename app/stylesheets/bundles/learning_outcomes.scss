@@ -27,7 +27,7 @@
     background-image: none;
     border: 1px solid $ic-border-light;
     background-color: darken($lightBackground, 3%);
-    padding: $ic-sp/2;
+    padding: $ic-sp*0.5;
     box-sizing: border-box;
     overflow: auto;
     .manage_rubrics {
@@ -96,7 +96,7 @@
     }
     .outcome-calculation-method-form {
       .grid-row {
-        padding: $ic-sp/2;
+        padding: $ic-sp*0.5;
       }
       label {
         display: inline;
@@ -106,8 +106,10 @@
       margin-bottom: -3px;
     }
     .outcome-assessed-info-banner {
-      margin-top: -$ic-sp;
       margin-bottom: $ic-sp;
+    }
+    .outcome-assessed-info-banner-with-mastery-scale {
+      margin-top: -$ic-sp;
     }
     .move_button, .edit_button, .delete_button {
       margin-#{direction(left)}: 1em;
@@ -155,7 +157,7 @@ ul.outcome-level {
       display: block;
       white-space: nowrap;
 
-      padding: $ic-sp/2 $ic-sp;
+      padding: $ic-sp*0.5 $ic-sp;
       color: $ic-font-color--subdued;
       span {
         &:hover {
@@ -200,7 +202,7 @@ ul.outcome-level {
       display: block;
       white-space: nowrap;
 
-      padding: $ic-sp/2 $ic-sp;
+      padding: $ic-sp*0.5 $ic-sp;
       color: $ic-font-color--subdued;
     }
     &[aria-grabbed=true] a, &[aria-grabbed=true] i {
@@ -214,6 +216,15 @@ ul.outcome-level {
   margin: 0;
   .ui-dialog-buttonpane {
     margin-top: 0;
+  }
+}
+
+.friendly-description {
+  background-color: $ic-color-medium-light;
+  padding: 8px;
+  margin-top: 10px;
+  .friendly-description-info {
+    font-weight: 200;
   }
 }
 
@@ -357,7 +368,7 @@ table.criterion .insert {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: $ic-sp/2;
+  padding: $ic-sp*0.5;
   border-bottom: 1px solid $ic-border-light;
 }
 #alignments .header {
@@ -375,4 +386,19 @@ table.criterion .insert {
 #outcome_results_list .outcome_result {
   list-style: none;
   padding: $ic-sp 0;
+}
+
+@media (min-width: 768px) and (max-width: 979px) {
+  .outcomes-browser {
+    .outcomes-content {
+      .learning_outcome {
+        label.span3 {
+          width: 220px
+        }
+        input.span3 {
+          width: 224px
+        }
+      }
+    }
+  }
 }

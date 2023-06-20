@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -63,7 +65,7 @@
 #         "all_day": {
 #           "description": "the overridden all day flag (present if due_at is overridden)",
 #           "example": true,
-#           "type": "integer"
+#           "type": "boolean"
 #         },
 #         "all_day_date": {
 #           "description": "the overridden all day date (present if due_at is overridden)",
@@ -84,13 +86,13 @@
 #     }
 #
 class AssignmentOverridesController < ApplicationController
-  before_action :require_group, :only => :group_alias
-  before_action :require_section, :only => :section_alias
+  before_action :require_group, only: :group_alias
+  before_action :require_section, only: :section_alias
   before_action :require_course
-  before_action :require_assignment, :except => [:batch_retrieve, :batch_update, :batch_create]
-  before_action :require_assignment_edit, :only => [:create, :update, :destroy]
-  before_action :require_all_assignments_edit, :only => [:batch_update, :batch_create]
-  before_action :require_override, :only => [:show, :update, :destroy]
+  before_action :require_assignment, except: %i[batch_retrieve batch_update batch_create]
+  before_action :require_assignment_edit, only: %i[create update destroy]
+  before_action :require_all_assignments_edit, only: [:batch_update, :batch_create]
+  before_action :require_override, only: %i[show update destroy]
 
   include Api::V1::AssignmentOverride
 
@@ -102,7 +104,7 @@ class AssignmentOverridesController < ApplicationController
   # @returns [AssignmentOverride]
   def index
     @overrides = assignment_override_collection(@assignment, true)
-    render :json => assignment_overrides_json(@overrides, @current_user)
+    render json: assignment_overrides_json(@overrides, @current_user)
   end
 
   # @API Get a single assignment override
@@ -111,7 +113,7 @@ class AssignmentOverridesController < ApplicationController
   #
   # @returns AssignmentOverride
   def show
-    render :json => assignment_override_json(@override)
+    render json: assignment_override_json(@override)
   end
 
   # @API Redirect to the assignment override for a group
@@ -121,10 +123,12 @@ class AssignmentOverridesController < ApplicationController
   def group_alias
     @override = find_assignment_override(@assignment, @group)
     raise ActiveRecord::RecordNotFound unless @override
+
     redirect_to api_v1_assignment_override_url(
-      :course_id => @course.id,
-      :assignment_id => @assignment.id,
-      :id => @override)
+      course_id: @course.id,
+      assignment_id: @assignment.id,
+      id: @override
+    )
   end
 
   # @API Redirect to the assignment override for a section
@@ -134,10 +138,12 @@ class AssignmentOverridesController < ApplicationController
   def section_alias
     @override = find_assignment_override(@assignment, @section)
     raise ActiveRecord::RecordNotFound unless @override
+
     redirect_to api_v1_assignment_override_url(
-      :course_id => @course.id,
-      :assignment_id => @assignment.id,
-      :id => @override)
+      course_id: @course.id,
+      assignment_id: @assignment.id,
+      id: @override
+    )
   end
 
   # @API Create an assignment override
@@ -205,10 +211,10 @@ class AssignmentOverridesController < ApplicationController
     @override = @assignment.assignment_overrides.build
 
     data, errors = interpret_assignment_override_data(@assignment, params[:assignment_override])
-    return bad_request(:errors => errors) if errors
+    return bad_request(errors:) if errors
 
     if update_assignment_override(@override, data, updating_user: @current_user)
-      render :json => assignment_override_json(@override), :status => 201
+      render json: assignment_override_json(@override), status: :created
     else
       bad_request(@override.errors)
     end
@@ -261,10 +267,10 @@ class AssignmentOverridesController < ApplicationController
   #
   def update
     data, errors = interpret_assignment_override_data(@assignment, params[:assignment_override], @override.set_type)
-    return bad_request(:errors => errors) if errors
+    return bad_request(errors:) if errors
 
     if update_assignment_override(@override, data, updating_user: @current_user)
-      render :json => assignment_override_json(@override)
+      render json: assignment_override_json(@override)
     else
       bad_request(@override.errors)
     end
@@ -284,7 +290,7 @@ class AssignmentOverridesController < ApplicationController
   #
   def destroy
     if @override.destroy
-      render :json => assignment_override_json(@override)
+      render json: assignment_override_json(@override)
     else
       bad_request(@override.errors)
     end
@@ -311,27 +317,27 @@ class AssignmentOverridesController < ApplicationController
     # check request format
     override_params = deserialize_overrides(params[:assignment_overrides])
     if override_params.blank?
-      return bad_request(errors: [ 'no assignment_overrides values present' ])
-    elsif !override_params.is_a? Array
-      return bad_request(errors: [ 'must specify an array with entry format { id, assignment_id }' ])
-    elsif !override_params.all? { |o| o.is_a?(ActionController::Parameters) && o.key?('assignment_id') && o.key?('id') }
-      return bad_request(errors: [ 'must specify an array with entry format { id, assignment_id }' ])
+      return bad_request(errors: ["no assignment_overrides values present"])
+    elsif !override_params.is_a?(Array) ||
+          !override_params.all? { |o| o.is_a?(ActionController::Parameters) && o.key?("assignment_id") && o.key?("id") }
+      return bad_request(errors: ["must specify an array with entry format { id, assignment_id }"])
     end
 
-    all_requests = override_params.group_by { |req| req['assignment_id'].to_i }
+    all_requests = override_params.group_by { |req| req["assignment_id"].to_i }
     assignments = @course.active_assignments.where(id: all_requests.keys).preload(:assignment_overrides)
 
     overrides = all_requests.map do |assignment_id, requests|
-      override_ids = requests.map { |r| r['id'].to_i }
+      override_ids = requests.map { |r| r["id"].to_i }
       assignment = assignments.find { |a| a.id == assignment_id }
       next unless assignment
+
       find_assignment_overrides(assignment, override_ids)
     end.flatten.compact
 
     # reorder to match request
     sorted = override_params.map do |req|
       overrides.find do |o|
-        o.id == req['id'].to_i
+        o.id == req["id"].to_i
       end
     end
 
@@ -424,6 +430,7 @@ class AssignmentOverridesController < ApplicationController
   def require_course
     @course ||= api_find(Course.active, params[:course_id])
     raise ActiveRecord::RecordNotFound if @course.deleted?
+
     @context = @course
     authorized_action(@course, @current_user, :read)
   end
@@ -437,7 +444,7 @@ class AssignmentOverridesController < ApplicationController
   end
 
   def require_all_assignments_edit
-    authorized_action(@course, @current_user, :manage_assignments)
+    authorized_action(@course, @current_user, [:manage_assignments, :manage_assignments_edit])
   end
 
   def require_override
@@ -446,7 +453,7 @@ class AssignmentOverridesController < ApplicationController
   end
 
   def bad_request(errors)
-    render :json => errors, :status => :bad_request
+    render json: errors, status: :bad_request
   end
 
   def batch_edit(is_update)
@@ -455,17 +462,17 @@ class AssignmentOverridesController < ApplicationController
     return bad_request(errors: all_errors) if all_errors.present?
 
     overrides = all_data.map do |data|
-      is_update ? data['override'] : data['assignment'].assignment_overrides.build
+      is_update ? data["override"] : data["assignment"].assignment_overrides.build
     end
 
     if update_assignment_overrides(overrides, all_data, updating_user: @current_user)
       render json: assignment_overrides_json(overrides, @current_user)
     else
       errors = overrides.map do |override|
-        override.errors if override.errors.present?
+        override.errors.presence
       end
-      errors = ['unknown error'] unless errors.compact.present?
-      bad_request(errors: errors)
+      errors = ["unknown error"] unless errors.compact.present?
+      bad_request(errors:)
     end
   end
 

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -16,10 +18,9 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/messages_helper')
+require_relative "messages_helper"
 
-describe 'appointment_reserved_by_user.twitter' do
+describe "appointment_reserved_by_user.twitter" do
   include MessagesCommon
 
   before :once do
@@ -29,12 +30,12 @@ describe 'appointment_reserved_by_user.twitter' do
 
   let(:asset) { @event }
   let(:notification_name) { :appointment_reserved_by_user }
-  let(:message_data) {
+  let(:message_data) do
     {
       data: { updating_user_name: @user.name },
       user: @user
     }
-  }
+  end
 
   context ".email" do
     let(:path_type) { :email }
@@ -44,23 +45,23 @@ describe 'appointment_reserved_by_user.twitter' do
       @course = course_model
       @cat = group_category
       user_model
-      @group = @cat.groups.create(:context => @course)
+      @group = @cat.groups.create(context: @course)
       @group.users << @user
       appointment_participant_model(participant: @group,
                                     course: @course,
                                     updating_user: @user)
     end
 
-    it "should render" do
+    it "renders" do
       msg = generate_message(notification_name, path_type, asset, message_data)
-      expect(msg.subject).to include('some title')
-      expect(msg.body).to include('some title')
+      expect(msg.subject).to include("some title")
+      expect(msg.body).to include("some title")
       expect(msg.body).to include(@user.name)
       expect(msg.body).to include(@course.name)
       expect(msg.body).to include("/appointment_groups/#{@appointment_group.id}")
     end
 
-    it "should render for groups" do
+    it "renders for groups" do
       msg = generate_message(notification_name, path_type, asset, message_data)
       expect(msg.body).to include(@group.name)
     end
@@ -68,18 +69,20 @@ describe 'appointment_reserved_by_user.twitter' do
 
   context ".sms" do
     let(:path_type) { :sms }
-    it "should render" do
+
+    it "renders" do
       msg = generate_message(notification_name, path_type, asset, message_data)
-      expect(msg.body).to include('some title')
+      expect(msg.body).to include("some title")
       expect(msg.body).to include(@user.name)
     end
   end
 
   context ".twitter" do
     let(:path_type) { :twitter }
-    it "should render" do
+
+    it "renders" do
       msg = generate_message(notification_name, path_type, asset, message_data)
-      expect(msg.body).to include('some title')
+      expect(msg.body).to include("some title")
       expect(msg.body).to include(@user.name)
     end
   end

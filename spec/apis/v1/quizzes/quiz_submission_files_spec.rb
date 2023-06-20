@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 Instructure, Inc.
 #
@@ -16,41 +18,39 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../api_spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/../../file_uploads_spec_helper')
+require_relative "../../api_spec_helper"
+require_relative "../../file_uploads_spec_helper"
 
 describe Quizzes::QuizSubmissionFilesController, type: :request do
-
   context "quiz submissions file uploads" do
     before :once do
-      course_with_student :active_all => true
-      @quiz = Quizzes::Quiz.create!(:title => 'quiz', :context => @course)
+      course_with_student active_all: true
+      @quiz = Quizzes::Quiz.create!(title: "quiz", context: @course)
       @quiz.did_edit!
       @quiz.offer!
 
-      s = @quiz.generate_submission(@student)
+      @quiz.generate_submission(@student)
     end
 
     include_examples "file uploads api"
 
     def preflight(preflight_params)
       json = api_call :post,
-        "/api/v1/courses/#{@course.id}/quizzes/#{@quiz.id}/submissions/self/files",
-        {
-          :controller => "quizzes/quiz_submission_files",
-          :action => "create",
-          :format => "json",
-          :course_id => @course.to_param,
-          :quiz_id => @quiz.to_param
-        },
-        preflight_params
+                      "/api/v1/courses/#{@course.id}/quizzes/#{@quiz.id}/submissions/self/files",
+                      {
+                        controller: "quizzes/quiz_submission_files",
+                        action: "create",
+                        format: "json",
+                        course_id: @course.to_param,
+                        quiz_id: @quiz.to_param
+                      },
+                      preflight_params
       # account for JSON API style return
-      json['attachments'] ? json['attachments'][0] : json
+      json["attachments"] ? json["attachments"][0] : json
     end
 
     def has_query_exemption?
       true
     end
   end
-
 end

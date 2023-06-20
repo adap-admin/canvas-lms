@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -15,17 +17,17 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_relative '../pages/srgb_page'
-require_relative './weighting_setup'
-require_relative './a_gradebook_shared_example'
+require_relative "../pages/srgb_page"
+require_relative "./weighting_setup"
+require_relative "./a_gradebook_shared_example"
 
-describe 'individual view' do
+describe "individual view" do
   include_context "in-process server selenium tests"
   include WeightingSetup
 
   let(:total_grade) do
     user_session(@teacher)
-    grading_period_titles = ['All Grading Periods', @gp1.title, @gp2.title]
+    grading_period_titles = ["All Grading Periods", @gp1.title, @gp2.title]
     SRGB.visit(@course.id)
 
     if @grading_period_index
@@ -33,7 +35,7 @@ describe 'individual view' do
       refresh_page
     end
     SRGB.select_student(@student)
-    SRGB.total_score()
+    SRGB.total_score
   end
 
   let(:individual_view) { true }
@@ -42,9 +44,9 @@ describe 'individual view' do
     weighted_grading_setup
   end
 
-  after(:each) do
+  after do
     clear_local_storage
   end
 
-  it_behaves_like 'a gradebook'
+  it_behaves_like "a gradebook"
 end

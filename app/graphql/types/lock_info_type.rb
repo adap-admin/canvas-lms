@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -27,7 +29,7 @@ module Types
   class LockInfoType < ApplicationObjectType
     graphql_name "LockInfo"
 
-    alias lock_info object
+    alias_method :lock_info, :object
 
     field :is_locked, Boolean, null: false
     def is_locked
@@ -39,7 +41,11 @@ module Types
       lock_info[:object]
     end
 
-    field :module, ModuleType, null: true
+    field :module, ModuleType, null: true, resolver_method: :lockable_module
+    def lockable_module
+      object.module
+    end
+
     field :lock_at, DateTimeType, null: true
     field :unlock_at, DateTimeType, null: true
     field :can_view, Boolean, null: true

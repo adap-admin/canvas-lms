@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -17,6 +19,10 @@
 #
 module TokenScopesHelper
   def self.scope_from_route(route)
-    "url:#{route.verb}|#{route.path.spec.to_s.gsub(/\(\.:format\)$/, '')}"
+    "url:#{route.verb}|#{path_without_format(route)}"
+  end
+
+  def self.path_without_format(route)
+    route.path.spec.to_s.gsub(/\(\.:format\)$/, "")
   end
 end

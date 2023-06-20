@@ -16,6 +16,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+@use "sass:math";
+
 @import "base/environment";
 @import "components/ui.selectmenu";
 @import "components/conditional_release";
@@ -113,6 +115,12 @@ $discussion-dark-text: $ic-color-dark;
         padding-top: 0;
       }
     }
+  }
+}
+
+.discussion-header__metadata {
+  @include mobile-only {
+    width: auto;
   }
 }
 
@@ -273,6 +281,10 @@ $discussion-dark-text: $ic-color-dark;
 
 .discussion-rate-action {
   margin-#{direction(left)}: 12px;
+  background: none;
+  border: none;
+  font: inherit;
+  cursor: pointer;
 }
 
 .discussion-rate-action--checked {
@@ -469,7 +481,11 @@ $discussion-dark-text: $ic-color-dark;
     padding: $ic-sp;
     border-#{direction(left)}: 1px solid $ic-border-light;
     border-#{direction(right)}: 1px solid $ic-border-light;
+    &.no-reply {
+      border-bottom: 1px solid $ic-border-light;
+    }
   }
+
 }
 
 .entry-header {
@@ -527,7 +543,7 @@ $discussion-dark-text: $ic-color-dark;
 
   @if $use_high_contrast { color: $ic-font-color-dark; }
   transition: border-color 0.2s;
-  padding: $ic-sp/2 $ic-sp;
+  padding: $ic-sp*0.5 $ic-sp;
   &:hover, &:focus {
     color: #444;
     text-decoration: none;
@@ -672,12 +688,30 @@ $discussion-dark-text: $ic-color-dark;
     border-color: $ic-border-light;
     background: $lightBackground;
     min-height: 53px;
-    margin-#{direction(left)}: $ic-header-primary-width + ($ic-sp*2);
-    margin-#{direction(right)}: $ic-sp*2;
     box-shadow: 0 2px 3px rgba(black, 0.1);
+    @include breakpoint(tablet) {
+      margin-#{direction(left)}: $ic-header-primary-width + ($ic-sp*2);
+      margin-#{direction(right)}: $ic-sp*2;
+    }
   }
   [disabled] {
     display: none;
+  }
+}
+
+.headerBar__layout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.headerBar__subscribe,
+.headerBar__controls {
+  margin: math.div($ic-sp, 3) 0;
+
+  @include breakpoint(desktop) {
+    margin: 0;
   }
 }
 
@@ -692,6 +726,16 @@ $discussion-dark-text: $ic-color-dark;
 }
 
 #discussion-toolbar {
+  #onlyUnread:focus +label[for="onlyUnread"] {
+    outline: 1px solid var(--ic-link-color);
+    outline-offset: 1px;
+  }
+
+  #showDeleted:focus +label[for="showDeleted"] {
+    outline: 1px solid var(--ic-link-color);
+    outline-offset: 1px;
+  }
+
   .topic-subscribe-button { display:none; }
   .topic-unsubscribe-button { display:none; }
 

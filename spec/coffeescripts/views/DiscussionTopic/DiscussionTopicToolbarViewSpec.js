@@ -18,7 +18,7 @@
 
 import $ from 'jquery'
 import assertions from 'helpers/assertions'
-import DiscussionTopicToolbarView from 'compiled/views/DiscussionTopic/DiscussionTopicToolbarView'
+import DiscussionTopicToolbarView from 'ui/features/discussion_topic/backbone/views/DiscussionTopicToolbarView'
 
 const fixture = `\
 <div id="discussion-topic-toolbar">
@@ -36,23 +36,34 @@ QUnit.module('DiscussionTopicToolbarView', {
   },
   teardown() {
     $('#fixtures').empty()
-  }
+  },
 })
 
-test('it should be accessible', function(assert) {
+test('it should be accessible', function (assert) {
   const done = assert.async()
   assertions.isAccessible(this.view, done, {a11yReport: true})
 })
 
-test('keyboard shortcut modal info shows when it has focus', function() {
+test('keyboard shortcut modal info shows when it has focus', function () {
   ok(this.info.css('display') === 'none')
   this.view.$('#keyboard-shortcut-modal-info').focus()
   ok(this.info.css('display') !== 'none')
 })
 
-test('keyboard shortcut modal info hides when it loses focus', function() {
+test('keyboard shortcut modal info hides when it loses focus', function () {
   this.view.$('#keyboard-shortcut-modal-info').focus()
   ok(this.info.css('display') !== 'none')
   this.view.$('#keyboard-shortcut-modal-info').blur()
   ok(this.info.css('display') === 'none')
+})
+
+test('keyboard shortcut modal stays hidden when setting disabled', function () {
+  // Stubbing Feature Flag
+  try {
+    window.ENV.disable_keyboard_shortcuts = true
+    this.view.$('#keyboard-shortcut-modal-info').focus()
+    strictEqual(this.info.css('display'), 'none')
+  } finally {
+    window.ENV.DISABLE_KEYBOARD_SHORTCUTS = undefined
+  }
 })

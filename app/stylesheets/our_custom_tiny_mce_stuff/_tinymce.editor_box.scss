@@ -16,7 +16,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-a.youtube_link_to_box, link.youbute_link_to_box {
+a.youtube_link_to_box,
+link.youbute_link_to_box {
   width: 425px !important;
   border: 1px solid #aaa;
   display: block;
@@ -31,7 +32,9 @@ a.youtube_link_to_box, link.youbute_link_to_box {
   background: transparent url(/images/cancel.png) no-repeat top left;
 }
 
-a.instructure_inline_media_comment {
+a.instructure_inline_media_comment,
+a.instructure_inline_media_comment.mce-item-anchor {
+  // when old rce content is loaded in the new rce
   display: block;
   width: 270px !important;
   border: 1px solid #aaa;
@@ -40,5 +43,10 @@ a.instructure_inline_media_comment {
 }
 
 .equation_image {
+  // Center equation image after saving changes on RCE 
   vertical-align: middle;
+}
+
+iframe {
+  border-style: none;
 }

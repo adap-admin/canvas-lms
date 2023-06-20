@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'net/https'
-
 class SSLCommon
   SSL_CA_PATH = "/etc/ssl/certs/"
 
@@ -34,30 +34,30 @@ class SSLCommon
 
     def raw_post(url, payload, headers = {}, form_data = nil)
       url = URI.parse(url)
-      http = self.get_http_conn(url.host, url.port, url.scheme.downcase == 'https')
+      http = get_http_conn(url.host, url.port, url.scheme.casecmp?("https"))
       req = Net::HTTP::Post.new(url.request_uri, headers)
-      req.basic_auth URI.unescape(url.user || ""), URI.unescape(url.password || "") if url.user
+      req.basic_auth URI::DEFAULT_PARSER.unescape(url.user || ""), URI::DEFAULT_PARSER.unescape(url.password || "") if url.user
       req.form_data = form_data if form_data
-      http.start {|http| http.request(req, payload) }
+      http.start { |conn| conn.request(req, payload) }
     end
 
-    def get(url, headers={})
+    def get(url, headers = {})
       url = URI.parse(url)
-      http = self.get_http_conn(url.host, url.port, url.scheme.downcase == 'https')
+      http = get_http_conn(url.host, url.port, url.scheme.casecmp?("https"))
       http.get(url.request_uri, headers)
     end
 
-    def post_form(url, form_data, headers={})
-      self.raw_post(url, nil, headers, form_data)
+    def post_form(url, form_data, headers = {})
+      raw_post(url, nil, headers, form_data)
     end
 
-    def post_multipart_form(url, form_data, headers={}, field_priority=[])
+    def post_multipart_form(url, form_data, headers = {}, field_priority = [])
       payload, mp_headers = Multipart::Post.new.prepare_query(form_data, field_priority)
-      self.raw_post(url, payload, mp_headers.merge(headers))
+      raw_post(url, payload, mp_headers.merge(headers))
     end
 
-    def post_data(url, data, content_type, headers={})
-      self.raw_post(url, data, {"Content-Type" => content_type}.merge(headers))
+    def post_data(url, data, content_type, headers = {})
+      raw_post(url, data, { "Content-Type" => content_type }.merge(headers))
     end
   end
 end

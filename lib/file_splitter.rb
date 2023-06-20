@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -18,23 +20,22 @@
 
 # Used inside the parsers to either parse by comma or parse by line.
 module FileSplitter
-  
   # OK, lame, but if there's a commas, call it comma-seperated
   def format
-    @format = @txt =~ /,/ ? :each_record : :each_line
+    @format = @txt.include?(",") ? :each_record : :each_line
   end
-  
+
   # Send it a block, expects @txt to be set in the parser.
-  def each_entry &block
-    self.send format, &block
+  def each_entry(&)
+    send(format, &)
   end
-  
-  def each_line
-    @txt.each_line {|line| yield(line) }
+
+  def each_line(&)
+    @txt.each_line(&)
   end
-  
+
   # Comma-seperated list, all one list
-  def each_record
-    @txt.split(',').each {|record| yield(record) }
+  def each_record(&)
+    @txt.split(",").each(&)
   end
 end

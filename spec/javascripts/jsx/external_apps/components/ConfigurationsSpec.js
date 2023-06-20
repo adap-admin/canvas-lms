@@ -19,7 +19,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom'
 import TestUtils from 'react-dom/test-utils'
-import Configurations from 'jsx/external_apps/components/Configurations'
+import Configurations from 'ui/features/external_apps/react/components/Configurations'
 
 const wrapper = document.getElementById('fixtures')
 const createElement = (data = {}) => <Configurations {...data} />
@@ -28,7 +28,7 @@ const renderComponent = (data = {}) => ReactDOM.render(createElement(data), wrap
 QUnit.module('ExternalApps.Configurations', {
   teardown() {
     ReactDOM.unmountComponentAtNode(wrapper)
-  }
+  },
 })
 
 test('renders', () => {
@@ -37,12 +37,12 @@ test('renders', () => {
   ok(TestUtils.isCompositeComponentWithType(component, Configurations))
 })
 
-test('canAddEdit', () => {
+test('canNotAddEdit', () => {
   const component = renderComponent({
     env: {
       PERMISSIONS: {create_tool_manually: false},
-      APP_CENTER: {enabled: true}
-    }
+      APP_CENTER: {enabled: true},
+    },
   })
   notOk(component.canAddEdit())
 })
@@ -51,8 +51,68 @@ test('canAddEdit', () => {
   const component = renderComponent({
     env: {
       PERMISSIONS: {create_tool_manually: true},
-      APP_CENTER: {enabled: true}
-    }
+      APP_CENTER: {enabled: true},
+    },
   })
   ok(component.canAddEdit())
+})
+
+test('canAdd', () => {
+  const component = renderComponent({
+    env: {
+      PERMISSIONS: {add_tool_manually: true},
+      APP_CENTER: {enabled: true},
+    },
+  })
+  ok(component.canAdd())
+})
+
+test('canNotAdd', () => {
+  const component = renderComponent({
+    env: {
+      PERMISSIONS: {add_tool_manually: false},
+      APP_CENTER: {enabled: true},
+    },
+  })
+  notOk(component.canAdd())
+})
+
+test('canEdit', () => {
+  const component = renderComponent({
+    env: {
+      PERMISSIONS: {edit_tool_manually: true},
+      APP_CENTER: {enabled: true},
+    },
+  })
+  ok(component.canEdit())
+})
+
+test('canNotEdit', () => {
+  const component = renderComponent({
+    env: {
+      PERMISSIONS: {edit_tool_manually: false},
+      APP_CENTER: {enabled: true},
+    },
+  })
+  notOk(component.canEdit())
+})
+
+test('canDelete', () => {
+  const component = renderComponent({
+    env: {
+      PERMISSIONS: {delete_tool_manually: true},
+      APP_CENTER: {enabled: true},
+    },
+  })
+  ok(component.canDelete())
+})
+
+test('canNotDelete', () => {
+  const component = renderComponent({
+    env: {
+      PERMISSIONS: {delete_tool_manually: false},
+      APP_CENTER: {enabled: true},
+    },
+  })
+  notOk(component.canDelete())
 })

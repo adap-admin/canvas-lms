@@ -19,13 +19,13 @@
 import React from 'react'
 import ReactDOM from 'react-dom'
 import TestUtils from 'react-dom/test-utils'
-import SubmissionProgressBars from 'jsx/context_cards/SubmissionProgressBars'
-import InstUIProgress from '@instructure/ui-elements/lib/components/Progress'
-import { shallow } from 'enzyme'
+import SubmissionProgressBars from '@canvas/context-cards/react/SubmissionProgressBars'
+import {ProgressBar as InstUIProgress} from '@instructure/ui-progress'
+import {shallow} from 'enzyme'
 
-const user = { _id: 1 }
+const user = {_id: 1}
 
-QUnit.module('StudentContextTray/Progress', (hooks) => {
+QUnit.module('StudentContextTray/Progress', hooks => {
   let grade, score, spy, subject, submission, tag
 
   hooks.afterEach(() => {
@@ -45,14 +45,12 @@ QUnit.module('StudentContextTray/Progress', (hooks) => {
 
   QUnit.module('displayGrade', () => {
     hooks.beforeEach(() => {
-      subject = TestUtils.renderIntoDocument(
-        <SubmissionProgressBars submissions={[]} />
-      )
+      subject = TestUtils.renderIntoDocument(<SubmissionProgressBars submissions={[]} />)
     })
 
     QUnit.module('when submission is excused', () => {
       test('it returns `EX`', () => {
-        submission = { id: 1, excused: true, assignment: {points_possible: 25} }
+        submission = {id: 1, excused: true, assignment: {points_possible: 25}}
         grade = SubmissionProgressBars.displayGrade(submission)
         equal(grade, 'EX')
       })
@@ -65,7 +63,7 @@ QUnit.module('StudentContextTray/Progress', (hooks) => {
           id: 1,
           excused: false,
           grade: percentage,
-          assignment: {points_possible: 25}
+          assignment: {points_possible: 25},
         }
         grade = SubmissionProgressBars.displayGrade(submission)
         equal(grade, percentage)
@@ -77,7 +75,7 @@ QUnit.module('StudentContextTray/Progress', (hooks) => {
         submission = {
           id: 1,
           excused: false,
-          assignment: {points_possible: 25}
+          assignment: {points_possible: 25},
         }
         spy = sinon.spy(SubmissionProgressBars, 'renderIcon')
 
@@ -101,7 +99,7 @@ QUnit.module('StudentContextTray/Progress', (hooks) => {
           score,
           id: 1,
           excused: false,
-          assignment: {points_possible: pointsPossible}
+          assignment: {points_possible: pointsPossible},
         }
         equal(SubmissionProgressBars.displayGrade(submission), `${score}/${pointsPossible}`)
       })
@@ -117,7 +115,7 @@ QUnit.module('StudentContextTray/Progress', (hooks) => {
           score,
           id: 1,
           excused: false,
-          assignment: {points_possible: pointsPossible}
+          assignment: {points_possible: pointsPossible},
         }
         equal(SubmissionProgressBars.displayGrade(submission), `${score}/${pointsPossible}`)
       })
@@ -126,14 +124,12 @@ QUnit.module('StudentContextTray/Progress', (hooks) => {
 
   QUnit.module('displayScreenreaderGrade', () => {
     hooks.beforeEach(() => {
-      subject = TestUtils.renderIntoDocument(
-        <SubmissionProgressBars submissions={[]} />
-      )
+      subject = TestUtils.renderIntoDocument(<SubmissionProgressBars submissions={[]} />)
     })
 
     QUnit.module('when submission is excused', () => {
       test('it returns `excused`', () => {
-        submission = { id: 1, excused: true, assignment: {points_possible: 25} }
+        submission = {id: 1, excused: true, assignment: {points_possible: 25}}
         grade = SubmissionProgressBars.displayScreenreaderGrade(submission)
         equal(grade, 'excused')
       })
@@ -146,7 +142,7 @@ QUnit.module('StudentContextTray/Progress', (hooks) => {
           id: 1,
           excused: false,
           grade: percentage,
-          assignment: {points_possible: 25}
+          assignment: {points_possible: 25},
         }
         grade = SubmissionProgressBars.displayScreenreaderGrade(submission)
         equal(grade, percentage)
@@ -158,13 +154,16 @@ QUnit.module('StudentContextTray/Progress', (hooks) => {
         submission = {
           id: 1,
           excused: false,
-          assignment: {points_possible: 25}
+          assignment: {points_possible: 25},
         }
 
         grade = SubmissionProgressBars.displayScreenreaderGrade({...submission, grade: 'complete'})
         equal(grade, 'complete')
 
-        grade = SubmissionProgressBars.displayScreenreaderGrade({...submission, grade: 'incomplete'})
+        grade = SubmissionProgressBars.displayScreenreaderGrade({
+          ...submission,
+          grade: 'incomplete',
+        })
         equal(grade, 'incomplete')
       })
     })
@@ -179,9 +178,12 @@ QUnit.module('StudentContextTray/Progress', (hooks) => {
           score,
           id: 1,
           excused: false,
-          assignment: {points_possible: pointsPossible}
+          assignment: {points_possible: pointsPossible},
         }
-        equal(SubmissionProgressBars.displayScreenreaderGrade(submission), `${score}/${pointsPossible}`)
+        equal(
+          SubmissionProgressBars.displayScreenreaderGrade(submission),
+          `${score}/${pointsPossible}`
+        )
       })
     })
 
@@ -195,9 +197,12 @@ QUnit.module('StudentContextTray/Progress', (hooks) => {
           score,
           id: 1,
           excused: false,
-          assignment: {points_possible: pointsPossible}
+          assignment: {points_possible: pointsPossible},
         }
-        equal(SubmissionProgressBars.displayScreenreaderGrade(submission), `15.57/${pointsPossible}`)
+        equal(
+          SubmissionProgressBars.displayScreenreaderGrade(submission),
+          `15.57/${pointsPossible}`
+        )
       })
     })
   })
@@ -207,13 +212,15 @@ QUnit.module('StudentContextTray/Progress', (hooks) => {
       test('renders icon with `icon-check` class', () => {
         subject = TestUtils.renderIntoDocument(
           <SubmissionProgressBars
-            submissions={[{
-              id: 1,
-              grade: 'complete',
-              score: 25,
-              assignment: {points_possible: 25},
-              user
-            }]}
+            submissions={[
+              {
+                id: 1,
+                grade: 'complete',
+                score: 25,
+                assignment: {points_possible: 25},
+                user,
+              },
+            ]}
           />
         )
         tag = TestUtils.findRenderedDOMComponentWithTag(subject, 'i')
@@ -224,13 +231,17 @@ QUnit.module('StudentContextTray/Progress', (hooks) => {
     QUnit.module('when grade is `complete`', () => {
       test('renders icon with `icon-check` class', () => {
         subject = TestUtils.renderIntoDocument(
-          <SubmissionProgressBars submissions={[{
-            id: 1,
-            grade: 'incomplete',
-            score: 0,
-            assignment: {points_possible: 25},
-            user
-          }]} />
+          <SubmissionProgressBars
+            submissions={[
+              {
+                id: 1,
+                grade: 'incomplete',
+                score: 0,
+                assignment: {points_possible: 25},
+                user,
+              },
+            ]}
+          />
         )
         tag = TestUtils.findRenderedDOMComponentWithTag(subject, 'i')
         equal(tag.className, 'icon-x')
@@ -240,28 +251,30 @@ QUnit.module('StudentContextTray/Progress', (hooks) => {
 
   QUnit.module('render', () => {
     test('renders one InstUIProgress component per submission', () => {
-      const submissions = [{
-        id: 1,
-        grade: 'incomplete',
-        score: 0,
-        user,
-        assignment: {points_possible: 25}
-      }, {
-        id: 2,
-        grade: 'complete',
-        score: 25,
-        user,
-        assignment: {points_possible: 25}
-      }, {
-        id: 3,
-        grade: 'A+',
-        score: 25,
-        user,
-        assignment: {points_possible: 25}
-      }]
-      subject = TestUtils.renderIntoDocument(
-        <SubmissionProgressBars submissions={submissions} />
-      )
+      const submissions = [
+        {
+          id: 1,
+          grade: 'incomplete',
+          score: 0,
+          user,
+          assignment: {points_possible: 25},
+        },
+        {
+          id: 2,
+          grade: 'complete',
+          score: 25,
+          user,
+          assignment: {points_possible: 25},
+        },
+        {
+          id: 3,
+          grade: 'A+',
+          score: 25,
+          user,
+          assignment: {points_possible: 25},
+        },
+      ]
+      subject = TestUtils.renderIntoDocument(<SubmissionProgressBars submissions={submissions} />)
       const instUIProgressBars = TestUtils.scryRenderedComponentsWithType(subject, InstUIProgress)
       equal(instUIProgressBars.length, submissions.length)
     })
@@ -273,19 +286,19 @@ QUnit.module('StudentContextTray/Progress', (hooks) => {
           score: 5,
           grade: '5',
           assignment: {html_url: 'asdf', points_possible: 1},
-          user: {short_name: 'bob', _id: '1'}
+          user: {short_name: 'bob', _id: '1'},
         },
         {
           id: '2',
           score: null,
           grade: null,
           assignment: {html_url: 'asdf', points_possible: 1},
-          user: {short_name: 'bob', _id: '1'}
-        }
+          user: {short_name: 'bob', _id: '1'},
+        },
       ]
 
       const tray = shallow(<SubmissionProgressBars submissions={submissions} />)
-      equal(tray.find('Progress').length, 1)
+      equal(tray.find('ProgressBar').length, 1)
     })
 
     test('links to submission urls', () => {
@@ -295,12 +308,17 @@ QUnit.module('StudentContextTray/Progress', (hooks) => {
           score: 5,
           grade: '5',
           assignment: {html_url: 'grades', points_possible: 1},
-          user: {short_name: 'bob', _id: '99'}
+          user: {short_name: 'bob', _id: '99'},
         },
       ]
 
       const tray = shallow(<SubmissionProgressBars submissions={submissions} />)
-      ok(tray.find("Link").getElement().props.href.match(/submissions\/99/));
+      ok(
+        tray
+          .find('Link')
+          .getElement()
+          .props.href.match(/submissions\/99/)
+      )
     })
   })
 })

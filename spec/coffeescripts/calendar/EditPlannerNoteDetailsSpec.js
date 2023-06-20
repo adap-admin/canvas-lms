@@ -17,17 +17,15 @@
  */
 
 import $ from 'jquery'
-import EditPlannerNoteDetails from 'compiled/calendar/EditPlannerNoteDetails'
-import tz from 'timezone'
-import french from 'timezone/fr_FR'
-import I18nStubber from 'helpers/I18nStubber'
+import EditPlannerNoteDetails from 'ui/features/calendar/backbone/views/EditPlannerNoteDetails'
+import tzInTest from '@canvas/timezone/specHelpers'
 import fakeENV from 'helpers/fakeENV'
-import commonEventFactory from 'compiled/calendar/commonEventFactory'
+import commonEventFactory from '@canvas/calendar/jquery/CommonEvent/index'
 
 const fixtures = $('#fixtures')
 const note = {
   id: '5',
-  todo_date: '2017-07-22T00:00',
+  todo_date: '2017-07-22T00:00:00-05',
   title: 'A To Do',
   details: 'the deets',
   user_id: '1',
@@ -35,51 +33,40 @@ const note = {
   workflow_state: 'active',
   type: 'planner_note',
   context_code: 'user_1',
-  all_context_codes: 'user_1'
+  all_context_codes: 'user_1',
 }
 
-QUnit.module('EditAssignmentDetails', {
+QUnit.module('EditPlannerNoteDetails', {
   setup() {
-    this.snapshot = tz.snapshot()
     this.$holder = $('<table />').appendTo(document.getElementById('fixtures'))
-    fakeENV.setup()
+    fakeENV.setup({TIMEZONE: 'America/Chicago'})
   },
   teardown() {
     this.$holder.detach()
     document.getElementById('fixtures').innerHTML = ''
     fakeENV.teardown()
-    tz.restore(this.snapshot)
-  }
+    tzInTest.restore()
+  },
 })
-const createView = function(event = note) {
+const createView = function (event = note) {
   return new EditPlannerNoteDetails(fixtures, event, null, null)
 }
 const commonEvent = () => commonEventFactory(note, [{asset_string: 'user_1'}])
 
 test('should initialize input with start date', () => {
   const view = createView(commonEvent())
-  equal(view.$('.date_field').val(), 'Jul 22, 2017')
+  equal(view.$('.date_field').val(), 'Sat, Jul 22, 2017')
 })
 
 test('should localize start date', () => {
-  I18nStubber.pushFrame()
-  tz.changeLocale(french, 'fr_FR', 'fr')
-  I18nStubber.setLocale('fr_FR')
-  I18nStubber.stub('fr_FR', {
-    'date.formats.full_with_weekday': '%a %-d %b %Y %-k:%M',
-    'date.formats.medium_with_weekday': '%a %-d %b %Y',
-    'date.formats.medium': '%-d %b %Y',
-    'date.month_names': ['août'],
-    'date.abbr_month_names': ['août']
-  })
+  ENV.LOCALE = 'fr' // fakeENV.teardown() will clean this up
   const view = createView(commonEvent())
-  equal(view.$('.date_field').val(), '22 juil. 2017')
-  I18nStubber.popFrame()
+  equal(view.$('.date_field').val(), 'sam. 22 juil. 2017')
 })
 
 test('requires name to save assignment note', () => {
   const data = {
-    ...note
+    ...note,
   }
   data.title = ''
   const view = createView(commonEvent(data))
@@ -91,7 +78,7 @@ test('requires name to save assignment note', () => {
 
 test('requires todo_date to save note', () => {
   const data = {
-    ...note
+    ...note,
   }
   data.todo_date = ''
   const view = createView(commonEvent(data))
@@ -103,7 +90,7 @@ test('requires todo_date to save note', () => {
 
 test('requires todo_date not to be in the past', () => {
   const data = {
-    ...note
+    ...note,
   }
   const d = new Date()
   d.setDate(d.getDate() - 1)

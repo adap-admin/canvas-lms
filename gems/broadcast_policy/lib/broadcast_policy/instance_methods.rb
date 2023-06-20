@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -19,7 +21,6 @@ require "active_support/hash_with_indifferent_access"
 
 module BroadcastPolicy
   module InstanceMethods
-
     def just_created
       saved_changes? && id_before_last_save.nil?
     end
@@ -41,6 +42,7 @@ module BroadcastPolicy
 
     def with_changed_attributes_from(other)
       return yield unless other
+
       begin
         # I'm pretty sure we can stop messing with @changed_attributes once
         # we're on Rails 5.2 (CANVAS_RAILS5_1)
@@ -61,10 +63,11 @@ module BroadcastPolicy
               other_attributes.instance_variable_get(:@attributes).delete(key)
               next
             end
-            if value.value != other_attributes[key].value
-              other_attributes.write_from_user(key, value.value)
-            else
+            if value.value == other_attributes[key].value
               other_attributes.write_from_database(key, value.value)
+            else
+              other_attributes[key].instance_variable_set(:@original_attribute, nil)
+              other_attributes.write_from_user(key, value.value)
             end
           end
           @mutations_before_last_save = ActiveModel::AttributeMutationTracker.new(other_attributes)
@@ -82,6 +85,7 @@ module BroadcastPolicy
     # helpers
     def broadcast_notifications(prior_version = nil)
       raise ArgumentError, "Broadcast Policy block not supplied for #{self.class}" unless self.class.broadcast_policy_list
+
       if prior_version
         with_changed_attributes_from(prior_version) do
           self.class.broadcast_policy_list.broadcast(self)
@@ -95,14 +99,14 @@ module BroadcastPolicy
 
     def save_without_broadcasting
       @skip_broadcasts = true
-      self.save
+      save
     ensure
       @skip_broadcasts = false
     end
 
     def save_without_broadcasting!
       @skip_broadcasts = true
-      self.save!
+      save!
     ensure
       @skip_broadcasts = false
     end
@@ -116,7 +120,7 @@ module BroadcastPolicy
         workflow_state_before_last_save == state.to_s
     end
 
-    def changed_state(new_state=nil, old_state=nil)
+    def changed_state(new_state = nil, old_state = nil)
       if new_state && old_state
         workflow_state == new_state.to_s &&
           workflow_state_before_last_save == old_state.to_s
@@ -127,12 +131,11 @@ module BroadcastPolicy
         saved_change_to_workflow_state?
       end
     end
-    alias :changed_state_to :changed_state
+    alias_method :changed_state_to, :changed_state
 
     def filter_asset_by_recipient(notification, recipient)
       policy = self.class.broadcast_policy_list.find_policy_for(notification.name)
       policy ? policy.recipient_filter.call(self, recipient) : self
     end
-
   end # InstanceMethods
 end

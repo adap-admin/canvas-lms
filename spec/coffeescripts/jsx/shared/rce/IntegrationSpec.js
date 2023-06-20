@@ -16,9 +16,9 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {wait} from '@testing-library/dom'
-import RichContentEditor from 'jsx/shared/rce/RichContentEditor'
-import RCELoader from 'jsx/shared/rce/serviceRCELoader'
+import {waitFor} from '@testing-library/dom'
+import RichContentEditor from '@canvas/rce/RichContentEditor'
+import RCELoader from '@canvas/rce/serviceRCELoader'
 import $ from 'jquery'
 import fakeENV from 'helpers/fakeENV'
 import editorUtils from 'helpers/editorUtils'
@@ -37,14 +37,14 @@ QUnit.module('Rce Abstraction - integration', {
       renderIntoDiv: (renderingTarget, propsForRCE, renderCallback) => {
         $(renderingTarget).append(`<div id='fake-editor'>${propsForRCE.toString()}</div>`)
         const fakeEditor = {
-          mceInstance () {
+          mceInstance() {
             return {
-              on () { }
+              on() {},
             }
-          }
+          },
         }
         return renderCallback(fakeEditor)
-      }
+      },
     }
     return sandbox.stub(RCELoader, 'loadRCE').callsFake(callback => callback(this.fakeRceModule))
   },
@@ -52,7 +52,7 @@ QUnit.module('Rce Abstraction - integration', {
     fakeENV.teardown()
     $('#fixtures').empty()
     editorUtils.resetRCE()
-  }
+  },
 })
 
 async function loadNewEditor() {
@@ -61,8 +61,8 @@ async function loadNewEditor() {
     const tinyMCEInitOptions = {
       manageParent: true,
       tinyOptions: {
-        init_instance_callback: resolve
-      }
+        init_instance_callback: resolve,
+      },
     }
     RichContentEditor.loadNewEditor($target, tinyMCEInitOptions)
   })
@@ -72,7 +72,7 @@ test('instatiating a remote editor', async () => {
   RichContentEditor.preloadRemoteModule()
   const target = $('#big_rce_text')
   loadNewEditor()
-  await wait(() => RCELoader.loadRCE.callCount > 0)
+  await waitFor(() => RCELoader.loadRCE.callCount > 0)
   equal(target.parent().attr('id'), 'tinymce-parent-of-big_rce_text')
   equal(target.parent().find('#fake-editor').length, 1)
 })

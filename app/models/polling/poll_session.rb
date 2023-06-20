@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -20,36 +22,38 @@ module Polling
   class PollSession < ActiveRecord::Base
     belongs_to :course
     belongs_to :course_section
-    belongs_to :poll, class_name: 'Polling::Poll'
-    has_many :poll_submissions, class_name: 'Polling::PollSubmission', dependent: :destroy
-    validates_presence_of :poll, :course
+    belongs_to :poll, class_name: "Polling::Poll"
+    has_many :poll_submissions, class_name: "Polling::PollSubmission", dependent: :destroy
+    validates :poll, :course, presence: true
     validate :section_belongs_to_course
 
     set_policy do
       given do |user, session|
-        self.poll.grants_right?(user, session, :update)
+        poll.grants_right?(user, session, :update)
       end
       can :read and can :create and can :delete and can :publish
 
       given do |user, session|
-        self.visible_to?(user, session)
+        visible_to?(user, session)
       end
       can :read
 
       given do |user, session|
-        self.visible_to?(user, session) && self.is_published?
+        visible_to?(user, session) && is_published?
       end
       can :submit
     end
 
     def self.available_for(user)
-      PollSession.where("course_id IN (?) AND (course_section_id IS NULL OR course_section_id IN (?))",
-                        Enrollment.where(user_id: user).active.select(:course_id),
-                        Enrollment.where(user_id: user).active.select(:course_section_id))
+      enrollments = Enrollment.where(user_id: user).active
+      subquery = PollSession.where(course_section_id: nil)
+                            .or(PollSession.where(course_section_id:
+                                enrollments.select(:course_section_id)))
+      PollSession.where(course_id: enrollments.select(:course_id)).merge(subquery)
     end
 
     def results
-      poll_submissions.group('poll_choice_id').count
+      poll_submissions.group("poll_choice_id").count
     end
 
     def has_submission_from?(user)
@@ -67,17 +71,16 @@ module Polling
     end
 
     def visible_to?(user, session)
-      self.course.grants_right?(user, session, :read) &&
-      (self.course_section ? self.course_section.grants_right?(user, session, :read) : true)
+      course.grants_right?(user, session, :read) &&
+        (course_section ? course_section.grants_right?(user, session, :read) : true)
     end
 
     private
+
     def section_belongs_to_course
-      if self.course && self.course_section
-        unless self.course.course_sections.include?(course_section)
-          errors.add(:base, I18n.t('polling.poll_sessions.validations.section_belongs_to_course',
-                                   'That course section does not belong to the existing course.'))
-        end
+      if course && course_section && !course.course_sections.include?(course_section)
+        errors.add(:base, I18n.t("polling.poll_sessions.validations.section_belongs_to_course",
+                                 "That course section does not belong to the existing course."))
       end
     end
   end

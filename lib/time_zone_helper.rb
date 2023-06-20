@@ -1,5 +1,5 @@
-# encoding: UTF-8
-#
+# frozen_string_literal: true
+
 # Copyright (C) 2013 - present Instructure, Inc.
 #
 # This file is part of Canvas.
@@ -30,7 +30,7 @@ module TimeZoneHelper
         @time_zone_attributes_module = Module.new
         include(@time_zone_attributes_module)
       end
-      @time_zone_attributes_module.class_eval <<-CODE, __FILE__, __LINE__ + 1
+      @time_zone_attributes_module.class_eval <<~RUBY, __FILE__, __LINE__ + 1
         def #{attr}
           value = super
           value ||= self.class.time_zone_attribute_defaults[#{attr.inspect}] or return
@@ -43,7 +43,7 @@ module TimeZoneHelper
           end
           super(value.try(:name))
         end
-      CODE
+      RUBY
     end
   end
 
@@ -53,16 +53,32 @@ module TimeZoneHelper
   # Returns a Rails named zone instead of tzinfo named zone, if one exists
   def self.rails_preferred_zone(zone)
     return nil unless zone
-    @reverse_map ||= Hash[ActiveSupport::TimeZone.all.map do |z|
+
+    @reverse_map ||= ActiveSupport::TimeZone.all.filter_map do |z|
       # Rails allows several aliases that map to the same IANA zone; on the reverse
       # mapping, exclude the aliases so that America/Lima doesn't come back as Quito
-      next if ["International Date Line West", "Guadalajara", "Quito",
-               "Edinburgh", "Bern", "St. Petersburg", "Volgograd", "Abu Dhabi",
-               "Islamabad", "Chennai", "Mumbai", "New Delhi", "Astana",
-               "Hanoi", "Osaka", "Sapporo", "Canberra", "Solomon Is.",
+      next if ["International Date Line West",
+               "Guadalajara",
+               "Quito",
+               "Edinburgh",
+               "Bern",
+               "St. Petersburg",
+               "Volgograd",
+               "Abu Dhabi",
+               "Islamabad",
+               "Chennai",
+               "Mumbai",
+               "New Delhi",
+               "Astana",
+               "Hanoi",
+               "Osaka",
+               "Sapporo",
+               "Canberra",
+               "Solomon Is.",
                "Wellington"].include?(z.name)
+
       [z.tzinfo.name, z]
-    end.compact]
+    end.to_h
     @reverse_map[zone.name] || zone
   end
 

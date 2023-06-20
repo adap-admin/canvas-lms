@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -16,13 +18,13 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-class AuthenticationProvider::Facebook < AuthenticationProvider::Oauth2
+class AuthenticationProvider::Facebook < AuthenticationProvider::OAuth2
   include AuthenticationProvider::PluginSettings
 
   self.plugin = :facebook
   plugin_settings :app_id, app_secret: :app_secret_dec
 
-  SENSITIVE_PARAMS = [ :app_secret ].freeze
+  SENSITIVE_PARAMS = [:app_secret].freeze
 
   alias_attribute :app_id, :client_id
   alias_attribute :app_secret, :client_secret
@@ -36,27 +38,27 @@ class AuthenticationProvider::Facebook < AuthenticationProvider::Oauth2
   end
 
   def self.recognized_params
-    [ :login_attribute, :jit_provisioning ].freeze
+    super + [:login_attribute, :jit_provisioning].freeze
   end
 
   def self.login_attributes
-    ['id'.freeze, 'email'.freeze].freeze
+    ["id", "email"].freeze
   end
   validates :login_attribute, inclusion: login_attributes
 
   def self.recognized_federated_attributes
-    [
-      'email'.freeze,
-      'first_name'.freeze,
-      'id'.freeze,
-      'last_name'.freeze,
-      'locale'.freeze,
-      'name'.freeze,
+    %w[
+      email
+      first_name
+      id
+      last_name
+      locale
+      name
     ].freeze
   end
 
   def login_attribute
-    super || 'id'.freeze
+    super || "id"
   end
 
   def unique_id(token)
@@ -72,14 +74,14 @@ class AuthenticationProvider::Facebook < AuthenticationProvider::Oauth2
   def me(token)
     # abusing AccessToken#options as a useful place to cache this response
     token.options[:me] ||= begin
-      attributes = ([login_attribute] + federated_attributes.values.map { |v| v['attribute'] }).uniq
-      token.get("me?fields=#{attributes.join(',')}").parsed
+      attributes = ([login_attribute] + federated_attributes.values.pluck("attribute")).uniq
+      token.get("me?fields=#{attributes.join(",")}").parsed
     end
   end
 
   def authorize_options
-    if login_attribute == 'email' || federated_attributes.any? { |(_k, v)| v['attribute'] == 'email' }
-      { scope: 'email'.freeze }.freeze
+    if login_attribute == "email" || federated_attributes.any? { |(_k, v)| v["attribute"] == "email" }
+      { scope: "email" }.freeze
     else
       {}.freeze
     end
@@ -87,9 +89,9 @@ class AuthenticationProvider::Facebook < AuthenticationProvider::Oauth2
 
   def client_options
     {
-      site: 'https://graph.facebook.com'.freeze,
-      authorize_url: 'https://www.facebook.com/dialog/oauth'.freeze,
-      token_url: 'oauth/access_token'.freeze
+      site: "https://graph.facebook.com",
+      authorize_url: "https://www.facebook.com/dialog/oauth",
+      token_url: "oauth/access_token"
     }
   end
 end

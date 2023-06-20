@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -20,10 +22,6 @@ class TeacherViewPageV2
     include SeleniumDependencies
 
     # Selectors
-    def a2_page_loading_spinner
-      f("div[data-cid='Spinner']:contains('Loading...')")
-    end
-
     def details_tab
       fj("div[role='tab']:contains('Details')")
     end
@@ -34,11 +32,11 @@ class TeacherViewPageV2
 
     # Methods & Actions
     def visit(course, assignment)
-      course.account.enable_feature!(:assignments_2)
+      course.account.enable_feature!(:assignments_2_teacher)
       get "/courses/#{course.id}/assignments/#{assignment.id}"
-      wait_for(method: nil, timeout: 1) {
+      wait_for(method: nil, timeout: 1) do
         assignment_type
-      }
+      end
     end
   end
 end

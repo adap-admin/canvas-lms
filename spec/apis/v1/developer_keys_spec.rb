@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 Instructure, Inc.
 #
@@ -16,59 +18,63 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../api_spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/../../lti_1_3_spec_helper')
+require_relative "../api_spec_helper"
+require_relative "../../lti_1_3_spec_helper"
 
 describe DeveloperKeysController, type: :request do
-  include_context 'lti_1_3_spec_helper'
+  include_context "lti_1_3_spec_helper"
   let(:sa_id) { Account.site_admin.id }
 
   describe "GET 'index'" do
-    it 'should require authorization' do
+    it "requires authorization" do
       unauthorized_api_call(:get, "/api/v1/accounts/#{sa_id}/developer_keys.json", {
-        controller: 'developer_keys',
-        action: 'index',
-        format: 'json',
-        account_id: sa_id.to_s
-      })
+                              controller: "developer_keys",
+                              action: "index",
+                              format: "json",
+                              account_id: sa_id.to_s
+                            })
     end
 
-    it 'should have the default developer key' do
+    it "has the default developer key" do
       admin_session
       json = api_call(:get, "/api/v1/accounts/#{sa_id}/developer_keys.json", {
-        controller: 'developer_keys',
-        action: 'index',
-        format: 'json',
-        account_id: sa_id.to_s
-      })
+                        controller: "developer_keys",
+                        action: "index",
+                        format: "json",
+                        account_id: sa_id.to_s
+                      })
 
       confirm_valid_key_in_json(json, DeveloperKey.default)
     end
 
-    it 'should return the list of developer keys' do
+    it "returns the list of developer keys" do
       admin_session
       key = DeveloperKey.create!
       json = api_call(:get, "/api/v1/accounts/#{sa_id}/developer_keys.json", {
-        controller: 'developer_keys',
-        action: 'index',
-        format: 'json',
-        account_id: sa_id.to_s
-      })
+                        controller: "developer_keys",
+                        action: "index",
+                        format: "json",
+                        account_id: sa_id.to_s
+                      })
 
       confirm_valid_key_in_json(json, key)
     end
 
-    it 'should stringify the nested stuff' do
+    it "stringifies the nested stuff" do
       admin_session
       key = DeveloperKey.create!
-      json = api_call(:get, "/api/v1/accounts/#{sa_id}/developer_keys.json", {
-        controller: 'developer_keys', action: 'index', format: 'json', account_id: sa_id.to_s
-      }, {}, { 'Accept' => 'application/json+canvas-string-ids' })
-      row = json.detect{|r| r["id"] == key.global_id.to_s}
+      json = api_call(:get,
+                      "/api/v1/accounts/#{sa_id}/developer_keys.json",
+                      {
+                        controller: "developer_keys", action: "index", format: "json", account_id: sa_id.to_s
+                      },
+                      {},
+                      { "Accept" => "application/json+canvas-string-ids" })
+      row = json.detect { |r| r["id"] == key.global_id.to_s }
       expect(row["developer_key_account_binding"]["developer_key_id"]).to eq key.global_id.to_s
     end
 
-    it 'should only include a subset of attributes if inherited is set' do
+    it "only includes a subset of attributes if inherited is set" do
       a = Account.create!
       allow_any_instance_of(DeveloperKeysController).to receive(:context_is_domain_root_account?).and_return(true)
       user_session(account_admin_user(account: a))
@@ -76,128 +82,171 @@ describe DeveloperKeysController, type: :request do
       d.update! visible: true
       get "/api/v1/accounts/#{a.id}/developer_keys", params: { inherited: true }
       expect(json_parse.first.keys).to match_array(
-        %w[name created_at icon_url workflow_state id developer_key_account_binding is_lti_key]
+        %w[name created_at icon_url workflow_state id developer_key_account_binding is_lti_key inherited_from]
       )
     end
 
-    it 'should only include tool_configuration if inherited is not set' do
+    context "when inherited is set for siteadmin key" do
+      subject { get "/api/v1/accounts/#{account.id}/developer_keys", params: { inherited: true } }
+
+      let(:account) { Account.create! }
+      let(:key) do
+        d = DeveloperKey.create!(account: nil)
+        d.update! visible: true
+        d
+      end
+
+      before do
+        allow_any_instance_of(DeveloperKeysController).to receive(:context_is_domain_root_account?).and_return(true)
+        user_session(account_admin_user(account:))
+        key
+      end
+
+      it "only includes a subset of attributes" do
+        subject
+        expect(json_parse.first.keys).to match_array(
+          %w[name created_at icon_url workflow_state id developer_key_account_binding is_lti_key inherited_from]
+        )
+      end
+
+      it "sets inherited_from to global" do
+        subject
+        expect(json_parse.first["inherited_from"]).to eq "global"
+      end
+    end
+
+    it "only includes tool_configuration if inherited is not set" do
       a = Account.create!
       allow_any_instance_of(DeveloperKeysController).to receive(:context_is_domain_root_account?).and_return(true)
       user_session(account_admin_user(account: a))
       d = DeveloperKey.create!(account: a)
       d.update! visible: true
       get "/api/v1/accounts/#{a.id}/developer_keys"
-      expect(json_parse.first.keys).to include 'tool_configuration'
+      expect(json_parse.first.keys).to include "tool_configuration"
     end
 
-    it 'does not include `test_cluster_only` by default' do
+    it 'includes "allow_includes"' do
+      a = Account.create!
+      allow_any_instance_of(DeveloperKeysController).to receive(:context_is_domain_root_account?).and_return(true)
+      user_session(account_admin_user(account: a))
+      d = DeveloperKey.create!(account: a)
+      d.update! visible: true
+      get "/api/v1/accounts/#{a.id}/developer_keys"
+      expect(json_parse.first.keys).to include "allow_includes"
+    end
+
+    it "does not include `test_cluster_only` by default" do
       admin_session
-      key = DeveloperKey.create!
+      DeveloperKey.create!
       json = api_call(:get, "/api/v1/accounts/#{sa_id}/developer_keys.json", {
-        controller: 'developer_keys',
-        action: 'index',
-        format: 'json',
-        account_id: sa_id.to_s
-      })
-      expect(json.first.keys).not_to be_include('test_cluster_only')
+                        controller: "developer_keys",
+                        action: "index",
+                        format: "json",
+                        account_id: sa_id.to_s
+                      })
+      expect(json.first.keys).not_to be_include("test_cluster_only")
     end
 
-    it 'does include `test_cluster_only` when enabled' do
+    it "does include `test_cluster_only` when enabled" do
       Setting.set("dev_key_test_cluster_checks_enabled", true)
       admin_session
-      key = DeveloperKey.create!
+      DeveloperKey.create!
       json = api_call(:get, "/api/v1/accounts/#{sa_id}/developer_keys.json", {
-        controller: 'developer_keys',
-        action: 'index',
-        format: 'json',
-        account_id: sa_id.to_s
-      })
-      expect(json.first.keys).to be_include('test_cluster_only')
+                        controller: "developer_keys",
+                        action: "index",
+                        format: "json",
+                        account_id: sa_id.to_s
+                      })
+      expect(json.first.keys).to be_include("test_cluster_only")
     end
 
-    describe 'developer key account bindings' do
+    describe "developer key account bindings" do
       specs_require_sharding
 
-      context 'when context is site admin' do
-        it 'includes the site admin binding for the key' do
+      context "when context is site admin" do
+        it "includes the site admin binding for the key" do
           user_session(account_admin_user(account: Account.site_admin))
           sa_key = Account.site_admin.shard.activate { DeveloperKey.create!(account: nil) }
-          get '/api/v1/accounts/site_admin/developer_keys'
+          get "/api/v1/accounts/site_admin/developer_keys"
 
-          site_admin_key_json = json_parse.find{ |d| d['id'] == sa_key.global_id }
-          expect(Account.find(site_admin_key_json.dig('developer_key_account_binding', 'account_id'))).to eq Account.site_admin
-          expect(site_admin_key_json.dig('developer_key_account_binding', 'account_owns_binding')).to eq true
+          site_admin_key_json = json_parse.find { |d| d["id"] == sa_key.global_id }
+          expect(Account.find(site_admin_key_json.dig("developer_key_account_binding", "account_id"))).to eq Account.site_admin
+          expect(site_admin_key_json.dig("developer_key_account_binding", "account_owns_binding")).to be true
         end
       end
 
-      context 'when context is not site admin' do
+      context "when context is not site admin" do
         let(:root_account) { account_model }
 
-        it 'includes the site admin binding if it is set' do
+        it "includes the site admin binding if it is set" do
           user_session(account_admin_user(account: Account.site_admin))
           sa_key = Account.site_admin.shard.activate { DeveloperKey.create!(account: nil) }
           sa_key.update!(visible: true)
-          root_account.developer_key_account_bindings.create!(developer_key: sa_key, workflow_state: 'on')
+          root_account.developer_key_account_bindings.create!(developer_key: sa_key, workflow_state: "on")
 
           get "/api/v1/accounts/#{root_account.id}/developer_keys?inherited=true"
 
-          site_admin_key_json = json_parse.find{ |d| d['id'] == sa_key.global_id }
+          site_admin_key_json = json_parse.find { |d| d["id"] == sa_key.global_id }
 
-          expect(Account.find(site_admin_key_json.dig('developer_key_account_binding', 'account_id'))).to eq Account.site_admin
-          expect(site_admin_key_json.dig('developer_key_account_binding', 'account_owns_binding')).to eq false
+          expect(Account.find(site_admin_key_json.dig("developer_key_account_binding", "account_id"))).to eq Account.site_admin
+          expect(site_admin_key_json.dig("developer_key_account_binding", "account_owns_binding")).to be false
         end
       end
     end
   end
 
   describe "POST 'create'" do
-    it 'should require authorization' do
-      unauthorized_api_call(:post, "/api/v1/accounts/#{sa_id}/developer_keys.json", {
-        controller: 'developer_keys',
-        action: 'create',
-        format: 'json',
-        account_id: sa_id.to_s
-      }, {developer_key: {}})
+    it "requires authorization" do
+      unauthorized_api_call(:post,
+                            "/api/v1/accounts/#{sa_id}/developer_keys.json",
+                            {
+                              controller: "developer_keys",
+                              action: "create",
+                              format: "json",
+                              account_id: sa_id.to_s
+                            },
+                            { developer_key: {} })
     end
 
-    it 'should create a new developer key' do
+    it "creates a new developer key" do
       create_call
     end
   end
 
   describe "PUT 'update'" do
-    it 'should require authorization' do
+    it "requires authorization" do
       key = DeveloperKey.create!
-      unauthorized_api_call(:put, "/api/v1/developer_keys/#{key.id}.json", {
-        controller: 'developer_keys',
-        action: 'update',
-        id: key.id.to_s,
-        format: 'json'
-      }, {developer_key: {}})
+      unauthorized_api_call(:put,
+                            "/api/v1/developer_keys/#{key.id}.json",
+                            {
+                              controller: "developer_keys",
+                              action: "update",
+                              id: key.id.to_s,
+                              format: "json"
+                            },
+                            { developer_key: {} })
     end
 
-
-    it 'should update an existing developer key' do
+    it "updates an existing developer key" do
       update_call
     end
   end
 
   describe "DELETE 'destroy'" do
-    it 'should require authorization' do
+    it "requires authorization" do
       key = DeveloperKey.create!
       unauthorized_api_call(:delete, "/api/v1/developer_keys/#{key.id}.json", {
-        controller: 'developer_keys',
-        action: 'destroy',
-        id: key.id.to_s,
-        format: 'json'
-      })
+                              controller: "developer_keys",
+                              action: "destroy",
+                              id: key.id.to_s,
+                              format: "json"
+                            })
     end
 
-    it 'should delete an existing developer key' do
+    it "deletes an existing developer key" do
       destroy_call
     end
   end
-
 
   def admin_session
     account_admin_user(account: Account.site_admin)
@@ -205,15 +254,18 @@ describe DeveloperKeysController, type: :request do
 
   def create_call
     admin_session
-    post_hash = { developer_key: { name: 'cool tool', icon_url: '' } }
+    post_hash = { developer_key: { name: "cool tool", icon_url: "" } }
     # make sure this key is created
     DeveloperKey.default
-    json = api_call(:post, "/api/v1/accounts/#{sa_id}/developer_keys.json", {
-      controller: 'developer_keys',
-      action: 'create',
-      format: 'json',
-      account_id: sa_id.to_s
-    }, post_hash)
+    json = api_call(:post,
+                    "/api/v1/accounts/#{sa_id}/developer_keys.json",
+                    {
+                      controller: "developer_keys",
+                      action: "create",
+                      format: "json",
+                      account_id: sa_id.to_s
+                    },
+                    post_hash)
 
     expect(DeveloperKey.count).to eq 2
     confirm_valid_key_in_json([json], DeveloperKey.last)
@@ -222,13 +274,16 @@ describe DeveloperKeysController, type: :request do
   def update_call
     admin_session
     key = DeveloperKey.create!
-    post_hash = { developer_key: { name: 'cool tool' } }
-    json = api_call(:put, "/api/v1/developer_keys/#{key.id}.json", {
-      controller: 'developer_keys',
-      action: 'update',
-      format: 'json',
-      id: key.id.to_s
-    }, post_hash)
+    post_hash = { developer_key: { name: "cool tool" } }
+    json = api_call(:put,
+                    "/api/v1/developer_keys/#{key.id}.json",
+                    {
+                      controller: "developer_keys",
+                      action: "update",
+                      format: "json",
+                      id: key.id.to_s
+                    },
+                    post_hash)
 
     key.reload
     confirm_valid_key_in_json([json], key)
@@ -236,25 +291,25 @@ describe DeveloperKeysController, type: :request do
 
   def destroy_call
     admin_session
-    key = DeveloperKey.create!()
+    key = DeveloperKey.create!
     api_call(:delete, "/api/v1/developer_keys/#{key.id}.json", {
-      controller: 'developer_keys',
-      action: 'destroy',
-      format: 'json',
-      id: key.id.to_s
-    })
+               controller: "developer_keys",
+               action: "destroy",
+               format: "json",
+               id: key.id.to_s
+             })
 
     expect(DeveloperKey.where(id: key).first).to be_deleted
   end
 
   def unauthorized_api_call(*args)
     raw_api_call(*args)
-    expect(response.code).to eq "401"
+    expect(response).to have_http_status :unauthorized
   end
 
   def confirm_valid_key_in_json(json, key)
     json.map! do |hash|
-      hash.keep_if {|k, _| ['id', 'icon_url', 'name'].include?(k)}
+      hash.keep_if { |k, _| %w[id icon_url name].include?(k) }
     end
 
     expect(json.include?(key_to_hash(key))).to be true
@@ -262,9 +317,9 @@ describe DeveloperKeysController, type: :request do
 
   def key_to_hash(key)
     {
-      'id' => key.global_id,
-      'icon_url' => key.icon_url,
-      'name' => key.name
+      "id" => key.global_id,
+      "icon_url" => key.icon_url,
+      "name" => key.name
     }
   end
 end

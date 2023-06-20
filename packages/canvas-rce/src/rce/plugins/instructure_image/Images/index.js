@@ -17,48 +17,79 @@
  */
 
 import React, {useRef} from 'react'
-import {arrayOf, bool, func, shape} from 'prop-types'
-import {Flex} from '@instructure/ui-layout'
-
+import {arrayOf, bool, func, objectOf, oneOf, shape, string} from 'prop-types'
+import {fileShape} from '../../shared/fileShape'
+import {Flex} from '@instructure/ui-flex'
+import {View} from '@instructure/ui-view'
+import {Text} from '@instructure/ui-text'
 import {
   LoadMoreButton,
   LoadingIndicator,
   LoadingStatus,
-  useIncrementalLoading
+  useIncrementalLoading,
 } from '../../../../common/incremental-loading'
-import Image from '../ImageList/Image'
 import ImageList from '../ImageList'
+import formatMessage from '../../../../format-message'
+
+export const RCSImageCollectionType = objectOf(
+  shape({
+    files: arrayOf(shape(fileShape)).isRequired,
+    bookmark: string,
+    hasMore: bool.isRequired,
+    isLoading: bool.isRequired,
+    error: string,
+  })
+)
+
+function hasFiles(images) {
+  return images.files.length > 0
+}
+
+function isEmpty(images) {
+  return !hasFiles(images) && !images.hasMore && !images.isLoading
+}
 
 export default function Images(props) {
-  const {fetchImages, images} = props
-  const {hasMore, isLoading, records} = images
+  const {
+    fetchInitialImages,
+    fetchNextImages,
+    contextType,
+    sortBy,
+    searchString,
+    isIconMaker,
+    canvasOrigin,
+  } = props
+  const images = props.images[contextType]
+  const {hasMore, isLoading, error, files} = images
   const lastItemRef = useRef(null)
 
   const loader = useIncrementalLoading({
     hasMore,
     isLoading,
     lastItemRef,
-
-    onLoadInitial() {
-      fetchImages({calledFromRender: true})
-    },
-
-    onLoadMore() {
-      fetchImages({calledFromRender: false})
-    },
-
-    records
+    onLoadInitial: fetchInitialImages,
+    onLoadMore: fetchNextImages,
+    records: files,
+    contextType,
+    sortBy,
+    searchString,
   })
 
   return (
-    <>
+    <View as="div" data-testid="instructure_links-ImagesPanel">
       <Flex alignItems="center" direction="column" justifyItems="space-between" height="100%">
         <Flex.Item overflowY="visible" width="100%">
-          <ImageList images={records} lastItemRef={lastItemRef} onImageClick={props.onImageEmbed} />
+          <ImageList
+            images={files}
+            lastItemRef={lastItemRef}
+            onImageClick={props.onImageEmbed}
+            isIconMaker={isIconMaker}
+            canvasOrigin={canvasOrigin}
+          />
         </Flex.Item>
 
         {loader.isLoading && (
-          <Flex.Item as="div" grow>
+          <Flex.Item as="div" shouldGrow={true}>
             <LoadingIndicator loader={loader} />
           </Flex.Item>
         )}
@@ -71,16 +102,37 @@ export default function Images(props) {
       </Flex>
 
       <LoadingStatus loader={loader} />
-    </>
+
+      {error && (
+        <View as="div" role="alert" margin="medium">
+          <Text color="danger">{formatMessage('Loading failed.')}</Text>
+        </View>
+      )}
+
+      {isEmpty(images) && (
+        <View as="div" role="alert" padding="medium">
+          {formatMessage('No results.')}
+        </View>
+      )}
+    </View>
   )
 }
 
 Images.propTypes = {
-  fetchImages: func.isRequired,
-  images: shape({
-    hasMore: bool.isRequired,
-    isLoading: bool.isRequired,
-    records: arrayOf(Image.propTypes.image).isRequired
+  fetchInitialImages: func.isRequired,
+  fetchNextImages: func.isRequired,
+  contextType: string.isRequired,
+  images: RCSImageCollectionType.isRequired,
+  sortBy: shape({
+    sort: oneOf(['date_added', 'alphabetical']).isRequired,
+    order: oneOf(['asc', 'desc']).isRequired,
   }),
-  onImageEmbed: func.isRequired
+  searchString: string,
+  onImageEmbed: func.isRequired,
+  isIconMaker: bool,
+  canvasOrigin: string.isRequired,
+}
+
+Images.defaultProps = {
+  isIconMaker: false,
 }

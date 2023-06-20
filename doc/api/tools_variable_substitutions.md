@@ -44,7 +44,7 @@ For more information on variable substitution, see the <a href="https://www.imsg
 Variable substitutions can be configured for a tool in 3 ways:
 
 ## Via UI
-Custom fields can be <a href="https://community.canvaslms.com/docs/DOC-3033">configured via UI</a> by editing the tool configuration and adding the
+Custom fields can be <a href="https://community.canvaslms.com/t5/Admin-Guide/How-do-I-configure-a-manual-entry-external-app-for-an-account/ta-p/219">configured via UI</a> by editing the tool configuration and adding the
 desired variable to the Custom Fields text box.
 
 The following would add the domain as a launch parameter called custom_arbitrary_name:
@@ -69,7 +69,60 @@ curl 'https://<domain>.instructure.com/api/v1/courses/<course_id>/external_tools
   -F 'custom_fields[domain]=$Canvas.api.domain'
 ```
 
-## Via XML Configuration
+## Via JSON Configuration (LTI 1.3)
+JSON can be used to <a href="https://community.canvaslms.com/t5/Admin-Guide/How-do-I-configure-an-LTI-key-for-an-account/ta-p/140" target="_blank">configure an LTI 1.3 Developer Key</a>.
+
+The following JSON would create a developer key with the a placement specfic custom field and a tool-level custom field:
+
+```
+{  
+   "title":"Variable Expansion Tool",
+   "scopes":[  
+
+   ],
+   "extensions":[  
+      {  
+         "domain":"variableexpander.com",
+         "tool_id":"variable-expansion-example",
+         "platform":"canvas.instructure.com",
+         "settings":{  
+            "text":"Variation Expansion Tool Text",
+            "icon_url":"https://some.icon.url",
+            "placements":[  
+               {  
+                  "text":"User Navigation Placement",
+                  "enabled":true,
+                  "icon_url":"https://static.thenounproject.com/png/131630-200.png",
+                  "placement":"user_navigation",
+                  "message_type":"LtiResourceLinkRequest",
+                  "target_link_uri":"https://lti-ri.imsglobal.org/lti/tools/281/launches",
+                  "canvas_icon_class":"icon-lti",
+                  "custom_fields":{  
+                     "foo":"$Canvas.user.id"
+                  }
+               }
+            ]
+         }
+      }
+   ],
+   "public_jwk":{  
+      "kty":"RSA",
+      "alg":"RS256",
+      "e":"AQAB",
+      "kid":"8f796169-0ac4-48a3-a202-fa4f3d814fcd",
+      "n":"nZD7QWmIwj-3N_RZ1qJjX6CdibU87y2l02yMay4KunambalP9g0fU9yZLwLX9WYJINcXZDUf6QeZ-SSbblET-h8Q4OvfSQ7iuu0WqcvBGy8M0qoZ7I-NiChw8dyybMJHgpiP_AyxpCQnp3bQ6829kb3fopbb4cAkOilwVRBYPhRLboXma0cwcllJHPLvMp1oGa7Ad8osmmJhXhM9qdFFASg_OCQdPnYVzp8gOFeOGwlXfSFEgt5vgeU25E-ycUOREcnP7BnMUk7wpwYqlE537LWGOV5z_1Dqcqc9LmN-z4HmNV7b23QZW4_mzKIOY4IqjmnUGgLU9ycFj5YGDCts7Q",
+      "use":"sig"
+   },
+   "description":"1.3 Test Tool",
+   "custom_fields":{  
+      "bar":"$Canvas.user.sisid"
+   },
+   "target_link_uri":"https://your.target_link_uri",
+   "oidc_initiation_url":"https://your.oidc_initiation_url"
+}
+```
+
+## Via XML Configuration (LTI 1.1)
 Custom fields can also be <a href="/doc/api/file.tools_xml.html">configured via XML</a>.
 
 This would create a tool in a course with custom fields, some of which are specific for a
@@ -106,8 +159,116 @@ particular placement:
      </blti:extensions>
    </cartridge_basiclti_link>
 ```
-
 # Supported Substitutions
+## ResourceLink.id
+LTI - Custom parameter substitution: ResourceLink.id
+Returns the LTI value for the resource_link.id property
+Returns "$ResourceLink.id" otherwise.
+
+**Availability**: *always*  
+**Launch Parameter**: *resourcelink_id*  
+
+
+## ResourceLink.description
+LTI - Custom parameter substitution: ResourceLink.description
+Returns the LTI value for the resource_link.description property
+Returns "$ResourceLink.description" otherwise.
+
+**Availability**: *always*  
+**Launch Parameter**: *resourcelink_description*  
+
+
+## ResourceLink.title
+LTI - Custom parameter substitution: ResourceLink.title
+Returns the LTI value for the resource_link.title property
+Returns "$ResourceLink.title" otherwise.
+
+**Availability**: *always*  
+**Launch Parameter**: *resourcelink_title*  
+
+
+## ResourceLink.available.startDateTime
+LTI - Custom parameter substitution: ResourceLink.available.startDateTime
+Returns the ISO 8601 date and time when this resource is available for learners to access
+Returns "$ResourceLink.available.startDateTime" otherwise.
+
+**Availability**: *always*  
+**Launch Parameter**: *resourcelink_available_startdatetime*  
+
+
+## ResourceLink.available.endDateTime
+LTI - Custom parameter substitution: ResourceLink.available.endDateTime
+Returns the ISO 8601 date and time when this resource ceases to be available for learners to access
+Returns "$ResourceLink.available.endDateTime" otherwise.
+
+**Availability**: *always*  
+**Launch Parameter**: *resourcelink_available_enddatetime*  
+
+
+## ResourceLink.submission.endDateTime
+LTI - Custom parameter substitution: ResourceLink.submission.endDateTime
+Returns the ISO 8601 date and time when this resource stops accepting submissions.
+Returns "$ResourceLink.submission.endDateTime" otherwise.
+
+**Availability**: *always*  
+**Launch Parameter**: *resourcelink_submission_enddatetime*  
+
+
+## com.instructure.User.observees
+If the current user is an observer in the launch
+context, this substitution returns a comma-separated
+list of user IDs linked to the current user for
+observing. For LTI 1.3 tools, the user IDs will
+correspond to the "sub" claim made in LTI 1.3 launches
+(a UUIDv4), while for all other tools, the user IDs will
+be the user's typical LTI ID.
+
+Returns an empty string otherwise.
+
+**Availability**: *when launched in a course*  
+**Launch Parameter**: *com_instructure_user_observees*  
+
+```
+ LTI 1.3: "a6e2e413-4afb-4b60-90d1-8b0344df3e91",
+ All Others: "c0ddd6c90cbe1ef0f32fbce5c3bf654204be186c"
+```
+## com.instructure.User.sectionNames
+Returns an array of the section names in a JSON-escaped format that the user is enrolled in, if the
+context of the tool launch is within a course.
+
+**Availability**: *when launched from a course*  
+**Launch Parameter**: *com_instructure_user_section_names*  
+
+```
+[\"Section 1, M-T\", \"Section 2, W-Th\", \"TA Section\"]
+```
+## com.instructure.RCS.app_host
+Returns the host of the rich content service for the current region.
+
+**Availability**: *always*  
+**Launch Parameter**: *com_instructure_rcs_app_host*  
+
+```
+"rich-content-iad.inscloudgate.net"
+```
+## com.instructure.RCS.service_jwt
+Returns the RCS Service JWT for the current user.
+
+**Availability**: *internal LTI tools*  
+**Launch Parameter**: *com_instructure_rcs_service_jwt*  
+
+```
+"base64-encoded-service-jwt"
+```
+## com.instructure.Observee.sisIds
+returns all observee ids linked to this observer as an String separated by `,`.
+
+**Availability**: *when launched in a course*  
+**Launch Parameter**: *com_instructure_observee_sis_ids*  
+
+```
+"A123,B456,..."
+```
 ## Context.title
 The title of the context.
 
@@ -115,12 +276,12 @@ The title of the context.
 **Launch Parameter**: *context_title*  
 
 ```
-Example Course
+"Example Course"
 ```
 ## com.instructure.Editor.contents
 The contents of the text editor associated with the content item launch.
 
-**Availability**: *always*  
+**Availability**: *when the tool is launched from the editor_button placement*  
 **Launch Parameter**: *com_instructure_editor_contents*  
 
 ```
@@ -130,7 +291,7 @@ The contents of the text editor associated with the content item launch.
 The contents the user has selected in the text editor associated
 with the content item launch.
 
-**Availability**: *always*  
+**Availability**: *when the tool is launched from the editor_button placement*  
 **Launch Parameter**: *com_instructure_editor_selection*  
 
 ```
@@ -144,7 +305,7 @@ and Canvas via the Window.postMessage API.
 **Launch Parameter**: *com_instructure_post_message_token*  
 
 ```
-9ae4170c-6b64-444d-9246-0b7dedd5f560
+"9ae4170c-6b64-444d-9246-0b7dedd5f560"
 ```
 ## com.instructure.Assignment.lti.id
 The LTI assignment id of an assignment. This value corresponds with
@@ -154,7 +315,28 @@ the `ext_lti_assignment_id` send in various launches and webhooks.
 **Launch Parameter**: *com_instructure_assignment_lti_id*  
 
 ```
-9ae4170c-6b64-444d-9246-0b7dedd5f560
+"9ae4170c-6b64-444d-9246-0b7dedd5f560"
+```
+## com.instructure.Assignment.description
+The LTI assignment description of an assignment.
+
+**Availability**: *always*  
+**Launch Parameter**: *com_instructure_assignment_description*  
+
+```
+"Example Description"
+```
+## com.instructure.Assignment.allowedFileExtensions
+A comma separated list of the file extensions that are allowed for submitting to this
+assignment. If there are no limits on what files can be uploaded, an empty string will be
+returned. If the assignment does not allow file uploads as a submission type, then no
+substitution will be performed.
+
+**Availability**: *when the tool is used to upload a file as an assignment submission*  
+**Launch Parameter**: *com_instructure_assignment_allowed_file_extensions*  
+
+```
+"docx,pdf,txt"
 ```
 ## com.instructure.OriginalityReport.id
 The Canvas id of the Originality Report associated
@@ -202,16 +384,28 @@ an opaque identifier that uniquely identifies the context of the tool launch.
 **Launch Parameter**: *context_id*  
 
 ```
-cdca1fe2c392a208bd8a657f8865ddb9ca359534
+"cdca1fe2c392a208bd8a657f8865ddb9ca359534"
 ```
-## Context.sourcedId
-The sourced Id of the context.
+## Context.sourcedId [duplicates Person.sourcedId]
+If the context is a Course, returns sourced Id of the context.
 
 **Availability**: *always*  
 
 
 ```
 1234
+```
+## Context.id.history
+Returns a string with a comma-separated list of the context ids of the
+courses in reverse chronological order from which content has been copied.
+Will show a limit of 1000 context ids.  When the number passes 1000,
+'truncated' will show at the end of the list.
+
+**Availability**: *when launched in a course*  
+
+
+```
+"789,456,123"
 ```
 ## Message.documentTarget
 communicates the kind of browser window/frame where the Canvas has launched a tool.
@@ -220,7 +414,7 @@ communicates the kind of browser window/frame where the Canvas has launched a to
 **Launch Parameter**: *launch_presentation_document_target*  
 
 ```
-iframe
+"iframe"
 ```
 ## Message.locale
 returns the current locale.
@@ -229,7 +423,7 @@ returns the current locale.
 **Launch Parameter**: *launch_presentation_locale*  
 
 ```
-de
+"de"
 ```
 ## ToolConsumerInstance.guid
 returns a unique identifier for the Tool Consumer (Canvas).
@@ -238,7 +432,7 @@ returns a unique identifier for the Tool Consumer (Canvas).
 **Launch Parameter**: *tool_consumer_instance_guid*  
 
 ```
-0dWtgJjjFWRNT41WdQMvrleejGgv7AynCVm3lmZ2:canvas-lms
+"0dWtgJjjFWRNT41WdQMvrleejGgv7AynCVm3lmZ2:canvas-lms"
 ```
 ## Canvas.api.domain
 returns the canvas domain for the current context.
@@ -247,7 +441,7 @@ returns the canvas domain for the current context.
 
 
 ```
-canvas.instructure.com
+"canvas.instructure.com"
 ```
 ## Canvas.api.collaborationMembers.url
 returns the api url for the members of the collaboration.
@@ -256,7 +450,7 @@ returns the api url for the members of the collaboration.
 
 
 ```
-https://canvas.instructure.com/api/v1/collaborations/1/members
+"https://canvas.instructure.com/api/v1/collaborations/1/members"
 ```
 ## Canvas.api.baseUrl
 returns the base URL for the current context.
@@ -265,7 +459,7 @@ returns the base URL for the current context.
 
 
 ```
-https://canvas.instructure.com
+"https://canvas.instructure.com"
 ```
 ## ToolProxyBinding.memberships.url
 returns the URL for the membership service associated with the current context.
@@ -276,7 +470,7 @@ This variable is for future use only. Complete support for the IMS Membership Se
 
 
 ```
-https://canvas.instructure.com/api/lti/courses/1/membership_service
+"https://canvas.instructure.com/api/lti/courses/1/membership_service"
 ```
 ## Canvas.account.id
 returns the account id for the current context.
@@ -294,7 +488,7 @@ returns the account name for the current context.
 
 
 ```
-School Name
+"School Name"
 ```
 ## Canvas.account.sisSourceId
 returns the account's sis source id for the current context.
@@ -303,7 +497,7 @@ returns the account's sis source id for the current context.
 
 
 ```
-sis_account_id_1234
+"sis_account_id_1234"
 ```
 ## Canvas.rootAccount.id
 returns the Root Account ID for the current context.
@@ -321,7 +515,16 @@ returns the root account's sis source id for the current context.
 
 
 ```
-sis_account_id_1234
+"sis_account_id_1234"
+```
+## Canvas.externalTool.global_id
+returns the global ID for the external tool that was launched. Only available for LTI 1.
+
+**Availability**: *always and when in an LTI 1*  
+
+
+```
+1234
 ```
 ## Canvas.externalTool.url
 returns the URL for the external tool that was launched. Only available for LTI 1.
@@ -330,7 +533,7 @@ returns the URL for the external tool that was launched. Only available for LTI 
 
 
 ```
-http://example.url/path
+"http://example.url/path"
 ```
 ## com.instructure.brandConfigJSON.url
 returns the URL to retrieve the brand config JSON for the launching context.
@@ -339,7 +542,7 @@ returns the URL to retrieve the brand config JSON for the launching context.
 
 
 ```
-http://example.url/path.json
+"http://example.url/path.json"
 ```
 ## com.instructure.brandConfigJSON
 returns the brand config JSON itself for the launching context.
@@ -360,7 +563,7 @@ More information on on how to use instructure ui react components can be found [
 
 
 ```
-http://example.url/path.js
+"http://example.url/path.js"
 ```
 ## Canvas.css.common
 returns the URL for the common css file.
@@ -369,7 +572,7 @@ returns the URL for the common css file.
 
 
 ```
-http://example.url/path.css
+"http://example.url/path.css"
 ```
 ## Canvas.shard.id
 returns the shard id for the current context.
@@ -405,7 +608,7 @@ returns the account uuid for the current context.
 **Launch Parameter**: *vnd_canvas_root_account_uuid*  
 
 ```
-Ioe3sJPt0KZp9Pw6xAvcHuLCl0z4TvPKP0iIOLbo
+"Ioe3sJPt0KZp9Pw6xAvcHuLCl0z4TvPKP0iIOLbo"
 ```
 ## Canvas.root_account.sisSourceId *[deprecated]*
 returns the root account sis source id for the current context.
@@ -432,7 +635,7 @@ returns the current course uuid.
 
 
 ```
-S3vhRY2pBzG8iPdZ3OBPsPrEnqn5sdRoJOLXGbwc
+"S3vhRY2pBzG8iPdZ3OBPsPrEnqn5sdRoJOLXGbwc"
 ```
 ## Canvas.course.name
 returns the current course name.
@@ -441,10 +644,19 @@ returns the current course name.
 
 
 ```
-Course Name
+"Course Name"
 ```
 ## Canvas.course.sisSourceId
 returns the current course sis source id.
+
+**Availability**: *when launched in a course*  
+
+
+```
+1234
+```
+## com.instructure.Course.integrationId
+returns the current course integration id.
 
 **Availability**: *when launched in a course*  
 
@@ -459,7 +671,16 @@ returns the current course start date.
 
 
 ```
-YYY-MM-DD HH:MM:SS -0700
+2018-01-15 00:00:00 -0700
+```
+## Canvas.course.endAt
+returns the current course end date.
+
+**Availability**: *when launched in a course*  
+
+
+```
+2018-05-01 00:00:00 -0700
 ```
 ## Canvas.course.workflowState
 returns the current course workflow state. Workflow states of "claimed" or "created"
@@ -469,7 +690,7 @@ indicate an unpublished course.
 
 
 ```
-active
+"active"
 ```
 ## Canvas.term.startAt
 returns the current course's term start date.
@@ -478,7 +699,7 @@ returns the current course's term start date.
 
 
 ```
-YYY-MM-DD HH:MM:SS -0700
+2018-01-12 00:00:00 -0700
 ```
 ## Canvas.term.name
 returns the current course's term name.
@@ -487,7 +708,7 @@ returns the current course's term name.
 **Launch Parameter**: *canvas_term_name*  
 
 ```
-W1 2017
+"W1 2017"
 ```
 ## CourseSection.sourcedId
 returns the current course sis source id
@@ -506,7 +727,7 @@ returns the current course enrollment state.
 
 
 ```
-active
+"active"
 ```
 ## com.instructure.Assignment.anonymous_grading
 returns true if the assignment has anonymous grading
@@ -526,7 +747,7 @@ using the LIS v2 vocabulary.
 **Launch Parameter**: *com_instructure_membership_roles*  
 
 ```
-http://purl.imsglobal.org/vocab/lis/v2/institution/person#Student
+"http://purl.imsglobal.org/vocab/lis/v2/institution/person#Student"
 ```
 ## Canvas.membership.roles
 returns the current course membership roles.
@@ -535,7 +756,7 @@ returns the current course membership roles.
 **Launch Parameter**: *canvas_membership_roles*  
 
 ```
-StudentEnrollment
+"StudentEnrollment"
 ```
 ## Canvas.membership.concludedRoles
 This is a list of IMS LIS roles should have a different key.
@@ -544,7 +765,7 @@ This is a list of IMS LIS roles should have a different key.
 
 
 ```
-urn:lti:sysrole:ims/lis/None
+"urn:lti:sysrole:ims/lis/None"
 ```
 ## Canvas.course.previousContextIds
 With respect to the current course, returns the context ids of the courses from which content has been copied (excludes cartridge imports).
@@ -553,16 +774,17 @@ With respect to the current course, returns the context ids of the courses from 
 
 
 ```
-1234,4567
+"1234,4567"
 ```
 ## Canvas.course.previousContextIds.recursive
 With respect to the current course, recursively returns the context ids of the courses from which content has been copied (excludes cartridge imports).
+Will show a limit of 1000 context ids.  When the number passes 1000, 'truncated' will show at the end of the list.
 
 **Availability**: *when launched in a course*  
 
 
 ```
-1234,4567
+"1234,4567"
 ```
 ## Canvas.course.previousCourseIds
 With respect to the current course, returns the course ids of the courses from which content has been copied (excludes cartridge imports).
@@ -580,7 +802,7 @@ Returns the full name of the launching user.
 **Launch Parameter**: *lis_person_name_full*  
 
 ```
-John Doe
+"John Doe"
 ```
 ## Person.name.display
 Returns the display name of the launching user.
@@ -589,7 +811,7 @@ Returns the display name of the launching user.
 **Launch Parameter**: *person_name_display*  
 
 ```
-John Doe
+"John Doe"
 ```
 ## Person.name.family
 Returns the last name of the launching user.
@@ -598,7 +820,7 @@ Returns the last name of the launching user.
 **Launch Parameter**: *lis_person_name_family*  
 
 ```
-Doe
+"Doe"
 ```
 ## Person.name.given
 Returns the first name of the launching user.
@@ -607,7 +829,7 @@ Returns the first name of the launching user.
 **Launch Parameter**: *lis_person_name_given*  
 
 ```
-John
+"John"
 ```
 ## com.instructure.Person.name_sortable
 Returns the sortable name of the launching user.
@@ -616,7 +838,7 @@ Returns the sortable name of the launching user.
 **Launch Parameter**: *com_instructure_person_name_sortable*  
 
 ```
-Doe, John
+"Doe, John"
 ```
 ## Person.email.primary
 Returns the primary email of the launching user.
@@ -625,7 +847,16 @@ Returns the primary email of the launching user.
 **Launch Parameter**: *lis_person_contact_email_primary*  
 
 ```
-john.doe@example.com
+"john.doe@example.com"
+```
+## com.instructure.Person.pronouns
+Returns pronouns for the current user.
+
+**Availability**: *when launched by a logged in user*  
+**Launch Parameter**: *com_instructure_person_pronouns*  
+
+```
+"She/Her"
 ```
 ## vnd.Canvas.Person.email.sis
 Returns the institution assigned email of the launching user.
@@ -634,7 +865,7 @@ Returns the institution assigned email of the launching user.
 
 
 ```
-john.doe@example.com
+"john.doe@example.com"
 ```
 ## Person.address.timezone
 Returns the name of the timezone of the launching user.
@@ -643,7 +874,7 @@ Returns the name of the timezone of the launching user.
 
 
 ```
-America/Denver
+"America/Denver"
 ```
 ## User.image
 Returns the profile picture URL of the launching user.
@@ -652,7 +883,7 @@ Returns the profile picture URL of the launching user.
 **Launch Parameter**: *user_image*  
 
 ```
-https://example.com/picture.jpg
+"https://example.com/picture.jpg"
 ```
 ## User.id [duplicates Canvas.user.id]
 Returns the Canvas user_id of the launching user.
@@ -679,7 +910,7 @@ Returns the Canvas user_uuid of the launching user for the context.
 
 
 ```
-N2ST123dQ9zyhurykTkBfXFa3Vn1RVyaw9Os6vu3
+"N2ST123dQ9zyhurykTkBfXFa3Vn1RVyaw9Os6vu3"
 ```
 ## vnd.instructure.User.current_uuid [duplicates User.uuid]
 Returns the current Canvas user_uuid of the launching user.
@@ -688,7 +919,7 @@ Returns the current Canvas user_uuid of the launching user.
 
 
 ```
-N2ST123dQ9zyhurykTkBfXFa3Vn1RVyaw9Os6vu3
+"N2ST123dQ9zyhurykTkBfXFa3Vn1RVyaw9Os6vu3"
 ```
 ## Canvas.user.prefersHighContrast
 Returns the users preference for high contrast colors (an accessibility feature).
@@ -706,7 +937,7 @@ returns the Canvas ids of all active groups in the current course.
 **Launch Parameter**: *com_instructure_course_groupids*  
 
 ```
-23,24,...
+"23,24,..."
 ```
 ## Canvas.group.contextIds
 returns the context ids for the groups the user belongs to in the course.
@@ -715,7 +946,7 @@ returns the context ids for the groups the user belongs to in the course.
 
 
 ```
-1c16f0de65a080803785ecb3097da99872616f0d,d4d8d6ae1611e2c7581ce1b2f5c58019d928b79d,...
+"1c16f0de65a080803785ecb3097da99872616f0d,d4d8d6ae1611e2c7581ce1b2f5c58019d928b79d,..."
 ```
 ## Membership.role
 Returns the [IMS LTI membership service](https://www.imsglobal.org/specs/ltimemv1p0/specification-3) roles for filtering via query parameters.
@@ -725,7 +956,7 @@ Or, for LTI 1.3 tools, returns the [IMS LTI Names and Role Provisioning Service]
 **Launch Parameter**: *roles*  
 
 ```
-http://purl.imsglobal.org/vocab/lis/v2/institution/person#Administrator
+"http://purl.imsglobal.org/vocab/lis/v2/institution/person#Administrator"
 ```
 ## Canvas.xuser.allRoles [duplicates ext_roles which is sent by default]
 Returns list of [LIS role full URNs](https://www.imsglobal.org/specs/ltiv1p0/implementation-guide#toc-16).
@@ -741,7 +972,7 @@ System role urns start with "urn:lti:sysrole" and include roles for the entire s
 
 
 ```
-urn:lti:instrole:ims/lis/Administrator,urn:lti:instrole:ims/lis/Instructor,urn:lti:sysrole:ims/lis/SysAdmin,urn:lti:sysrole:ims/lis/User
+"urn:lti:instrole:ims/lis/Administrator,urn:lti:instrole:ims/lis/Instructor,urn:lti:sysrole:ims/lis/SysAdmin,urn:lti:sysrole:ims/lis/User"
 ```
 ## com.instructure.User.allRoles
 Same as "Canvas.xuser.allRoles", but uses roles formatted for LTI Advantage.
@@ -780,7 +1011,7 @@ This may not be the pseudonym the user is actually logged in with.
 
 
 ```
-jdoe
+"jdoe"
 ```
 ## Canvas.user.loginId [duplicates User.username]
 Username/Login ID for the primary pseudonym for the user for the account.
@@ -790,7 +1021,7 @@ This may not be the pseudonym the user is actually logged in with.
 
 
 ```
-jdoe
+"jdoe"
 ```
 ## Canvas.user.sisSourceId [duplicates Person.sourcedId]
 Returns the sis source id for the primary pseudonym for the user for the account
@@ -800,7 +1031,7 @@ This may not be the pseudonym the user is actually logged in with.
 
 
 ```
-sis_user_42
+"sis_user_42"
 ```
 ## Canvas.user.sisIntegrationId
 Returns the integration id for the primary pseudonym for the user for the account
@@ -810,7 +1041,7 @@ This may not be the pseudonym the user is actually logged in with.
 
 
 ```
-integration_user_42
+"integration_user_42"
 ```
 ## Person.sourcedId [duplicates Canvas.user.sisSourceId]
 Returns the sis source id for the primary pseudonym for the user for the account
@@ -820,7 +1051,7 @@ This may not be the pseudonym the user is actually logged in with.
 **Launch Parameter**: *lis_person_sourcedid*  
 
 ```
-sis_user_42
+"sis_user_42"
 ```
 ## Canvas.logoutService.url
 Returns the logout service url for the user.
@@ -831,7 +1062,7 @@ It may not hold all the sis info needed in other launch substitutions.
 
 
 ```
-https://<domain>.instructure.com/api/lti/v1/logout_service/<external_tool_id>-<user_id>-<current_unix_timestamp>-<opaque_string>
+"https://<domain>.instructure.com/api/lti/v1/logout_service/<external_tool_id>-<user_id>-<current_unix_timestamp>-<opaque_string>"
 ```
 ## Canvas.masqueradingUser.id
 Returns the Canvas user_id for the masquerading user.
@@ -853,7 +1084,7 @@ It may not hold all the sis info needed in other launch substitutions.
 
 
 ```
-da12345678cb37ba1e522fc7c5ef086b7704eff9
+"da12345678cb37ba1e522fc7c5ef086b7704eff9"
 ```
 ## Canvas.xapi.url
 Returns the xapi url for the user.
@@ -862,7 +1093,7 @@ Returns the xapi url for the user.
 
 
 ```
-https://<domain>.instructure.com/api/lti/v1/xapi/<external_tool_id>-<user_id>-<course_id>-<current_unix_timestamp>-<opaque_id>
+"https://<domain>.instructure.com/api/lti/v1/xapi/<external_tool_id>-<user_id>-<course_id>-<current_unix_timestamp>-<opaque_id>"
 ```
 ## Caliper.url
 Returns the caliper url for the user.
@@ -871,7 +1102,7 @@ Returns the caliper url for the user.
 
 
 ```
-https://<domain>.instructure.com/api/lti/v1/caliper/<external_tool_id>-<user_id>-<course_id>-<current_unix_timestamp>-<opaque_id>
+"https://<domain>.instructure.com/api/lti/v1/caliper/<external_tool_id>-<user_id>-<course_id>-<current_unix_timestamp>-<opaque_id>"
 ```
 ## Canvas.course.sectionIds
 Returns a comma separated list of section_id's that the user is enrolled in.
@@ -880,7 +1111,7 @@ Returns a comma separated list of section_id's that the user is enrolled in.
 
 
 ```
-42, 43
+"42, 43"
 ```
 ## Canvas.course.sectionRestricted
 Returns true if the user can only view and interact with users in their own sections.
@@ -898,7 +1129,7 @@ Returns a comma separated list of section sis_id's that the user is enrolled in.
 
 
 ```
-section_sis_id_1, section_sis_id_2
+"section_sis_id_1, section_sis_id_2"
 ```
 ## com.instructure.contextLabel
 Returns the course code.
@@ -907,7 +1138,7 @@ Returns the course code.
 **Launch Parameter**: *context_label*  
 
 ```
-CS 124
+"CS 124"
 ```
 ## Canvas.module.id
 Returns the module_id that the module item was launched from.
@@ -936,6 +1167,15 @@ Returns the assignment_id of the assignment that was launched.
 ```
 1234
 ```
+## Canvas.assignment.description
+Returns the assignment_description of the assignment that was launched.
+
+**Availability**: *when launched as an assignment*  
+
+
+```
+"Example Description"
+```
 ## com.instructure.Group.id
 Returns the Canvas id of the group the current user is in if launching
 from a group assignment.
@@ -954,7 +1194,7 @@ from a group assignment.
 **Launch Parameter**: *vnd_canvas_group_name*  
 
 ```
-Group One
+"Group One"
 ```
 ## Canvas.assignment.title
 Returns the title of the assignment that was launched.
@@ -963,7 +1203,7 @@ Returns the title of the assignment that was launched.
 
 
 ```
-Deep thought experiment
+"Deep thought experiment"
 ```
 ## Canvas.assignment.pointsPossible
 Returns the points possible of the assignment that was launched.
@@ -1003,7 +1243,7 @@ Only available when launched as an assignment with an `unlock_at` set.
 
 
 ```
-YYYY-MM-DDT07:00:00Z
+2018-02-18T00:00:00Z
 ```
 ## Canvas.assignment.lockAt.iso8601
 Returns the `lock_at` date of the assignment that was launched.
@@ -1013,7 +1253,7 @@ Only available when launched as an assignment with a `lock_at` set.
 
 
 ```
-YYYY-MM-DDT07:00:00Z
+2018-02-20:00:00Z
 ```
 ## Canvas.assignment.dueAt.iso8601
 Returns the `due_at` date of the assignment that was launched.
@@ -1023,7 +1263,21 @@ Only available when launched as an assignment with a `due_at` set.
 
 
 ```
-YYYY-MM-DDT07:00:00Z
+2018-02-19:00:00Z
+```
+## Canvas.assignment.allDueAts.iso8601
+In Canvas, users, sections and groups can have distinct due dates for the same assignment.
+This returns all possible `due_at` dates of the assignment that was launched.
+If the assignment is assigned to anyone without a due date, an empty string
+will be present in the list (hence the ",," in the example)
+
+Only available when launched as an assignment.
+
+**Availability**: *always*  
+
+
+```
+2018-02-19:00:00Z,,2018-02-20:00:00Z
 ```
 ## Canvas.assignment.published
 Returns true if the assignment that was launched is published.
@@ -1035,6 +1289,34 @@ Only available when launched as an assignment.
 ```
 true
 ```
+## Canvas.assignment.lockdownEnabled
+Returns true if the assignment is LDB enabled.
+Only available when launched as an assignment.
+
+**Availability**: *when launched as an assignment*  
+
+
+```
+true
+```
+## Canvas.assignment.allowedAttempts
+Returns the allowed number of submission attempts.
+
+**Availability**: *when launched as an assignment*  
+
+
+```
+5
+```
+## Canvas.assignment.submission.studentAttempts
+Returns the number of submission attempts which the student did.
+
+**Availability**: *when launched as an assignment by a student*  
+
+
+```
+2
+```
 ## LtiLink.custom.url
 Returns the endpoint url for accessing link-level tool settings
 Only available for LTI 2.0.
@@ -1043,7 +1325,7 @@ Only available for LTI 2.0.
 
 
 ```
-https://<domain>.instructure.com/api/lti/tool_settings/<link_id>
+"https://<domain>.instructure.com/api/lti/tool_settings/<link_id>"
 ```
 ## ToolProxyBinding.custom.url
 Returns the endpoint url for accessing context-level tool settings
@@ -1053,7 +1335,7 @@ Only available for LTI 2.0.
 
 
 ```
-https://<domain>.instructure.com/api/lti/tool_settings/<binding_id>
+"https://<domain>.instructure.com/api/lti/tool_settings/<binding_id>"
 ```
 ## ToolProxy.custom.url
 Returns the endpoint url for accessing system-wide tool settings
@@ -1063,7 +1345,7 @@ Only available for LTI 2.0.
 
 
 ```
-https://<domain>.instructure.com/api/lti/tool_settings/<proxy_id>
+"https://<domain>.instructure.com/api/lti/tool_settings/<proxy_id>"
 ```
 ## ToolConsumerProfile.url
 Returns the [Tool Consumer Profile](https://www.imsglobal.org/specs/ltiv2p0/implementation-guide#toc-46) url for the tool.
@@ -1073,8 +1355,8 @@ Only available for LTI 2.0.
 
 
 ```
-https://<domain>.instructure.com/api/lti/courses/<course_id>/tool_consumer_profile/<opaque_id>
-https://<domain>.instructure.com/api/lti/accounts/<account_id>/tool_consumer_profile/<opaque_id>
+"https://<domain>.instructure.com/api/lti/courses/<course_id>/tool_consumer_profile/<opaque_id>"
+"https://<domain>.instructure.com/api/lti/accounts/<account_id>/tool_consumer_profile/<opaque_id>"
 ```
 ## vnd.Canvas.OriginalityReport.url
 The originality report LTI2 service endpoint.
@@ -1083,7 +1365,7 @@ The originality report LTI2 service endpoint.
 **Launch Parameter**: *vnd_canvas_originality_report_url*  
 
 ```
-api/lti/assignments/{assignment_id}/submissions/{submission_id}/originality_report
+"api/lti/assignments/{assignment_id}/submissions/{submission_id}/originality_report"
 ```
 ## vnd.Canvas.submission.url
 The submission LTI2 service endpoint.
@@ -1092,7 +1374,7 @@ The submission LTI2 service endpoint.
 **Launch Parameter**: *vnd_canvas_submission_url*  
 
 ```
-api/lti/assignments/{assignment_id}/submissions/{submission_id}
+"api/lti/assignments/{assignment_id}/submissions/{submission_id}"
 ```
 ## vnd.Canvas.submission.history.url
 The submission history LTI2 service endpoint.
@@ -1101,7 +1383,7 @@ The submission history LTI2 service endpoint.
 **Launch Parameter**: *vnd_canvas_submission_history_url*  
 
 ```
-api/lti/assignments/{assignment_id}/submissions/{submission_id}/history
+"api/lti/assignments/{assignment_id}/submissions/{submission_id}/history"
 ```
 ## Canvas.file.media.id
 
@@ -1156,6 +1438,73 @@ api/lti/assignments/{assignment_id}/submissions/{submission_id}/history
 
 
 **Availability**: *when an attachment is present and has usage rights defined*  
+
+
+
+## com.instructure.Course.accept_canvas_resource_types
+Returns the types of resources that can be imported to the current page, forwarded from the request.
+Value is a comma-separated array of one or more values of: ["assignment", "assignment_group", "audio",
+"discussion_topic", "document", "image", "module", "quiz", "page", "video"]
+
+Only functional when `com_instructure_course_accept_canvas_resource_types` is included as a query param
+in Canvas-side GET request that triggers the LTI launch.
+
+**Availability**: *always*  
+
+
+```
+"page"
+"module"
+"assignment,discussion_topic,page,quiz,module"
+```
+## com.instructure.Course.canvas_resource_type
+Returns the target resource type for the current page, forwarded from the request.
+Value is the largest logical unit of the page. Possible values are: ["assignment", "assignment_group",
+"audio", "discussion_topic", "document", "image", "module", "quiz", "page", "video"]
+  on Pages Index -> 'page'
+  on Modules -> 'module'
+  and so on.
+
+Only functional when `com_instructure_course_canvas_resource_type` is included as a query param
+in Canvas-side GET request that triggers the LTI launch.
+
+**Availability**: *always*  
+
+
+```
+page
+```
+## com.instructure.Course.allow_canvas_resource_selection
+Returns whether a content can be imported into a specific group on the page, forwarded from the request.
+True for Modules page and Assignment Groups page. False for other content index pages.
+
+Only functional when `com_instructure_course_allow_canvas_resource_selection` is included as a query param
+in Canvas-side GET request that triggers the LTI launch.
+
+**Availability**: *always*  
+
+
+```
+true
+```
+## com.instructure.Course.available_canvas_resources
+Returns a JSON-encoded list of content groups which can be selected, providing ID and name of each group,
+forwarded from the request.
+Empty value if com.instructure.Course.allow_canvas_resource_selection is false.
+
+Only functional when `com_instructure_course_available_canvas_resources` is included as a query param
+in Canvas-side GET request that triggers the LTI launch.
+
+**Availability**: *always*  
+
+
+```
+[{"id":"3","name":"First Module"},{"id":"5","name":"Second Module"}]
+```
+## com.instructure.Account.usage_metrics_enabled
+
+
+**Availability**: *always*  
 
 
 

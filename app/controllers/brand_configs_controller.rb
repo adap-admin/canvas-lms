@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -16,7 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 class BrandConfigsController < ApplicationController
-
   include Api::V1::Progress
   include Api::V1::Account
 
@@ -27,36 +28,38 @@ class BrandConfigsController < ApplicationController
   before_action { |c| c.active_tab = "brand_configs" }
 
   def index
-    add_crumb t('Themes')
-    @page_title = join_title(t('Themes'), @account.name)
+    add_crumb t("Themes")
+    @page_title = join_title(t("Themes"), @account.name)
     css_bundle :brand_config_index
-    js_bundle :brand_configs_index
+    js_bundle :brand_configs
 
-    base_brand_config = @account.parent_account.try(:effective_brand_config)
+    base_brand_config = @account.first_parent_brand_config
     base_brand_config ||= BrandConfig.k12_config if k12?
+    base_brand_config ||= BrandConfig.new
 
     js_env brandConfigStuff: {
       baseBrandableVariables: BrandableCSS.all_brand_variable_values(base_brand_config),
       brandableVariableDefaults: BrandableCSS.variables_map,
       accountID: @account.id.to_s,
-      sharedBrandConfigs: visible_shared_brand_configs.as_json(include_root: false, include: 'brand_config'),
+      sharedBrandConfigs: visible_shared_brand_configs.as_json(include_root: false, include: "brand_config"),
       activeBrandConfig: active_brand_config(ignore_parents: true).as_json(include_root: false)
     }
-    render html: '', layout: true
+    render html: "", layout: true
   end
 
   def new
-    @page_title = join_title(t('Theme Editor'), @account.name)
+    @page_title = join_title(t("Theme Editor"), @account.name)
     css_bundle :common, :theme_editor
     js_bundle :theme_editor
     brand_config = active_brand_config(ignore_parents: true) || BrandConfig.new
 
     js_env brandConfig: brand_config.as_json(include_root: false),
-           hasUnsavedChanges: session.key?(:brand_config_md5),
+           isDefaultConfig: session[:brand_config]&.[](:type) == :default,
+           hasUnsavedChanges: session.key?(:brand_config),
            variableSchema: default_schema,
            allowGlobalIncludes: @account.allow_global_includes?,
            account_id: @account.id
-    render html: '', layout: 'layouts/bare'
+    render html: "", layout: "layouts/bare"
   end
 
   def show
@@ -69,7 +72,7 @@ class BrandConfigsController < ApplicationController
     overridden_schema = duped_brandable_vars
     overridden_schema.each do |group|
       group["variables"].each do |var|
-        if variables.keys.include?(var["variable_name"])
+        if variables.key?(var["variable_name"])
           var["default"] = variables[var["variable_name"]]
         end
       end
@@ -81,11 +84,11 @@ class BrandConfigsController < ApplicationController
   def duped_brandable_vars
     BrandableCSS::BRANDABLE_VARIABLES.map do |group|
       new_group = group.deep_dup
-      new_group["group_name"] =  BrandableCSS::GROUP_NAMES[new_group['group_key']].call
+      new_group["group_name"] = BrandableCSS::GROUP_NAMES[new_group["group_key"]].call
       new_group["variables"] = new_group["variables"].map(&:deep_dup)
       new_group["variables"].each do |v|
-        v["human_name"] = BrandableCSS::VARIABLE_HUMAN_NAMES[v['variable_name']].call
-        if helper_text_proc = BrandableCSS::HELPER_TEXTS[v['variable_name']]
+        v["human_name"] = BrandableCSS::VARIABLE_HUMAN_NAMES[v["variable_name"]].call
+        if (helper_text_proc = BrandableCSS::HELPER_TEXTS[v["variable_name"]])
           v["helper_text"] = helper_text_proc.call
         end
       end
@@ -105,8 +108,17 @@ class BrandConfigsController < ApplicationController
   # @returns {BrandConfig, Progress}
   def create
     params[:brand_config] ||= {}
+    parent_md5 = nil
+    parent_bc = @account.first_parent_brand_config
+    if parent_bc
+      parent_md5 = if parent_bc.shard == Switchman::Shard.current
+                     parent_bc.md5
+                   else
+                     "#{parent_bc.shard.id}~#{parent_bc.md5}"
+                   end
+    end
     opts = {
-      parent_md5: @account.first_parent_brand_config.try(:md5),
+      parent_md5:,
       variables: process_variables(params[:brand_config][:variables])
     }
     BrandConfig::OVERRIDE_TYPES.each do |override|
@@ -132,17 +144,16 @@ class BrandConfigsController < ApplicationController
   #
   # @argument brand_config_md5 [String]
   #   If set, will activate this specific brand config as the active one in the session.
-  #   If the empty string ('') is passed, will use nothing for this session
-  #   (so the user will see the canvas default theme).
+  #   If the empty string ('') is passed, will use the parent theme for this session.
   def save_to_user_session
-    old_md5 = session.delete(:brand_config_md5)
-    session[:brand_config_md5] = if params[:brand_config_md5] == ''
-      false
-    elsif params[:brand_config_md5]
-      BrandConfig.find(params[:brand_config_md5]).md5
-    end
+    old_editing_config = session.delete(:brand_config)
+    session[:brand_config] = if params[:brand_config_md5] == ""
+                               { md5: @account.first_parent_brand_config&.md5, type: :default }
+                             elsif params[:brand_config_md5]
+                               { md5: BrandConfig.find(params[:brand_config_md5]).md5, type: :base }
+                             end
 
-    BrandConfig.destroy_if_unused(old_md5) if old_md5 != session[:brand_config_md5]
+    BrandConfig.destroy_if_unused(old_editing_config[:md5]) if old_editing_config && (old_editing_config[:md5] != session[:brand_config]&.[](:md5))
     redirect_to account_theme_editor_path(@account)
   end
 
@@ -150,23 +161,24 @@ class BrandConfigsController < ApplicationController
   # they POST to this action to save it to their account so everyone else sees it.
   def save_to_account
     old_md5 = @account.brand_config_md5
-    new_md5 = session.delete(:brand_config_md5).presence
+    session_config = session.delete(:brand_config)
+    new_md5 = (session_config.nil? || session_config[:type] == :default) ? nil : session_config[:md5]
     new_brand_config = new_md5 && BrandConfig.find(new_md5)
-    regenerator = BrandConfigRegenerator.new(@account, @current_user, new_brand_config)
+    progress = BrandConfigRegenerator.process(@account, @current_user, new_brand_config)
 
     BrandConfig.destroy_if_unused(old_md5)
 
     render json: {
-      subAccountProgresses: regenerator.progresses.map{|p| progress_json(p, @current_user, session)}
+      subAccountProgresses: [progress_json(progress, @current_user, session)]
     }
   end
 
   # When you close the theme editor, it will send a DELETE to this action to
   # clear out the session brand_config that you were prevewing.
   def destroy
-    old_md5 = session.delete(:brand_config_md5).presence
+    old_md5 = session.delete(:brand_config)&.[](:md5)
     BrandConfig.destroy_if_unused(old_md5)
-    redirect_to account_brand_configs_path(@account), notice: t('Theme editor changes have been cancelled.')
+    redirect_to account_brand_configs_path(@account), notice: t("Theme editor changes have been cancelled.")
   end
 
   def existing_config(config)
@@ -190,9 +202,11 @@ class BrandConfigsController < ApplicationController
 
   def process_variables(variables)
     return unless variables
+
     variables.to_unsafe_h.each_with_object({}) do |(key, value), memo|
       next unless value.present? && (config = BrandableCSS.variables_map[key])
-      value = process_file(value) if config['type'] == 'image'
+
+      value = process_file(value) if config["type"] == "image"
       memo[key] = value
     end
   end
@@ -210,17 +224,18 @@ class BrandConfigsController < ApplicationController
     progress = Progress.new(context: @current_user, tag: :brand_config_save_and_sync_to_s3)
     progress.user = @current_user
     progress.reset!
-    progress.process_job(brand_config, :save_and_sync_to_s3!, priority: Delayed::HIGH_PRIORITY)
+    progress.process_job(brand_config, :save_and_sync_to_s3!, { priority: Delayed::HIGH_PRIORITY })
     progress
   end
 
   def upload_file(file)
     expires_in = 15.years
     attachment = Attachment.new(attachment_options: {
-                                  s3_access: 'public-read',
+                                  s3_access: "public-read",
                                   skip_sis: true,
                                   cache_control: "Cache-Control:max-age=#{expires_in.to_i}, public",
-                                  expires: expires_in.from_now.httpdate },
+                                  expires: expires_in.from_now.httpdate
+                                },
                                 context: @account)
     attachment.uploaded_data = file
     attachment.save!

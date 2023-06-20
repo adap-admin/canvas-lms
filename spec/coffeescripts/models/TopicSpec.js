@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Topic from 'compiled/models/Topic'
+import Topic from 'ui/features/discussion_topic/backbone/models/Topic'
 
 QUnit.module('Topic')
 
@@ -25,7 +25,7 @@ test('#parse should set author on new entries', () => {
   const participant = {id: 1}
   const entry = {
     id: 1,
-    user_id: participant.id
+    user_id: participant.id,
   }
   const data = topic.parse({
     participants: [participant],
@@ -33,7 +33,7 @@ test('#parse should set author on new entries', () => {
     new_entries: [entry],
     unread_entries: [],
     forced_entries: [],
-    entry_ratings: {}
+    entry_ratings: {},
   })
   strictEqual(data.entries[0].author, participant)
 })

@@ -19,9 +19,9 @@
 import React from 'react'
 import ReactDOM from 'react-dom'
 
-import UsageRightsDialog from 'jsx/files/UsageRightsDialog'
-import File from 'compiled/models/File'
-import Folder from 'compiled/models/Folder'
+import UsageRightsDialog from '@canvas/files/react/components/UsageRightsDialog'
+import File from '@canvas/files/backbone/models/File'
+import Folder from '@canvas/files/backbone/models/Folder'
 
 QUnit.module('UsageRightsDialog', suiteHooks => {
   let $container
@@ -42,9 +42,9 @@ QUnit.module('UsageRightsDialog', suiteHooks => {
         new File({
           cid: '1',
           thumbnail_url: 'http://localhost/thumbnail.png',
-          usage_rights: usageRights
-        })
-      ]
+          usage_rights: usageRights,
+        }),
+      ],
     }
   })
 
@@ -57,6 +57,17 @@ QUnit.module('UsageRightsDialog', suiteHooks => {
   function mountComponent() {
     component = ReactDOM.render(<UsageRightsDialog {...props} />, $container)
   }
+
+  test('displays dialog preview', () => {
+    mountComponent()
+    strictEqual(component.form.querySelectorAll('.DialogPreview__container').length, 1)
+  })
+
+  test('does not display dialog preview', () => {
+    props.hidePreview = true
+    mountComponent()
+    strictEqual(component.form.querySelectorAll('.DialogPreview__container').length, 0)
+  })
 
   test('clicking the close button closes modal', () => {
     props.closeModal = sinon.spy()
@@ -78,13 +89,13 @@ QUnit.module('UsageRightsDialog', suiteHooks => {
       new File({
         cid: '1',
         thumbnail_url: 'http://localhost/thumbnail.png',
-        usage_rights: usageRights
+        usage_rights: usageRights,
       }),
       new File({
         cid: '2',
         thumbnail_url: 'http://localhost/thumbnail.png',
-        usage_rights: usageRights
-      })
+        usage_rights: usageRights,
+      }),
     ]
     mountComponent()
     equal(component.fileName.innerText.trim(), '2 items selected')
@@ -103,13 +114,13 @@ QUnit.module('UsageRightsDialog', suiteHooks => {
     const file1 = new File({
       cid: '1',
       thumbnail_url: 'http://localhost/thumbnail.png',
-      usage_rights: copyright
+      usage_rights: copyright,
     })
     file1.displayName = () => 'cats'
     const file2 = new File({
       cid: '2',
       thumbnail_url: 'http://localhost/thumbnail.png',
-      usage_rights: permission
+      usage_rights: permission,
     })
     file2.displayName = () => 'dogs'
     props.itemsToManage = [file1, file2]
@@ -122,13 +133,13 @@ QUnit.module('UsageRightsDialog', suiteHooks => {
     const file1 = new File({
       cid: '3',
       thumbnail_url: 'http://localhost/thumbnail.png',
-      usage_rights: usageRights
+      usage_rights: usageRights,
     })
     file1.displayName = () => 'cats'
     const file2 = new File({
       cid: '4',
       thumbnail_url: 'http://localhost/thumbnail.png',
-      usage_rights: usageRights
+      usage_rights: usageRights,
     })
     file2.displayName = () => 'cats'
     props.itemsToManage = [file1, file2]
@@ -164,7 +175,7 @@ QUnit.module('UsageRightsDialog', suiteHooks => {
       const file = new File({
         cid: '1',
         thumbnail_url: 'http://localhost/thumbnail.png',
-        usage_rights: usageRights
+        usage_rights: usageRights,
       })
       file.displayName = () => 'hello'
       props.itemsToManage = [file]

@@ -17,4 +17,20 @@
  */
 
 import '@testing-library/jest-dom/extend-expect'
-import '@testing-library/react/cleanup-after-each'
+
+if (!('matchMedia' in window)) {
+  window.matchMedia = () => ({
+    matches: false,
+    addListener: () => {},
+    removeListener: () => {}
+  })
+  window.matchMedia._mocked = true
+}
+
+if (!('createRange' in document)) {
+  // enough for tinymce so these specs pass
+  Object.getPrototypeOf(document).createRange = () => ({
+    commonAncestorContainer: window.document?.body,
+    collapsed: true
+  })
+}

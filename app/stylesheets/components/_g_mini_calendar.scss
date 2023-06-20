@@ -25,7 +25,7 @@
 
 .mini-cal-header {
   text-align: center;
-  padding: $ic-sp $ic-sp/2;
+  padding: $ic-sp $ic-sp*0.5;
   font-weight: bold;
   border: 1px solid $ic-border-light;
   color: $ic-font-color--subdued;
@@ -60,7 +60,7 @@
     .event_link_text, .today_text, .previous_month_text, .next_month_text {
       display: none;
     }
-    &.other_month { color: #888; }
+    &.other_month { color: var(--ic-brand-font-color-dark-lightened-28); }
     &:hover, &.related, &.drop_target { background-image: url("/images/4_percent_opacity.png"); }
     &.drop_target { background-color: #aaa; }
   }

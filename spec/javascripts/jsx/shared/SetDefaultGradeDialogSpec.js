@@ -18,30 +18,32 @@
 
 import $ from 'jquery'
 
-import {waitFor} from '../support/Waiters'
+import SetDefaultGradeDialog from '@canvas/grading/jquery/SetDefaultGradeDialog'
 
-import SetDefaultGradeDialog from 'compiled/shared/SetDefaultGradeDialog'
-
-import 'jst/SetDefaultGradeDialog'
-import 'jst/_grading_box'
-
-const assignment = Object.freeze({
-  id: '2',
-  points_possible: 10,
-  name: 'an Assignment',
-  grading_type: 'points'
-})
-
-function closeDialog() {
-  Array.from(document.querySelectorAll('button'))
-    .find(node => node.innerText === 'close')
-    .click()
-}
-
-QUnit.module('SetDefaultGradeDialog', () => {
+QUnit.module('Shared > SetDefaultGradeDialog', suiteHooks => {
+  let assignment
   let dialog
 
-  test('#gradeIsExcused returns true if grade is EX', function() {
+  suiteHooks.beforeEach(() => {
+    assignment = {
+      grading_type: 'points',
+      id: '2',
+      name: 'an Assignment',
+      points_possible: 10,
+    }
+  })
+
+  function getDialog() {
+    return dialog.$dialog[0].closest('.ui-dialog')
+  }
+
+  function closeDialog() {
+    Array.from(getDialog().querySelectorAll('button'))
+      .find(node => node.innerText === 'close')
+      .click()
+  }
+
+  test('#gradeIsExcused returns true if grade is EX', () => {
     dialog = new SetDefaultGradeDialog({assignment})
     dialog.show()
     deepEqual(dialog.gradeIsExcused('EX'), true)
@@ -51,7 +53,7 @@ QUnit.module('SetDefaultGradeDialog', () => {
     closeDialog()
   })
 
-  test('#gradeIsExcused returns false if grade is not EX', function() {
+  test('#gradeIsExcused returns false if grade is not EX', () => {
     dialog = new SetDefaultGradeDialog({assignment})
     dialog.show()
     deepEqual(dialog.gradeIsExcused('14'), false)
@@ -61,19 +63,21 @@ QUnit.module('SetDefaultGradeDialog', () => {
     closeDialog()
   })
 
-  test('#show text', function() {
+  test('#show text', () => {
     dialog = new SetDefaultGradeDialog({assignment})
     dialog.show()
-    ok(document.getElementById('default_grade_description').innerText.includes('same grade'))
+    ok(getDialog().querySelector('#default_grade_description').innerText.includes('same grade'))
     closeDialog()
   })
 
-  test('#show changes text for grading percent', function() {
+  test('#show changes text for grading percent', () => {
     const percentAssignmentParams = {...assignment, grading_type: 'percent'}
     dialog = new SetDefaultGradeDialog({assignment: percentAssignmentParams})
     dialog.show()
     ok(
-      document.getElementById('default_grade_description').innerText.includes('same percent grade')
+      getDialog()
+        .querySelector('#default_grade_description')
+        .innerText.includes('same percent grade')
     )
     closeDialog()
   })
@@ -81,52 +85,99 @@ QUnit.module('SetDefaultGradeDialog', () => {
   QUnit.module('submit behaviors', submitBehaviorHooks => {
     const context_id = '1'
     let alert
-    let server
-    let publishStub
 
     function clickSetDefaultGrade() {
-      Array.from(document.querySelectorAll('button[role="button"]'))
+      Array.from(getDialog().querySelectorAll('button[role="button"]'))
         .find(node => node.innerText === 'Set Default Grade')
         .click()
     }
 
     function respondWithPayload(payload) {
-      server.respondWith('POST', `/courses/${context_id}/gradebook/update_submission`, [
+      sandbox.server.respondWith('POST', `/courses/${context_id}/gradebook/update_submission`, [
         200,
         {'Content-Type': 'application/json'},
-        JSON.stringify(payload)
+        JSON.stringify(payload),
       ])
     }
 
     submitBehaviorHooks.beforeEach(() => {
-      server = sinon.createFakeServer({respondImmediately: true})
+      sandbox.server.respondImmediately = true
       alert = sinon.spy()
-      publishStub = sinon.stub($, 'publish')
+      sandbox.stub($, 'publish')
     })
 
-    submitBehaviorHooks.afterEach(() => {
-      publishStub.restore()
-      server.restore()
-    })
-
-    test('submit reports number of students', async () => {
+    test('submit reports number of students scored', async () => {
       const payload = [
         {submission: {id: '11', assignment_id: '2', user_id: '3'}},
-        {submission: {id: '22', assignment_id: '2', user_id: '4'}}
+        {submission: {id: '22', assignment_id: '2', user_id: '4'}},
       ]
       respondWithPayload(payload)
       const students = [{id: '3'}, {id: '4'}]
-      dialog = new SetDefaultGradeDialog({assignment, students, context_id, alert})
+      dialog = new SetDefaultGradeDialog({
+        missing_shortcut_enabled: true,
+        assignment,
+        students,
+        context_id,
+        alert,
+      })
       dialog.show()
-      await waitFor(() => document.getElementById('set_default_grade_form'))
       clickSetDefaultGrade()
-      await waitFor(() => !document.getElementById('set_default_grade_form'))
       const {
         firstCall: {
-          args: [message]
-        }
+          args: [message],
+        },
       } = alert
-      strictEqual(message, '2 Student scores updated')
+      strictEqual(message, '2 student scores updated')
+    })
+
+    test('submit reports number of students marked as missing', async () => {
+      const payload = [
+        {submission: {id: '11', assignment_id: '2', user_id: '3'}},
+        {submission: {id: '22', assignment_id: '2', user_id: '4'}},
+      ]
+      respondWithPayload(payload)
+      const students = [{id: '3'}, {id: '4'}]
+      dialog = new SetDefaultGradeDialog({
+        missing_shortcut_enabled: true,
+        assignment,
+        students,
+        context_id,
+        alert,
+      })
+      dialog.show()
+      document.querySelector('input[name="default_grade"]').value = 'mi'
+      clickSetDefaultGrade()
+      const {
+        firstCall: {
+          args: [message],
+        },
+      } = alert
+      strictEqual(message, '2 students marked as missing')
+    })
+
+    test('submit ignores the missing shortcut when the shortcut feature flag is disabled', async () => {
+      const payload = [
+        {submission: {id: '11', assignment_id: '2', user_id: '3'}},
+        {submission: {id: '22', assignment_id: '2', user_id: '4'}},
+      ]
+      respondWithPayload(payload)
+      const students = [{id: '3'}, {id: '4'}]
+      dialog = new SetDefaultGradeDialog({
+        missing_shortcut_enabled: false,
+        assignment,
+        students,
+        context_id,
+        alert,
+      })
+      dialog.show()
+      document.querySelector('input[name="default_grade"]').value = 'mi'
+      clickSetDefaultGrade()
+      const {
+        firstCall: {
+          args: [message],
+        },
+      } = alert
+      strictEqual(message, '2 student scores updated')
     })
 
     test('submit reports number of students when api includes duplicates due to group assignments', async () => {
@@ -134,22 +185,27 @@ QUnit.module('SetDefaultGradeDialog', () => {
         {submission: {id: '11', assignment_id: '2', user_id: '3'}},
         {submission: {id: '22', assignment_id: '2', user_id: '4'}},
         {submission: {id: '33', assignment_id: '2', user_id: '5'}},
-        {submission: {id: '44', assignment_id: '2', user_id: '6'}}
+        {submission: {id: '44', assignment_id: '2', user_id: '6'}},
       ]
       respondWithPayload(payload)
       const students = [{id: '3'}, {id: '4'}, {id: '5'}, {id: '6'}]
       // adjust page size so that we generate two requests
-      dialog = new SetDefaultGradeDialog({assignment, students, context_id, page_size: 2, alert})
+      dialog = new SetDefaultGradeDialog({
+        missing_shortcut_enabled: true,
+        assignment,
+        students,
+        context_id,
+        page_size: 2,
+        alert,
+      })
       dialog.show()
-      await waitFor(() => document.getElementById('set_default_grade_form'))
       clickSetDefaultGrade()
-      await waitFor(() => !document.getElementById('set_default_grade_form'))
       const {
         firstCall: {
-          args: [message]
-        }
+          args: [message],
+        },
       } = alert
-      strictEqual(message, '4 Student scores updated')
+      strictEqual(message, '4 student scores updated')
     })
   })
 })

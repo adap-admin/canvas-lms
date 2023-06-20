@@ -18,33 +18,76 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+library "canvas-builds-library@${env.CANVAS_BUILDS_REFSPEC}"
+loadLocalLibrary('local-lib', 'build/new-jenkins/library')
+
 pipeline {
   agent none
   options {
     ansiColor('xterm')
+    timeout(15)
+    timestamps()
   }
 
   environment {
-    COMPOSE_FILE = 'docker-compose.new-jenkins.yml'
-    // 'refs/changes/63/181863/8' -> '63.181863.8'
-    NAME = "${env.GERRIT_REFSPEC}".minus('refs/changes/').replaceAll('/','.')
+    BUILD_REGISTRY_FQDN = configuration.buildRegistryFQDN()
+    COMPOSE_FILE = 'docker-compose.new-jenkins.yml:docker-compose.new-jenkins-contract-tests.yml'
+    POSTGRES_PASSWORD = 'sekret'
+    PACT_BROKER = credentials('PACT_BROKER')
+    PACT_BROKER_USERNAME = "${env.PACT_BROKER_USR}"
+    PACT_BROKER_PASSWORD = "${env.PACT_BROKER_PSW}"
+    RSPEC_PROCESSES = '7'
   }
-  // Todo: This will run all contract tests consecutively, still need to get parallel depending on runtime
-  stages {
-    stage ('Contract Tests') {
-      agent { label 'docker' }
-      steps {
-        timeout(time: 60) {
-          sh 'printenv | sort'
-          sh 'build/new-jenkins/docker-compose-build.sh'
-          // todo create contract tests script
-          // sh 'build/new-jenkins/.sh'
-        }
-      }
 
-      post {
-        cleanup {
-          sh 'docker-compose stop && docker-compose down --volumes --remove-orphans --rmi all'
+  stages {
+    stage('Environment') {
+      steps {
+        script {
+          extendedStage('Runner').nodeRequirements(label: nodeLabel(), podTemplate: contractTestsStage.nodeRequirementsTemplate()).obeysAllowStages(false).execute {
+            def stages = [:]
+
+            def consumerEnvVars = [
+              'DATABASE_CLEANER_ALLOW_REMOTE_DATABASE_URL=true',
+              'RUN_API_CONTRACT_TESTS=1',
+            ]
+
+            callableWithDelegate(contractTestsStage.queueTestStage('Android'))(stages,
+              databaseName: 'pact_test1',
+              consumerName: 'android',
+              envVars: consumerEnvVars,
+              command: 'cd /usr/src/app && bundle exec rake pact:verify'
+            )
+
+            callableWithDelegate(contractTestsStage.queueTestStage('Canvas iOS'))(stages,
+              databaseName: 'pact_test2',
+              consumerName: 'canvas-ios',
+              envVars: consumerEnvVars,
+              command: 'cd /usr/src/app && bundle exec rake pact:verify'
+            )
+
+            callableWithDelegate(contractTestsStage.queueTestStage('Sistemic'))(stages,
+              databaseName: 'pact_test4',
+              consumerName: 'Sistemic',
+              envVars: consumerEnvVars,
+              command: 'cd /usr/src/app && bundle exec rake pact:verify'
+            )
+
+            callableWithDelegate(contractTestsStage.queueTestStage('Live Events'))(stages,
+              databaseName: 'pact_test5',
+              command: 'cd /usr/src/app && bin/rspec spec/contracts/service_consumers/live_events --tag pact_live_events --format doc'
+            )
+
+            callableWithDelegate(contractTestsStage.queueTestStage('Outcomes'))(stages,
+              databaseName: 'pact_test6',
+              envVars: [
+                "PUBLISH_API=${configuration.isChangeMerged() ? '1' : '0'}",
+                "SHA=${env.GERRIT_PATCHSET_REVISION}"
+              ],
+              command: 'cd /usr/src/app && build/new-jenkins/pact/contracts-generate-api.sh'
+            )
+
+            parallel(stages)
+          }
         }
       }
     }

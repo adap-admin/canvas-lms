@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -17,7 +19,11 @@
 
 # Non-standard Canvas extension to Bundler behavior -- load the Gemfiles from
 # plugins.
-Dir[File.join(File.dirname(__FILE__), '../gems/plugins/*/Gemfile.d/*')].each do |g|
-  next if g.end_with?('/_before.rb')
-  eval(File.read(g), nil, g)
+
+if CANVAS_INCLUDE_PLUGINS
+  Dir[File.join(File.dirname(__FILE__), "../gems/plugins/*/Gemfile.d/*")].each do |g|
+    next if g.end_with?("/_before.rb")
+
+    eval_gemfile(g)
+  end
 end

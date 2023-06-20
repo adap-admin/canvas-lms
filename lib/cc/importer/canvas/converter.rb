@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -26,6 +28,7 @@ module CC::Importer::Canvas
     include WebcontentConverter
     include QuizConverter
     include MediaTrackConverter
+    include LtiResourceLinkConverter
 
     MANIFEST_FILE = "imsmanifest.xml"
 
@@ -39,8 +42,7 @@ module CC::Importer::Canvas
     end
 
     # exports the package into the intermediary json
-    def export(to_export = SCRAPE_ALL_HASH)
-      to_export = SCRAPE_ALL_HASH.merge to_export if to_export
+    def export(_to_export = SCRAPE_ALL_HASH)
       unzip_archive
       set_progress(5)
 
@@ -53,7 +55,7 @@ module CC::Importer::Canvas
       set_progress(20)
       @course[:assignments] = convert_canvas_assignments
       set_progress(30)
-      @course[:discussion_topics], @course[:announcements]  = convert_topics_and_announcements
+      @course[:discussion_topics], @course[:announcements] = convert_topics_and_announcements
       set_progress(40)
       lti = CC::Importer::BLTIConverter.new
       res = lti.get_blti_resources(@manifest)
@@ -67,6 +69,8 @@ module CC::Importer::Canvas
       set_progress(70)
       @course[:media_tracks] = convert_media_tracks(settings_doc(MEDIA_TRACKS))
       set_progress(71)
+      @course[:lti_resource_links] = convert_lti_resource_links
+      set_progress(72)
       convert_quizzes if Qti.qti_enabled?
       set_progress(80)
 
@@ -75,7 +79,7 @@ module CC::Importer::Canvas
       # for master course sync
       @course[:deletions] = @settings[:deletions] if @settings[:deletions].present?
 
-      #close up shop
+      # close up shop
       save_to_file
       set_progress(90)
       delete_unzipped_archive
@@ -90,13 +94,13 @@ module CC::Importer::Canvas
       Dir["#{folder}/**/**"].each do |path|
         next if File.directory?(path)
 
-        service_key = File.basename(path, '.json')
+        service_key = File.basename(path, ".json")
         json = File.read(path)
         begin
           data = JSON.parse(json)
           external_content[service_key] = data
         rescue JSON::ParserError => e
-          Canvas::Errors.capture_exception(:external_content_migration, e)
+          Canvas::Errors.capture_exception(:external_content_migration, e, :info)
         end
       end
       @course[:external_content] = external_content

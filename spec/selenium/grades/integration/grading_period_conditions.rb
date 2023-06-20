@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -15,26 +17,26 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-shared_context 'all grading periods' do
-  before(:each) do
+shared_context "all grading periods" do
+  before do
     @grading_period_index = 0
   end
 end
 
-shared_context 'grading period one' do
-  before(:each) do
+shared_context "grading period one" do
+  before do
     @grading_period_index = 1
   end
 end
 
-shared_context 'grading period two' do
-  before(:each) do
+shared_context "grading period two" do
+  before do
     @grading_period_index = 2
   end
 end
 
-shared_context 'no grading periods' do
-  before(:each) do
+shared_context "no grading periods" do
+  before do
     @grading_period_index = nil
   end
 end

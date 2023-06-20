@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -16,31 +18,31 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-class AuthenticationProvider::Twitter < AuthenticationProvider::Oauth
+class AuthenticationProvider::Twitter < AuthenticationProvider::OAuth
   include AuthenticationProvider::PluginSettings
   self.plugin = :twitter
   plugin_settings :consumer_key, consumer_secret: :consumer_secret_dec
 
   def self.recognized_params
-    [ :login_attribute, :jit_provisioning ].freeze
+    super + [:login_attribute, :jit_provisioning].freeze
   end
 
   def self.login_attributes
-    ['user_id'.freeze, 'screen_name'.freeze].freeze
+    ["user_id", "screen_name"].freeze
   end
   validates :login_attribute, inclusion: login_attributes
 
   def self.recognized_federated_attributes
-    [
-      'name'.freeze,
-      'screen_name'.freeze,
-      'time_zone'.freeze,
-      'user_id'.freeze,
+    %w[
+      name
+      screen_name
+      time_zone
+      user_id
     ].freeze
   end
 
   def login_attribute
-    super || 'user_id'.freeze
+    super || "user_id"
   end
 
   def unique_id(token)
@@ -49,8 +51,8 @@ class AuthenticationProvider::Twitter < AuthenticationProvider::Oauth
 
   def provider_attributes(token)
     result = token.params.dup
-    if federated_attributes.any? { |(_k, v)| ['name', 'time_zone'].include?(v['attribute']) }
-      result.merge!(JSON.parse(token.get('/1.1/account/verify_credentials.json?skip_status=true').body))
+    if federated_attributes.any? { |(_k, v)| ["name", "time_zone"].include?(v["attribute"]) }
+      result.merge!(JSON.parse(token.get("/1.1/account/verify_credentials.json?skip_status=true").body))
     end
     result
   end
@@ -59,8 +61,8 @@ class AuthenticationProvider::Twitter < AuthenticationProvider::Oauth
 
   def consumer_options
     {
-      site: 'https://api.twitter.com'.freeze,
-      authorize_path: '/oauth/authenticate'.freeze
+      site: "https://api.twitter.com",
+      authorize_path: "/oauth/authenticate"
     }
   end
 end

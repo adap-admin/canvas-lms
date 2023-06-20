@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -18,7 +20,7 @@
 
 module Exporters
   class ZipExporter
-    def self.create_zip_export(content_export, opts={})
+    def self.create_zip_export(content_export, **)
       exporter = ZipExporter.new(content_export)
       exporter.export
     end
@@ -27,15 +29,17 @@ module Exporters
       folders = []
       files = []
       context = content_export.context
-      if content_export.selected_content.empty? || content_export.export_symbol?('all_attachments')
+      if content_export.selected_content.empty? || content_export.export_symbol?("all_attachments")
         folders = Folder.root_folders(context)
       else
-        folders = (content_export.selected_content['folders'] || {}).select { |tag, included| Canvas::Plugin::value_to_boolean(included) }.keys.map do |folder_tag|
-          context.folders.active.find_by_asset_string(folder_tag, %w(Folder))
-        end.compact
-        files = (content_export.selected_content['attachments'] || {}).select { |tag, included| Canvas::Plugin::value_to_boolean(included) }.keys.map do |att_tag|
-          context.attachments.not_deleted.find_by_asset_string(att_tag, %w(Attachment))
-        end.compact
+        folders = (content_export.selected_content["folders"] || {})
+                  .select { |_tag, included| Canvas::Plugin.value_to_boolean(included) }
+                  .keys
+                  .filter_map { |folder_tag| context.folders.active.find_by_asset_string(folder_tag, %w[Folder]) }
+        files = (content_export.selected_content["attachments"] || {})
+                .select { |_tag, included| Canvas::Plugin.value_to_boolean(included) }
+                .keys
+                .filter_map { |att_tag| context.attachments.not_deleted.find_by_asset_string(att_tag, %w[Attachment]) }
       end
       [folders, files]
     end
@@ -48,10 +52,23 @@ module Exporters
 
       @files_in_zip = Set.new
       compute_common_folder
+      @export_dos_time = zip_dos_time
     end
 
     def archive_name
-      @archive_name ||= "#{@common_folder_name.gsub(/[\x00-0x20\/\\\?:*"`\s]/, '_')}_export.zip"
+      @archive_name ||= "#{@common_folder_name.gsub(%r{[\x00-0x20/\\?:*"`\s]}, "_")}_export.zip"
+    end
+
+    def zip_dos_time
+      time_zone = @export.settings[:user_time_zone]
+      export_time =
+        if time_zone.blank?
+          Time.now.strftime("%Y-%m-%dT%H:%M:%S")
+        else
+          TZInfo::Timezone.get(time_zone).now.strftime("%Y-%m-%dT%H:%M:%S")
+        end
+
+      ::Zip::DOSTime.parse(export_time)
     end
 
     def export
@@ -73,21 +90,21 @@ module Exporters
     private
 
     def compute_common_folder
-      if root_folder = @folders.detect { |f| f.parent_folder.nil? }
+      if (root_folder = @folders.detect { |f| f.parent_folder.nil? })
         # exporting all files
         @common_folder_name = root_folder.name
-        @common_prefix = root_folder.full_name + '/'
+        @common_prefix = root_folder.full_name + "/"
       else
         # find the deepest folder all the provided files and folders share
         top_level_folder_elements = (@folders.map(&:parent_folder) + @files.map(&:folder)).uniq.map do |folder|
-          folder.full_name.split('/')
+          folder.full_name.split("/")
         end
         common_elements = top_level_folder_elements.reduce do |a, b|
           n = (0...[a.length, b.length].min).detect { |ix| a[ix] != b[ix] }
           n ? a[0...n] : [a, b].min_by(&:length)
         end
         @common_folder_name = common_elements.last
-        @common_prefix = common_elements.join('/') + '/'
+        @common_prefix = common_elements.join("/") + "/"
       end
     end
 
@@ -101,11 +118,12 @@ module Exporters
     end
 
     def mock_session
-      @user && {:user_id => @user.id} # used for public_to_auth_users courses
+      @user && { user_id: @user.id } # used for public_to_auth_users courses
     end
 
     def process_folder(folder)
       return unless folder.grants_right?(@user, mock_session, :read_contents)
+
       @folder_list << folder unless folder.root_folder?
       folder.sub_folders.active.each do |sub_folder|
         process_folder(sub_folder)
@@ -122,35 +140,41 @@ module Exporters
       end
     end
 
+    def create_zip_entry(zip_io, name)
+      Zip::Entry.new(zip_io, name, nil, nil, nil, nil, nil, nil, @export_dos_time)
+    end
+
     def add_file(zipstream, file)
       path = file.full_display_path
-      path = path[@common_prefix.length..-1] if path.starts_with?(@common_prefix)
+      path = path[@common_prefix.length..] if path.starts_with?(@common_prefix)
       wrote_header = false
       begin
         file.open do |chunk|
           unless wrote_header
-            zipstream.put_next_entry(path)
+            zip_entry = create_zip_entry(zipstream, path)
+            zipstream.put_next_entry(zip_entry)
             wrote_header = true
           end
           zipstream.write(chunk)
           update_progress(chunk.size)
         end
       rescue => e
-        @export.add_error(I18n.t('Skipped file %{filename} due to error', filename: file.display_name), e)
+        @export.add_error(I18n.t("Skipped file %{filename} due to error", filename: file.display_name), e)
       end
     end
 
     def add_folder(zipstream, folder)
       path = folder.full_name
-      path = path[@common_prefix.length..-1] if path.starts_with?(@common_prefix)
-      zipstream.put_next_entry(path + '/')
+      path = path[@common_prefix.length..] if path.starts_with?(@common_prefix)
+      zip_entry = create_zip_entry(zipstream, path + "/")
+      zipstream.put_next_entry(zip_entry)
     end
 
     def attach_zip(zip_filename)
       attachment = @export.attachments.build
-      attachment.uploaded_data = Rack::Test::UploadedFile.new(zip_filename, 'application/zip')
-      attachment.workflow_state = 'zipped'
-      attachment.file_state = 'available'
+      attachment.uploaded_data = Rack::Test::UploadedFile.new(zip_filename, "application/zip")
+      attachment.workflow_state = "zipped"
+      attachment.file_state = "available"
       attachment.save!
       attachment
     end

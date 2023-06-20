@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -20,6 +22,6 @@ module Api::V1::PostGradesStatus
   include Api::V1::Json
 
   def post_grades_status_json(course_or_section)
-    res = course_or_section.sis_post_grades_statuses.last.as_json(:only => %w(id course_id course_section_id status message grades_posted_at))
+    course_or_section.sis_post_grades_statuses.last.as_json(only: %w[id course_id course_section_id status message grades_posted_at])
   end
 end

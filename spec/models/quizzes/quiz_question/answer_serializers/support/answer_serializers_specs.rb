@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -15,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-shared_examples_for 'Answer Serializers' do
+shared_examples_for "Answer Serializers" do
   # A QuizQuestion of the type the AnswerSerializer deals with.
   #
   # Exports 'qq'.
@@ -28,6 +30,9 @@ shared_examples_for 'Answer Serializers' do
   #     answer_parser_compatibility: true
   #   }
   # end
+  # An AnswerSerializer for the QuizQuestion being tested.
+  subject { described_class.new qq }
+
   let(:qq) do
     question_type = self.class.described_class.question_type
 
@@ -35,9 +40,11 @@ shared_examples_for 'Answer Serializers' do
     options = respond_to?(:factory_options) ? factory_options : {}
 
     # can't test for #arity directly since it might be an optional parameter
-    data = factory.parameters.include?([ :opt, :options ]) ?
-      factory.call(options) :
-      factory.call
+    data = if factory.parameters.include?([:opt, :options])
+             factory.call(options)
+           else
+             factory.call
+           end
 
     # we'll manually assign an ID of 5 so that we won't have to use variables
     # like "#{question_id}" all over the place, a readability thing that's all
@@ -46,7 +53,7 @@ shared_examples_for 'Answer Serializers' do
     # so, we could just build a new Quiz, but it's unnecessary and this is
     # faster as we only need the #quiz_data set
     quiz = Object.new
-    allow(quiz).to receive(:quiz_data).and_return [ data ]
+    allow(quiz).to receive(:quiz_data).and_return [data]
 
     qq = Quizzes::QuizQuestion.new
     qq.id = question_id
@@ -56,22 +63,19 @@ shared_examples_for 'Answer Serializers' do
     qq
   end
 
-  # An AnswerSerializer for the QuizQuestion being tested.
-  subject { described_class.new qq }
-
-  context 'serialization' do
-    before :each do
+  context "serialization" do
+    before do
       if !respond_to?(:input) && !respond_to?(:inputs)
-        raise 'missing :input or :outputs definition'
+        raise "missing :input or :outputs definition"
       elsif !respond_to?(:output) && !respond_to?(:outputs)
-        raise 'missing :output or :outputs definition'
+        raise "missing :output or :outputs definition"
       end
 
-      @inputs = respond_to?(:inputs) ? inputs : [ input ]
-      @outputs = respond_to?(:outputs) ? outputs : [ output ]
+      @inputs = respond_to?(:inputs) ? inputs : [input]
+      @outputs = respond_to?(:outputs) ? outputs : [output]
     end
 
-    it '[auto] should serialize' do
+    it "[auto] should serialize" do
       @inputs.each_with_index do |input, index|
         rc = subject.serialize(input)
         expect(rc.error).to be_nil
@@ -79,7 +83,7 @@ shared_examples_for 'Answer Serializers' do
       end
     end
 
-    it '[auto] should deserialize' do
+    it "[auto] should deserialize" do
       @outputs.each_with_index do |output, index|
         input = @inputs[index]
 

@@ -16,10 +16,10 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import _ from 'underscore'
+import {cloneDeep} from 'lodash'
 import React from 'react'
 import TestUtils from 'react-dom/test-utils'
-import DuplicateSection from 'jsx/add_people/components/duplicate_section'
+import DuplicateSection from '@canvas/add-people/react/components/duplicate_section'
 
 QUnit.module('DuplicateSection')
 
@@ -37,7 +37,7 @@ const duplicates = {
       account_id: 1,
       account_name: 'School of Rock',
       email: 'addr1@foo.com',
-      login_id: 'addr1'
+      login_id: 'addr1',
     },
     {
       address: 'addr1',
@@ -46,11 +46,11 @@ const duplicates = {
       account_id: 1,
       account_name: 'School of Rock',
       email: 'addr2@foo.com',
-      login_id: 'addr1'
-    }
-  ]
+      login_id: 'addr1',
+    },
+  ],
 }
-const noop = function() {}
+const noop = function () {}
 const inviteUsersURL = '/couses/#/invite_users'
 
 test('renders the component', () => {
@@ -83,21 +83,21 @@ test('renders the table', () => {
   equal(rows.length, 5, 'five rows')
   const headings = rows[0].querySelectorAll('th')
   equal(headings.length, 6, 'six column headings')
-  const createNewRow = duplicateSection.querySelector('tr.create-new')
+  const createNewRow = duplicateSection.querySelector('tr[data-testid="create-new"]')
   ok(createNewRow, 'create new row exists')
 
   const createUserBtn = createNewRow.querySelector('button')
   ok(createUserBtn)
   equal(createUserBtn.innerText, 'Create a new user for "addr1"')
 
-  const skipUserRow = duplicateSection.querySelector('tr.skip-addr')
+  const skipUserRow = duplicateSection.querySelector('tr[data-testid="skip-addr"]')
   ok(skipUserRow, 'skip user row exists')
 
   const skipUserBtn = skipUserRow.querySelector('button')
   equal(skipUserBtn.innerText, 'Don’t add this user for now.', 'skip user button')
 })
 test('select a user', () => {
-  const dupes = _.cloneDeep(duplicates)
+  const dupes = cloneDeep(duplicates)
   dupes.selectedUserId = 2
   const component = TestUtils.renderIntoDocument(
     <DuplicateSection
@@ -117,7 +117,7 @@ test('select a user', () => {
   equal(radio2.checked, true, 'user 2 selected')
 })
 test('create a user', () => {
-  const dupes = _.cloneDeep(duplicates)
+  const dupes = cloneDeep(duplicates)
   dupes.createNew = true
   dupes.newUserInfo = {name: 'bob', email: 'bob@em.ail'}
   const component = TestUtils.renderIntoDocument(
@@ -136,11 +136,11 @@ test('create a user', () => {
   ok(nameInput, 'name input exists')
   equal(nameInput.value, 'bob', 'name has correct value')
   const emailInput = rows[3].querySelector('input[type="email"]')
-  ok(emailInput, 'email input', 'email input exists')
+  ok(emailInput, 'email input') // 'email input exists'
   equal(emailInput.value, 'bob@em.ail', 'email has correct value')
 })
 test('skip a set of dupes', () => {
-  const dupes = _.cloneDeep(duplicates)
+  const dupes = cloneDeep(duplicates)
   dupes.skip = true
   const component = TestUtils.renderIntoDocument(
     <DuplicateSection
@@ -158,7 +158,7 @@ test('skip a set of dupes', () => {
   equal(skipUserRadioBtn.checked, true, 'duplicate set skipped')
 })
 test('cannot create a user', () => {
-  const dupes = _.cloneDeep(duplicates)
+  const dupes = cloneDeep(duplicates)
 
   const component = TestUtils.renderIntoDocument(
     <DuplicateSection
@@ -171,6 +171,6 @@ test('cannot create a user', () => {
   )
   const duplicateSection = TestUtils.findRenderedDOMComponentWithClass(component, 'namelist')
 
-  const createNewRow = duplicateSection.querySelector('tr.create-new')
+  const createNewRow = duplicateSection.querySelector('tr[data-testid="create-new"]')
   equal(createNewRow, null, 'create new user row does not exist')
 })

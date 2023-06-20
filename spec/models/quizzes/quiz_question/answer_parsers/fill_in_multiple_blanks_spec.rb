@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -16,11 +18,9 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../../../spec_helper.rb')
-require File.expand_path(File.dirname(__FILE__) + '/answer_parser_spec_helper.rb')
+require_relative "answer_parser_spec_helper"
 
 describe Quizzes::QuizQuestion::AnswerParsers::FillInMultipleBlanks do
-
   describe "#parse" do
     let(:raw_answers) do
       [
@@ -46,7 +46,7 @@ describe Quizzes::QuizQuestion::AnswerParsers::FillInMultipleBlanks do
       ]
     end
 
-    let(:question_params) { Hash.new }
+    let(:question_params) { {} }
     let(:parser_class) { Quizzes::QuizQuestion::AnswerParsers::FillInMultipleBlanks }
 
     include_examples "All answer parsers"

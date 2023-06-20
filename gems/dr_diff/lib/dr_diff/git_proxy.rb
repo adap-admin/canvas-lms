@@ -1,4 +1,6 @@
-require 'shellwords'
+# frozen_string_literal: true
+
+require "shellwords"
 
 module DrDiff
   class Change
@@ -18,7 +20,7 @@ module DrDiff
       @git_dir = git_dir
     end
 
-    ROOT_DIR = File.expand_path("../../../../../", __FILE__)
+    ROOT_DIR = File.expand_path("../../../..", __dir__)
     def path_from_root
       File.join(ROOT_DIR, git_dir || ".", path)
     end
@@ -46,11 +48,13 @@ module DrDiff
 
     def files
       return outstanding_change_files if run_on_outstanding
+
       change_files
     end
 
     def diff
       return outstanding_change_diff if run_on_outstanding
+
       change_diff
     end
 
@@ -68,7 +72,7 @@ module DrDiff
     end
 
     def wip?
-      first_line =~ /\A(\(|\[)?wip\b/i ? true : false
+      /\A(\(|\[)?wip\b/i.match?(first_line)
     end
 
     private
@@ -82,7 +86,7 @@ module DrDiff
     end
 
     def outstanding_change_files
-      shell("git diff --name-only")
+      shell("git diff --name-only && git diff --cached --name-only")
     end
 
     def change_files
@@ -90,7 +94,7 @@ module DrDiff
     end
 
     def outstanding_change_diff
-      shell("git diff")
+      shell("git diff && git diff --cached")
     end
 
     def change_diff

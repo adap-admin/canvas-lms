@@ -16,9 +16,9 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Backbone from 'Backbone'
-import FileUploadQuestion from 'compiled/views/quizzes/FileUploadQuestionView'
-import File from 'compiled/models/File'
+import Backbone from '@canvas/backbone'
+import FileUploadQuestion from 'ui/features/take_quiz/backbone/views/FileUploadQuestionView'
+import File from '@canvas/files/backbone/models/File'
 import $ from 'jquery'
 
 QUnit.module('FileUploadQuestionView', {
@@ -27,14 +27,15 @@ QUnit.module('FileUploadQuestionView', {
     this.model = new File(
       {
         display_name: 'foobar.jpg',
-        id: 1
+        id: 1,
       },
       {preflightUrl: 'url.com'}
     )
     this.view = new FileUploadQuestion({model: this.model})
-    $(
-      '<input value="C:\\fakepath\\file.upload.zip" class="file-upload hidden" />'
-    ).appendTo(this.view.$el)
+    $('<input value="C:\\fakepath\\file.upload.zip" class="file-upload hidden" />').appendTo(
+      this.view.$el
+    )
+    $('<input type="hidden" id="fileupload_in_progress" value="false"/>').appendTo(this.view.$el)
     this.view.$el.appendTo('#fixtures')
     this.view.render()
   },
@@ -42,18 +43,32 @@ QUnit.module('FileUploadQuestionView', {
     window.ENV = this.oldEnv
     this.view.remove()
     this.server && this.server.restore()
-  }
+  },
 })
 
-test('#processAttachment fires "attachmentManipulationComplete" event', function() {
+test('#checkForFileChange set file upload status to in_progress', function () {
+  $('#fileupload_in_progress').val(false)
+  const spy = sinon.stub(this.model, 'save')
+  ok($('#fileupload_in_progress').val(), 'false')
+  this.view.$fileUpload.val('C:\\fakepath\\file.upload.zip')
+  this.view.checkForFileChange($.Event('keydown', {keyCode: 64}))
+  ok($('#fileupload_in_progress').val(), 'true')
+  spy.reset()
+  spy.restore()
+})
+
+test('#processAttachment fires "attachmentManipulationComplete" event', function () {
+  $('#fileupload_in_progress').val(true)
   const spy = sinon.spy(this.view, 'trigger')
   notOk(spy.called, 'precondition')
+  ok($('#fileupload_in_progress').val(), 'true')
   this.view.processAttachment()
   ok(spy.calledWith('attachmentManipulationComplete'))
+  ok($('#fileupload_in_progress').val(), 'false')
   this.view.trigger.restore()
 })
 
-test('#deleteAttachment fires "attachmentManipulationComplete" event', function() {
+test('#deleteAttachment fires "attachmentManipulationComplete" event', function () {
   const spy = sinon.spy(this.view, 'trigger')
   notOk(spy.called, 'precondition')
   this.view.deleteAttachment($.Event('keydown', {keyCode: 64}))
@@ -61,8 +76,8 @@ test('#deleteAttachment fires "attachmentManipulationComplete" event', function(
   this.view.trigger.restore()
 })
 
-test('#deleteAttachment clears file input', function() {
-  equal(this.view.$fileUpload.val(), "C:\\fakepath\\file.upload.zip")
+test('#deleteAttachment clears file input', function () {
+  equal(this.view.$fileUpload.val(), 'C:\\fakepath\\file.upload.zip')
   this.view.deleteAttachment($.Event('keydown', {keyCode: 64}))
   equal(this.view.$fileUpload.val(), '')
 })

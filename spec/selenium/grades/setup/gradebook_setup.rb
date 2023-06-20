@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -46,42 +48,38 @@ module GradebookSetup
 
   def closed_attributes(now = Time.zone.now)
     {
-        title: "GP Closed",
-        start_date: 3.weeks.ago(now),
-        end_date: 2.weeks.ago(now)
+      title: "GP Closed",
+      start_date: 3.weeks.ago(now),
+      end_date: 2.weeks.ago(now)
     }
   end
 
   def ended_attributes(now = Time.zone.now)
     {
-        title: "GP Ended",
-        start_date: 2.weeks.ago(now),
-        end_date: 2.days.ago(now),
-        close_date: 2.days.from_now
+      title: "GP Ended",
+      start_date: 2.weeks.ago(now),
+      end_date: 2.days.ago(now),
+      close_date: 2.days.from_now
     }
   end
 
   def current_attributes(now = Time.zone.now)
     {
-        title: "GP Current",
-        start_date: 1.day.ago(now),
-        end_date: 2.weeks.from_now
+      title: "GP Current",
+      start_date: 1.day.ago(now),
+      end_date: 2.weeks.from_now
     }
   end
 
   def update_display_preferences(concluded, inactive)
     update_course_preferences(@teacher, {
-      'show_concluded_enrollments' => concluded.to_s,
-      'show_inactive_enrollments' => inactive.to_s
-    })
+                                "show_concluded_enrollments" => concluded.to_s,
+                                "show_inactive_enrollments" => inactive.to_s
+                              })
   end
 
   def update_course_preferences(user, preferences)
-    user.update preferences: {
-      gradebook_settings: {
-        @course.id => preferences
-      }
-    }
+    user.set_preference(:gradebook_settings, @course.global_id, preferences)
   end
 
   def display_concluded_enrollments
@@ -93,23 +91,23 @@ module GradebookSetup
   end
 
   def show_grading_periods_filter(user)
-    set_filter_visibility(user, 'gradingPeriods', true)
+    set_filter_visibility(user, "gradingPeriods", true)
   end
 
   def show_sections_filter(user)
-    set_filter_visibility(user, 'sections', true)
+    set_filter_visibility(user, "sections", true)
   end
 
   def show_modules_filter(user)
-    set_filter_visibility(user, 'modules', true)
+    set_filter_visibility(user, "modules", true)
   end
 
   def show_student_groups_filter(user)
-    set_filter_visibility(user, 'studentGroups', true)
+    set_filter_visibility(user, "studentGroups", true)
   end
 
   def set_filter_visibility(user, filter, visible)
-    filters = user.preferences.dig(:gradebook_settings, @course.id, :selected_view_options_filters) || []
+    filters = user.get_preference(:gradebook_settings, @course.global_id)&.dig(:selected_view_options_filters) || []
     if visible && !filters.include?(filter)
       filters << filter
     elsif !visible && filters.include?(filter)

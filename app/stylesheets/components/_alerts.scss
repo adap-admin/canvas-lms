@@ -16,68 +16,12 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*
-@styleguide Highlights/Alerts
-
-
-```html
-<p>
-  <div class="ic-flash-info">
-    <div class="ic-flash__icon" aria-hidden="true">
-      <i class="icon-info"></i>
-    </div>
-    Info: Sample flash notice style.
-    <button type="button" class="Button Button--icon-action close_link">
-      <i class="icon-x" aria-hidden="true"></i>
-      <span class="screenreader-only">Close</span>
-    </button>
-  </div>
-</p>
-<p>
-  <div class="ic-flash-success">
-    <div class="ic-flash__icon" aria-hidden="true">
-      <i class="icon-check"></i>
-    </div>
-    Success: Sample flash notice style.
-    <button type="button" class="Button Button--icon-action close_link">
-      <i class="icon-x" aria-hidden="true"></i>
-      <span class="screenreader-only">Close</span>
-    </button>
-  </div>
-</p>
-<p>
-  <div class="ic-flash-warning">
-    <div class="ic-flash__icon" aria-hidden="true">
-      <i class="icon-warning"></i>
-    </div>
-    Warning: Sample flash notice style.
-    <button type="button" class="Button Button--icon-action close_link">
-      <i class="icon-x" aria-hidden="true"></i>
-      <span class="screenreader-only">Close</span>
-    </button>
-  </div>
-</p>
-<p>
-  <div class="ic-flash-error">
-    <div class="ic-flash__icon" aria-hidden="true">
-      <i class="icon-warning"></i>
-    </div>
-    Error: Sample flash notice style.
-    <button type="button" class="Button Button--icon-action close_link">
-      <i class="icon-x" aria-hidden="true"></i>
-      <span class="screenreader-only">Close</span>
-    </button>
-  </div>
-</p>
-```
-
-*/
-
 // Alerts
 ////////////////////////
 
-
 // Base styles
+
+@use "sass:math";
 
 .alert {
   padding: direction-sides($ic-sp $ic-sp*3 $ic-sp $ic-sp);
@@ -138,10 +82,11 @@
 .ic-flash-info, .ic-flash-success, .ic-flash-warning, .ic-flash-error {
   position: relative;
   box-sizing: border-box;
-  padding: direction-sides($ic-sp/2 40px $ic-sp/2 $ic-sp*4);
+  padding: direction-sides($ic-sp*0.5 40px $ic-sp*0.5 $ic-sp*4);
   margin: 0 auto;
-  width: 475px;
   min-height: 20px;
+  min-width: 17rem; // designs minimum width minus the spacing they want
+  max-width: 32rem; // design has a max-width they want alerts to display
   line-height: 1.3;
   z-index: 2;
   vertical-align: middle;
@@ -152,7 +97,7 @@
 
   .close_link {
     position: absolute;
-    #{direction(right)}: $ic-sp/3;
+    #{direction(right)}: math.div($ic-sp, 3);
     top: 50%;
     margin-top: -12px;
     text-decoration: none;
@@ -220,7 +165,7 @@
 }
 
 .ic-flash__text {
-  margin: $ic-sp/2 0;
+  margin: $ic-sp*0.5 0;
   &:first-of-type { margin-top: 0; }
   &:last-child { margin-bottom: 0; }
 }
@@ -237,7 +182,7 @@ a.Button--flash {
 // masquerading or using student view. In the new UI, it gives
 // Canvas the appearance of being inside a 3px frame.
 .ic-alert-masquerade-student-view {
-  padding: $ic-sp/2 $ic-sp;
+  padding: $ic-sp*0.5 $ic-sp;
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -262,14 +207,14 @@ a.Button--flash {
 // When the fixed bottom alert is showing, add a
 // left and right border, making Canvas appear as if
 // it is inside a frame.
-body.is-masquerading-or-student-view {
+body.is-masquerading-or-student-view:not(.embedded) {
   border-#{direction(right)}: 3px solid $ic-color-action;
   .ic-app-header { border-#{direction(left)}: 3px solid $ic-color-action; }
 }
 
 .ic-alert-masquerade-student-view-module {
   flex: 1;
-  padding: 0 $ic-sp/2;
+  padding: 0 $ic-sp*0.5;
   &:first-of-type { padding-#{direction(left)}: 0; }
   &:last-of-type {
     padding-#{direction(right)}: 0;
@@ -314,15 +259,15 @@ $ic-notification-border-thickness: 2px;
       display: flex;
       @include breakpoint(desktop) { align-items: flex-start; }
     }
-    .ic-notification__message { flex: 1; }
+    .ic-notification__message { flex: 1; overflow-wrap: anywhere;}
     .ic-notification__actions {
       margin-#{direction(left)}: $ic-sp*2;
       @include breakpoint(desktop) { margin-#{direction(left)}: $ic-sp*3; }
     }
     .ic-notification__title {
       display: block;
-      @include fontSize($ic-font-size--medium)
-      margin: 0 0 $ic-sp/2;
+      @include fontSize($ic-font-size--medium);
+      margin: 0 0 $ic-sp*0.5;
     }
   }
 }
@@ -345,7 +290,7 @@ $ic-notification-border-thickness: 2px;
 }
 
 .ic-notification__title {
-  margin-#{direction(right)}: $ic-sp/3;
+  margin-#{direction(right)}: math.div($ic-sp, 3);
   @include fontSize($ic-font-size--small);
   display: inline;
   font-weight: bold;

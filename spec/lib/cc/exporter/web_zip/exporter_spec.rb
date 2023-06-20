@@ -1,4 +1,5 @@
-# coding: utf-8
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -16,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require File.expand_path(File.dirname(__FILE__) + '/../../cc_spec_helper')
+require_relative "../../cc_spec_helper"
 
 describe "Exporter" do
   include CC::Exporter::WebZip
@@ -27,11 +28,10 @@ describe "Exporter" do
     end
 
     @attachment = Attachment.create({
-      context: course_factory,
-      filename: 'exportable-test-file',
-      uploaded_data: File.open(cartridge_path)
-    })
-
+                                      context: course_factory,
+                                      filename: "exportable-test-file",
+                                      uploaded_data: File.open(cartridge_path)
+                                    })
   end
 
   context "create web zip package default settings" do
@@ -39,11 +39,11 @@ describe "Exporter" do
       CC::Exporter::WebZip::Exporter.new(@attachment.open, false, :web_zip)
     end
 
-    it "should sort content by module" do
+    it "sorts content by module" do
       expect(exporter.base_template).to eq "../templates/module_sorting_template.html.erb"
     end
 
-    it "should not URL escape file names" do
+    it "does not URL escape file names" do
       expect(exporter.unsupported_files[1][:file_name]).to eq '!@#$%^&*().txt'
     end
   end

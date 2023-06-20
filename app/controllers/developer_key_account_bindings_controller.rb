@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -50,13 +52,15 @@
 #            "description": "True if the requested context owns the binding",
 #            "example": "true",
 #            "type": "boolean"
-#          },
+#          }
 #       }
 #     }
 class DeveloperKeyAccountBindingsController < ApplicationController
   before_action :require_context
   before_action :require_manage_developer_keys
   before_action :developer_key_in_account, only: :create_or_update
+  before_action :require_root_account
+  before_action :restrict_federated_child_accounts
 
   # @API Create a Developer Key Account Binding
   # Create a new Developer Key Account Binding. The developer key specified
@@ -79,54 +83,16 @@ class DeveloperKeyAccountBindingsController < ApplicationController
            status: existing_binding.present? ? :ok : :created
   end
 
-  # @API List Developer Key Account Binding
-  # List all Developer Key Account Bindings in the requested account
-  #
-  # @returns List of DeveloperKeyAccountBinding
-  def index
-    account_chain_bindings = DeveloperKeyAccountBinding.where(
-      account_id: account.account_chain_ids.concat([Account.site_admin.id])
-    ).eager_load(:account, :developer_key)
-
-    paginated_bindings = Api.paginate(
-      account_chain_bindings,
-      self,
-      pagination_url,
-      pagination_args
-    )
-    render json: index_serializer(paginated_bindings)
-  end
-
   private
 
-  def index_serializer(bindings)
-    bindings.map do |b|
-      DeveloperKeyAccountBindingSerializer.new(b, @context)
-    end
-  end
-
-  def pagination_url
-    url_for(action: :index, account_id: account.id)
-  end
-
-  def pagination_args
-    params[:limit] ? { per_page: params[:limit] } : {}
-  end
-
   def account
-    @_account ||= begin
-      a = Account.site_admin if params[:account_id] == 'site_admin'
-      a = @domain_root_account if params[:account_id] == 'self'
-      a || Account.find(params[:account_id])
-    end
+    @_account ||= api_find(Account, params[:account_id])
   end
 
   def existing_binding
-    @_existing_binding ||= begin
-      account.developer_key_account_bindings.find_by(
-        developer_key_id: params[:developer_key_id]
-      )
-    end
+    @_existing_binding ||= account.developer_key_account_bindings.find_by(
+      developer_key_id: params[:developer_key_id]
+    )
   end
 
   def developer_key
@@ -136,8 +102,8 @@ class DeveloperKeyAccountBindingsController < ApplicationController
   def create_params
     workflow_state_param.merge(
       {
-        account: account,
-        developer_key: developer_key
+        account:,
+        developer_key:
       }
     )
   end
@@ -167,5 +133,17 @@ class DeveloperKeyAccountBindingsController < ApplicationController
 
   def require_manage_developer_keys
     require_context_with_permission(account, :manage_developer_keys)
+  end
+
+  def require_root_account
+    raise ActiveRecord::RecordNotFound unless account.root_account?
+  end
+
+  def restrict_federated_child_accounts
+    # Federated children can make their own keys, but for now, we are not letting
+    # them turn on/off site admin account keys
+    if !account.primary_settings_root_account? && developer_key.account != account
+      raise ActiveRecord::RecordNotFound
+    end
   end
 end

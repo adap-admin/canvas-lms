@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -16,44 +18,42 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'spec_helper'
+require "spec_helper"
 
 describe IncomingMailProcessor::Pop3Mailbox do
-  include_examples 'Mailbox'
+  include_examples "Mailbox"
 
   def default_config
     {
-      :server => "mail.example.com",
-      :ssl => false,
-      :port => 2345,
-      :username => "user",
-      :password => "password",
+      server: "mail.example.com",
+      ssl: false,
+      port: 2345,
+      username: "user",
+      password: "password",
     }
   end
 
   def mock_net_pop
-    @pop_mock = Object.new
-    class <<@pop_mock
-      IncomingMailProcessor::Pop3Mailbox::UsedPopMethods.each do |method_name|
-        define_method(method_name) { |*args, &block| }
-      end
+    @pop_mock = double
+    IncomingMailProcessor::Pop3Mailbox::UsedPopMethods.each do |method_name|
+      allow(@pop_mock).to receive(method_name)
     end
 
     allow(Net::POP3).to receive(:new).and_return(@pop_mock)
   end
 
   describe "#initialize" do
-    it "should accept existing mailman pop3 configuration" do
+    it "accepts existing mailman pop3 configuration" do
       @mailbox = IncomingMailProcessor::Pop3Mailbox.new({
-        :server => "pop3.server.com",
-        :port => 1234,
-        :ssl => "truthy-value",
-        :username => "user@server.com",
-        :password => "secret-user-password",
-      })
+                                                          server: "pop3.server.com",
+                                                          port: 1234,
+                                                          ssl: "truthy-value",
+                                                          username: "user@server.com",
+                                                          password: "secret-user-password",
+                                                        })
 
       expect(@mailbox.server).to eql "pop3.server.com"
-      expect(@mailbox.port).to eql 1234
+      expect(@mailbox.port).to be 1234
       expect(@mailbox.ssl).to eql "truthy-value"
       expect(@mailbox.username).to eql "user@server.com"
       expect(@mailbox.password).to eql "secret-user-password"
@@ -65,8 +65,8 @@ describe IncomingMailProcessor::Pop3Mailbox do
       mock_net_pop
     end
 
-    it "should connect to the server" do
-      config = default_config.merge(:ssl => false, :port => 110)
+    it "connects to the server" do
+      config = default_config.merge(ssl: false, port: 110)
       expect(Net::POP3).to receive(:new).with(config[:server], config[:port]).and_return(@pop_mock)
       expect(@pop_mock).to receive(:start).with(config[:username], config[:password])
 
@@ -74,11 +74,11 @@ describe IncomingMailProcessor::Pop3Mailbox do
       @mailbox.connect
     end
 
-    it "should use ssl if configured" do
-      config = default_config.merge(:ssl => true, :port => 995)
+    it "uses ssl if configured" do
+      config = default_config.merge(ssl: true, port: 995)
 
       expect(Net::POP3).to receive(:new).with(config[:server], config[:port]).and_return(@pop_mock)
-      expect(@pop_mock).to receive(:enable_ssl).with(OpenSSL::SSL::VERIFY_NONE)
+      expect(@pop_mock).to receive(:enable_ssl).with(OpenSSL::SSL::VERIFY_PEER)
       expect(@pop_mock).to receive(:start).with(config[:username], config[:password])
 
       @mailbox = IncomingMailProcessor::Pop3Mailbox.new(config)
@@ -87,7 +87,7 @@ describe IncomingMailProcessor::Pop3Mailbox do
   end
 
   describe "#disconnect" do
-    it "should disconnect" do
+    it "disconnects" do
       mock_net_pop
       expect(@pop_mock).to receive(:finish)
 
@@ -97,8 +97,8 @@ describe IncomingMailProcessor::Pop3Mailbox do
     end
   end
 
-  describe '#unprocessed_message_count' do
-    it "should return nil" do
+  describe "#unprocessed_message_count" do
+    it "returns nil" do
       expect(IncomingMailProcessor::Pop3Mailbox.new(default_config).unprocessed_message_count).to be_nil
     end
   end
@@ -110,7 +110,7 @@ describe IncomingMailProcessor::Pop3Mailbox do
       @mailbox.connect
     end
 
-    it "should retrieve and yield messages" do
+    it "retrieves and yield messages" do
       foo = double(pop: "foo body")
       bar = double(pop: "bar body")
       baz = double(pop: "baz body")
@@ -125,7 +125,7 @@ describe IncomingMailProcessor::Pop3Mailbox do
     end
 
     it "retrieves messages using a stride and offset" do
-      foo, bar, baz = ["foo", "bar", "baz"].map do |msg|
+      foo, bar, baz = %w[foo bar baz].map do |msg|
         m = double(pop: "#{msg} body")
         expect(m).to receive(:uidl).twice.and_return(msg)
         m
@@ -151,20 +151,19 @@ describe IncomingMailProcessor::Pop3Mailbox do
         expect(@pop_mock).to receive(:mails).and_return([@foo])
       end
 
-      it "should delete when asked" do
+      it "deletes when asked" do
         expect(@foo).to receive(:delete)
-        @mailbox.each_message do |message_id, body|
+        @mailbox.each_message do |message_id, _body|
           @mailbox.delete_message(message_id)
         end
       end
 
-      it "should delete when asked to move" do
+      it "deletes when asked to move" do
         expect(@foo).to receive(:delete)
-        @mailbox.each_message do |message_id, body|
+        @mailbox.each_message do |message_id, _body|
           @mailbox.move_message(message_id, "anything")
         end
       end
     end
   end
-
 end

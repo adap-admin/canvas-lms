@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -15,11 +17,10 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'spec_helper'
+require "spec_helper"
 
 describe TurnitinApi do
-  it 'has a version number' do
-    expect(TurnitinApi::VERSION).not_to be nil
+  it "has a version number" do
+    expect(TurnitinApi::VERSION).not_to be_nil
   end
-
 end

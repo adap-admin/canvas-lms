@@ -17,33 +17,35 @@
  */
 
 import $ from 'jquery'
-import 'compiled/jquery.rails_flash_notifications'
+import '@canvas/rails-flash-notifications'
 
 import fakeENV from 'helpers/fakeENV'
-import rubric_assessment from 'rubric_assessment'
-import I18n from 'i18n!rubric_assessment'
+import rubric_assessment from '@canvas/rubrics/jquery/rubric_assessment'
+import {useScope as useI18nScope} from '@canvas/i18n'
+
+const I18n = useI18nScope('rubric_assessment')
 
 QUnit.module('RubricAssessment#roundAndFormat')
 
-test('rounds given number to two decimal places', function() {
+test('rounds given number to two decimal places', () => {
   strictEqual(rubric_assessment.roundAndFormat(42.325), '42.33')
   strictEqual(rubric_assessment.roundAndFormat(42.324), '42.32')
 })
 
-test('formats given number with I18n.n', function() {
-  sandbox.stub(I18n, 'n').returns('formatted_number')
+test('formats given number with I18n.n', () => {
+  sandbox.stub(I18n.constructor.prototype, 'n').returns('formatted_number')
   strictEqual(rubric_assessment.roundAndFormat(42), 'formatted_number')
   strictEqual(I18n.n.callCount, 1)
   ok(I18n.n.calledWith(42))
 })
 
-test('returns empty string when passed null, undefined or empty string', function() {
+test('returns empty string when passed null, undefined or empty string', () => {
   strictEqual(rubric_assessment.roundAndFormat(null), '')
   strictEqual(rubric_assessment.roundAndFormat(undefined), '')
   strictEqual(rubric_assessment.roundAndFormat(''), '')
 })
 
-test('properly adds the "selected" class to a rating when score is equal', function() {
+test('properly adds the "selected" class to a rating when score is equal', () => {
   const $criterion = $(
     '<span>' +
       "<span class='rating'><span class='points'>5</span></span>" +
@@ -52,16 +54,10 @@ test('properly adds the "selected" class to a rating when score is equal', funct
       '</span>'
   )
   rubric_assessment.highlightCriterionScore($criterion, 3)
-  strictEqual(
-    $criterion
-      .find('.selected')
-      .find('.points')
-      .text(),
-    '3'
-  )
+  strictEqual($criterion.find('.selected').find('.points').text(), '3')
 })
 
-test('properly adds the "selected" class to proper rating when score is in range', function() {
+test('properly adds the "selected" class to proper rating when score is in range', () => {
   const $criterion = $(
     '<span>' +
       "<input type='checkbox' class='criterion_use_range' checked>" +
@@ -72,17 +68,11 @@ test('properly adds the "selected" class to proper rating when score is in range
   )
   rubric_assessment.highlightCriterionScore($criterion, 4)
   strictEqual($criterion.find('.selected').length, 1)
-  strictEqual(
-    $criterion
-      .find('.selected')
-      .find('.points')
-      .text(),
-    '5'
-  )
+  strictEqual($criterion.find('.selected').find('.points').text(), '5')
 })
 
 QUnit.module('RubricAssessment#checkScoreAdjustment')
-test('displays a flash warning when rawPoints has been adjusted', function() {
+test('displays a flash warning when rawPoints has been adjusted', () => {
   const flashSpy = sinon.spy($, 'flashWarning')
   const $criterion = $(
     '<span>' +
@@ -103,7 +93,7 @@ test('displays a flash warning when rawPoints has been adjusted', function() {
   flashSpy.restore()
 })
 
-test('does not display a flash warning when rawPoints has not been adjusted', function() {
+test('does not display a flash warning when rawPoints has not been adjusted', () => {
   const flashSpy = sinon.spy($, 'flashWarning')
   const $criterion = $(
     '<span>' +
@@ -130,8 +120,28 @@ QUnit.module('RubricAssessment', moduleHooks => {
     fakeENV.teardown()
   })
 
+  QUnit.module('#getCriteriaAssessmentId', () => {
+    test('returns undefined if id is null', () => {
+      const id = rubric_assessment.getCriteriaAssessmentId(null)
+
+      strictEqual(id, undefined)
+    })
+
+    test('returns undefined if id is "null"', () => {
+      const id = rubric_assessment.getCriteriaAssessmentId('null')
+
+      strictEqual(id, undefined)
+    })
+
+    test('returns the id if id is not null and not "null"', () => {
+      const id = rubric_assessment.getCriteriaAssessmentId(5)
+
+      strictEqual(id, 5)
+    })
+  })
+
   QUnit.module('#assessmentData', () => {
-    const createRubric = (contents = "") => $(`<div class="rubric">${contents}</div>`)
+    const createRubric = (contents = '') => $(`<div class="rubric">${contents}</div>`)
 
     test('returns the user ID if assessment_user_id exists in the environment', () => {
       ENV.RUBRIC_ASSESSMENT.assessment_user_id = '123'
@@ -182,7 +192,7 @@ QUnit.module('RubricAssessment', moduleHooks => {
     })
   })
 
-  QUnit.module('#populateRubric', (hooks) => {
+  QUnit.module('#populateRubric', hooks => {
     let $rubric
 
     hooks.beforeEach(() => {

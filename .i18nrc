@@ -1,5 +1,10 @@
 {
   "plugins": [
-    "i18nliner-handlebars"
+    "@instructure/i18nliner-canvas"
+  ],
+
+  "include": [
+    "gems/plugins",
+    "ui"
   ]
 }

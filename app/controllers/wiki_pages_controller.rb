@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -21,16 +23,18 @@ class WikiPagesController < ApplicationController
   include SubmittableHelper
 
   before_action :require_context
-  before_action :get_wiki_page, :except => [:front_page]
-  before_action :set_front_page, :only => [:front_page]
+  before_action :get_wiki_page, except: [:front_page]
+  before_action :set_front_page, only: [:front_page]
   before_action :set_pandapub_read_token
   before_action :set_js_rights
   before_action :set_js_wiki_data
   before_action :rce_js_env, only: [:edit, :index]
 
-  add_crumb(proc { t '#crumbs.wiki_pages', "Pages"}) do |c|
-    context = c.instance_variable_get('@context')
-    current_user = c.instance_variable_get('@current_user')
+  include K5Mode
+
+  add_crumb(proc { t "#crumbs.wiki_pages", "Pages" }) do |c|
+    context = c.instance_variable_get(:@context)
+    current_user = c.instance_variable_get(:@current_user)
     if context.grants_right?(current_user, :read)
       c.send :polymorphic_path, [context, :wiki_pages]
     end
@@ -42,14 +46,12 @@ class WikiPagesController < ApplicationController
   end
 
   def set_pandapub_read_token
-    if @page && @page.grants_right?(@current_user, session, :read)
-      if CanvasPandaPub.enabled?
-        channel = "/private/wiki_page/#{@page.global_id}/update"
-        js_env :WIKI_PAGE_PANDAPUB => {
-          :CHANNEL => channel,
-          :TOKEN => CanvasPandaPub.generate_token(channel, true)
-        }
-      end
+    if @page&.grants_right?(@current_user, session, :read) && CanvasPandaPub.enabled?
+      channel = "/private/wiki_page/#{@page.global_id}/update"
+      js_env WIKI_PAGE_PANDAPUB: {
+        CHANNEL: channel,
+        TOKEN: CanvasPandaPub.generate_token(channel, true)
+      }
     end
   end
 
@@ -66,17 +68,17 @@ class WikiPagesController < ApplicationController
       @padless = true
       js_bundle :wiki_page_show
       css_bundle :wiki_page
-      render template: 'wiki_pages/show'
+      render template: "wiki_pages/show"
     else
       redirect_to polymorphic_url([@context, :wiki_pages])
     end
   end
 
   def index
-    Shackles.activate(:slave) do
+    GuardRail.activate(:secondary) do
       if authorized_action(@context.wiki, @current_user, :read) && tab_enabled?(@context.class::TAB_PAGES)
-        log_asset_access([ "pages", @context ], "pages", "other")
-        js_env((ConditionalRelease::Service.env_for(@context)))
+        log_asset_access(["pages", @context], "pages", "other")
+        js_env(ConditionalRelease::Service.env_for(@context))
         wiki_pages_js_env(@context)
         set_tutorial_js_env
         @padless = true
@@ -85,33 +87,34 @@ class WikiPagesController < ApplicationController
   end
 
   def show
-    Shackles.activate(:slave) do
+    GuardRail.activate(:secondary) do
       if @page.new_record?
+        wiki_page = @context.wiki_pages.deleted_last.where(url: @page.url).first
         if @page.grants_any_right?(@current_user, session, :update, :update_content)
-          flash[:info] = t('notices.create_non_existent_page', 'The page "%{title}" does not exist, but you can create it below', :title => @page.title)
-          encoded_name = @page_name && CGI.escape(@page_name).gsub("+", " ")
+          flash[:info] = t("notices.create_non_existent_page", 'The page "%{title}" does not exist, but you can create it below', title: @page.title)
+          InstStatsd::Statsd.increment("wikipage.show.page_does_not_exist.with_edit_rights") unless wiki_page&.deleted?
+          encoded_name = @page_name && CGI.escape(@page_name).tr("+", " ")
           redirect_to polymorphic_url([@context, :wiki_page], id: encoded_name || @page, titleize: params[:titleize], action: :edit)
         else
-          wiki_page = @context.wiki_pages.deleted_last.where(url: @page.url).first
-          if wiki_page && wiki_page.deleted?
-            flash[:warning] = t('notices.page_deleted', 'The page "%{title}" has been deleted.', :title => @page.title)
-          else
-            flash[:warning] = t('notices.page_does_not_exist', 'The page "%{title}" does not exist.', :title => @page.title)
-          end
+          flash[:warning] = if wiki_page&.deleted?
+                              t("notices.page_deleted", 'The page "%{title}" has been deleted.', title: @page.title)
+                            else
+                              InstStatsd::Statsd.increment("wikipage.show.page_does_not_exist.without_edit_rights")
+                              t("notices.page_does_not_exist", 'The page "%{title}" does not exist.', title: @page.title)
+                            end
           redirect_to polymorphic_url([@context, :wiki_pages])
         end
         return
       end
 
-      if authorized_action(@page, @current_user, :read)
-        if !@context.feature_enabled?(:conditional_release) || enforce_assignment_visible(@page)
-          add_crumb(@page.title)
-          log_asset_access(@page, 'wiki', @wiki)
-          wiki_pages_js_env(@context)
-          set_master_course_js_env_data(@page, @context)
-          @mark_done = MarkDonePresenter.new(self, @context, params["module_item_id"], @current_user, @page)
-          @padless = true
-        end
+      if authorized_action(@page, @current_user, :read) &&
+         (!@context.conditional_release? || enforce_assignment_visible(@page))
+        add_crumb(@page.title)
+        log_asset_access(@page, "wiki", @wiki)
+        wiki_pages_js_env(@context)
+        set_master_course_js_env_data(@page, @context)
+        @mark_done = MarkDonePresenter.new(self, @context, params["module_item_id"], @current_user, @page)
+        @padless = true
       end
       js_bundle :wiki_page_show
       css_bundle :wiki_page
@@ -124,37 +127,35 @@ class WikiPagesController < ApplicationController
       js_env(ConditionalRelease::Service.env_for(@context))
       wiki_pages_js_env(@context)
       if !ConditionalRelease::Service.enabled_in_context?(@context) ||
-        enforce_assignment_visible(@page)
+         enforce_assignment_visible(@page)
         add_crumb(@page.title)
         @padless = true
       end
-    else
-      if authorized_action(@page, @current_user, :read)
-        flash[:warning] = t('notices.cannot_edit', 'You are not allowed to edit the page "%{title}".', :title => @page.title)
-        redirect_to polymorphic_url([@context, @page])
-      end
+    elsif authorized_action(@page, @current_user, :read)
+      flash[:warning] = t("notices.cannot_edit", 'You are not allowed to edit the page "%{title}".', title: @page.title)
+      redirect_to polymorphic_url([@context, @page])
     end
   end
 
   def revisions
     if @page.grants_right?(@current_user, session, :read_revisions)
-      if !@context.feature_enabled?(:conditional_release) || enforce_assignment_visible(@page)
+      if !@context.conditional_release? || enforce_assignment_visible(@page)
         add_crumb(@page.title, polymorphic_url([@context, @page]))
         add_crumb(t("#crumbs.revisions", "Revisions"))
 
         @padless = true
       end
-    else
-      if authorized_action(@page, @current_user, :read)
-        flash[:warning] = t('notices.cannot_read_revisions', 'You are not allowed to review the historical revisions of "%{title}".', :title => @page.title)
-        redirect_to polymorphic_url([@context, @page])
-      end
+    elsif authorized_action(@page, @current_user, :read)
+      flash[:warning] = t("notices.cannot_read_revisions", 'You are not allowed to review the historical revisions of "%{title}".', title: @page.title)
+      redirect_to polymorphic_url([@context, @page])
     end
   end
 
   def show_redirect
-    redirect_to polymorphic_url([@context, @page], :titleize => params[:titleize],
-                                :module_item_id => params[:module_item_id]), status: :moved_permanently
+    redirect_to polymorphic_url([@context, @page],
+                                titleize: params[:titleize],
+                                module_item_id: params[:module_item_id]),
+                status: :moved_permanently
   end
 
   def revisions_redirect
@@ -162,12 +163,14 @@ class WikiPagesController < ApplicationController
   end
 
   private
+
   def wiki_pages_js_env(context)
+    set_k5_mode # we need this to run now, even though we haven't hit the render hook yet
     @wiki_pages_env ||= {
-      :wiki_page_menu_tools => external_tools_display_hashes(:wiki_page_menu),
-      :DISPLAY_SHOW_ALL_LINK => tab_enabled?(context.class::TAB_PAGES, {no_render: true}),
-      :STUDENT_PLANNER_ENABLED => context.root_account.feature_enabled?(:student_planner),
-      :DIRECT_SHARE_ENABLED => @domain_root_account&.feature_enabled?(:direct_share),
+      wiki_page_menu_tools: external_tools_display_hashes(:wiki_page_menu),
+      wiki_index_menu_tools: external_tools_display_hashes(:wiki_index_menu),
+      DISPLAY_SHOW_ALL_LINK: tab_enabled?(context.class::TAB_PAGES, { no_render: true }) && !@k5_details_view,
+      CAN_SET_TODO_DATE: context.grants_any_right?(@current_user, session, :manage_content, :manage_course_content_edit)
     }
     js_env(@wiki_pages_env)
     @wiki_pages_env

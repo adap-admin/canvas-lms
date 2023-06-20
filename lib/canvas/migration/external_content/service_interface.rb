@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -44,15 +46,16 @@ module Canvas::Migration::ExternalContent
         # import_completed?(import_data)
         #   verifies that the import completed
         methods = {
-          :applies_to_course? => 1,
-          :begin_export => 2,
-          :export_completed? => 1,
-          :retrieve_export => 1,
-          :send_imported_content => 3,
-          :import_completed? => 1
+          applies_to_course?: 1,
+          begin_export: 2,
+          export_completed?: 1,
+          retrieve_export: 1,
+          send_imported_content: 3,
+          import_completed?: 1
         }
         methods.each do |method_name, arity|
           raise "external content service needs to implement #{method_name}" unless service.respond_to?(method_name)
+
           m = service.method(method_name)
           raise "method #{method_name} should accept #{arity} argument(s)" unless m.arity == arity
         end

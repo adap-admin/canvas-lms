@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -35,7 +37,7 @@ module CanvasQuizStatistics::Analyzers::Concerns
     #   "text": "Answer text.",
     #   "correct": true // based on weight
     # }
-    def parse_answers(source=@question_data[:answers], &formatter)
+    def parse_answers(source = @question_data[:answers])
       return [] if source.blank?
 
       source.map do |answer|
@@ -67,14 +69,13 @@ module CanvasQuizStatistics::Analyzers::Concerns
     def calculate_responses(responses, answers, *args)
       responses.each do |response|
         answer = locate_answer(response, answers, *args)
-        answer ||= begin
-          if answer_present_but_unknown?(response, *args)
-            generate_unknown_answer(answers)
-          else
-            generate_missing_answer(answers)
-          end
-        end
+        answer ||= if answer_present_but_unknown?(response, *args)
+                     generate_unknown_answer(answers)
+                   else
+                     generate_missing_answer(answers)
+                   end
 
+        answer[:user_ids] << response[:user_id]
         answer[:user_names] << response[:user_name]
         answer[:responses] += 1
       end
@@ -88,7 +89,7 @@ module CanvasQuizStatistics::Analyzers::Concerns
     #   answers.detect { |a| a[:id] == "#{response[:answer_id]}" }
     #
     # @return [Hash|NilClass]
-    def locate_answer(response, answers, *args)
+    def locate_answer(response, answers, *)
       raise NotImplementedError
     end
 
@@ -102,32 +103,33 @@ module CanvasQuizStatistics::Analyzers::Concerns
     # pre-defined answer in #locate_answer.
     #
     # @return [Boolean]
-    def answer_present_but_unknown?(response, *args)
+    def answer_present_but_unknown?(response, *)
       answer_present?(response)
     end
 
     private
 
-    def build_answer(id, text, correct=false)
+    def build_answer(id, text, correct = false)
       {
-        id: "#{id}",
+        id: id.to_s,
         text: text.to_s,
-        correct: correct,
+        correct:,
         responses: 0,
+        user_ids: [],
         user_names: []
       }
     end
 
     def generate_unknown_answer(set)
       __generate_incorrect_answer(Constants::UnknownAnswerKey,
-        Constants::UnknownAnswerText,
-        set)
+                                  Constants::UnknownAnswerText,
+                                  set)
     end
 
     def generate_missing_answer(set)
       __generate_incorrect_answer(Constants::MissingAnswerKey,
-        Constants::MissingAnswerText,
-        set)
+                                  Constants::MissingAnswerText,
+                                  set)
     end
 
     def __generate_incorrect_answer(id, text, answer_set)

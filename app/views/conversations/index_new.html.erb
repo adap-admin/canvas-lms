@@ -17,7 +17,7 @@
 %>
 
 <% css_bundle :conversations_new %>
-<% js_bundle  :conversations_new %>
+<% js_bundle :conversations %>
 <% add_body_class 'ic-no-flex-layout full-width' %>
 <h1 class="screenreader-only"><%= t("Inbox") %></h1>
 <% provide :page_title, t("Inbox") %>
@@ -32,7 +32,11 @@
           <span class="current-selection-label"></span>
         </span>
         <select class="course-filter" id="course-filter" aria-haspopup="true" aria-labelledby="course-filter-description"></select>
-        <div id="conversation_filter" style="display:inline-block; vertical-align: middle;"></div>
+        <div
+          id="conversation_filter"
+          class="conversations__filter"
+        >
+        </div>
       </div>
       </div>
       <div class="panel__secondary">
@@ -164,10 +168,11 @@
     </div>
   </header>
 
-  <div class="row-fluid messaging-wrapper">
-    <div class="span4 message-list-scroller">
+  <div class="messaging-wrapper">
+    <div class="message-list-scroller">
       <div class="message-list"></div>
     </div>
-    <div class="span8 message-detail"></div>
+    <div class="message-detail conversations__message-detail">
+    </div>
   </div>
 </div>

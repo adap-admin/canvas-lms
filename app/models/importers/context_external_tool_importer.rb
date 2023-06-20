@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -15,36 +17,33 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_dependency 'importers'
-
 module Importers
   class ContextExternalToolImporter < Importer
-
     self.item_class = ContextExternalTool
 
     def self.process_migration(data, migration)
-      tools = data['external_tools'] ? data['external_tools']: []
+      tools = data["external_tools"] || []
       tools.each do |tool|
-        if migration.import_object?("context_external_tools", tool['migration_id']) || migration.import_object?("external_tools", tool['migration_id'])
-          begin
-            item = import_from_migration(tool, migration.context, migration)
-          rescue
-            migration.add_import_warning(t('#migration.external_tool_type', "External Tool"), tool[:title], $!)
-          end
+        next unless migration.import_object?("context_external_tools", tool["migration_id"]) || migration.import_object?("external_tools", tool["migration_id"])
+
+        begin
+          import_from_migration(tool, migration.context, migration)
+        rescue
+          migration.add_import_warning(t("#migration.external_tool_type", "External Tool"), tool[:title], $!)
         end
       end
       migration.imported_migration_items_by_class(ContextExternalTool).each do |tool|
-        if (tool.consumer_key == 'fake' || tool.shared_secret == 'fake') && !tool.use_1_3?
-          migration.add_warning(t('external_tool_attention_needed', 'The security parameters for the external tool "%{tool_name}" need to be set in Course Settings.', :tool_name => tool.name))
+        if (tool.consumer_key == "fake" || tool.shared_secret == "fake") && !tool.use_1_3?
+          migration.add_warning(t("external_tool_attention_needed", 'The security parameters for the external tool "%{tool_name}" need to be set in Course Settings.', tool_name: tool.name))
         end
       end
     end
 
-    def self.import_from_migration(hash, context, migration, item=nil, persist = true)
+    def self.import_from_migration(hash, context, migration, item = nil, persist = true)
       hash = hash.with_indifferent_access
       return nil if hash[:migration_id] && hash[:external_tools_to_import] && !hash[:external_tools_to_import][hash[:migration_id]]
 
-      if !item && migration && item = check_for_compatible_tool_translation(hash, migration)
+      if !item && migration && (item = check_for_compatible_tool_translation(hash, migration))
         return item
       end
 
@@ -62,19 +61,29 @@ module Importers
         item.url = url
       end
       item.domain = hash[:domain] unless hash[:domain].blank?
-      item.privacy_level = hash[:privacy_level] || 'name_only'
+      item.privacy_level = hash[:privacy_level] || "name_only"
       item.not_selectable = hash[:not_selectable] if hash[:not_selectable]
-      item.consumer_key ||= hash[:consumer_key] || 'fake'
-      item.shared_secret ||= hash[:shared_secret] || 'fake'
+      item.consumer_key ||= hash[:consumer_key] || "fake"
+      item.shared_secret ||= hash[:shared_secret] || "fake"
       item.developer_key_id ||= hash.dig(:settings, :client_id)
+      item.lti_version = hash[:lti_version] || (hash.dig(:settings, :client_id) && "1.3") || (hash.dig(:settings, :use_1_3) && "1.3") || "1.1"
       item.settings = create_tool_settings(hash)
+
+      Lti::ResourcePlacement::PLACEMENTS.each do |placement|
+        next unless item.settings.key?(placement)
+
+        item.set_extension_setting(placement, item.settings[placement])
+      end
+
       if hash[:custom_fields].is_a? Hash
         item.settings[:custom_fields] ||= {}
         item.settings[:custom_fields].merge! hash[:custom_fields]
       end
 
+      return if item.new_record? && ContextExternalTool.where(identity_hash: item.calculate_identity_hash).exists?
+
       item.save! if persist
-      migration.add_imported_item(item) if migration
+      migration&.add_imported_item(item)
       item
     end
 
@@ -88,11 +97,12 @@ module Importers
         settings[:vendor_extensions] ||= []
         hash[:extensions].each do |ext|
           next unless ext[:custom_fields].is_a? Hash
-          if existing = settings[:vendor_extensions].find { |ve| ve[:platform] == ext[:platform] }
+
+          if (existing = settings[:vendor_extensions].find { |ve| ve[:platform] == ext[:platform] })
             existing[:custom_fields] ||= {}
             existing[:custom_fields].merge! ext[:custom_fields]
           else
-            settings[:vendor_extensions] << {:platform => ext[:platform], :custom_fields => ext[:custom_fields]}
+            settings[:vendor_extensions] << { platform: ext[:platform], custom_fields: ext[:custom_fields] }
           end
         end
       end
@@ -100,24 +110,25 @@ module Importers
     end
 
     def self.check_for_compatible_tool_translation(hash, migration)
-      if migration.migration_settings[:prefer_existing_tools] && (tool = self.check_for_existing_tool(hash, migration))
+      if migration.migration_settings[:prefer_existing_tools] && (tool = check_for_existing_tool(hash, migration))
         return tool
       end
-      if migration.migration_type == "common_cartridge_importer" && (tool = self.check_for_tool_compaction(hash, migration))
-        return tool
+
+      if migration.migration_type == "common_cartridge_importer" && (tool = check_for_tool_compaction(hash, migration))
+        tool
       end
     end
 
     def self.check_for_tool_compaction(hash, migration)
       # rather than making a thousand separate tools, try to combine into other tools if we can
 
-      url, domain, settings = self.extract_for_translation(hash)
+      url, domain, settings = extract_for_translation(hash)
       return if url && ContextModuleImporter.add_custom_fields_to_url(url, hash[:custom_fields] || {}).nil?
 
       return unless url || domain
 
       migration.imported_migration_items_by_class(ContextExternalTool).each do |tool|
-        next unless matching_settings?(hash, tool, settings)
+        next unless matching_settings?(migration, hash, tool, settings)
 
         if tool.url.blank? && tool.domain.present?
           match_domain = tool.domain
@@ -155,17 +166,17 @@ module Importers
     end
 
     def self.check_for_existing_tool(hash, migration)
-      url, domain, settings = self.extract_for_translation(hash)
+      url, domain, settings = extract_for_translation(hash)
       return unless domain
 
       tool_contexts = ContextExternalTool.contexts_to_search(migration.context)
       return unless tool_contexts.present?
 
-      tools = ContextExternalTool.active.polymorphic_where(:context => tool_contexts)
+      tools = ContextExternalTool.active.where(context: tool_contexts)
 
       tools.each do |tool|
         # check if tool is compatible
-        next unless self.matching_settings?(hash, tool, settings, true)
+        next unless matching_settings?(migration, hash, tool, settings, true)
 
         if tool.url.blank? && tool.domain.present?
           if domain && domain == tool.domain
@@ -195,24 +206,25 @@ module Importers
 
     def self.generalize_tool_name(tool)
       if tool.domain
-        tool.name = CanvasTextHelper.truncate_text(tool.domain, :max_length => 100)
+        tool.name = CanvasTextHelper.truncate_text(tool.domain, max_length: 100)
         tool.description = "A combined configuration for all tools with the domain: #{tool.domain}"
         tool.save! if tool.changed?
       end
     end
 
-    def self.matching_settings?(hash, tool, settings, preexisting_tool=false)
+    def self.matching_settings?(migration, hash, tool, settings, preexisting_tool = false)
       return if hash[:privacy_level] && tool.privacy_level != hash[:privacy_level]
+      return if migration.migration_type == "canvas_cartridge_importer" && hash[:title] && tool.name != hash[:title]
 
-      if preexisting_tool
+      if preexisting_tool && (((hash[:consumer_key] || "fake") == "fake") && ((hash[:shared_secret] || "fake") == "fake"))
         # we're matching to existing tools; go with their config if we don't have a real one
-        ignore_key_check = true if ((hash[:consumer_key] || 'fake') == 'fake') && ((hash[:shared_secret] || 'fake') == 'fake')
+        ignore_key_check = true
       end
-      return unless ignore_key_check || (tool.consumer_key == (hash[:consumer_key] || 'fake') && tool.shared_secret == (hash[:shared_secret] || 'fake'))
+      return unless ignore_key_check || (tool.consumer_key == (hash[:consumer_key] || "fake") && tool.shared_secret == (hash[:shared_secret] || "fake"))
 
       tool_settings = tool.settings.with_indifferent_access.except(:custom_fields, :vendor_extensions)
       if preexisting_tool
-        settings.all? {|k, v| tool_settings[k].presence == v.presence }
+        settings.all? { |k, v| tool_settings[k].presence == v.presence }
       else
         settings == tool_settings
       end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -15,7 +17,6 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-require 'spec_helper'
 
 describe DataFixup::BackfillDevKeyAccountBindingsForDeletedKeys do
   describe "#run" do
@@ -37,9 +38,7 @@ describe DataFixup::BackfillDevKeyAccountBindingsForDeletedKeys do
 
       # Verify
       expect(key.developer_key_account_bindings.count).to eq(1)
-      expect(
-        key.developer_key_account_bindings.first.workflow_state
-      ).to eq(DeveloperKeyAccountBinding::OFF_STATE)
+      expect(key.developer_key_account_bindings.first).to be_off
     end
 
     it "backfills when no binding is present for inactive key" do
@@ -56,9 +55,7 @@ describe DataFixup::BackfillDevKeyAccountBindingsForDeletedKeys do
 
       # Verify
       expect(key.developer_key_account_bindings.count).to eq(1)
-      expect(
-        key.developer_key_account_bindings.first.workflow_state
-      ).to eq(DeveloperKeyAccountBinding::OFF_STATE)
+      expect(key.developer_key_account_bindings.first).to be_off
     end
 
     it "does not backfill when no binding is present for an active key" do

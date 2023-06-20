@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -19,7 +21,7 @@ class ClearNewGradebookHistoryFeatureFlags < ActiveRecord::Migration[5.0]
   tag :postdeploy
 
   def self.up
-    DataFixup::ClearFeatureFlags.run_async('new_gradebook_history')
+    DataFixup::ClearFeatureFlags.run_async("new_gradebook_history")
   end
 
   def self.down

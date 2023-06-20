@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -96,7 +98,6 @@
 #     }
 #
 class ProgressController < ApplicationController
-
   include Api::V1::Progress
 
   # @API Query progress
@@ -106,7 +107,22 @@ class ProgressController < ApplicationController
   def show
     progress = Progress.find(params[:id])
     if authorized_action(progress.context, @current_user, :read)
-      render :json => progress_json(progress, @current_user, session)
+      render json: progress_json(progress, @current_user, session)
+    end
+  end
+
+  # @API Cancel progress
+  # Cancel an asynchronous job associated with a Progress object
+  # If you include "message" in the POSTed data, it will be set on
+  # the Progress and returned. This is handy to distinguish between
+  # cancel and fail for a workflow_state of "failed".
+  #
+  # @returns Progress
+  def cancel
+    progress = Progress.find(params[:id])
+    if authorized_action(progress, @current_user, :cancel)
+      progress.update!(workflow_state: "failed", message: params[:message])
+      render json: progress_json(progress, @current_user, session)
     end
   end
 end

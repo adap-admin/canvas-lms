@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,22 +18,25 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper.rb')
-
 describe DelayedNotification do
-  describe '#process' do
+  describe "#process" do
     let(:group_user) { user_with_communication_channel(active_all: true) }
     let(:group_membership) { group_with_user(user: group_user, active_all: true) }
     let(:notification) { Notification.create!(name: "New Context Group Membership", category: "Registration") }
 
-    it 'processes notifications' do
+    it "processes notifications" do
       to_list = ["user_#{group_user.id}"]
       messages = DelayedNotification.process(group_membership, notification, to_list, nil)
 
       expect(messages.size).to eq 1
       messages.first.user == group_user
     end
- end
 
+    it "processes a notification to lots of users" do
+      to_list = Array.new(10) { "user_#{user_with_communication_channel(active_all: true).id}" }
+      messages = DelayedNotification.process(group_membership, notification, to_list, nil)
+
+      expect(messages.size).to eq 10
+    end
+  end
 end
-

@@ -16,20 +16,28 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Backbone from 'Backbone'
-import Quiz from 'compiled/models/Quiz'
-import QuizCollection from 'compiled/collections/QuizCollection'
-import QuizItemGroupView from 'compiled/views/quizzes/QuizItemGroupView'
+import Quiz from '@canvas/quizzes/backbone/models/Quiz'
+import QuizCollection from 'ui/features/quizzes_index/backbone/collections/QuizCollection'
+import QuizItemGroupView from 'ui/features/quizzes_index/backbone/views/QuizItemGroupView'
 import $ from 'jquery'
 import fakeENV from 'helpers/fakeENV'
 import assertions from 'helpers/assertions'
 import 'helpers/jquery.simulate'
 
-const fixtures = $('#fixtures')
-
-const createView = function(collection) {
+const createView = function (collection) {
   if (collection == null) {
-    collection = new QuizCollection([{id: 1, title: 'Foo'}, {id: 2, title: 'Bar'}])
+    collection = new QuizCollection([
+      {
+        id: 1,
+        title: 'Foo',
+        permissions: {delete: true},
+      },
+      {
+        id: 2,
+        title: 'Bar',
+        permissions: {delete: true},
+      },
+    ])
   }
   const view = new QuizItemGroupView({collection, listId: 'assignment-quizzes'})
   view.$el.appendTo($('#fixtures'))
@@ -42,85 +50,83 @@ QUnit.module('QuizItemGroupView', {
   },
   teardown() {
     fakeENV.teardown()
-  }
+  },
 })
 
-test('it should be accessible', function(assert) {
-  const view = new createView()
+// eslint-disable-next-line qunit/resolve-async
+test('it should be accessible', assert => {
+  const view = createView()
   const done = assert.async()
   return assertions.isAccessible(view, done, {a11yReport: true})
 })
 
-test('#isEmpty is false if any items arent hidden', function() {
-  const view = new createView()
+test('#isEmpty is false if any items arent hidden', () => {
+  const view = createView()
   ok(!view.isEmpty())
 })
 
-test('#isEmpty is true if collection is empty', function() {
+test('#isEmpty is true if collection is empty', () => {
   const collection = new QuizCollection([])
-  const view = new createView(collection)
-  ok(view.isEmpty())
-})
-
-test('#isEmpty is true if all items are hidden', function() {
-  const collection = new QuizCollection([{id: 1, hidden: true}, {id: 2, hidden: true}])
-  const view = new createView(collection)
-  ok(view.isEmpty())
-})
-
-test('should filter models with title that doesnt match term', function() {
-  const collection = new QuizCollection([{id: 1}, {id: 2}])
   const view = createView(collection)
+  ok(view.isEmpty())
+})
+
+test('#isEmpty is true if all items are hidden', () => {
+  const collection = new QuizCollection([
+    {id: 1, hidden: true},
+    {id: 2, hidden: true},
+  ])
+  const view = createView(collection)
+  ok(view.isEmpty())
+})
+
+test('should filter models with title that doesnt match term', () => {
+  const view = createView()
   const model = new Quiz({title: 'Foo Name'})
 
   ok(view.filter(model, 'name'))
   ok(!view.filter(model, 'zzz'))
 })
 
-test('should not use regexp to filter models', function() {
-  const collection = new QuizCollection([{id: 1}, {id: 2}])
-  const view = createView(collection)
+test('should not use regexp to filter models', () => {
+  const view = createView()
   const model = new Quiz({title: 'Foo Name'})
 
   ok(!view.filter(model, '.*name'))
   ok(!view.filter(model, 'zzz'))
 })
 
-test('should filter models with multiple terms', function() {
-  const collection = new QuizCollection([{id: 1}, {id: 2}])
-  const view = createView(collection)
+test('should filter models with multiple terms', () => {
+  const view = createView()
   const model = new Quiz({title: 'Foo Name bar'})
 
   ok(view.filter(model, 'name bar'))
   ok(!view.filter(model, 'zzz'))
 })
 
-test('should rerender on filter change', function() {
-  const collection = new QuizCollection([{id: 1, title: 'hey'}, {id: 2, title: 'foo'}])
-  const view = createView(collection)
-  equal(view.$el.find('.collectionViewItems li').length, 2)
+test('should rerender on filter change', () => {
+  const view = createView()
+  equal(view.$el.find('.collectionViewItems li.quiz').length, 2)
 
-  view.filterResults('hey')
-  equal(view.$el.find('.collectionViewItems li').length, 1)
+  view.filterResults('foo')
+  equal(view.$el.find('.collectionViewItems li.quiz').length, 1)
 })
 
-test('should not render no content message if quizzes are available', function() {
-  const collection = new QuizCollection([{id: 1}, {id: 2}])
-  const view = createView(collection)
-  equal(view.$el.find('.collectionViewItems li').length, 2)
+test('should not render no content message if quizzes are available', () => {
+  const view = createView()
+  equal(view.$el.find('.collectionViewItems li.quiz').length, 2)
   ok(!view.$el.find('.no_content').is(':visible'))
 })
 
-test('should render no content message if no quizzes available', function() {
+test('should render no content message if no quizzes available', () => {
   const collection = new QuizCollection([])
   const view = createView(collection)
-  equal(view.$el.find('.collectionViewItems li').length, 0)
+  equal(view.$el.find('.collectionViewItems li.quiz').length, 0)
   ok(view.$el.find('.no_content').is(':visible'))
 })
 
-test('clicking the header should toggle arrow state', function() {
-  const collection = new QuizCollection([{id: 1}, {id: 2}])
-  const view = createView(collection)
+test('clicking the header should toggle arrow state', () => {
+  const view = createView()
 
   ok(view.$('.element_toggler i').hasClass('icon-mini-arrow-down'))
   ok(!view.$('.element_toggler i').hasClass('icon-mini-arrow-right'))

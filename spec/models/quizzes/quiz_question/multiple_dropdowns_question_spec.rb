@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -15,14 +17,11 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require File.expand_path(File.dirname(__FILE__) + '/../../../spec_helper.rb')
-
 describe Quizzes::QuizQuestion::MultipleDropdownsQuestion do
-
   let(:question_data) do
     {
-      :id => "1",
-      :answers => [{:id => 2, :blank_id => "test_group", :wieght => 100}]
+      id: "1",
+      answers: [{ id: 2, blank_id: "test_group", wieght: 100 }]
     }
   end
 
@@ -37,24 +36,24 @@ describe Quizzes::QuizQuestion::MultipleDropdownsQuestion do
   end
 
   describe "#find_chosen_answer" do
-    it 'detects answers when answer id is an integer' do
-      answer = question.find_chosen_answer('test_group', '2')
+    it "detects answers when answer id is an integer" do
+      answer = question.find_chosen_answer("test_group", "2")
       expect(answer[:id]).to eq question_data[:answers][0][:id]
       expect(answer[:blank_id]).to eq question_data[:answers][0][:blank_id]
     end
 
-    it 'detects answers when answer id is a string' do
+    it "detects answers when answer id is a string" do
       question_data[:answers][0][:id] = "3"
       question = Quizzes::QuizQuestion::MultipleDropdownsQuestion.new(question_data)
-      answer = question.find_chosen_answer('test_group', '3')
+      answer = question.find_chosen_answer("test_group", "3")
       expect(answer[:id]).to eq question_data[:answers][0][:id]
       expect(answer[:blank_id]).to eq question_data[:answers][0][:blank_id]
     end
 
-    it 'returns nil values when answer not detected' do
-      answer = question.find_chosen_answer('test_group', '0')
-      expect(answer[:id]).to be nil
-      expect(answer[:blank_id]).to be nil
+    it "returns nil values when answer not detected" do
+      answer = question.find_chosen_answer("test_group", "0")
+      expect(answer[:id]).to be_nil
+      expect(answer[:blank_id]).to be_nil
     end
   end
 end

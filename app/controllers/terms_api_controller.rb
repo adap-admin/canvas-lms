@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -67,6 +69,25 @@
 #           "description": "Term date overrides for specific enrollment types",
 #           "example": {"StudentEnrollment": {"start_at": "2014-01-07T08:00:00-05:00", "end_at": "2014-05-14T05:00:00-04:0"}},
 #           "type": "object"
+#         },
+#         "course_count": {
+#           "description": "The number of courses in the term (available via include)",
+#           "example": "80",
+#           "type": "integer"
+#         }
+#       }
+#     }
+#
+# @model EnrollmentTermsList
+#     {
+#       "id": "EnrollmentTermsList",
+#       "description": "",
+#       "properties": {
+#         "enrollment_terms": {
+#           "description": "a paginated list of all terms in the account",
+#           "type": "array",
+#           "example": [],
+#           "items": { "$ref": "EnrollmentTerm" }
 #         }
 #       }
 #     }
@@ -78,7 +99,7 @@ class TermsApiController < ApplicationController
 
   # @API List enrollment terms
   #
-  # A paginated list of all of the terms in the account.
+  # An object with a paginated list of all of the terms in the account.
   #
   # @argument workflow_state[] [String, "active"|"deleted"|"all"]
   #   If set, only returns terms that are in the given state.
@@ -88,6 +109,7 @@ class TermsApiController < ApplicationController
   #   Array of additional information to include.
   #
   #   "overrides":: term start/end dates overridden for different enrollment types
+  #   "course_count":: the number of courses in each term
   #
   # @example_request
   #   curl -H 'Authorization: Bearer <token>' \
@@ -119,13 +141,13 @@ class TermsApiController < ApplicationController
   #     ]
   #   }
   #
-  # @returns [EnrollmentTerm]
+  # @returns EnrollmentTermsList
   def index
-    terms = @context.enrollment_terms.order('start_at DESC, end_at DESC, id ASC')
+    terms = @context.enrollment_terms.order("start_at DESC, end_at DESC, id ASC")
 
-    state = Array(params[:workflow_state])&['all', 'active', 'deleted']
-    state = 'active' if state == []
-    state = nil if Array(state).include?('all')
+    state = Array(params[:workflow_state]) & %w[all active deleted]
+    state = "active" if state == []
+    state = nil if Array(state).include?("all")
     terms = terms.where(workflow_state: state) if state.present?
 
     terms = Api.paginate(terms, self, api_v1_enrollment_terms_url)
@@ -143,15 +165,15 @@ class TermsApiController < ApplicationController
   # @returns EnrollmentTerm
   def show
     term = api_find(@context.enrollment_terms, params[:id])
-    render json: enrollment_term_json(term, @current_user, session, nil, %w{overrides})
+    render json: enrollment_term_json(term, @current_user, session, nil, %w[course_count overrides])
   end
 
   protected
 
   def require_root_account
     unless @context.root_account?
-      render json: {message: 'Terms only belong to root_accounts.'}, status: :bad_request
-      return false
+      render json: { message: "Terms only belong to root_accounts." }, status: :bad_request
+      false
     end
   end
 

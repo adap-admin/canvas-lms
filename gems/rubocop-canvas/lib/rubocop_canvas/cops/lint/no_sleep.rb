@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -22,10 +24,10 @@ module RuboCop
         include RuboCop::Cop::FileMeta
 
         CONTROLLER_MSG = "Avoid using sleep, as it will tie up this process."
-        SPEC_MSG = "Avoid using sleep. Depending on what you are trying to do,"\
-                   " you should instead consider: Timecop,"\
-                   " vanilla `f` calls (since they wait),"\
-                   " the `become` matcher, `wait_for_ajaximations`, or `keep_trying_until`."
+        SPEC_MSG = "Avoid using sleep. Depending on what you are trying to do, " \
+                   "you should instead consider: Timecop, " \
+                   "vanilla `f` calls (since they wait), " \
+                   "the `become` matcher, `wait_for_ajaximations`, or `keep_trying_until`."
         OTHER_MSG = "Avoid using sleep."
 
         METHOD = :sleep

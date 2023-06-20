@@ -18,12 +18,12 @@
 
 import React from 'react'
 import $ from 'jquery'
-import { Provider } from 'react-redux'
+import {Provider} from 'react-redux'
 import * as enzyme from 'enzyme'
 import moxios from 'moxios'
 
-import {ConnectedCourseSidebar} from 'jsx/blueprint_courses/components/CourseSidebar'
-import MigrationStates from 'jsx/blueprint_courses/migrationStates'
+import {ConnectedCourseSidebar} from 'ui/features/blueprint_course_master/react/components/CourseSidebar'
+import MigrationStates from '@canvas/blueprint-courses/react/migrationStates'
 import getSampleData from '../getSampleData'
 import mockStore from '../mockStore'
 
@@ -41,11 +41,13 @@ const initialState = {
 }
 
 const defaultProps = () => ({
-  contentRef: (cr) => { sidebarContentRef = cr },
+  contentRef: cr => {
+    sidebarContentRef = cr
+  },
   routeTo: () => {},
 })
 
-function connect (props = defaultProps(), storeState = initialState) {
+function connect(props = defaultProps(), storeState = initialState) {
   return (
     <Provider store={mockStore(storeState)}>
       <ConnectedCourseSidebar {...props} />
@@ -54,7 +56,7 @@ function connect (props = defaultProps(), storeState = initialState) {
 }
 
 QUnit.module('Course Sidebar component', {
-  setup () {
+  setup() {
     clock = sinon.useFakeTimers()
     const appElement = document.createElement('div')
     appElement.id = 'application'
@@ -66,17 +68,17 @@ QUnit.module('Course Sidebar component', {
       response: [{id: '1'}],
     })
   },
-  teardown () {
+  teardown() {
     moxios.uninstall()
     document.getElementById('fixtures').innerHTML = ''
     clock.restore()
-  }
+  },
 })
 
 test('renders the closed CourseSidebar component', () => {
   const tree = enzyme.mount(connect())
   const node = tree.find('button')
-  equal(node.text().trim(), 'Open sidebar')
+  equal(node.text().trim(), 'Open Blueprint Sidebar')
   tree.unmount()
 })
 
@@ -91,7 +93,11 @@ test('renders the open CourseSidebar component', () => {
 
   // associations
   ok(rows.eq(0).find('button#mcSidebarAsscBtn').size(), 'Associations button')
-  equal(rows.eq(0).text().trim(), `Associations${initialState.existingAssociations.length}`, 'Associations count')
+  equal(
+    rows.eq(0).text().trim(),
+    `Associations${initialState.existingAssociations.length}`,
+    'Associations count'
+  )
 
   // sync history
   ok(rows.eq(1).find('button#mcSyncHistoryBtn').size(), 'sync history button')

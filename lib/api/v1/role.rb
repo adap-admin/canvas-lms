@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -20,23 +22,28 @@ module Api::V1::Role
   include Api::V1::Json
   include Api::V1::Account
 
-  def role_json(account, role, current_user, session, opts={})
+  def role_json(account, role, current_user, session, skip_permissions: false, preloaded_overrides: nil)
     json = {
-      :id => role.id,
-      :role => role.name,
-      :label => role.label,
-      :last_updated_at => role.updated_at,
-      :base_role_type => (role.built_in? && role.account_role?) ? Role::DEFAULT_ACCOUNT_TYPE : role.base_role_type,
-      :workflow_state => role.workflow_state,
-      :created_at => role.created_at.iso8601,
-      :permissions => {}
+      id: role.id,
+      role: role.name,
+      label: role.label,
+      last_updated_at: role.updated_at,
+      base_role_type: (role.built_in? && role.account_role?) ? Role::DEFAULT_ACCOUNT_TYPE : role.base_role_type,
+      workflow_state: role.workflow_state,
+      created_at: role.created_at&.iso8601,
+      permissions: {},
+      is_account_role: role.account_role?
     }
 
     json[:account] = account_json(role.account, current_user, session, []) if role.account_id
 
-    RoleOverride.manageable_permissions(account).keys.each do |permission|
-      perm = RoleOverride.permission_for(account, permission, role, account)
+    return json if skip_permissions
+
+    preloaded_overrides ||= RoleOverride.preload_overrides(account, [role])
+    RoleOverride.manageable_permissions(account).each_key do |permission|
+      perm = RoleOverride.permission_for(account, permission, role, account, true, preloaded_overrides:)
       next if permission == :manage_developer_keys && !account.root_account?
+
       json[:permissions][permission] = permission_json(perm, current_user, session) if perm[:account_allows]
     end
 
@@ -44,7 +51,7 @@ module Api::V1::Role
   end
 
   def permission_json(permission, _current_user, _session)
-    permission = permission.dup
+    permission = permission.slice(:enabled, :locked, :readonly, :explicit, :prior_default, :group)
 
     if permission[:enabled]
       permission[:applies_to_self] = permission[:enabled].include?(:self)
@@ -53,7 +60,6 @@ module Api::V1::Role
     permission[:enabled] = !!permission[:enabled]
     permission[:prior_default] = !!permission[:prior_default]
     permission.delete(:prior_default) unless permission[:explicit]
-    permission.slice(:enabled, :locked, :readonly, :explicit, :prior_default,
-                     :applies_to_descendants, :applies_to_self)
+    permission
   end
 end

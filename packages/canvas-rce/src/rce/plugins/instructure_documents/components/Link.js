@@ -18,44 +18,53 @@
 
 import React, {useState} from 'react'
 import {func, instanceOf, shape} from 'prop-types'
-import {fileShape} from './propTypes'
+import {fileOrMediaObjectShape} from '../../shared/fileShape'
 import classnames from 'classnames'
 
-import {StyleSheet, css} from "aphrodite";
-import {AccessibleContent} from '@instructure/ui-a11y'
-import {Flex, View} from '@instructure/ui-layout'
-import {Text} from '@instructure/ui-elements'
-import {
-  IconDragHandleLine,
-  IconPublishSolid,
-  IconUnpublishedSolid
-} from '@instructure/ui-icons'
+import {AccessibleContent} from '@instructure/ui-a11y-content'
+import {Flex} from '@instructure/ui-flex'
+import {View} from '@instructure/ui-view'
+import {Text} from '@instructure/ui-text'
+import {IconDragHandleLine, IconPublishSolid, IconUnpublishedSolid} from '@instructure/ui-icons'
 
-import formatMessage from '../../../../format-message';
-import {renderLink as renderLinkHtml} from "../../../contentRendering";
-import dragHtml from "../../../../sidebar/dragHtml";
+import formatMessage from '../../../../format-message'
+import {renderLink as renderLinkHtml} from '../../../contentRendering'
+import dragHtml from '../../../../sidebar/dragHtml'
 import {getIconFromType} from '../../shared/fileTypeUtils'
 import {isPreviewable} from '../../shared/Previewable'
+import {applyTimezoneOffsetToDate} from '../../shared/dateUtils'
+import RCEGlobals from '../../../RCEGlobals'
 
 export default function Link(props) {
   const [isHovering, setIsHovering] = useState(false)
-  const {filename, display_name, content_type, published, date} = props
+  const {filename, display_name, title, content_type, published, date, disabled, disabledMessage} =
+    props
   const Icon = getIconFromType(content_type)
   const color = published ? 'success' : 'primary'
-  const dateString = formatMessage.date(Date.parse(date), 'long')
+  // Uses user locale and timezone
+  const configuredTimezone = RCEGlobals.getConfig()?.timezone
+  const dateString = formatMessage.date(applyTimezoneOffsetToDate(date, configuredTimezone), 'long')
   const publishedMsg = published ? formatMessage('published') : formatMessage('unpublished')
 
   function linkAttrsFromDoc() {
     const canPreview = isPreviewable(props.content_type)
     const clazz = classnames('instructure_file_link', {
-      instructure_scribd_file: canPreview
+      instructure_scribd_file: canPreview,
+      inline_disabled: true,
     })
 
     const attrs = {
+      id: props.id,
       href: props.href,
       target: '_blank',
       class: clazz,
-      text: props.display_name || props.filename // because onClick only takes a single object
+      text: props.display_name || props.filename, // because onClick only takes a single object
+      content_type: props.content_type, // files have this
+      // media_objects have these
+      title: props.title,
+      type: props.type,
+      embedded_iframe_url: props.embedded_iframe_url,
+      media_entry_id: props.media_entry_id,
     }
     if (canPreview) {
       attrs['data-canvas-previewable'] = true
@@ -64,8 +73,8 @@ export default function Link(props) {
   }
 
   function handleLinkClick(e) {
-    e.preventDefault();
-    props.onClick(linkAttrsFromDoc());
+    e.preventDefault()
+    props.onClick(linkAttrsFromDoc())
   }
 
   function handleLinkKey(e) {
@@ -77,10 +86,10 @@ export default function Link(props) {
 
   function handleDragStart(e) {
     const linkAttrs = linkAttrsFromDoc()
-    dragHtml(e, renderLinkHtml(linkAttrs, linkAttrs.text));
+    dragHtml(e, renderLinkHtml(linkAttrs, linkAttrs.text))
   }
 
-  function handleDragEnd(e) {
+  function handleDragEnd(_e) {
     document.body.click()
   }
 
@@ -88,55 +97,97 @@ export default function Link(props) {
     setIsHovering(e.type === 'mouseenter')
   }
 
+  function buildCallback(callback) {
+    if (disabled) return
+
+    return callback
+  }
+
+  function dateOrMessage(str) {
+    if (disabled && disabledMessage) {
+      return (
+        <View display="block">
+          <span style={textStyles()}>
+            <Text fontStyle="italic">{disabledMessage}</Text>
+          </span>
+        </View>
+      )
+    }
+
+    if (str) {
+      return <View as="div">{str}</View>
+    }
+  }
+
+  function textStyles() {
+    if (disabled) return {color: 'gray'}
+
+    return {}
+  }
+
   let elementRef = null
   if (props.focusRef) {
-    elementRef = ref => props.focusRef.current = ref
+    elementRef = ref => (props.focusRef.current = ref)
   }
 
   return (
     <div
       data-testid="instructure_links-Link"
-      draggable
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-      onMouseEnter={handleHover}
-      onMouseLeave={handleHover}
+      draggable={true}
+      onDragStart={buildCallback(handleDragStart)}
+      onDragEnd={buildCallback(handleDragEnd)}
+      onMouseEnter={buildCallback(handleHover)}
+      onMouseLeave={buildCallback(handleHover)}
       style={{position: 'relative'}}
     >
       <View
-        className={css(styles.link)}
         as="div"
         role="button"
+        position="relative"
+        focusPosition="inset"
+        focusColor="info"
         tabIndex="0"
         aria-describedby={props.describedByID}
         elementRef={elementRef}
-        background="default"
+        background="primary"
         borderWidth="0 0 small 0"
         padding="x-small"
         width="100%"
-        onClick={handleLinkClick}
-        onKeyDown={handleLinkKey}
+        onClick={buildCallback(handleLinkClick)}
+        onKeyDown={buildCallback(handleLinkKey)}
+        aria-disabled={disabled}
       >
         <div style={{pointerEvents: 'none'}}>
           <Flex>
             <Flex.Item margin="0 xx-small 0 0" size="1.125rem">
               {isHovering ? <IconDragHandleLine size="x-small" inline={false} /> : null}
             </Flex.Item>
-            <Flex.Item grow shrink>
+            <Flex.Item shouldGrow={true} shouldShrink={true}>
               <Flex>
                 <Flex.Item padding="0 x-small 0 0">
                   <Text color={color}>
-                    <Icon size="x-small"/>
+                    <Icon size="x-small" />
                   </Text>
                 </Flex.Item>
-                <Flex.Item padding="0 x-small 0 0" grow shrink textAlign="start">
-                  <View as="div" margin="0">{display_name || filename}</View>
-                  {dateString ? (<View as="div">{dateString}</View>) : null}
+                <Flex.Item
+                  padding="0 x-small 0 0"
+                  shouldGrow={true}
+                  shouldShrink={true}
+                  textAlign="start"
+                >
+                  <View as="div" margin="0">
+                    <span style={textStyles()}>{display_name || title || filename}</span>
+                  </View>
+                  {dateOrMessage(dateString)}
                 </Flex.Item>
                 <Flex.Item>
                   <AccessibleContent alt={publishedMsg}>
                     <Text color={color}>
-                      {published ? <IconPublishSolid inline={false} /> : <IconUnpublishedSolid inline={false} />}
+                      {published ? (
+                        <IconPublishSolid inline={false} />
+                      ) : (
+                        <IconUnpublishedSolid inline={false} />
+                      )}
                     </Text>
                   </AccessibleContent>
                 </Flex.Item>
@@ -151,20 +202,12 @@ export default function Link(props) {
 
 Link.propTypes = {
   focusRef: shape({
-    current: instanceOf(Element)
+    current: instanceOf(Element),
   }),
-  ...fileShape,
+  ...fileOrMediaObjectShape,
   onClick: func.isRequired,
 }
 
 Link.defaultProps = {
-  focusRef: null
+  focusRef: null,
 }
-
-const styles = StyleSheet.create({
-  link: {
-    ':focus': {
-      'outline-offset': '-4px'
-    }
-  }
-});

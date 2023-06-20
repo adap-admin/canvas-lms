@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -17,7 +19,7 @@
 
 module I18nTasks
   module HashExtensions
-    def flatten_keys(result={}, prefix='')
+    def flatten_keys(result = {}, prefix = "")
       each_pair do |k, v|
         if v.is_a?(Hash)
           v.flatten_keys(result, "#{prefix}#{k}.")
@@ -30,7 +32,7 @@ module I18nTasks
 
     def expand_keys(result = {})
       each_pair do |k, v|
-        parts = k.split('.')
+        parts = k.split(".")
         last = parts.pop
         parts.inject(result) { |h, k2| h[k2] ||= {} }[last] = v
       end
@@ -38,13 +40,12 @@ module I18nTasks
     end
 
     def to_ordered
-      keys.sort_by(&:to_s).inject ActiveSupport::OrderedHash.new do |h, k|
+      keys.sort_by(&:to_s).each_with_object ActiveSupport::OrderedHash.new do |k, h|
         v = fetch(k)
         h[k] = v.is_a?(Hash) ? v.to_ordered : v
-        h
       end
     end
 
-    Hash.send(:include, HashExtensions)
+    Hash.include HashExtensions
   end
 end

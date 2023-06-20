@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -17,10 +19,7 @@
 
 module CC::Exporter::WebZip
   class Exporter < CC::Exporter::Epub::Exporter
-
     # override epub exporter templates
-    def templates
-
-    end
+    def templates; end
   end
 end

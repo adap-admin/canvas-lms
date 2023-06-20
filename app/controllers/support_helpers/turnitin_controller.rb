@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -39,7 +41,7 @@ module SupportHelpers
       if params[:id]
         run_fixer(SupportHelpers::Tii::AssignmentFixer, params[:id].to_i)
       else
-        render plain: "Missing assignment `id` parameter", status: 400
+        render plain: "Missing assignment `id` parameter", status: :bad_request
       end
     end
 
@@ -53,18 +55,18 @@ module SupportHelpers
 
     def lti_attachment
       param_keys = %w[submission_id attachment_id]
-      if (params.keys & param_keys).present?
+      if params.keys.intersect?(param_keys)
         ids = param_keys.map do |key|
-          error = {text:"Missing `#{key}` parameter", status: 400}
-          render error and return unless params[key]
+          error = { text: "Missing `#{key}` parameter", status: 400 }
+          return render error unless params[key]
+
           params[key].to_i
         end
         run_fixer(SupportHelpers::Tii::LtiAttachmentFixer, *ids)
       else
-        error = {text:"Missing attachment_id and submission_id parameters", status: 400}
+        error = { text: "Missing attachment_id and submission_id parameters", status: 400 }
         render error and return
       end
     end
-
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,7 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'atom'
+require "atom"
 
 class ExternalFeedAggregator
   def self.process
@@ -28,14 +30,14 @@ class ExternalFeedAggregator
   end
 
   def process
-    Shackles.activate(:slave) do
+    GuardRail.activate(:secondary) do
       start = Time.now.utc
       loop do
         feeds = ExternalFeed.to_be_polled(start).limit(1000).preload(context: :root_account).to_a
         break if feeds.empty?
 
         feeds.each do |feed|
-          Shackles.activate(:master) do
+          GuardRail.activate(:primary) do
             if feed.inactive?
               feed.update_attribute(:refresh_at, inactive_wait_seconds.seconds.from_now)
               next
@@ -49,10 +51,11 @@ class ExternalFeedAggregator
 
   def parse_entries(feed, body)
     begin
-      require 'rss/1.0'
-      require 'rss/2.0'
+      require "rss/1.0"
+      require "rss/2.0"
       rss = RSS::Parser.parse(body, false)
       raise "Invalid rss feed" unless rss
+
       feed.title = rss.channel.title
       feed.save
       @logger.info("#{rss.items.length} rss items found")
@@ -61,7 +64,7 @@ class ExternalFeedAggregator
       return true
     rescue
       begin
-        require 'atom'
+        require "atom"
         atom = Atom::Feed.load_feed(body)
         feed.title = atom.title.to_s
         feed.save
@@ -70,38 +73,38 @@ class ExternalFeedAggregator
         @logger.info("#{entries.length} new entries added")
         return true
       rescue
+        nil
       end
     end
     false
   end
 
   def process_feed(feed)
-    begin
-      @logger.info("feed found: #{feed.url}")
-      @logger.info('requesting entries')
-      require 'net/http'
+    LiveEvents.set_context(Canvas::LiveEvents.amended_context(feed.context))
+    @logger.info("feed found: #{feed.url}")
+    @logger.info("requesting entries")
+    require "net/http"
 
-      response = CanvasHttp.get(feed.url)
-      case response
-      when Net::HTTPSuccess
-        success = parse_entries(feed, response.body)
-        @logger.info(success ? 'successful response' : '200 with no data returned')
-        feed.consecutive_failures = 0 if success
-        feed.update_attribute(:refresh_at, success_wait_seconds.seconds.from_now)
-      else
-        @logger.info("request failed #{response.class}")
-        handle_failure(feed)
-      end
-    rescue CanvasHttp::Error,
-      CanvasHttp::RelativeUriError,
-      CanvasHttp::InsecureUriError,
-      Timeout::Error,
-      SocketError,
-      SystemCallError => e
-
-      @logger.info("request error: #{e}")
+    response = CanvasHttp.get(feed.url)
+    case response
+    when Net::HTTPSuccess
+      success = parse_entries(feed, response.body)
+      @logger.info(success ? "successful response" : "200 with no data returned")
+      feed.consecutive_failures = 0 if success
+      feed.update_attribute(:refresh_at, success_wait_seconds.seconds.from_now)
+    else
+      @logger.info("request failed #{response.class}")
       handle_failure(feed)
     end
+  rescue CanvasHttp::Error,
+         CanvasHttp::RelativeUriError,
+         CanvasHttp::InsecureUriError,
+         Timeout::Error,
+         SocketError,
+         SystemCallError,
+         OpenSSL::SSL::SSLError => e
+    Canvas::Errors.capture_exception(:external_feed, e, :info)
+    handle_failure(feed)
   end
 
   def handle_failure(feed)
@@ -111,14 +114,14 @@ class ExternalFeedAggregator
   end
 
   def inactive_wait_seconds
-    Setting.get('external_feed_success_wait_seconds', 48.hours.to_s).to_f
+    Setting.get("external_feed_success_wait_seconds", 48.hours.to_s).to_f
   end
 
   def success_wait_seconds
-    Setting.get('external_feed_success_wait_seconds', 2.hours.to_s).to_f
+    Setting.get("external_feed_success_wait_seconds", 2.hours.to_s).to_f
   end
 
   def failure_wait_seconds
-    Setting.get('external_feed_failure_wait_seconds', 30.minutes.to_s).to_f
+    Setting.get("external_feed_failure_wait_seconds", 30.minutes.to_s).to_f
   end
 end

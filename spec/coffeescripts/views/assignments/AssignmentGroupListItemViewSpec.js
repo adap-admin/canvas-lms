@@ -16,26 +16,22 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Backbone from 'Backbone'
-import AssignmentGroupCollection from 'compiled/collections/AssignmentGroupCollection'
-import AssignmentGroup from 'compiled/models/AssignmentGroup'
-import Assignment from 'compiled/models/Assignment'
-import AssignmentGroupListItemView from 'compiled/views/assignments/AssignmentGroupListItemView'
-import AssignmentListItemView from 'compiled/views/assignments/AssignmentListItemView'
-import AssignmentGroupListView from 'compiled/views/assignments/AssignmentGroupListView'
+import Backbone from '@canvas/backbone'
+import AssignmentGroupCollection from '@canvas/assignments/backbone/collections/AssignmentGroupCollection'
+import AssignmentGroupListItemView from 'ui/features/assignment_index/backbone/views/AssignmentGroupListItemView'
+import AssignmentGroupListView from 'ui/features/assignment_index/backbone/views/AssignmentGroupListView'
 import $ from 'jquery'
 import fakeENV from 'helpers/fakeENV'
-import simulate from 'helpers/jquery.simulate'
-import elementToggler from 'compiled/behaviors/elementToggler'
+import elementToggler from '../../../../ui/boot/initializers/activateElementToggler'
 
-const assignment1 = function() {
+const assignment1 = function () {
   const date1 = {
     due_at: '2013-08-28T23:59:00-06:00',
-    title: 'Summer Session'
+    title: 'Summer Session',
   }
   const date2 = {
     due_at: '2013-08-28T23:59:00-06:00',
-    title: 'Winter Session'
+    title: 'Winter Session',
   }
 
   return buildAssignment({
@@ -45,7 +41,7 @@ const assignment1 = function() {
     due_at: '2013-08-21T23:59:00-06:00',
     points_possible: 2,
     position: 1,
-    all_dates: [date1, date2]
+    all_dates: [date1, date2],
   })
 }
 
@@ -55,7 +51,7 @@ const assignment2 = () =>
     name: 'Math Quiz',
     due_at: '2013-08-23T23:59:00-06:00',
     points_possible: 10,
-    position: 2
+    position: 2,
   })
 
 const assignment3 = () =>
@@ -63,10 +59,10 @@ const assignment3 = () =>
     id: 2,
     name: 'Science Quiz',
     points_possible: 5,
-    position: 3
+    position: 3,
   })
 
-var buildAssignment = function(options) {
+const buildAssignment = function (options) {
   if (options == null) {
     options = {}
   }
@@ -83,19 +79,17 @@ var buildAssignment = function(options) {
     html_url: `http://localhost:3000/courses/1/assignments/${options.id}`,
     needs_grading_count: 0,
     all_dates: [],
-    published: true
+    published: true,
   }
   return Object.assign(base, options)
 }
-
-const group1 = () => buildGroup()
 
 const group2 = () =>
   buildGroup({
     id: 2,
     name: 'Other Assignments',
     position: 2,
-    rules: {drop_lowest: 1, drop_highest: 2, never_drop: [3, 4]}
+    rules: {drop_lowest: 1, drop_highest: 2, never_drop: [3, 4]},
   }) // intentionally include an invalid assignment id
 
 const group3 = () =>
@@ -103,10 +97,10 @@ const group3 = () =>
     id: 3,
     name: 'Even more Assignments',
     position: 3,
-    rules: {drop_lowest: 1, drop_highest: 1}
+    rules: {drop_lowest: 1, drop_highest: 1},
   })
 
-var buildGroup = function(options) {
+const buildGroup = function (options) {
   if (options == null) {
     options = {}
   }
@@ -118,12 +112,12 @@ var buildGroup = function(options) {
     position: 1,
     rules: {},
     group_weight: 1,
-    assignments
+    assignments,
   }
   return Object.assign(base, options)
 }
 
-const createAssignmentGroup = function(group) {
+const createAssignmentGroup = function (group) {
   if (group == null) {
     group = buildGroup()
   }
@@ -131,17 +125,21 @@ const createAssignmentGroup = function(group) {
   return groups.models[0]
 }
 
-const createView = function(model, options) {
+const createView = function (model, options) {
   options = {
     canManage: true,
-    ...options
+    ...options,
   }
-  ENV.PERMISSIONS = {manage: options.canManage}
+  ENV.PERMISSIONS = {
+    manage: options.canManage,
+    manage_assignments_add: options.canAdd || options.canManage,
+    manage_assignments_delete: options.canDelete || options.canManage,
+  }
 
   const view = new AssignmentGroupListItemView({
     model,
     course: new Backbone.Model({id: 1}),
-    userIsAdmin: options.userIsAdmin
+    userIsAdmin: options.userIsAdmin,
   })
   view.$el.appendTo($('#fixtures'))
   view.render()
@@ -149,19 +147,23 @@ const createView = function(model, options) {
   return view
 }
 
-const createCollectionView = function() {
+const createCollectionView = function (options) {
   const model = group3()
-  var options = {
+  options = {
     canManage: true,
-    ...options
+    ...options,
   }
-  ENV.PERMISSIONS = {manage: options.canManage}
+  ENV.PERMISSIONS = {
+    manage: options.canManage,
+    manage_assignments_add: options.canAdd || options.canManage,
+    manage_assignments_delete: options.canDelete || options.canManage,
+  }
   const groupCollection = new AssignmentGroupCollection([model])
   const assignmentGroupsView = new AssignmentGroupListView({
     collection: groupCollection,
     sortURL: 'http://localhost:3000/courses/1/assignments/',
     assignment_sort_base_url: 'http://localhost:3000/courses/1/assignments/',
-    course: new Backbone.Model({id: 1})
+    course: new Backbone.Model({id: 1}),
   })
   assignmentGroupsView.$el.appendTo($('#fixtures'))
   assignmentGroupsView.render()
@@ -206,7 +208,7 @@ QUnit.module('AssignmentGroupListItemView as a teacher', {
   setup() {
     fakeENV.setup({
       current_user_roles: ['teacher'],
-      URLS: {sort_url: 'test'}
+      URLS: {sort_url: 'test'},
     })
 
     this.model = createAssignmentGroup()
@@ -218,10 +220,10 @@ QUnit.module('AssignmentGroupListItemView as a teacher', {
     fakeENV.teardown()
     $('#fixtures').empty()
     return $('form.dialogFormView').remove()
-  }
+  },
 })
 
-test('initializes collection', function() {
+test('initializes collection', function () {
   const view = createView(this.model)
   ok(view.collection)
 })
@@ -230,14 +232,11 @@ test('drags icon not being overridden on drag', () => {
   const view = createCollectionView()
   const assignmentGroups = {item: view.$el.find('.search_show')}
   view.$el.find('#assignment_1').trigger('sortstart', assignmentGroups)
-  const dragHandle = view
-    .$('#assignment_1')
-    .find('i')
-    .attr('class')
+  const dragHandle = view.$('#assignment_1').find('i').attr('class')
   equal(dragHandle, 'icon-drag-handle')
 })
 
-test('does not parse response with multiple due dates', function() {
+test('does not parse response with multiple due dates', function () {
   const {models} = this.model.get('assignments')
   const a1 = models[0]
   const a2 = models[1]
@@ -256,41 +255,41 @@ test('does not parse response with multiple due dates', function() {
   ok(!a2.doNotParse.called)
 })
 
-test('initializes child views if can manage', function() {
+test('initializes child views if can manage', function () {
   const view = createView(this.model)
   ok(view.editGroupView)
   ok(view.createAssignmentView)
   ok(view.deleteGroupView)
 })
 
-test('initializes editGroupView with userIsAdmin property', function() {
+test('initializes editGroupView with userIsAdmin property', function () {
   let view = createView(this.model, {userIsAdmin: true})
   ok(view.editGroupView.userIsAdmin)
   view = createView(this.model, {userIsAdmin: false})
   notOk(view.editGroupView.userIsAdmin)
 })
 
-test("initializes no child views if can't manage", function() {
+test("initializes no child views if can't manage", function () {
   const view = createView(this.model, {canManage: false})
   ok(!view.editGroupView)
   ok(!view.createAssignmentView)
   ok(!view.deleteGroupView)
 })
 
-test('initializes cache', function() {
+test('initializes cache', function () {
   const view = createView(this.model)
   ok(view.cache)
 })
 
-test('toJSON includes group weight', function() {
+test('toJSON includes group weight', function () {
   const view = createView(this.model)
   const json = view.toJSON()
   equal(json.groupWeight, 1)
 })
 
-test('shouldBeExpanded returns cache state', function() {
+test('shouldBeExpanded returns cache state', function () {
   const view = createView(this.model)
-  //make sure the cache starts at true
+  // make sure the cache starts at true
   if (!view.shouldBeExpanded()) {
     view.toggleCache()
   }
@@ -304,9 +303,9 @@ test('shouldBeExpanded returns cache state', function() {
   equal(localStorage[key], 'false')
 })
 
-test('toggleCache correctly toggles cache state', function() {
+test('toggleCache correctly toggles cache state', function () {
   const view = createView(this.model)
-  //make sure the cache starts at true
+  // make sure the cache starts at true
   if (!view.shouldBeExpanded()) {
     view.toggleCache()
   }
@@ -318,19 +317,21 @@ test('toggleCache correctly toggles cache state', function() {
   ok(view.shouldBeExpanded())
 })
 
-test('currentlyExpanded returns expanded state', function() {
+test('currentlyExpanded returns expanded state', function () {
   const view = createView(this.model)
-  //make sure the cache starts at true
+  // make sure the cache starts at true
   if (!view.shouldBeExpanded()) {
     view.toggleCache()
   }
   ok(view.currentlyExpanded())
 })
 
-test('toggleCollapse toggles expansion', function() {
+test('toggleCollapse toggles expansion', function () {
   const view = createView(this.model)
   const $toggle_el = view.$el.find('.element_toggler')
-  //make sure the cache starts at true
+  ok($toggle_el)
+
+  // make sure the cache starts at true
   if (!view.shouldBeExpanded()) {
     view.toggleCache()
   }
@@ -350,19 +351,19 @@ test('displayableRules', () => {
   equal(view.displayableRules().length, 3)
 })
 
-test('cacheKey builds unique key', function() {
+test('cacheKey builds unique key', function () {
   const view = createView(this.model)
   deepEqual(view.cacheKey(), ['course', 1, 'user', '1', 'ag', 1, 'expanded'])
 })
 
-test('disallows deleting groups with frozen assignments', function() {
+test('disallows deleting groups with frozen assignments', function () {
   const assignments = this.model.get('assignments')
   assignments.first().set('frozen', true)
   const view = createView(this.model)
   ok(view.$(`#assignment_group_${this.model.id} a.delete_group.disabled`).length)
 })
 
-test('disallows deleting groups with assignments due in closed grading periods', function() {
+test('disallows deleting groups with assignments due in closed grading periods', function () {
   this.model.set('any_assignment_in_closed_grading_period', true)
   const assignments = this.model.get('assignments')
   assignments.first().set('frozen', false)
@@ -370,26 +371,26 @@ test('disallows deleting groups with assignments due in closed grading periods',
   ok(view.$(`#assignment_group_${this.model.id} a.delete_group.disabled`).length)
 })
 
-test('allows deleting non-frozen groups without assignments due in closed grading periods', function() {
+test('allows deleting non-frozen groups without assignments due in closed grading periods', function () {
   this.model.set('any_assignment_in_closed_grading_period', false)
   const view = createView(this.model)
   ok(view.$(`#assignment_group_${this.model.id} a.delete_group:not(.disabled)`).length)
 })
 
-test('allows deleting frozen groups for admins', function() {
+test('allows deleting frozen groups for admins', function () {
   const assignments = this.model.get('assignments')
   assignments.first().set('frozen', true)
   const view = createView(this.model, {userIsAdmin: true})
   ok(view.$(`#assignment_group_${this.model.id} a.delete_group:not(.disabled)`).length)
 })
 
-test('allows deleting groups with assignments due in closed grading periods for admins', function() {
+test('allows deleting groups with assignments due in closed grading periods for admins', function () {
   this.model.set('any_assignment_in_closed_grading_period', true)
   const view = createView(this.model, {userIsAdmin: true})
   ok(view.$(`#assignment_group_${this.model.id} a.delete_group:not(.disabled)`).length)
 })
 
-test('does not provide a view to delete a group with assignments due in a closed grading period', function() {
+test('does not provide a view to delete a group with assignments due in a closed grading period', function () {
   this.model.set('any_assignment_in_closed_grading_period', true)
   const view = createView(this.model)
   ok(!view.deleteGroupView)
@@ -414,10 +415,10 @@ QUnit.module('AssignmentGroupListItemView as an admin', {
     $('form.dialogFormView').remove()
     $('#fixtures').empty()
     fakeENV.teardown()
-  }
+  },
 })
 
-test('provides a view to delete a group when canDelete is true', function() {
+test('provides a view to delete a group when canDelete is true', function () {
   sandbox.stub(this.model, 'canDelete').returns(true)
   this.model.set('any_assignment_in_closed_grading_period', true)
   const view = createView(this.model, {userIsAdmin: true})
@@ -425,7 +426,7 @@ test('provides a view to delete a group when canDelete is true', function() {
   notOk(view.$(`#assignment_group_${this.model.id} a.delete_group.disabled`).length)
 })
 
-test('provides a view to delete a group when canDelete is false', function() {
+test('provides a view to delete a group when canDelete is false', function () {
   sandbox.stub(this.model, 'canDelete').returns(false)
   this.model.set('any_assignment_in_closed_grading_period', true)
   const view = createView(this.model, {userIsAdmin: true})

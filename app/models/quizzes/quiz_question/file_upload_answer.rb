@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -19,12 +21,13 @@
 class Quizzes::QuizQuestion::FileUploadAnswer < Quizzes::QuizQuestion::UserAnswer
   def initialize(question_id, points_possible, answer_data)
     super(question_id, points_possible, answer_data)
-    self.answer_details = {:attachment_ids => attachment_ids}
+    self.answer_details = { attachment_ids: }
   end
 
   def attachment_ids
-    return nil unless data = @answer_data["question_#{question_id}".to_sym]
+    return nil unless (data = @answer_data["question_#{question_id}".to_sym])
+
     ids = data.select(&:present?)
-    ids.present? ? ids : nil
+    ids.presence
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -17,7 +19,8 @@
 #
 
 module Diigo
-  class Error < ::Exception; end
+  class Error < RuntimeError; end
+
   class TooManyRedirectsError < Diigo::Error; end
 
   class Connection
@@ -25,7 +28,7 @@ module Diigo
       "https://www.diigo.com/api/v2/bookmarks?key=#{CGI.escape(key)}&user=#{CGI.escape(service.service_user_name)}"
     end
 
-    def self.diigo_generate_request(url, method, user_name, password, form_data=nil)
+    def self.diigo_generate_request(url, method, user_name, password, form_data = nil)
       redirect_limit = 3
       loop do
         raise(TooManyRedirectsError) if redirect_limit <= 0
@@ -36,11 +39,11 @@ module Diigo
         path = url.path
         path += "?" + url.query if url.query
 
-        if method == 'GET'
-          request = Net::HTTP::Get.new(path)
-        else
-          request = Net::HTTP::Post.new(path)
-        end
+        request = if method == "GET"
+                    Net::HTTP::Get.new(path)
+                  else
+                    Net::HTTP::Post.new(path)
+                  end
         request.set_form_data(form_data) if form_data
         request.basic_auth user_name, password
         response = http.request(request)
@@ -49,7 +52,7 @@ module Diigo
         when Net::HTTPSuccess
           return response
         when Net::HTTPRedirection
-          url = response['Location']
+          url = response["Location"]
           redirect_limit -= 1
         else
           response.error!
@@ -58,18 +61,18 @@ module Diigo
     end
 
     def self.diigo_get_bookmarks(service)
-      response = diigo_generate_request(diigo_url(service), 'GET', service.service_user_name, service.decrypted_password)
+      response = diigo_generate_request(diigo_url(service), "GET", service.service_user_name, service.decrypted_password)
       ActiveSupport::JSON.decode(response.body)
     end
 
     def self.diigo_post_bookmark(service, url, title, desc, tags)
-      form_data = {:title => title, :url => url, :tags => tags.join(","), :desc => desc}
-      response = diigo_generate_request(diigo_url(service), 'POST', service.service_user_name, service.decrypted_password, form_data)
+      form_data = { title:, url:, tags: tags.join(","), desc: }
+      response = diigo_generate_request(diigo_url(service), "POST", service.service_user_name, service.decrypted_password, form_data)
       ActiveSupport::JSON.decode(response.body)
     end
 
-    def self.key(key=nil)
-      self.config['api_key']
+    def self.key
+      config["api_key"]
     end
 
     def self.config_check(settings)
@@ -78,14 +81,15 @@ module Diigo
     end
 
     def self.config=(config)
-      if !config.is_a?(Proc)
+      unless config.is_a?(Proc)
         raise "Config must be a Proc"
       end
+
       @config = config
     end
 
     def self.config
-      @config.call()
+      @config.call
     end
   end
 end

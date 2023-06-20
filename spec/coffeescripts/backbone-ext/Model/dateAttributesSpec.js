@@ -16,11 +16,11 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Model from 'compiled/backbone-ext/Model'
+import Model from '@canvas/backbone/Model'
 
 QUnit.module('dateAttributes')
 
-test('converts date strings to date objects', function() {
+test('converts date strings to date objects', function () {
   class TestModel extends Model {
     static initClass() {
       this.prototype.dateAttributes = ['foo', 'bar']
@@ -32,12 +32,12 @@ test('converts date strings to date objects', function() {
   const res = TestModel.prototype.parse({
     foo: stringDate,
     bar: null,
-    baz: stringDate
+    baz: stringDate,
   })
   const expected = {
     foo: parsedDate,
     bar: null,
-    baz: stringDate
+    baz: stringDate,
   }
   deepEqual(res, expected)
 })

@@ -1,18 +1,20 @@
+# frozen_string_literal: true
+
 namespace :canvas do
   namespace :quizzes do
-    desc 'Generate events from snapshots for submissions to a quiz.'
-    task :generate_events_from_snapshots, [ :quiz_id ] => :environment do |t, args|
+    desc "Generate events from snapshots for submissions to a quiz."
+    task :generate_events_from_snapshots, [:quiz_id] => :environment do |_t, args|
       quiz_id = Array(args[:quiz_id])
-      quiz_submission_ids = Quizzes::QuizSubmission.where(quiz_id: quiz_id)
+      quiz_submission_ids = Quizzes::QuizSubmission.where(quiz_id:)
 
       model = Quizzes::QuizSubmissionEvent
       parser = Quizzes::LogAuditing::SnapshotScraper.new
 
       model.transaction do
-        snapshots = Quizzes::QuizSubmissionSnapshot.
-          where(quiz_submission_id: quiz_submission_ids).
-          preload(:quiz_submission).
-          reject { |snapshot| snapshot.quiz_submission.nil? }
+        snapshots = Quizzes::QuizSubmissionSnapshot
+                    .where(quiz_submission_id: quiz_submission_ids)
+                    .preload(:quiz_submission)
+                    .reject { |snapshot| snapshot.quiz_submission.nil? }
 
         puts "Generating #{snapshots.length} events..."
         parser.events_from_snapshots(snapshots).map(&:save!)
@@ -21,27 +23,27 @@ namespace :canvas do
     end # task :generate_events_from_snapshots
 
     desc "Generate a JSON dump of events in a single quiz submission."
-    task :dump_events, [ :quiz_submission_id, :out ] => :environment do |t, args|
-      require 'json'
-      require 'benchmark'
+    task :dump_events, [:quiz_submission_id, :out] => :environment do |_t, args|
+      require "json"
+      require "benchmark"
 
-      unless out_path = args[:out]
+      unless (out_path = args[:out])
         raise "Missing path to output file."
       end
 
       events = nil
 
-      puts '*' * 80
-      puts '-' * 80
+      puts "*" * 80
+      puts "-" * 80
       puts "Extracting events from snapshots of quiz submission #{args[:quiz_submission_id]}..."
 
       elapsed = Benchmark.realtime do
         parser = Quizzes::LogAuditing::SnapshotScraper.new
         quiz_submission = Quizzes::QuizSubmission.find(args[:quiz_submission_id])
         snapshots = Quizzes::QuizSubmissionSnapshot.where({
-          quiz_submission_id: quiz_submission.id,
-          attempt: quiz_submission.attempt
-        })
+                                                            quiz_submission_id: quiz_submission.id,
+                                                            attempt: quiz_submission.attempt
+                                                          })
 
         events = parser.events_from_snapshots(snapshots)
       end
@@ -55,13 +57,13 @@ namespace :canvas do
       puts "\tBlob size: #{File.size(out_path)}b (#{(File.size(out_path) / 1000).round}K)"
       puts "\tBlob signature: #{Digest::MD5.hexdigest(File.read(out_path))}"
       puts "Done. Bye!"
-      puts '*' * 80
+      puts "*" * 80
     end
 
-    desc 'Create partition tables for the current and upcoming months.'
-    task :create_event_partitions => :environment do |t, args|
+    desc "Create partition tables for the current and upcoming months."
+    task create_event_partitions: :environment do
       Shard.with_each_shard do
-        Quizzes::QuizSubmissionEventPartitioner.logger = Logger.new(STDOUT)
+        Quizzes::QuizSubmissionEventPartitioner.logger = Logger.new($stdout)
         Quizzes::QuizSubmissionEventPartitioner.process
       end
     end

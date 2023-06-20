@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -15,21 +17,21 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require File.expand_path(File.dirname(__FILE__) + '/../common')
+require_relative "../common"
 
 describe "quizzes" do
   include_context "in-process server selenium tests"
 
   context "as an admin" do
-    it "should show unpublished quizzes to admins without management rights" do
+    it "shows unpublished quizzes to admins without management rights" do
       course_factory(active_all: true)
-      quiz = @course.quizzes.create!(:title => "quizz")
+      quiz = @course.quizzes.create!(title: "quizz")
       quiz.unpublish!
 
-      role = custom_account_role("other admin", :account => Account.default)
-      account_admin_user_with_role_changes(:role => role, :role_changes => {:read_course_content => true} )
+      role = custom_account_role("other admin", account: Account.default)
+      account_admin_user_with_role_changes(role:, role_changes: { read_course_content: true })
 
-      user_with_pseudonym(:user => @admin)
+      user_with_pseudonym(user: @admin)
       user_session(@admin)
 
       get "/courses/#{@course.id}/quizzes"

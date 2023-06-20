@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -183,10 +185,32 @@ class CourseAuditApiController < AuditorApiController
   # @returns [CourseEvent]
   #
   def for_course
-    @course = @domain_root_account.all_courses.find(params[:course_id])
+    @course = api_find(@domain_root_account.all_courses, params[:course_id])
     if authorize
       events = Auditors::Course.for_course(@course, query_options)
       render_events(events, api_v1_audit_course_for_course_url(@course))
+    else
+      render_unauthorized_action
+    end
+  end
+
+  # @API Query by account.
+  #
+  # List course change events for a given account.
+  #
+  # @argument start_time [DateTime]
+  #   The beginning of the time range from which you want events.
+  #
+  # @argument end_time [DateTime]
+  #   The end of the time range from which you want events.
+  #
+  # @returns [CourseEvent]
+  #
+  def for_account
+    @account = api_find(Account.active, params[:account_id])
+    if authorize
+      events = Auditors::Course.for_account(@account, query_options)
+      render_events(events, api_v1_audit_course_for_account_url(@account))
     else
       render_unauthorized_action
     end
@@ -200,6 +224,6 @@ class CourseAuditApiController < AuditorApiController
 
   def render_events(events, route)
     events = Api.paginate(events, self, route)
-    render :json => course_events_compound_json(events, @current_user, session)
+    render json: course_events_compound_json(events, @current_user, session)
   end
 end

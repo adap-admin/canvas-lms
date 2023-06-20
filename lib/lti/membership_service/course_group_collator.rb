@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -19,17 +21,7 @@
 module Lti
   module MembershipService
     class CourseGroupCollator < CollatorBase
-      attr_reader :role, :per_page, :page, :context, :user
-
-      def initialize(context, opts={})
-        super()
-        @role = opts[:role]
-        @per_page = [[opts[:per_page].to_i, Api.per_page].max, Api.max_per_page].min
-        @page = [opts[:page].to_i, 1].max
-        @context = context
-      end
-
-      def memberships(context: nil)
+      def memberships
         @_memberships ||= collate_memberships
       end
 
@@ -40,7 +32,7 @@ module Lti
       end
 
       def collate_memberships
-        groups.to_a.slice(0, @per_page).map do |user|
+        groups.map do |user|
           generate_membership(user)
         end
       end
@@ -50,21 +42,21 @@ module Lti
       end
 
       def scope
-        @context.groups.active
+        context.groups.active
       end
 
       def generate_member(group)
-        IMS::LTI::Models::MembershipService::Context.new(
+        ::IMS::LTI::Models::MembershipService::Context.new(
           name: group.name,
           context_id: Lti::Asset.opaque_identifier_for(group)
         )
       end
 
       def generate_membership(user)
-        IMS::LTI::Models::MembershipService::Membership.new(
-          status: IMS::LIS::Statuses::SimpleNames::Active,
+        ::IMS::LTI::Models::MembershipService::Membership.new(
+          status: ::IMS::LIS::Statuses::SimpleNames::Active,
           member: generate_member(user),
-          role: [IMS::LIS::ContextType::URNs::Group]
+          role: [::IMS::LIS::ContextType::URNs::Group]
         )
       end
     end

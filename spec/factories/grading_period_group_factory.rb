@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -17,7 +19,7 @@
 
 module Factories
   class GradingPeriodGroupHelper
-    TITLE = "Example Grading Period Group".freeze
+    TITLE = "Example Grading Period Group"
 
     def valid_attributes(attr = {})
       {
@@ -25,7 +27,7 @@ module Factories
       }.merge(attr)
     end
 
-    def create_for_account(account, options={})
+    def create_for_account(account, options = {})
       account.grading_period_groups.create!(title: TITLE, **options)
     end
 
@@ -37,7 +39,7 @@ module Factories
     end
 
     def create_for_enrollment_term_and_account!(enrollment_term, account, title: TITLE)
-      group = account.grading_period_groups.create!(title: title)
+      group = account.grading_period_groups.create!(title:)
       group.enrollment_terms << enrollment_term
       group
     end

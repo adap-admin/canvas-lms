@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -17,13 +19,13 @@
 #
 
 module Factories
-  def assessment_request_model(opts={})
+  def assessment_request_model
     @user = user_model
     @user2 = user_model
     @submission = submission_model
     @assessor_submission = submission_model
 
-    @assessment_request = AssessmentRequest.create!(:user => @user, :assessor_asset => @assessor_submission, :assessor => @user, :asset => @submission)
+    @assessment_request = AssessmentRequest.create!(user: @user, assessor_asset: @assessor_submission, assessor: @user, asset: @submission)
 
     @assessment_request
   end

@@ -15,13 +15,14 @@
  * You should have received a copy of the GNU Affero General Public License along
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-import React, { Component } from 'react';
-import {bool, func, string} from 'prop-types';
-import {Button} from '@instructure/ui-buttons'
-import {View} from '@instructure/ui-layout'
-import {Spinner, Text} from '@instructure/ui-elements'
-import ErrorAlert from '../ErrorAlert';
-import formatMessage from '../../format-message';
+import React, {Component} from 'react'
+import {bool, func, string} from 'prop-types'
+import {Link} from '@instructure/ui-link'
+import {View} from '@instructure/ui-view'
+import {Text} from '@instructure/ui-text'
+import {Spinner} from '@instructure/ui-spinner'
+import ErrorAlert from '../ErrorAlert'
+import formatMessage from '../../format-message'
 
 export default class LoadingFutureIndicator extends Component {
   static propTypes = {
@@ -29,7 +30,6 @@ export default class LoadingFutureIndicator extends Component {
     allFutureItemsLoaded: bool,
     onLoadMore: func,
     loadingError: string,
-    plannerActive: func,
   }
 
   static defaultProps = {
@@ -37,22 +37,23 @@ export default class LoadingFutureIndicator extends Component {
     allFutureItemsLoaded: false,
     onLoadMore: () => {},
     loadingError: undefined,
-    plannerActive: () => {return false;},
   }
 
   handleLoadMoreButton = () => {
-    this.props.onLoadMore({loadMoreButtonClicked: true});
+    this.props.onLoadMore({loadMoreButtonClicked: true})
   }
 
-  renderLoadMore () {
+  renderLoadMore() {
     if (!this.props.loadingFuture && !this.props.allFutureItemsLoaded) {
-      return <Button variant="link" onClick={this.handleLoadMoreButton}>
-        {formatMessage('Load more')}
-      </Button>;
+      return (
+        <Link isWithinText={false} as="button" onClick={this.handleLoadMoreButton}>
+          {formatMessage('Load more')}
+        </Link>
+      )
     }
   }
 
-  renderError () {
+  renderError() {
     if (this.props.loadingError) {
       // Show an Alert for the user, while including the underlying root cause error
       // in a hidden div in case we need to know what it was
@@ -62,35 +63,47 @@ export default class LoadingFutureIndicator extends Component {
             {formatMessage('Error loading more items')}
           </ErrorAlert>
         </div>
-      );
+      )
     }
   }
 
-  renderLoading () {
+  renderLoading() {
     if (this.props.loadingFuture && !this.props.allFutureItemsLoaded) {
-      return <View>
-        <Spinner size="small" margin="0 x-small 0 0" renderTitle={() => formatMessage('Loading...')} />
-        <Text size="small" color="secondary">
-          {formatMessage('Loading...')}</Text>
-      </View>;
+      return (
+        <View>
+          <Spinner
+            size="small"
+            margin="0 x-small 0 0"
+            renderTitle={() => formatMessage('Loading...')}
+          />
+          <Text size="small" color="secondary">
+            {formatMessage('Loading...')}
+          </Text>
+        </View>
+      )
     }
   }
 
-  renderEverythingLoaded () {
+  renderEverythingLoaded() {
     if (this.props.allFutureItemsLoaded) {
-      return <Text color="secondary" size="small">
-        {formatMessage('All items loaded')}</Text>;
+      return (
+        <Text color="secondary" size="small">
+          {formatMessage('No more items to show')}
+        </Text>
+      )
     }
   }
 
-  render () {
-    return <div>
-      <View as="div" padding="x-large" textAlign="center">
-        {this.renderError()}
-        {this.renderLoadMore()}
-        {this.renderLoading()}
-        {this.renderEverythingLoaded()}
-      </View>
-    </div>;
+  render() {
+    return (
+      <div>
+        <View as="div" padding="x-large" textAlign="center">
+          {this.renderError()}
+          {this.renderLoadMore()}
+          {this.renderLoading()}
+          {this.renderEverythingLoaded()}
+        </View>
+      </div>
+    )
   }
 }

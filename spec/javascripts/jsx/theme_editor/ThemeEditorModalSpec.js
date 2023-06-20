@@ -18,13 +18,13 @@
 
 import React from 'react'
 import {shallow} from 'enzyme'
-import ThemeEditorModal from 'jsx/theme_editor/ThemeEditorModal'
+import ThemeEditorModal from 'ui/features/theme_editor/react/ThemeEditorModal'
 
 const defaultProps = {
   showProgressModal: false,
   showSubAccountProgress: false,
   progress: 0.5,
-  activeSubAccountProgresses: []
+  activeSubAccountProgresses: [],
 }
 
 QUnit.module('ThemeEditorModal Component')

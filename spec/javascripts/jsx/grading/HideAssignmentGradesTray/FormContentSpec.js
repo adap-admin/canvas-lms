@@ -19,7 +19,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom'
 
-import FormContent from 'jsx/grading/HideAssignmentGradesTray/FormContent'
+import FormContent from '@canvas/hide-assignment-grades-tray/react/FormContent'
 
 QUnit.module('HideAssignmentGradesTray FormContent', suiteHooks => {
   let $container
@@ -67,17 +67,20 @@ QUnit.module('HideAssignmentGradesTray FormContent', suiteHooks => {
       assignment: {
         anonymousGrading: false,
         gradesPublished: true,
-        ...assignment
+        ...assignment,
       },
       dismiss() {},
       hideBySections: true,
       hideBySectionsChanged() {},
       hidingGrades: false,
       onHideClick() {},
-      sections: [{id: '2001', name: 'Freshmen'}, {id: '2002', name: 'Sophomores'}],
+      sections: [
+        {id: '2001', name: 'Freshmen'},
+        {id: '2002', name: 'Sophomores'},
+      ],
       sectionSelectionChanged() {},
       selectedSectionIds: [],
-      ...props
+      ...props,
     }
   }
 

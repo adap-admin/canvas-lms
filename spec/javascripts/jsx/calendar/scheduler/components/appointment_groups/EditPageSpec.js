@@ -20,28 +20,30 @@ import React from 'react'
 import ReactDOM from 'react-dom'
 import TestUtils from 'react-dom/test-utils'
 import $ from 'jquery'
-import axios from 'axios'
-import EditPage from 'jsx/calendar/scheduler/components/appointment_groups/EditPage'
+import axios from '@canvas/axios'
+import EditPage from 'ui/features/calendar_appointment_group_edit/react/EditPage'
 import london from 'timezone/Europe/London'
-import tz from 'timezone'
+import tz from '@canvas/timezone'
 import fakeENV from 'helpers/fakeENV'
 import moxios from 'moxios'
 
 const container = document.getElementById('fixtures')
 
-const renderComponent = (props = { appointment_group_id: '1' }) => TestUtils.renderIntoDocument(<EditPage {...props} />)
+const renderComponent = (props = {appointment_group_id: '1'}) =>
+  TestUtils.renderIntoDocument(<EditPage {...props} />)
 
 // use ReactDOM instead of TestUtils to test integration with non-react things that need real DOM
-const renderComponentInDOM = (props = { appointment_group_id: '1' }) => ReactDOM.render(<EditPage {...props} />, container)
+const renderComponentInDOM = (props = {appointment_group_id: '1'}) =>
+  ReactDOM.render(<EditPage {...props} />, container)
 
 let sandbox = null
 QUnit.module('AppointmentGroup EditPage', {
-  setup () {
+  setup() {
     moxios.install()
   },
-  teardown () {
+  teardown() {
     moxios.uninstall()
-  }
+  },
 })
 
 test('renders the EditPage component', () => {
@@ -50,52 +52,50 @@ test('renders the EditPage component', () => {
   ok(editPage)
 })
 
-
 QUnit.module('Message Users', {
-  setup () {
+  setup() {
     moxios.install()
   },
-  teardown () {
+  teardown() {
     moxios.uninstall()
-  }
+  },
 })
 
-test('mocks editPage axios to appointmentGroups', (assert) => {
+test('mocks editPage axios to appointmentGroups', assert => {
   assert.expect(1)
   const done = assert.async()
   moxios.stubRequest(/appointment_groups/, {
     status: 200,
-    response: { limitUsersPerSlot: 4, limitSlotsPerUser: 6 }
+    response: {limitUsersPerSlot: 4, limitSlotsPerUser: 6},
   })
-  const component = renderComponent();
+  const component = renderComponent()
   moxios.wait(() => {
     ok(component.state.appointmentGroup.limitUsersPerSlot === 4)
     done()
   })
 })
 
-test('mocks editPage axios to calendarEvents', (assert) => {
+test('mocks editPage axios to calendarEvents', assert => {
   assert.expect(1)
   const done = assert.async()
   moxios.stubRequest(/calendar_events/, {
     status: 200,
-    response: { contexts: [{ asset_string: 'course_1' }, { asset_string: 'course_2' }] }
+    response: {contexts: [{asset_string: 'course_1'}, {asset_string: 'course_2'}]},
   })
-  const component = renderComponent();
+  const component = renderComponent()
   moxios.wait(() => {
     ok(component.state.contexts[0].asset_string === 'course_1')
     done()
   })
 })
 
-
-test('set time blocks correctly', (assert) => {
+test('set time blocks correctly', assert => {
   const done = assert.async()
   moxios.stubRequest(/appointment_groups/, {
     status: 200,
-    response: { limitUsersPerSlot: 4, limitSlotsPerUser: 6 }
+    response: {limitUsersPerSlot: 4, limitSlotsPerUser: 6},
   })
-  const component = renderComponent();
+  const component = renderComponent()
   moxios.wait(() => {
     component.setTimeBlocks(4)
     ok(component.state.formValues.timeblocks === 4)
@@ -115,7 +115,7 @@ test('clicking message users button opens message students modal', () => {
   // needed by message modal
   component.setState({
     eventDataSource: {
-      getParticipants: (group, status, cb) => cb([])
+      getParticipants: (group, status, cb) => cb([]),
     },
   })
 
@@ -124,20 +124,19 @@ test('clicking message users button opens message students modal', () => {
 
   ok(messageModal)
   ReactDOM.unmountComponentAtNode(container)
-  $(".ui-dialog").remove()
+  $('.ui-dialog').remove()
 })
-
 
 QUnit.module('Delete Group', {
   setup: () => {
-    sandbox = sinon.sandbox.create()
+    sandbox = sinon.createSandbox()
     moxios.install()
   },
   teardown: () => {
     sandbox.restore()
     sandbox = null
     moxios.uninstall()
-  }
+  },
 })
 
 test('fires delete ajax request with the correct id', () => {
@@ -152,7 +151,9 @@ test('fires delete ajax request with the correct id', () => {
 
 test('flashes error on error delete response', () => {
   const component = renderComponent()
-  sandbox.stub(axios, 'delete').callsFake(() => Promise.reject({ respose: { data: new Error('Something bad happened') } }))
+  sandbox
+    .stub(axios, 'delete')
+    .callsFake(() => Promise.reject({respose: {data: new Error('Something bad happened')}}))
   sandbox.spy($, 'flashError')
 
   component.deleteGroup()
@@ -161,12 +162,12 @@ test('flashes error on error delete response', () => {
 })
 
 QUnit.module('Change Handlers', {
-  setup () {
+  setup() {
     moxios.install()
   },
-  teardown () {
+  teardown() {
     moxios.uninstall()
-  }
+  },
 })
 
 test('handleChange updates properties based on the name property', () => {
@@ -174,8 +175,8 @@ test('handleChange updates properties based on the name property', () => {
   const fakeEvent = {
     target: {
       name: 'han',
-      value: 'solo'
-    }
+      value: 'solo',
+    },
   }
   component.handleChange(fakeEvent)
   equal(component.state.formValues.han, 'solo')
@@ -186,23 +187,23 @@ test('handleCheckboxChange updates the boolean flag based on the name property',
   const fakeEvent = {
     target: {
       name: 'han',
-      checked: true
-    }
+      checked: true,
+    },
   }
   component.handleCheckboxChange(fakeEvent)
   equal(component.state.formValues.han, true)
 })
 
 QUnit.module('Save Group', {
-  setup () {
-    sandbox = sinon.sandbox.create()
+  setup() {
+    sandbox = sinon.createSandbox()
     moxios.install()
   },
-  teardown () {
+  teardown() {
     sandbox.restore()
     sandbox = null
     moxios.uninstall()
-  }
+  },
 })
 
 test('handleSave shows error when limit users per slot is empty', () => {
@@ -211,8 +212,8 @@ test('handleSave shows error when limit users per slot is empty', () => {
   sandbox.spy(axios, 'put')
   component.setState({
     formValues: {
-      limitUsersPerSlot: true
-    }
+      limitUsersPerSlot: true,
+    },
   })
 
   component.handleSave()
@@ -227,8 +228,8 @@ test('handleSave shows error when limit users per slot is less than 1', () => {
   sandbox.spy(axios, 'put')
   component.setState({
     formValues: {
-      limitUsersPerSlot: true
-    }
+      limitUsersPerSlot: true,
+    },
   })
   $('.EditPage__Options-LimitUsersPerSlot', component.optionFields).val('0')
 
@@ -244,8 +245,8 @@ test('handleSave shows error when limit slots per user is empty', () => {
   sandbox.spy(axios, 'put')
   component.setState({
     formValues: {
-      limitSlotsPerUser: true
-    }
+      limitSlotsPerUser: true,
+    },
   })
 
   component.handleSave()
@@ -260,8 +261,8 @@ test('handleSave shows error when limit slots per user is less than 1', () => {
   sandbox.spy(axios, 'put')
   component.setState({
     formValues: {
-      limitSlotsPerUser: true
-    }
+      limitSlotsPerUser: true,
+    },
   })
   $('.EditPage__Options-LimitSlotsPerUser', component.optionFields).val('0')
 
@@ -276,8 +277,8 @@ test('handleSave prepares the proper participant_visibility when students are al
   sandbox.spy(axios, 'put')
   component.setState({
     formValues: {
-      allowStudentsToView: true
-    }
+      allowStudentsToView: true,
+    },
   })
 
   component.handleSave()
@@ -288,46 +289,48 @@ test('handleSave prepares the proper participant_visibility when students are al
 
 test('handleSave prepares the timeblocks appropriately', () => {
   const snapshot = tz.snapshot()
-    // set local timezone to UTC
+  // set local timezone to UTC
   tz.changeZone(london, 'Europe/London')
-    // set user profile timezone to EST (UTC-4)
-  fakeENV.setup({ TIMEZONE: 'America/Detroit' })
+  // set user profile timezone to EST (UTC-4)
+  fakeENV.setup({TIMEZONE: 'America/Detroit'})
 
   const component = renderComponent()
   sandbox.spy(axios, 'put')
   component.setState({
     formValues: {
-      timeblocks: [{
-        slotEventId: 'NEW-1',
-        timeData: {
-          date: $.fudgeDateForProfileTimezone(new Date('2016-10-28T19:00:00.000Z')),
-          startTime: $.fudgeDateForProfileTimezone(new Date('2016-10-28T19:00:00.000Z')),
-          endTime: $.fudgeDateForProfileTimezone(new Date('2016-10-28T19:30:00.000Z'))
-        }
-      },
-      {
-        slotEventId: 'NEW-2',
-        timeData: {
-          date: $.fudgeDateForProfileTimezone(new Date('2016-10-28T19:30:00.000Z')),
-          startTime: $.fudgeDateForProfileTimezone(new Date('2016-10-28T19:30:00.000Z')),
-          endTime: $.fudgeDateForProfileTimezone(new Date('2016-10-28T20:00:00.000Z'))
-        }
-      },
-      {
-        slotEventId: 'NEW-3',
-        timeData: {}
-      }
-      ] }
+      timeblocks: [
+        {
+          slotEventId: 'NEW-1',
+          timeData: {
+            date: $.fudgeDateForProfileTimezone(new Date('2016-10-28T19:00:00.000Z')),
+            startTime: $.fudgeDateForProfileTimezone(new Date('2016-10-28T19:00:00.000Z')),
+            endTime: $.fudgeDateForProfileTimezone(new Date('2016-10-28T19:30:00.000Z')),
+          },
+        },
+        {
+          slotEventId: 'NEW-2',
+          timeData: {
+            date: $.fudgeDateForProfileTimezone(new Date('2016-10-28T19:30:00.000Z')),
+            startTime: $.fudgeDateForProfileTimezone(new Date('2016-10-28T19:30:00.000Z')),
+            endTime: $.fudgeDateForProfileTimezone(new Date('2016-10-28T20:00:00.000Z')),
+          },
+        },
+        {
+          slotEventId: 'NEW-3',
+          timeData: {},
+        },
+      ],
+    },
   })
 
   component.handleSave()
 
   const requestObj = axios.put.args[0][1]
 
-    // The expected appointments are not fudged
+  // The expected appointments are not fudged
   const expectedAppointments = [
-      [new Date('2016-10-28T19:00:00.000Z'), new Date('2016-10-28T19:30:00.000Z')],
-      [new Date('2016-10-28T19:30:00.000Z'), new Date('2016-10-28T20:00:00.000Z')]
+    [new Date('2016-10-28T19:00:00.000Z'), new Date('2016-10-28T19:30:00.000Z')],
+    [new Date('2016-10-28T19:30:00.000Z'), new Date('2016-10-28T20:00:00.000Z')],
   ]
 
   deepEqual(requestObj.appointment_group.new_appointments, expectedAppointments)
@@ -335,7 +338,6 @@ test('handleSave prepares the timeblocks appropriately', () => {
   tz.restore(snapshot)
   fakeENV.teardown()
 })
-
 
 test('handleSave sends a request to the proper endpoint', () => {
   const component = renderComponent()
@@ -348,7 +350,9 @@ test('handleSave sends a request to the proper endpoint', () => {
 
 test('flashes error on error delete response', () => {
   const component = renderComponent()
-  sandbox.stub(axios, 'put').callsFake(() => Promise.reject({ respose: { data: new Error('Something bad happened') } }))
+  sandbox
+    .stub(axios, 'put')
+    .callsFake(() => Promise.reject({respose: {data: new Error('Something bad happened')}}))
   sandbox.stub($, 'flashError')
 
   component.handleSave()

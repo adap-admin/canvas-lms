@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -23,24 +25,20 @@ module GraphQLHelpers
   # standard canvas ids. the resolve function for fields using this preparer
   # will get a standard canvas id
   def self.relay_or_legacy_id_prepare_func(expected_type)
-    Proc.new do |relay_or_legacy_id, ctx|
-      begin
-        self.parse_relay_or_legacy_id(relay_or_legacy_id, expected_type)
-      rescue InvalidIDError => e
-        GraphQL::ExecutionError.new(e.message)
-      end
+    proc do |relay_or_legacy_id|
+      parse_relay_or_legacy_id(relay_or_legacy_id, expected_type)
+    rescue InvalidIDError => e
+      GraphQL::ExecutionError.new(e.message)
     end
   end
 
   def self.relay_or_legacy_ids_prepare_func(expected_type)
-    Proc.new do |relay_or_legacy_ids, ctx|
-      begin
-        relay_or_legacy_ids.map { |relay_or_legacy_id, ctx|
-          self.parse_relay_or_legacy_id(relay_or_legacy_id, expected_type)
-        }
-      rescue InvalidIDError => e
-        GraphQL::ExecutionError.new(e.message)
+    proc do |relay_or_legacy_ids|
+      relay_or_legacy_ids.map do |relay_or_legacy_id|
+        parse_relay_or_legacy_id(relay_or_legacy_id, expected_type)
       end
+    rescue InvalidIDError => e
+      GraphQL::ExecutionError.new(e.message)
     end
   end
 
@@ -48,22 +46,28 @@ module GraphQLHelpers
     if relay_or_legacy_id.nil? || relay_or_legacy_id =~ /\A\d+\Z/
       relay_or_legacy_id
     else
-      type, id = GraphQL::Schema::UniqueWithinType.decode(relay_or_legacy_id)
-      if (type != expected_type || id.nil?)
-        raise InvalidIDError.new("expected an id for #{expected_type}")
-      else
-        id
-      end
+      parse_relay_id(relay_or_legacy_id, expected_type)
     end
   end
 
-  # TODO - move this into LockType after we switch to the class-based api
+  def self.parse_relay_id(relay_id, expected_type)
+    type, id = GraphQL::Schema::UniqueWithinType.decode(relay_id)
+    if type != expected_type || id.nil?
+      raise InvalidIDError, "expected an id for #{expected_type}"
+    else
+      id
+    end
+  end
+
+  # TODO: move this into LockType after we switch to the class-based api
   def self.make_lock_resolver(attr)
-    ->(lock, _, _) {
-      lock == false ?
-        nil :
+    lambda do |lock, _, _|
+      if lock == false
+        nil
+      else
         lock[attr]
-    }
+      end
+    end
   end
 
   class InvalidIDError < StandardError; end

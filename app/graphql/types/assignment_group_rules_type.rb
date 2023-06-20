@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -19,15 +21,17 @@ module Types
   class AssignmentGroupRulesType < ApplicationObjectType
     graphql_name "AssignmentGroupRules"
 
-    alias rules object
+    alias_method :rules, :object
 
-    field :drop_lowest, Integer,
-      "The lowest N assignments are not included in grade calculations",
-      null: true
+    field :drop_lowest,
+          Integer,
+          "The lowest N assignments are not included in grade calculations",
+          null: true
 
-    field :drop_highest, Integer,
-      "The highest N assignments are not included in grade calculations",
-      null: true
+    field :drop_highest,
+          Integer,
+          "The highest N assignments are not included in grade calculations",
+          null: true
 
     field :never_drop, [AssignmentType], null: true
     def never_drop

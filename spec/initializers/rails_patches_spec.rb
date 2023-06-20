@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -15,10 +17,8 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require File.expand_path('../spec_helper', File.dirname( __FILE__ ))
-
-describe 'ActiveRecord::Associations::CollectionAssociation' do
-  it 'should null the scope for new record association scoping' do
+describe "ActiveRecord::Associations::CollectionAssociation" do
+  it "nulls the scope for new record association scoping" do
     AccessToken.create!(developer_key_id: nil)
     # without the patch, this query will find the record above
     expect(DeveloperKey.new.access_tokens.active).to be_empty

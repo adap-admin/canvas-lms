@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -19,8 +21,8 @@
 class Assignment
   class MaxGradersReachedError < GradeError
     def initialize
-      super('The maximum number of graders has been reached for this assignment.', :forbidden)
-      self.error_code = 'MAX_GRADERS_REACHED'
+      super("The maximum number of graders has been reached for this assignment.", :forbidden)
+      self.error_code = "MAX_GRADERS_REACHED"
     end
   end
 end

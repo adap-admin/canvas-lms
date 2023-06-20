@@ -18,7 +18,7 @@
 
 import React from 'react'
 import TestUtils from 'react-dom/test-utils'
-import CollaborationsApp from 'jsx/collaborations/CollaborationsApp'
+import CollaborationsApp from 'ui/features/lti_collaborations/react/CollaborationsApp'
 
 QUnit.module('CollaborationsApp')
 
@@ -34,19 +34,20 @@ const applicationState = {
         updated_at: new Date(0).toString(),
         permissions: {
           update: true,
-          delete: true
-        }
-      }
-    ]
+          delete: true,
+        },
+      },
+    ],
   },
   ltiCollaborators: {
-    ltiCollaboratorsData: []
-  }
+    ltiCollaboratorsData: [],
+  },
 }
 
 function setEnvironment() {
   ENV.context_asset_string = 'courses_1'
   ENV.current_user_roles = 'teacher'
+  ENV.CREATE_PERMISSION = true
 }
 
 test('renders the getting started component when there are no collaborations', () => {
@@ -55,8 +56,8 @@ test('renders the getting started component when there are no collaborations', (
   const appState = {
     ...applicationState,
     listCollaborations: {
-      list: []
-    }
+      list: [],
+    },
   }
   const component = TestUtils.renderIntoDocument(
     <CollaborationsApp applicationState={appState} actions={{}} />

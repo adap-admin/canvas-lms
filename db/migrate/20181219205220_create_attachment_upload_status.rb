@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -20,7 +22,7 @@ class CreateAttachmentUploadStatus < ActiveRecord::Migration[5.1]
 
   def change
     create_table :attachment_upload_statuses do |t|
-      t.references :attachment, limit: 8, foreign_key: true, index: true, null: false
+      t.references :attachment, foreign_key: true, index: true, null: false
       t.text :error, null: false
       t.datetime :created_at, null: false
     end

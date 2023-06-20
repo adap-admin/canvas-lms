@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,20 +18,19 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/../views_helper')
+require_relative "../views_helper"
 
-describe "context/undelete_index.html.erb" do
+describe "context/undelete_index" do
   before do
-    course_with_teacher(:active_all => true)
+    course_with_teacher(active_all: true)
     assign(:context, @course)
   end
 
-  it "should render the undelete link correctly for quizzes" do
+  it "renders the undelete link correctly for quizzes" do
     quiz = @course.quizzes.create!
     assign(:deleted_items, [quiz])
     render
-    expect(response.body).not_to match /quizzes:quiz/
-    expect(response.body).to match /quiz_#{quiz.id}/
+    expect(response.body).not_to match(/quizzes:quiz/)
+    expect(response.body).to match(/quiz_#{quiz.id}/)
   end
 end

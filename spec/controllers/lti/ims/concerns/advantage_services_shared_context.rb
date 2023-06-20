@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -16,73 +18,45 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../../../spec_helper')
+require "lti_1_3_tool_configuration_spec_helper"
+require "lib/lti/ims/advantage_access_token_shared_context"
 
-shared_context 'advantage services context' do
-  let_once(:root_account) do
-    Account.default
-  end
-  let_once(:developer_key) do
-    dk = DeveloperKey.create!(account: root_account)
-    dk.developer_key_account_bindings.first.update! workflow_state: DeveloperKeyAccountBinding::ON_STATE
-    dk
-  end
-  let(:access_token_scopes) do
-    %w(https://purl.imsglobal.org/spec/lti-ags/scope/lineitem
-       https://purl.imsglobal.org/spec/lti-ags/scope/result.readonly
-       https://purl.imsglobal.org/spec/lti-nrps/scope/contextmembership.readonly
-       https://canvas.instructure.com/lti/public_jwk/scope/update).join(' ')
-  end
-  let(:access_token_signing_key) { Canvas::Security.encryption_key }
-  let(:test_request_host) { 'test.host' }
-  let(:access_token_jwt_hash) do
-    timestamp = Time.zone.now.to_i
-    {
-      iss: 'https://canvas.instructure.com',
-      sub: developer_key.global_id,
-      aud: "http://#{test_request_host}/login/oauth2/token",
-      iat: timestamp,
-      exp: (timestamp + 1.hour.to_i),
-      nbf: (timestamp - 30),
-      jti: SecureRandom.uuid,
-      scopes: access_token_scopes
-    }
-  end
-  let(:access_token_jwt) do
-    return nil if access_token_jwt_hash.blank?
-    JSON::JWT.new(access_token_jwt_hash).sign(access_token_signing_key, :HS256).to_s
-  end
+shared_context "advantage services context" do
+  include_context "lti_1_3_tool_configuration_spec_helper"
+  include_context "advantage access token context"
+
   let(:tool_context) { root_account }
   let!(:tool) do
     ContextExternalTool.create!(
       context: tool_context,
-      consumer_key: 'key',
-      shared_secret: 'secret',
-      name: 'test tool',
-      url: 'http://www.tool.com/launch',
-      developer_key: developer_key,
-      settings: { use_1_3: true },
-      workflow_state: 'public'
+      consumer_key: "key",
+      shared_secret: "secret",
+      name: "test tool",
+      url: "http://www.tool.com/launch",
+      developer_key:,
+      lti_version: "1.3",
+      workflow_state: "public"
     )
   end
   let(:course_account) do
     root_account
   end
   let(:course) { course_factory(active_course: true, account: course_account) }
-  let(:context) { raise 'Override in spec' }
+  let(:context) { raise "Override in spec" }
   let(:context_id) { context.id }
-  let(:unknown_context_id) { raise 'Override in spec' }
-  let(:action) { raise 'Override in spec'}
+  let(:unknown_context_id) { raise "Override in spec" }
+  let(:action) { raise "Override in spec" }
   let(:params_overrides) { {} }
-  let(:json) { JSON.parse(response.body).with_indifferent_access }
-  let(:scope_to_remove) { raise 'Override in spec' }
+  let(:json) { response.parsed_body.with_indifferent_access }
+  let(:scope_to_remove) { raise "Override in spec" }
   let(:http_success_status) { :ok }
   let(:expected_mime_type) { described_class::MIME_TYPE }
   let(:content_type) { nil }
 
   def apply_headers
-    request.headers['Authorization'] = "Bearer #{access_token_jwt}" if access_token_jwt
-    request.headers['Content-Type'] = content_type if content_type.present?
+    request.headers["Authorization"] = "Bearer #{access_token_jwt}" if access_token_jwt
+    request.headers["Content-Type"] = content_type if content_type.present?
+    request
   end
 
   def send_http
@@ -91,18 +65,20 @@ shared_context 'advantage services context' do
 
   def send_request
     apply_headers
-    send_http
+    response = send_http
+    run_jobs
+    response
   end
 
   def expect_empty_response
-    raise 'Abstract Method'
+    raise "Abstract Method"
   end
 
   def remove_access_token_scope(default_scopes, to_remove)
     scopes_to_remove = [to_remove].flatten
-    default_scopes.
-      split(' ').
-      reject { |s| scopes_to_remove.include? s }.
-      join(' ')
+    default_scopes
+      .split
+      .reject { |s| scopes_to_remove.include? s }
+      .join(" ")
   end
 end

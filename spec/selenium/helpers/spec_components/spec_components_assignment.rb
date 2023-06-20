@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -15,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_relative 'spec_components_assignable_module'
+require_relative "spec_components_assignable_module"
 
 module SpecComponents
   class Assignment
@@ -24,13 +26,13 @@ module SpecComponents
 
     def initialize(opts)
       course = opts[:course]
-      assignment_title = opts.fetch(:title, 'Test Assignment')
+      assignment_title = opts.fetch(:title, "Test Assignment")
       due_at = opts.fetch(:due_at, Time.zone.now.advance(days: 7))
 
       @component_assignment = assignment_model(
         context: course,
         title: assignment_title,
-        due_at: due_at
+        due_at:
       )
       @id = @component_assignment.id
       @title = @component_assignment.title
@@ -43,7 +45,7 @@ module SpecComponents
     def submit_as(user)
       @component_assignment.submit_homework(
         user, {
-          submission_type: 'online_text_entry',
+          submission_type: "online_text_entry",
           body: "This is #{user.name}'s submission"
         }
       )
@@ -51,12 +53,12 @@ module SpecComponents
 
     private
 
-      def add_assignment_override_for_student(opts)
-        super(opts) { |assignment_override| assignment_override.assignment = @component_assignment }
-      end
+    def add_assignment_override_for_student(opts)
+      super(opts) { |assignment_override| assignment_override.assignment = @component_assignment }
+    end
 
-      def add_assignment_override_for_section(opts)
-        super(opts) { |assignment_override| assignment_override.assignment = @component_assignment }
-      end
+    def add_assignment_override_for_section(opts)
+      super(opts) { |assignment_override| assignment_override.assignment = @component_assignment }
+    end
   end
 end

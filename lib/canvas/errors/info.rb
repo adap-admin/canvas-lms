@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -15,24 +17,23 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_relative '../errors'
+require_relative "../errors"
 module Canvas
   class Errors
-
     # This is a class for taking the common context
     # found in the request/response cycle for an exception
     # and turning it into a pleasent hash for Canvas::Errors
     # to make use of.
     class Info
-
       attr_reader :req, :account, :user, :rci, :type
-      MAX_DATA_SIZE = 65535
 
-      def initialize(request, root_account, user, opts={})
+      MAX_DATA_SIZE = 65_535
+
+      def initialize(request, root_account, user, opts = {})
         @req = request
         @account = root_account
         @user = user
-        @rci = opts.fetch(:request_context_id, RequestContextGenerator.request_id)
+        @rci = opts.fetch(:request_context_id, RequestContext::Generator.request_id)
         @type = opts.fetch(:type, nil)
         @canvas_error_info = opts.fetch(:canvas_error_info, {})
       end
@@ -52,43 +53,46 @@ module Canvas
             request_context_id: @rci,
             request_method: @req.request_method_symbol,
             format: @req.format,
-          }.merge(self.class.useful_http_env_stuff_from_request(@req)).
-            merge(self.class.useful_http_headers(@req)).
-            merge(@canvas_error_info)
+          }.merge(self.class.useful_http_env_stuff_from_request(@req))
+            .merge(self.class.useful_http_headers(@req))
+            .merge(@canvas_error_info)
         }
       end
 
-      USEFUL_ENV = [
-        "HTTP_ACCEPT",
-        "HTTP_ACCEPT_ENCODING",
-        "HTTP_HOST",
-        "HTTP_REFERER",
-        "HTTP_USER_AGENT",
-        "PATH_INFO",
-        "QUERY_STRING",
-        "REMOTE_HOST",
-        "REQUEST_METHOD",
-        "REQUEST_PATH",
-        "REQUEST_URI",
-        "SERVER_NAME",
-        "SERVER_PORT",
-        "SERVER_PROTOCOL",
+      USEFUL_ENV = %w[
+        HTTP_ACCEPT
+        HTTP_ACCEPT_ENCODING
+        HTTP_HOST
+        HTTP_REFERER
+        HTTP_USER_AGENT
+        PATH_INFO
+        QUERY_STRING
+        REMOTE_HOST
+        REQUEST_METHOD
+        REQUEST_PATH
+        REQUEST_URI
+        SERVER_NAME
+        SERVER_PORT
+        SERVER_PROTOCOL
+        HTTP_X_FORWARDED_HOST
+        HTTP_X_FORWARDED_PROTO
+        HTTP_X_FORWARDED_FOR
       ].freeze
 
       def self.useful_http_env_stuff_from_request(req)
         stuff = req.env.slice(*USEFUL_ENV)
-        req_stuff = stuff.merge(filtered_request_params(req, stuff['QUERY_STRING']))
+        req_stuff = stuff.merge(filtered_request_params(req, stuff["QUERY_STRING"]))
         Marshal.load(Marshal.dump(req_stuff))
       end
 
       def self.useful_http_headers(req)
         headers = {
-          user_agent: req.headers['User-Agent']
+          user_agent: req.headers["User-Agent"]
         }
 
         # if we have an oauth1 header lets get the appropriate info from it
-        if req.authorization && req.authorization.match(/^OAuth/)
-          headers.merge!(OAuth::Helper.parse_header(req.authorization))
+        if req.authorization&.match(/^OAuth/)
+          headers.merge!(::OAuth::Helper.parse_header(req.authorization))
         end
 
         headers
@@ -98,12 +102,12 @@ module Canvas
         f = LoggingFilter
         {
           # ActionDispatch::Request#remote_ip has proxy smarts
-          'REMOTE_ADDR' => req.remote_ip,
-          'QUERY_STRING' => (f.filter_query_string("?" + (query_string || ''))),
-          'REQUEST_URI' => f.filter_uri(req.url),
-          'path_parameters' => f.filter_params(req.path_parameters.dup).inspect,
-          'query_parameters' => f.filter_params(req.query_parameters.dup).inspect,
-          'request_parameters' => f.filter_params(req.request_parameters.dup).inspect[0,MAX_DATA_SIZE],
+          "REMOTE_ADDR" => req.remote_ip,
+          "QUERY_STRING" => f.filter_query_string("?" + (query_string || "")),
+          "REQUEST_URI" => f.filter_uri(req.url),
+          "path_parameters" => f.filter_params(req.path_parameters.dup).inspect,
+          "query_parameters" => f.filter_params(req.query_parameters.dup).inspect,
+          "request_parameters" => f.filter_params(req.request_parameters.dup).inspect[0, MAX_DATA_SIZE],
         }
       end
       private_class_method :filtered_request_params

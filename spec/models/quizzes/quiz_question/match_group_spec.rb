@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -16,13 +18,10 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../../spec_helper.rb')
-
 describe Quizzes::QuizQuestion::MatchGroup do
-
-  describe '#add' do
+  describe "#add" do
     let(:properties) do
-      { text: 'Arkansas', match_id: 177 }
+      { text: "Arkansas", match_id: 177 }
     end
 
     it "adds to matches" do
@@ -57,5 +56,3 @@ describe Quizzes::QuizQuestion::MatchGroup do
     end
   end
 end
-
-

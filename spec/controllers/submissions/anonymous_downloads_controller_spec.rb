@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -16,10 +18,8 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'spec_helper'
-
 describe Submissions::AnonymousDownloadsController do
-  describe 'GET :show' do
+  describe "GET :show" do
     before do
       course_with_student_and_submitted_homework
       @course.account.enable_service(:avatars)
@@ -42,22 +42,23 @@ describe Submissions::AnonymousDownloadsController do
         }
         expect(assigns(:attachment)).to eq @attachment
         expect(response).to redirect_to(course_file_download_url(@context, @attachment, {
-          download_frd: true,
-          inline: nil,
-          verifier: @attachment.uuid
-        }))
+                                                                   download_frd: true,
+                                                                   inline: nil,
+                                                                   verifier: @attachment.uuid
+                                                                 }))
       end
 
       it "renders as json" do
         request.accept = Mime[:json].to_s
-        get :show, params: {
-          course_id: @context.id,
-          assignment_id: @assignment.id,
-          anonymous_id: @submission.anonymous_id,
-          download: @submission.attachment_id
-        },
-          format: :json
-        expect(JSON.parse(response.body)['attachment']['id']).to eq @submission.attachment_id
+        get :show,
+            params: {
+              course_id: @context.id,
+              assignment_id: @assignment.id,
+              anonymous_id: @submission.anonymous_id,
+              download: @submission.attachment_id
+            },
+            format: :json
+        expect(response.parsed_body["attachment"]["id"]).to eq @submission.attachment_id
       end
     end
 
@@ -65,15 +66,15 @@ describe Submissions::AnonymousDownloadsController do
       attachment = @submission.attachment = attachment_model(context: @context)
       @submission.submitted_at = 3.hours.ago
       @submission.save!
-      expect(@submission.attachment).not_to be_nil, 'precondition'
-      expect {
+      expect(@submission.attachment).not_to be_nil, "precondition"
+      expect do
         @submission.with_versioning(explicit: true) do
           @submission.attachment = nil
           @submission.submitted_at = 1.hour.ago
           @submission.save!
         end
-      }.to change(@submission.versions, :count), 'precondition'
-      expect(@submission.attachment).to be_nil, 'precondition'
+      end.to change(@submission.versions, :count), "precondition"
+      expect(@submission.attachment).to be_nil, "precondition"
 
       get :show, params: {
         course_id: @context.id,
@@ -87,7 +88,7 @@ describe Submissions::AnonymousDownloadsController do
 
     it "sets attachment from attachments collection when attachment_id is not present" do
       attachment = attachment_model(context: @context)
-      AttachmentAssociation.create!(context: @submission, attachment: attachment)
+      AttachmentAssociation.create!(context: @submission, attachment:)
       get :show, params: {
         course_id: @context.id,
         assignment_id: @assignment.id,
@@ -103,7 +104,7 @@ describe Submissions::AnonymousDownloadsController do
         # our factory system is broken
         @original_context = @context
         @original_student = @student
-        course_with_student(active_all:true)
+        course_with_student(active_all: true)
         @course.account.enable_service(:avatars)
         submission_comment_model
         @attachment = attachment_model(context: @assignment)
@@ -112,8 +113,8 @@ describe Submissions::AnonymousDownloadsController do
       end
 
       it "sets attachment from comment_id & download_id" do
-        expect(@assignment.attachments).to include(@attachment), 'precondition'
-        expect(@submission_comment.attachments).to include(@attachment), 'precondition'
+        expect(@assignment.attachments).to include(@attachment), "precondition"
+        expect(@submission_comment.attachments).to include(@attachment), "precondition"
 
         get :show, params: {
           course_id: @original_context.id,
@@ -124,28 +125,29 @@ describe Submissions::AnonymousDownloadsController do
         }
         expect(assigns(:attachment)).to eq @attachment
         expect(response).to redirect_to(file_download_url(@attachment, {
-          download_frd: true,
-          inline: nil,
-          verifier: @attachment.uuid
-        }))
+                                                            download_frd: true,
+                                                            inline: nil,
+                                                            verifier: @attachment.uuid
+                                                          }))
       end
     end
 
-    it "should redirect download requests with the download_frd parameter" do
+    it "redirects download requests with the download_frd parameter" do
       # This is because the files controller looks for download_frd to indicate a forced download
       course_with_teacher_logged_in
       @course.account.enable_service(:avatars)
       assignment = assignment_model(course: @course)
       student_in_course
-      att = attachment_model(:uploaded_data => stub_file_data('test.txt', 'asdf', 'text/plain'), :context => @student)
+      att = attachment_model(uploaded_data: stub_file_data("test.txt", "asdf", "text/plain"), context: @student)
       submission_model(
         course: @course,
-        assignment: assignment,
+        assignment:,
         submission_type: "online_upload",
         attachment_ids: att.id,
         attachments: [att],
-        user: @student)
-      get :show, params: {assignment_id: assignment.id, course_id: @course.id, anonymous_id: @submission.anonymous_id, download: att.id}
+        user: @student
+      )
+      get :show, params: { assignment_id: assignment.id, course_id: @course.id, anonymous_id: @submission.anonymous_id, download: att.id }
 
       expect(response).to be_redirect
       expect(response.headers["Location"]).to match %r{users/#{@student.id}/files/#{att.id}/download\?download_frd=true}

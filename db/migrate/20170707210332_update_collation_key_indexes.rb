@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -22,11 +24,11 @@ class UpdateCollationKeyIndexes < ActiveRecord::Migration[5.0]
   disable_ddl_transaction!
 
   def change
-    collkey = connection.extension_installed?(:pg_collkey)
+    collkey = connection.extension(:pg_collkey)&.schema
     return unless collkey
 
     reversible do |dir|
-      dir.up {
+      dir.up do
         # Remove any old indexes left over from previous migrations
         if connection.index_name_exists?(:users, :index_users_on_sortable_name_old)
           remove_index :users, name: :index_users_on_sortable_name_old
@@ -35,18 +37,23 @@ class UpdateCollationKeyIndexes < ActiveRecord::Migration[5.0]
         if connection.index_name_exists?(:attachments, :index_attachments_on_folder_id_and_file_state_and_display_name1)
           remove_index :attachments, name: :index_attachments_on_folder_id_and_file_state_and_display_name1
         end
-      }
+      end
     end
 
     rename_index :users, :index_users_on_sortable_name, :index_users_on_sortable_name_old
-    rename_index :attachments, :index_attachments_on_folder_id_and_file_state_and_display_name,
-      :index_attachments_on_folder_id_and_file_state_and_display_name1
+    rename_index :attachments,
+                 :index_attachments_on_folder_id_and_file_state_and_display_name,
+                 :index_attachments_on_folder_id_and_file_state_and_display_name1
 
-    add_index :users, "#{collkey}.collkey(sortable_name, 'root', false, 3, true)",
-      algorithm: :concurrently, name: :index_users_on_sortable_name
+    add_index :users,
+              "#{collkey}.collkey(sortable_name, 'root', false, 3, true)",
+              algorithm: :concurrently,
+              name: :index_users_on_sortable_name
 
-    add_index :attachments, "folder_id, file_state, #{collkey}.collkey(display_name, 'root', false, 3, true)",
-      algorithm: :concurrently, name: :index_attachments_on_folder_id_and_file_state_and_display_name,
-      where: 'folder_id IS NOT NULL'
+    add_index :attachments,
+              "folder_id, file_state, #{collkey}.collkey(display_name, 'root', false, 3, true)",
+              algorithm: :concurrently,
+              name: :index_attachments_on_folder_id_and_file_state_and_display_name,
+              where: "folder_id IS NOT NULL"
   end
 end

@@ -19,8 +19,8 @@
 import React from 'react'
 import ReactDOM from 'react-dom'
 
-import FormContent from 'jsx/grading/PostAssignmentGradesTray/FormContent'
-import {EVERYONE} from 'jsx/grading/PostAssignmentGradesTray/PostTypes'
+import FormContent from '@canvas/post-assignment-grades-tray/react/FormContent'
+import {EVERYONE} from '@canvas/post-assignment-grades-tray/react/PostTypes'
 
 QUnit.module('PostAssignmentGradesTray FormContent', suiteHooks => {
   let $container
@@ -89,7 +89,7 @@ QUnit.module('PostAssignmentGradesTray FormContent', suiteHooks => {
       assignment: {
         anonymousGrading: false,
         gradesPublished: true,
-        ...assignment
+        ...assignment,
       },
       dismiss() {},
       postBySections: true,
@@ -98,11 +98,14 @@ QUnit.module('PostAssignmentGradesTray FormContent', suiteHooks => {
       postType: EVERYONE,
       postTypeChanged() {},
       onPostClick() {},
-      sections: [{id: '2001', name: 'Freshmen'}, {id: '2002', name: 'Sophomores'}],
+      sections: [
+        {id: '2001', name: 'Freshmen'},
+        {id: '2002', name: 'Sophomores'},
+      ],
       sectionSelectionChanged() {},
       selectedSectionIds: [],
       unpostedCount: 0,
-      ...props
+      ...props,
     }
   }
 
@@ -155,7 +158,10 @@ QUnit.module('PostAssignmentGradesTray FormContent', suiteHooks => {
     })
 
     test('"Post types" inputs are enabled', () => {
-      strictEqual(getPostTypeInputs().every($input => !$input.disabled), true)
+      strictEqual(
+        getPostTypeInputs().every($input => !$input.disabled),
+        true
+      )
     })
 
     test('a summary of unposted submissions is not displayed', () => {
@@ -195,7 +201,10 @@ QUnit.module('PostAssignmentGradesTray FormContent', suiteHooks => {
     })
 
     test('"Post types" inputs are disabled', () => {
-      strictEqual(getPostTypeInputs().every($input => $input.disabled), true)
+      strictEqual(
+        getPostTypeInputs().every($input => $input.disabled),
+        true
+      )
     })
 
     test('"Specific Section" toggle is disabled', () => {

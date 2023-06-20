@@ -19,8 +19,8 @@
 import React from 'react'
 import ReactDOM from 'react-dom'
 import TestUtils from 'react-dom/test-utils'
-import SwitchEditorControl from 'jsx/editor/SwitchEditorControl'
-import RichContentEditor from 'jsx/shared/rce/RichContentEditor'
+import SwitchEditorControl from '@canvas/editor-toggle/react/SwitchEditorControl'
+import RichContentEditor from '@canvas/rce/RichContentEditor'
 
 QUnit.module('SwitchEditorControl', {
   setup() {
@@ -29,7 +29,7 @@ QUnit.module('SwitchEditorControl', {
 
   teardown() {
     RichContentEditor.callOnRCE.restore()
-  }
+  },
 })
 
 test('changes text on each click', () => {

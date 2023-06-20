@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,30 +18,34 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 class EquationImagesController < ApplicationController
-
   # Facade to codecogs API for gif generation or microservice MathMan for svg
   def show
     @latex = params[:id]
+    @scale = params[:scale]
 
     # Usually, the latex string is stored in the db double escaped.  By the
     # time the value gets here as `params[:id]` it has been unescaped once.
     # However if it was stored in the db single escaped, we need to re-escape
     # it here
-    @latex = URI.escape(@latex) if @latex == URI.unescape(@latex)
+    @latex = URI::DEFAULT_PARSER.escape(@latex) if @latex == URI::DEFAULT_PARSER.unescape(@latex)
 
     # This is nearly how we want it to pass it on to the next service, except
     # `+` signs are in tact. Since normally the `+` signifies a space and we
     # want the `+` signs for real, we need to encode them.
-    @latex = @latex.gsub('+', '%2B')
+    @latex = @latex.gsub("+", "%2B")
     redirect_to url
   end
 
   private
+
   def url
     if MathMan.use_for_svg?
-      MathMan.url_for(latex: @latex, target: :svg)
+      MathMan.url_for(latex: @latex, target: :svg, scale: @scale)
     else
-      Setting.get('equation_image_url', 'http://latex.codecogs.com/gif.latex?') + @latex
+      scale_param = "&scale=#{@scale}" if @scale.present?
+      scale_param ||= ""
+      Setting.get("equation_image_url", "http://latex.codecogs.com/gif.latex?") + @latex +
+        scale_param
     end
   end
 end

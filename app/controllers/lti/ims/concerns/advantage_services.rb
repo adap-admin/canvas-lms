@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -15,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-module Lti::Ims::Concerns
+module Lti::IMS::Concerns
   module AdvantageServices
     extend ActiveSupport::Concern
     include LtiServices
@@ -40,7 +42,7 @@ module Lti::Ims::Concerns
       end
 
       def context
-        raise 'Abstract Method'
+        raise "Abstract Method"
       end
 
       def active_binding_for_account?
@@ -48,11 +50,14 @@ module Lti::Ims::Concerns
       end
 
       def tool
-        @_tool ||= begin
-          return nil unless context
-          return nil unless developer_key
-          ContextExternalTool.all_tools_for(context).where(developer_key: developer_key).take
-        end
+        # Not sure what the correct order is. Previously it used collation order on name, followed
+        # by id, but that seems arbitrary; now that tools can be cross-shard, it's also hard to
+        # implement. It now is shard (course/immediate root-account first), then id.
+        @tool ||= context && developer_key &&
+                  Lti::ContextToolFinder.new(
+                    context,
+                    base_scope: ContextExternalTool.order(:id).where(developer_key:)
+                  ).all_tools_scope_union.take
       end
     end
   end

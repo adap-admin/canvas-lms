@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -22,11 +24,13 @@
 #
 # See http://rubydoc.info/gems/rspec-core/RSpec/Core/Configuration
 begin
-  require '../../spec/coverage_tool.rb'
+  require "../../spec/coverage_tool"
   CoverageTool.start("activesupport-suspend-callback-gem")
 rescue LoadError => e
   puts "Error: #{e}"
 end
+
+require "byebug"
 
 require "active_support/callbacks/suspension"
 
@@ -38,5 +42,5 @@ RSpec.configure do |config|
   # order dependency and want to debug it, you can fix the order by providing
   # the seed, which is printed after each run.
   #     --seed 1234
-  config.order = 'random'
+  config.order = "random"
 end

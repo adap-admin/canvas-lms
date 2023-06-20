@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -26,6 +28,7 @@ class AssignmentPresenter
     return false unless @context&.allows_speed_grader?
     return true if !@context.concluded? && @context.grants_any_right?(user, :manage_grades, :view_all_grades)
     return true if @context.concluded? && @context.grants_right?(user, :read_as_admin)
+
     false
   end
 end

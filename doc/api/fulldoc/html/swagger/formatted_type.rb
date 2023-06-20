@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -29,6 +31,7 @@ class FormattedType
   def integer?
     return true if @example.is_a?(Integer)
     return false if @example.is_a?(Float)
+
     begin # try to convert string to integer
       Integer(@example)
       true
@@ -40,6 +43,7 @@ class FormattedType
   def float?
     return true if @example.is_a?(Float)
     return false if integer?
+
     begin # try to convert string to float
       Float(@example)
       true
@@ -49,11 +53,7 @@ class FormattedType
   end
 
   def boolean?
-    if @example == true || @example == false
-      true
-    else
-      false
-    end
+    @example == true || @example == false
   end
 
   def string?
@@ -79,9 +79,7 @@ class FormattedType
       ["string", "date-time"]
     elsif date?
       ["string", "date"]
-    elsif string?
-      ["string", nil]
-    else
+    else # string?
       ["string", nil]
     end
   end

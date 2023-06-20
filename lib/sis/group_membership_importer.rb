@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -18,17 +20,14 @@
 
 module SIS
   class GroupMembershipImporter < BaseImporter
-
     def process
-      start = Time.zone.now
       importer = Work.new(@batch, @root_account, @logger)
       yield importer
       SisBatchRollBackData.bulk_insert_roll_back_data(importer.roll_back_data)
-      @logger.debug("Group Users took #{Time.zone.now - start} seconds")
+
       importer.success_count
     end
 
-    private
     class Work
       attr_accessor :success_count, :roll_back_data
 
@@ -44,10 +43,9 @@ module SIS
       def add_group_membership(user_id, group_id, status)
         user_id = user_id.to_s
         group_id = group_id.to_s
-        @logger.debug("Processing Group User #{[user_id, group_id, status].inspect}")
         raise ImportError, "No group_id given for a group user" if group_id.blank?
         raise ImportError, "No user_id given for a group user" if user_id.blank?
-        raise ImportError, "Improper status \"#{status}\" for a group user" unless status =~ /\A(accepted|deleted)/i
+        raise ImportError, "Improper status \"#{status}\" for a group user" unless /\A(accepted|deleted)/i.match?(status)
         return if @batch.skip_deletes? && status =~ /deleted/i
 
         pseudo = @root_account.pseudonyms.where(sis_user_id: user_id).take
@@ -65,17 +63,17 @@ module SIS
         end
 
         # can't query group.group_memberships, since that excludes deleted memberships
-        group_membership = GroupMembership.where(group_id: group, user_id: user).
-          order(Arel.sql("CASE WHEN workflow_state = 'accepted' THEN 0 ELSE 1 END")).take
-        group_membership ||= group.group_memberships.build(:user => user)
+        group_membership = GroupMembership.where(group_id: group, user_id: user)
+                                          .order(Arel.sql("CASE WHEN workflow_state = 'accepted' THEN 0 ELSE 1 END")).take
+        group_membership ||= group.group_memberships.build(user:)
 
         group_membership.sis_batch_id = @batch.id
 
         case status
         when /accepted/i
-          group_membership.workflow_state = 'accepted'
+          group_membership.workflow_state = "accepted"
         when /deleted/i
-          group_membership.workflow_state = 'deleted'
+          group_membership.workflow_state = "deleted"
         end
 
         if group_membership.valid?
@@ -90,7 +88,6 @@ module SIS
         end
         @success_count += 1
       end
-
     end
   end
 end

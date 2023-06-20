@@ -19,11 +19,16 @@
 import React from 'react'
 import ReactDOM from 'react-dom'
 
+import bridge from '../../../../bridge'
+import {asVideoElement, findMediaPlayerIframe} from '../../shared/ContentSelection'
 import VideoOptionsTray from '.'
+import {isStudioEmbeddedMedia, parseStudioOptions} from '../../shared/StudioLtiSupportUtils'
+import RCEGlobals from '../../../RCEGlobals'
 
 export const CONTAINER_ID = 'instructure-video-options-tray-container'
 
-export const VIDEO_SIZE_OPTIONS = { height: '432px', width: '768px' }
+export const VIDEO_SIZE_DEFAULT = {height: '225px', width: '400px'} // AKA "LARGE"
+export const AUDIO_PLAYER_SIZE = {width: '320px', height: '14.25rem'}
 
 export default class TrayController {
   constructor() {
@@ -49,8 +54,16 @@ export default class TrayController {
 
   showTrayForEditor(editor) {
     this._editor = editor
+    this.$videoContainer = findMediaPlayerIframe(editor.selection.getNode())
     this._shouldOpen = true
-    this._renderTray()
+
+    if (bridge.focusedEditor) {
+      // Dismiss any content trays that may already be open
+      bridge.hideTrays()
+    }
+
+    const trayProps = bridge.trayProps.get(editor)
+    this._renderTray(trayProps)
   }
 
   hideTrayForEditor(editor) {
@@ -60,21 +73,96 @@ export default class TrayController {
   }
 
   _applyVideoOptions(videoOptions) {
-    const editor = this._editor
-    const $videoContainer = editor.selection.getNode()
-    $videoContainer.setAttribute("style",`height: ${VIDEO_SIZE_OPTIONS[videoOptions.videoSize].height}; width:${VIDEO_SIZE_OPTIONS[videoOptions.videoSize].width}`);
+    if (this.$videoContainer?.tagName === 'IFRAME') {
+      const $tinymceIframeShim = this.$videoContainer.parentElement
+      if (videoOptions.displayAs === 'embed') {
+        const isVertical = videoOptions.appliedHeight > videoOptions.appliedWidth
+        // player v5 requires more space for the CC button
+        // TODO: remove when using v7
+        const minWidth = videoOptions.subtitles?.length ? 400 : 320
+        const styl = {
+          height: `${videoOptions.appliedHeight}px`,
+          width: `${Math.max(
+            minWidth,
+            isVertical ? videoOptions.appliedHeight : videoOptions.appliedWidth
+          )}px`,
+        }
+        this._editor.dom.setStyles($tinymceIframeShim, styl)
+        this._editor.dom.setStyles(this.$videoContainer, styl)
+
+        const title = videoOptions.titleText
+        this._editor.dom.setAttrib($tinymceIframeShim, 'data-mce-p-title', title)
+        this._editor.dom.setAttrib(
+          $tinymceIframeShim,
+          'data-mce-p-data-titleText',
+          videoOptions.titleText
+        )
+        this._editor.dom.setAttrib(this.$videoContainer, 'title', title)
+        this._editor.dom.setAttrib(this.$videoContainer, 'data-titleText', videoOptions.titleText)
+
+        // tell tinymce so the context toolbar resets
+        this._editor.fire('ObjectResized', {
+          target: this.$videoContainer,
+          width: videoOptions.appliedWidth,
+          height: videoOptions.appliedHeight,
+        })
+      } else {
+        const href = this._editor.dom.getAttrib($tinymceIframeShim, 'data-mce-p-src')
+        const title =
+          videoOptions.titleText || this._editor.dom.getAttrib(this.$videoContainer, 'title')
+        const link = document.createElement('a')
+        link.setAttribute('href', href)
+        link.setAttribute('target', '_blank')
+        link.setAttribute('rel', 'noreferrer noopener')
+        link.textContent = title
+        this._editor.dom.replace(link, $tinymceIframeShim)
+        this._editor.selection.select(link)
+        this.$videoContainer = null
+      }
+
+      const data = {
+        media_object_id: videoOptions.media_object_id,
+        title: videoOptions.titleText,
+        subtitles: videoOptions.subtitles,
+      }
+
+      if (RCEGlobals.getFeatures().media_links_use_attachment_id) {
+        data.attachment_id = videoOptions.attachment_id
+      }
+
+      // If the video just edited came from a file uploaded to canvas
+      // and not notorious, we probably don't have a media_object_id.
+      // If not, we can't update the MediaObject in the canvas db.
+      if (videoOptions.media_object_id && videoOptions.media_object_id !== 'undefined') {
+        videoOptions
+          .updateMediaObject(data)
+          .then(_r => {
+            if (this.$videoContainer && videoOptions.displayAs === 'embed') {
+              this.$videoContainer.contentWindow.postMessage(
+                {subject: 'reload_media', media_object_id: videoOptions.media_object_id},
+                bridge.canvasOrigin
+              )
+            }
+          })
+          .catch(ex => {
+            console.error('failed updating video captions', ex) // eslint-disable-line no-console
+          })
+      }
+    }
     this._dismissTray()
   }
 
   _dismissTray() {
+    if (this.$videoContainer) {
+      this._editor?.selection?.select(this.$videoContainer)
+    }
     this._shouldOpen = false
     this._renderTray()
     this._editor = null
   }
 
-  _renderTray() {
-    // we will need this element when we do tracks but not for now.
-    // const $video = this._editor.selection.getNode()
+  _renderTray(trayProps) {
+    let vo = {}
 
     if (this._shouldOpen) {
       /*
@@ -83,15 +171,19 @@ export default class TrayController {
        * be used for initial video options.
        */
       this._renderId++
+      vo = asVideoElement(this.$videoContainer) || {}
     }
 
     const element = (
       <VideoOptionsTray
+        id="video-options-tray"
         key={this._renderId}
+        videoOptions={vo}
         onEntered={() => {
           this._isOpen = true
         }}
         onExited={() => {
+          bridge.focusActiveEditor(false)
           this._isOpen = false
         }}
         onSave={videoOptions => {
@@ -99,6 +191,12 @@ export default class TrayController {
         }}
         onRequestClose={() => this._dismissTray()}
         open={this._shouldOpen}
+        trayProps={trayProps}
+        studioOptions={
+          isStudioEmbeddedMedia(this.$videoContainer)
+            ? parseStudioOptions(this.$videoContainer)
+            : null
+        }
       />
     )
     ReactDOM.render(element, this.$container)

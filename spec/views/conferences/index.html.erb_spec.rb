@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,20 +18,19 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/../views_helper')
+require_relative "../views_helper"
 
-describe "/conference/index" do
+describe "conferences/index" do
   before do
     # these specs need an enabled web conference plugin
-    @plugin = PluginSetting.create!(name: 'wimba')
-    @plugin.update_attribute(:settings, { :domain => 'www.example.com' })
+    @plugin = PluginSetting.create!(name: "wimba")
+    @plugin.update_attribute(:settings, { domain: "www.example.com" })
   end
 
-  it "should render" do
-    course_with_teacher(:active_all => true)
+  it "renders" do
+    course_with_teacher(active_all: true)
     view_context(@course, @user)
-    @conference = @course.web_conferences.build(:conference_type => "Wimba")
+    @conference = @course.web_conferences.build(conference_type: "Wimba")
     @conference.user = @user
     @conference.save!
     @conference.add_initiator(@user)
@@ -39,4 +40,3 @@ describe "/conference/index" do
     expect(response).to have_tag("#new-conference-list")
   end
 end
-

@@ -70,7 +70,7 @@
                        title: accessible_date_format %>
     </div>
   </div>
-  <% if can_do(@context.account, @current_user, :manage_courses) %>
+  <% if can_do(@context.account, @current_user, :manage_courses, :manage_courses_admin) %>
     <div class="control-group">
       <label class="control-label"><strong><%= t('enrollment_term_id', 'Term') %></strong></label>
 
@@ -97,6 +97,15 @@
         </label>
       </div>
 
+      <% if MasterCourses::MasterTemplate.is_master_course?(@context) %>
+        <div class="controls import-blueprint-settings" style="margin-left: 2em; padding-bottom: 0.75em;">
+          <label class="checkbox">
+            <input type="checkbox" name="settings[import_blueprint_settings]">
+            <%= t('Copy Blueprint Course settings') %>
+          </label>
+        </div>
+      <% end %>
+
       <div class="radio">
         <label>
           <input type="radio" name="selective_import" value=true>
@@ -107,6 +116,11 @@
   </div>
 
   <div class="control-group">
+    <% if @context.root_account.feature_allowed?(:quizzes_next) && @context.root_account.feature_enabled?(:new_quizzes_migration) %>
+      <div class="controls">
+        <div id="new_quizzes_migrate"></div>
+      </div>
+    <% end %>
     <div id="date_shift"></div>
   </div>
 

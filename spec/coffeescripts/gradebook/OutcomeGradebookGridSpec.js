@@ -16,8 +16,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {isEqual, pluck} from 'underscore'
-import Grid from 'compiled/gradebook/OutcomeGradebookGrid'
+import {isEqual} from 'lodash'
+import Grid from '@canvas/outcome-gradebook-grid'
 import fakeENV from 'helpers/fakeENV'
 
 QUnit.module('OutcomeGradebookGrid', {
@@ -26,14 +26,14 @@ QUnit.module('OutcomeGradebookGrid', {
   },
   teardown() {
     fakeENV.teardown()
-  }
+  },
 })
 
 test('Grid.Math.mean', () => {
   const subject = [1, 1, 2, 4, 5]
-  ok(Grid.Math.mean(subject) === 2.6, 'returns a proper average')
-  ok(Grid.Math.mean(subject, true) === 3, 'optionally rounds result value')
-  ok(Grid.Math.mean([5, 12, 2]) === 6.33, 'rounds to two places')
+  strictEqual(Grid.Math.mean(subject), 2.6, 'returns a proper average')
+  strictEqual(Grid.Math.mean(subject, true), 3, 'optionally rounds result value')
+  strictEqual(Grid.Math.mean([5, 12, 2]), 6.33, 'rounds to two places')
 })
 
 test('Grid.Util._toRow', () => {
@@ -41,7 +41,7 @@ test('Grid.Util._toRow', () => {
   Grid.sections = {1: {}}
   const rollup = {
     links: {section: '1', user: '1'},
-    scores: [{score: '3', hide_points: true, links: {outcome: '2'}}]
+    scores: [{score: '3', hide_points: true, links: {outcome: '2'}}],
   }
   ok(
     isEqual(Grid.Util._toRow([rollup], null).outcome_2, {score: '3', hide_points: true}),
@@ -54,17 +54,20 @@ test('Grid.Util.toRows', () => {
   Grid.sections = {1: {}}
   const rollups = [
     {
-      links: {section: '1', user: '3'}
+      links: {section: '1', user: '3'},
     },
     {
-      links: {section: '1', user: '1'}
+      links: {section: '1', user: '1'},
     },
     {
-      links: {section: '1', user: '2'}
-    }
+      links: {section: '1', user: '2'},
+    },
   ]
   ok(
-    isEqual(Grid.Util.toRows(rollups).map(r => r.student.id), [3, 1, 2]),
+    isEqual(
+      Grid.Util.toRows(rollups).map(r => r.student.id),
+      [3, 1, 2]
+    ),
     'returns rows in the same user order as rollups'
   )
 })
@@ -77,7 +80,7 @@ test('Grid.View.masteryDetails', () => {
   Grid.ratings = [
     {points: 10, color: '00ff00', description: 'great'},
     {points: 5, color: '0000ff', description: 'OK'},
-    {points: 0, color: 'ff0000', description: 'turrable'}
+    {points: 0, color: 'ff0000', description: 'turrable'},
   ]
   ok(
     isEqual(Grid.View.masteryDetails(10, outcome), ['rating_0', '#00ff00', 'great']),
@@ -106,7 +109,7 @@ test('Grid.View.masteryDetails with scaling', () => {
   Grid.ratings = [
     {points: 10, color: '00ff00', description: 'great'},
     {points: 5, color: '0000ff', description: 'OK'},
-    {points: 0, color: 'ff0000', description: 'turrable'}
+    {points: 0, color: 'ff0000', description: 'turrable'},
   ]
   ok(
     isEqual(Grid.View.masteryDetails(5, outcome), ['rating_0', '#00ff00', 'great']),
@@ -127,7 +130,7 @@ test('Grid.View.masteryDetails with scaling (points_possible 0)', () => {
   Grid.ratings = [
     {points: 10, color: '00ff00', description: 'great'},
     {points: 5, color: '0000ff', description: 'OK'},
-    {points: 0, color: 'ff0000', description: 'turrable'}
+    {points: 0, color: 'ff0000', description: 'turrable'},
   ]
   ok(
     isEqual(Grid.View.masteryDetails(5, outcome), ['rating_0', '#00ff00', 'great']),
@@ -150,11 +153,11 @@ test('Grid.View.legacyMasteryDetails', () => {
     'returns "exceeds" if 150% or more of mastery score'
   )
   ok(
-    isEqual(Grid.View.legacyMasteryDetails(5, outcome), ['rating_1', '#00AC18', 'Meets Mastery']),
+    isEqual(Grid.View.legacyMasteryDetails(5, outcome), ['rating_1', '#0B874B', 'Meets Mastery']),
     'returns "mastery" if equal to mastery score'
   )
   ok(
-    isEqual(Grid.View.legacyMasteryDetails(7, outcome), ['rating_1', '#00AC18', 'Meets Mastery']),
+    isEqual(Grid.View.legacyMasteryDetails(7, outcome), ['rating_1', '#0B874B', 'Meets Mastery']),
     'returns "mastery" if above mastery score'
   )
   ok(
@@ -164,8 +167,8 @@ test('Grid.View.legacyMasteryDetails', () => {
   ok(
     isEqual(Grid.View.legacyMasteryDetails(1, outcome), [
       'rating_3',
-      '#EE0612',
-      'Well Below Mastery'
+      '#E0061F',
+      'Well Below Mastery',
     ]),
     'returns "remedial" if less than half of mastery score'
   )
@@ -174,7 +177,7 @@ test('Grid.View.legacyMasteryDetails', () => {
 test('Grid.Util.toColumns for xss', () => {
   const outcome = {
     id: 1,
-    title: '<script>'
+    title: '<script>',
   }
   const columns = Grid.Util.toColumns([outcome], [])
   ok(isEqual(columns[1].name, '&lt;script&gt;'))
@@ -188,15 +191,15 @@ test('Grid.Util._studentColumn does not modify default options', () => {
 test('Grid.Util.toColumns hasResults', () => {
   const outcomes = [
     {
-      id: '1'
+      id: '1',
     },
     {
-      id: '2'
-    }
+      id: '2',
+    },
   ]
   const rollup = {
     links: {section: '1', user: '1'},
-    scores: [{score: '3', hide_points: true, links: {outcome: '2'}}]
+    scores: [{score: '3', hide_points: true, links: {outcome: '2'}}],
   }
   const columns = Grid.Util.toColumns(outcomes, [rollup])
   ok(isEqual(columns[1].hasResults, false))

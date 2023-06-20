@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -17,15 +19,15 @@
 #
 
 module Factories
-  def group_membership_model(opts={})
-    do_save = opts.has_key?(:save) ? opts.delete(:save) : true
+  def group_membership_model(opts = {})
+    do_save = opts.key?(:save) ? opts.delete(:save) : true
     @group_membership = factory_with_protected_attributes(GroupMembership, valid_group_membership_attributes.merge(opts), do_save)
   end
 
   def valid_group_membership_attributes
     {
-      :group => @group,
-      :user => @user
+      group: @group,
+      user: @user
     }
   end
 end

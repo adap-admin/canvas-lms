@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -15,18 +17,18 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-shared_examples '[:incorrect]' do
-  it 'should count all incorrect responses' do
+shared_examples "[:incorrect]" do
+  it "counts all incorrect responses" do
     stats = subject.run([
-      { correct: "true" },
-      { correct: true },
-      { correct: 'false' },
-      { correct: false },
-      { correct: nil },
-      { correct: 'partial' },
-      { correct: 'undefined' },
-      { correct: 'defined' }
-    ])
+                          { correct: "true" },
+                          { correct: true },
+                          { correct: "false" },
+                          { correct: false },
+                          { correct: nil },
+                          { correct: "partial" },
+                          { correct: "undefined" },
+                          { correct: "defined" }
+                        ])
 
     expect(stats[:incorrect]).to eq(3)
   end

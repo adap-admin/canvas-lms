@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -20,6 +22,6 @@ class ChangeAssignmentOverrideStudentsConstraint < ActiveRecord::Migration[5.0]
 
   def change
     remove_index :assignment_override_students, [:assignment_id, :user_id]
-    add_index :assignment_override_students, [:assignment_id, :user_id], :unique => true, :where => "workflow_state = 'active'"
+    add_index :assignment_override_students, [:assignment_id, :user_id], unique: true, where: "workflow_state = 'active'"
   end
 end

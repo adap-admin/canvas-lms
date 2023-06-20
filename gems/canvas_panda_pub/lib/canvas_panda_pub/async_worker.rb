@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -16,23 +18,20 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'thread'
-require 'set'
+require "set"
 
 module CanvasPandaPub
-
   # Internal: Helper for performing PandaPub HTTP requests in a separate
   # thread. The only type of pushes we currently support are ones where later
   # pushes take precedence over earlier pushes.
 
   class AsyncWorker
-
     def initialize(start_thread = true)
       @queue = Queue.new
       @logger = CanvasPandaPub.logger
       @interval = CanvasPandaPub.process_interval
 
-      self.start! if start_thread
+      start! if start_thread
     end
 
     def push(tag, p)
@@ -44,7 +43,7 @@ module CanvasPandaPub
       # second the Proc that gets run
       # third is a flag of whether or not to actually run it. We may
       # change it to false later
-      @queue << [ tag, p, true ]
+      @queue << [tag, p, true]
       true
     end
 
@@ -54,7 +53,7 @@ module CanvasPandaPub
     end
 
     def start!
-        @thread = Thread.new { self.run_thread }
+      @thread = Thread.new { run_thread }
     end
 
     def run_thread
@@ -106,11 +105,11 @@ module CanvasPandaPub
             # since a) that incurs a Redis hit for every use, and b) we're
             # already protected from blocking Canvas since we're in a thread.
             p.call
-          rescue Exception => e
+          rescue => e
             @logger.error("Exception making PandaPub call to channel #{tag}: #{e}")
           end
+          CanvasPandaPub.on_work_unit_end&.call
         end
-
         break if stop
       end
     end

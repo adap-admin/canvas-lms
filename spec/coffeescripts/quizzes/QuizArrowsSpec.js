@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import QuizArrowApplicator from 'quiz_arrows'
+import QuizArrowApplicator from '@canvas/quizzes/jquery/quiz_arrows'
 import fakeENV from 'helpers/fakeENV'
 
 QUnit.module('QuizArrowApplicator', {
@@ -26,17 +26,17 @@ QUnit.module('QuizArrowApplicator', {
   },
   teardown() {
     fakeENV.teardown()
-  }
+  },
 })
 
-test("applies 'correct' and 'incorrect' arrows when the quiz is not a survey", function() {
+test("applies 'correct' and 'incorrect' arrows when the quiz is not a survey", function () {
   sandbox.spy(this.arrowApplicator, 'applyCorrectAndIncorrectArrows')
   ENV.IS_SURVEY = false
   this.arrowApplicator.applyArrows()
   ok(this.arrowApplicator.applyCorrectAndIncorrectArrows.calledOnce)
 })
 
-test("does not apply 'correct' and 'incorrect' arrows when the quiz is a survey", function() {
+test("does not apply 'correct' and 'incorrect' arrows when the quiz is a survey", function () {
   sandbox.spy(this.arrowApplicator, 'applyCorrectAndIncorrectArrows')
   ENV.IS_SURVEY = true
   this.arrowApplicator.applyArrows()

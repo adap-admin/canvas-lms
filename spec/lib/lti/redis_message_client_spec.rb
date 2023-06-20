@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -16,38 +18,36 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper')
-
 describe Lti::RedisMessageClient do
   include Lti::RedisMessageClient
 
   let_once(:context) { course_model }
 
-  let(:launch) { {foo: 'bar'} }
+  let(:launch) { { foo: "bar" } }
 
-  describe '#cache_launch' do
-    it 'caches the launch as JSON' do
+  describe "#cache_launch" do
+    it "caches the launch as JSON" do
       verifier = cache_launch(launch, context)
       redis_key = "#{context.class.name}:#{Lti::RedisMessageClient::LTI_1_3_PREFIX}#{verifier}"
       expect(Canvas.redis.get(redis_key)).to eq launch.to_json
     end
 
-    it 'allows setting the prefix' do
+    it "allows setting the prefix" do
       verifier = cache_launch(launch, context, prefix: Lti::RedisMessageClient::SESSIONLESS_LAUNCH_PREFIX)
       redis_key = "#{context.class.name}:#{Lti::RedisMessageClient::SESSIONLESS_LAUNCH_PREFIX}#{verifier}"
       expect(Canvas.redis.get(redis_key)).to eq launch.to_json
     end
   end
 
-  describe '#fetch_and_delete_launch' do
+  describe "#fetch_and_delete_launch" do
     let(:redis_key) { cache_launch(launch, context) }
 
-    it 'fetches the launch data' do
+    it "fetches the launch data" do
       cached_launch = fetch_and_delete_launch(context, redis_key)
       expect(cached_launch).to eq launch.to_json
     end
 
-    it 'deletes the redis entry' do
+    it "deletes the redis entry" do
       fetch_and_delete_launch(context, redis_key)
       cached_launch = fetch_and_delete_launch(context, redis_key)
       expect(cached_launch).to be_nil

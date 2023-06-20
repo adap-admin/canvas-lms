@@ -19,10 +19,10 @@
 import React from 'react'
 import ReactDOM from 'react-dom'
 import TestUtils from 'react-dom/test-utils'
-import Avatar from 'jsx/context_cards/Avatar'
-import InstUIAvatar from '@instructure/ui-elements/lib/components/Avatar'
+import Avatar from '@canvas/context-cards/react/Avatar'
+import {Avatar as InstUIAvatar} from '@instructure/ui-avatar'
 
-QUnit.module('StudentContextTray/Avatar', (hooks) => {
+QUnit.module('StudentContextTray/Avatar', hooks => {
   let subject
 
   hooks.afterEach(() => {
@@ -36,11 +36,11 @@ QUnit.module('StudentContextTray/Avatar', (hooks) => {
   })
 
   test('renders no avatars by default', () => {
-    subject = TestUtils.renderIntoDocument(
-      <Avatar user={{}} courseId="1" canMasquerade />
-    )
+    subject = TestUtils.renderIntoDocument(<Avatar name="" user={{}} courseId="1" canMasquerade />)
 
-    throws(() => { TestUtils.findRenderedComponentWithType(subject, InstUIAvatar) })
+    throws(() => {
+      TestUtils.findRenderedComponentWithType(subject, InstUIAvatar)
+    })
   })
 
   test('renders avatar with user object when provided', () => {
@@ -49,10 +49,10 @@ QUnit.module('StudentContextTray/Avatar', (hooks) => {
     const user = {
       name: userName,
       avatar_url: avatarUrl,
-      _id: '17'
+      _id: '17',
     }
     subject = TestUtils.renderIntoDocument(
-      <Avatar user={user} courseId="1" canMasquerade />
+      <Avatar name="" user={user} courseId="1" canMasquerade />
     )
 
     const avatar = TestUtils.findRenderedComponentWithType(subject, InstUIAvatar)

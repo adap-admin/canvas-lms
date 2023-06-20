@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
-
 describe WikiPagesController do
   before do
     course_with_teacher_logged_in(active_all: true)
@@ -25,8 +25,8 @@ describe WikiPagesController do
   end
 
   describe "GET 'front_page'" do
-    it "should redirect" do
-      get 'front_page', params: {:course_id => @course.id}
+    it "redirects" do
+      get "front_page", params: { course_id: @course.id }
       expect(response).to be_redirect
       expect(response.location).to match(%r{/courses/#{@course.id}/pages})
     end
@@ -34,24 +34,9 @@ describe WikiPagesController do
     it "sets up js_env for view_all_pages link" do
       front_page = @course.wiki_pages.create!(title: "ponies4ever")
       @wiki.set_front_page_url!(front_page.url)
-      get 'front_page', params: {course_id: @course.id}
+      get "front_page", params: { course_id: @course.id }
       expect(response).to be_successful
       expect(assigns[:js_env][:DISPLAY_SHOW_ALL_LINK]).to be(true)
-    end
-  end
-
-  describe "GET 'index'" do
-    it "sets DIRECT_SHARE_ENABLED when enabled" do
-      @course.account.enable_feature!(:direct_share)
-      get 'index', params: {course_id: @course.id}
-      expect(response).to be_successful
-      expect(assigns[:js_env][:DIRECT_SHARE_ENABLED]).to be(true)
-    end
-
-    it "does not set DIRECT_SHARE_ENABLED when disabled" do
-      get 'index', params: {course_id: @course.id}
-      expect(response).to be_successful
-      expect(assigns[:js_env][:DIRECT_SHARE_ENABLED]).to be(false)
     end
   end
 
@@ -61,71 +46,60 @@ describe WikiPagesController do
     end
 
     describe "GET 'show_redirect'" do
-      it "should redirect" do
-        get 'show_redirect', params: {:course_id => @course.id, :id => @page.url}
+      it "redirects" do
+        get "show_redirect", params: { course_id: @course.id, id: @page.url }
         expect(response).to be_redirect
         expect(response.location).to match(%r{/courses/#{@course.id}/pages/#{@page.url}})
       end
     end
 
     describe "GET 'show'" do
-      it "should render" do
-        get 'show', params: {course_id: @course.id, id: @page.url}
+      it "renders" do
+        get "show", params: { course_id: @course.id, id: @page.url }
         expect(response).to be_successful
       end
     end
 
     describe "GET 'edit'" do
-      it "should render" do
-        get 'edit', params: {course_id: @course.id, id: @page.url}
+      it "renders" do
+        get "edit", params: { course_id: @course.id, id: @page.url }
         expect(response).to be_successful
       end
     end
 
     describe "GET 'revisions'" do
-      it "should render" do
-        get 'revisions', params: {course_id: @course.id, wiki_page_id: @page.url}
+      it "renders" do
+        get "revisions", params: { course_id: @course.id, wiki_page_id: @page.url }
         expect(response).to be_successful
       end
     end
 
-    describe "student planner" do
-      before :once do
-        course_with_teacher(active_all: true)
-        @page = @course.wiki_pages.create!(title: "plan for planning the planner's planned plan... plan", body: "")
-      end
+    it "js_env has placements for Commons Favorites Import" do
+      allow(controller).to receive(:external_tools_display_hashes).and_return(["tool 1", "tool 2"])
+      get "show", params: { course_id: @course.id, id: @page.url }
+      expect(response).to be_successful
+      expect(controller.js_env[:wiki_index_menu_tools]).to eq ["tool 1", "tool 2"]
+    end
 
+    context "when K5 mode is enabled and user is a student" do
       before do
-        user_session @teacher
+        course_with_student(active_all: true)
+        @course.account.enable_as_k5_account!
+        @page = @course.wiki_pages.create!(title: "a page", body: "")
+        user_session(@user)
       end
 
-      context "feature enabled" do
-        before :once do
-          @course.root_account.enable_feature! :student_planner
-        end
-
-        describe "GET 'index" do
-          it "should render" do
-            get 'index', params: {course_id: @course.id}
-            expect(response).to be_successful
-            expect(controller.js_env[:STUDENT_PLANNER_ENABLED]).to be_truthy
-          end
-        end
-
-        describe "GET 'show" do
-          it "should render" do
-            get 'show', params: {course_id: @course.id, id: @page.url}
-            expect(response).to be_successful
-            expect(controller.js_env[:STUDENT_PLANNER_ENABLED]).to be_truthy
-          end
-        end
+      it "hides the view_all_pages link" do
+        get "show", params: { course_id: @course.id, id: @page.url }
+        expect(response).to be_successful
+        expect(controller.js_env[:DISPLAY_SHOW_ALL_LINK]).to be_falsey
       end
     end
 
     context "differentiated assignments" do
       before do
         assignment = @course.assignments.create!(
-          submission_types: 'wiki_page',
+          submission_types: "wiki_page",
           only_visible_to_overrides: true
         )
         @page.assignment = assignment
@@ -139,45 +113,46 @@ describe WikiPagesController do
 
       context "for unassigned students" do
         before do
-          @course.enroll_student(@student_without_override, enrollment_state: 'active')
+          @course.enroll_student(@student_without_override, enrollment_state: "active")
           user_session(@student_without_override)
         end
 
-        it "should allow show" do
-          get 'show', params: {course_id: @course.id, id: @page.url}
-          expect(response.code).to eq "200"
+        it "allows show" do
+          get "show", params: { course_id: @course.id, id: @page.url }
+          expect(response).to have_http_status :ok
         end
 
-        it "should allow edit" do
-          get 'edit', params: {course_id: @course.id, id: @page.url}
-          expect(response.code).to eq "200"
+        it "allows edit" do
+          get "edit", params: { course_id: @course.id, id: @page.url }
+          expect(response).to have_http_status :ok
         end
 
-        it "should allow revisions" do
-          get 'revisions', params: {course_id: @course.id, wiki_page_id: @page.url}
-          expect(response.code).to eq "200"
+        it "allows revisions" do
+          get "revisions", params: { course_id: @course.id, wiki_page_id: @page.url }
+          expect(response).to have_http_status :ok
         end
 
         context "feature enabled" do
           before do
-            allow(ConditionalRelease::Service).to receive(:configured?).and_return(true)
-            @course.enable_feature!(:conditional_release)
+            allow(ConditionalRelease::Service).to receive(:service_configured?).and_return(true)
+            @course.conditional_release = true
+            @course.save!
           end
 
-          it "should forbid show" do
-            get 'show', params: {course_id: @course.id, id: @page.url}
+          it "forbids show" do
+            get "show", params: { course_id: @course.id, id: @page.url }
             expect(response).to be_redirect
             expect(response.location).to eq course_wiki_pages_url(@course)
           end
 
-          it "should forbid edit" do
-            get 'edit', params: {course_id: @course.id, id: @page.url}
+          it "forbids edit" do
+            get "edit", params: { course_id: @course.id, id: @page.url }
             expect(response).to be_redirect
             expect(response.location).to eq course_wiki_pages_url(@course)
           end
 
-          it "should forbid revisions" do
-            get 'revisions', params: {course_id: @course.id, wiki_page_id: @page.url}
+          it "forbids revisions" do
+            get "revisions", params: { course_id: @course.id, wiki_page_id: @page.url }
             expect(response).to be_redirect
             expect(response.location).to eq course_wiki_pages_url(@course)
           end
@@ -190,20 +165,62 @@ describe WikiPagesController do
           user_session(@student_with_override)
         end
 
-        it "should allow show" do
-          get 'show', params: {course_id: @course.id, id: @page.url}
-          expect(response.code).to eq "200"
+        it "allows show" do
+          get "show", params: { course_id: @course.id, id: @page.url }
+          expect(response).to have_http_status :ok
         end
 
-        it "should allow edit" do
-          get 'edit', params: {course_id: @course.id, id: @page.url}
-          expect(response.code).to eq "200"
-          expect(controller.js_env[:CONDITIONAL_RELEASE_SERVICE_ENABLED]).to eq false
+        it "allows edit" do
+          get "edit", params: { course_id: @course.id, id: @page.url }
+          expect(response).to have_http_status :ok
+          expect(controller.js_env[:CONDITIONAL_RELEASE_SERVICE_ENABLED]).to be false
         end
 
-        it "should allow revisions" do
-          get 'revisions', params: {course_id: @course.id, wiki_page_id: @page.url}
-          expect(response.code).to eq "200"
+        it "allows revisions" do
+          get "revisions", params: { course_id: @course.id, wiki_page_id: @page.url }
+          expect(response).to have_http_status :ok
+        end
+      end
+    end
+  end
+
+  describe "metrics" do
+    before do
+      allow(InstStatsd::Statsd).to receive(:increment).and_call_original
+    end
+
+    context "show" do
+      context "with edit rights" do
+        it "increments the count metric for a nonexistent page" do
+          course_with_teacher_logged_in(active_all: true)
+          bad_page_url = "something-that-doesnt-really-exist"
+          get "show", params: { course_id: @course.id, id: bad_page_url }
+          expect(InstStatsd::Statsd).to have_received(:increment).with("wikipage.show.page_does_not_exist.with_edit_rights")
+        end
+
+        it "does not increment the count metric when page is deleted" do
+          course_with_teacher_logged_in(active_all: true)
+          @page = @course.wiki_pages.create!(title: "delete me")
+          @page.update(workflow_state: "deleted")
+          get "show", params: { course_id: @course.id, id: @page.url }
+          expect(InstStatsd::Statsd).not_to have_received(:increment).with("wikipage.show.page_does_not_exist.with_edit_rights")
+        end
+      end
+
+      context "without edit rights" do
+        it "increments the count metric for a nonexistent page" do
+          course_with_student_logged_in(active_all: true)
+          bad_page_url = "something-else-that-doesnt-really-exist"
+          get "show", params: { course_id: @course.id, id: bad_page_url }
+          expect(InstStatsd::Statsd).to have_received(:increment).with("wikipage.show.page_does_not_exist.without_edit_rights")
+        end
+
+        it "does not increment the count metric when page is deleted" do
+          course_with_student_logged_in(active_all: true)
+          @page = @course.wiki_pages.create!(title: "delete me too")
+          @page.update(workflow_state: "deleted")
+          get "show", params: { course_id: @course.id, id: @page.url }
+          expect(InstStatsd::Statsd).not_to have_received(:increment).with("wikipage.show.page_does_not_exist.without_edit_rights")
         end
       end
     end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -15,42 +17,42 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require File.expand_path(File.dirname(__FILE__) + '/../common')
+require_relative "../common"
 
 module SchedulerCommon
   def fill_out_appointment_group_form(new_appointment_text, opts = {})
-    f('.create_link').click
-    edit_form = f('#edit_appointment_form')
+    f(".create_link").click
+    edit_form = f("#edit_appointment_form")
     expect(edit_form).to be_displayed
     replace_content(f('input[name="title"]'), new_appointment_text)
     unless opts[:skip_contexts]
-      f('.ag_contexts_selector').click
-      f('.ag_sections_toggle').click
+      f(".ag_contexts_selector").click
+      f(".ag_sections_toggle").click
       if opts[:section_codes]
         opts[:section_codes].each { |code| f("[name='sections[]'][value='#{code}']").click }
       else
         f('[name="context_codes[]"]').click
       end
-      f('.ag_contexts_done').click
+      f(".ag_contexts_done").click
     end
     if opts[:checkable_options]
-      if opts[:checkable_options].has_key?(:per_slot_option)
+      if opts[:checkable_options].key?(:per_slot_option)
         set_value f('[type=checkbox][name="per_slot_option"]'), true
       end
-      if opts[:checkable_options].has_key?(:participant_visibility)
+      if opts[:checkable_options].key?(:participant_visibility)
         set_value f('[type=checkbox][name="participant_visibility"]'), true
       end
-      if opts[:checkable_options].has_key?(:max_appointments_per_participant_option)
+      if opts[:checkable_options].key?(:max_appointments_per_participant_option)
         set_value f('[type=checkbox][name="max_appointments_per_participant_option"]'), true
       end
     end
-    date_field = edit_form.find_element(:css, '.date_field')
+    date_field = edit_form.find_element(:css, ".date_field")
     date_field.click
     wait_for_ajaximations
-    fj('.ui-datepicker-trigger:visible').click
+    fj(".ui-datepicker-trigger:visible").click
     datepicker_next
-    replace_content(edit_form.find_element(:css, '.start_time'), '1')
-    replace_content(edit_form.find_element(:css, '.end_time'), '3')
+    replace_content(edit_form.find_element(:css, ".start_time"), "1")
+    replace_content(edit_form.find_element(:css, ".end_time"), "3")
   end
 
   def scheduler_setup
@@ -66,10 +68,10 @@ module SchedulerCommon
   end
 
   def create_users_and_enroll
-    @student1 = User.create!(name: 'Student 1')
-    @student2 = User.create!(name: 'Student 2')
-    @student3 = User.create!(name: 'Student 3')
-    @teacher1 = User.create!(name: 'teacher')
+    @student1 = User.create!(name: "Student 1")
+    @student2 = User.create!(name: "Student 2")
+    @student3 = User.create!(name: "Student 3")
+    @teacher1 = User.create!(name: "teacher")
     @course1.enroll_student(@student1).accept!
     @course1.enroll_teacher(@teacher1).accept!
     @course1.enroll_student(@student2).accept!
@@ -82,31 +84,34 @@ module SchedulerCommon
   def create_appointment_groups_for_courses
     time = Time.zone.now
     time += 1.hour if time.hour == 23 # ensure the appointments are on the same day
-    @app1 = AppointmentGroup.create!(title: "Appointment 1", contexts: [@course1],
-                                     participant_visibility: 'protected',
-                                     new_appointments: [[time, time+30.minutes],
+    @app1 = AppointmentGroup.create!(title: "Appointment 1",
+                                     contexts: [@course1],
+                                     participant_visibility: "protected",
+                                     new_appointments: [[time, time + 30.minutes],
                                                         [time + 30.minutes, time + 1.hour]],
-                                     participants_per_appointment: 1, max_appointments_per_participant: 1)
+                                     participants_per_appointment: 1,
+                                     max_appointments_per_participant: 1)
     @app1.publish!
-    @app3 = AppointmentGroup.create!(title: "Appointment 3", contexts: [@course1, @course2],
-                                                        new_appointments: [[time+1.hour, time+1.hour + 30.minutes]])
+    @app3 = AppointmentGroup.create!(title: "Appointment 3",
+                                     contexts: [@course1, @course2],
+                                     new_appointments: [[time + 1.hour, time + 1.hour + 30.minutes]])
     @app3.publish!
   end
 
-  def appointment_params(opts={})
+  def appointment_params(opts = {})
     {
-        title: opts[:title],
-        contexts: opts[:contexts],
-        new_appointments: [
-          [opts[:start_at] || Time.zone.now + 1.hour,
-           opts[:end_at] || Time.zone.now + 3.hours],
-        ],
-        participants_per_appointment: opts[:participants] || 4
+      title: opts[:title],
+      contexts: opts[:contexts],
+      new_appointments: [
+        [opts[:start_at] || 1.hour.from_now,
+         opts[:end_at] || 3.hours.from_now],
+      ],
+      participants_per_appointment: opts[:participants] || 4
     }
   end
 
   def submit_appointment_group_form(publish = true)
-    save, save_and_publish = ff('.ui-dialog-buttonset .ui-button')
+    save, save_and_publish = ff(".ui-dialog-buttonset .ui-button")
     if publish
       save_and_publish.click
     else
@@ -121,44 +126,39 @@ module SchedulerCommon
 
   def create_appointment_group_manual(opts = {})
     opts = {
-        :publish => true,
-        :new_appointment_text => 'new appointment group'
+      publish: true,
+      new_appointment_text: "new appointment group"
     }.with_indifferent_access.merge(opts)
 
-    expect {
+    expect do
       fill_out_appointment_group_form(opts[:new_appointment_text], opts)
       submit_appointment_group_form(opts[:publish])
-      expect(f('.view_calendar_link').text).to eq opts[:new_appointment_text]
-    }.to change(AppointmentGroup, :count).by(1)
+      expect(f(".view_calendar_link").text).to eq opts[:new_appointment_text]
+    end.to change(AppointmentGroup, :count).by(1)
   end
 
   def open_select_courses_modal(course_name)
-    f('#FindAppointmentButton').click
-    click_option('.ic-Input', course_name)
+    f("#FindAppointmentButton").click
+    click_option(".ic-Input", course_name)
     f('[role="dialog"][aria-label="Select Course"] button[type="submit"]').click
   end
 
   # This method closes the modal only when it is already opened. If not, it will open the modal
   def close_select_courses_modal
-    f('#FindAppointmentButton').click
-  end
-
-  def click_scheduler_link
-    f('button#scheduler').click
-    wait_for_ajaximations
+    f("#FindAppointmentButton").click
   end
 
   def click_appointment_link
-    f('.view_calendar_link').click
-    fj('.agenda-wrapper.active:visible')
+    f(".view_calendar_link").click
+    fj(".agenda-wrapper.active:visible")
     # wait for loading spinner, then wait for it to not be displayed
-    wait_for(method: nil, timeout: 3) { f('#refresh_calendar_link').displayed? }
-    wait_for(method: nil, timeout: 15) { !f('#refresh_calendar_link').displayed? }
+    wait_for(method: nil, timeout: 3) { f("#refresh_calendar_link").displayed? }
+    wait_for(method: nil, timeout: 15) { !f("#refresh_calendar_link").displayed? }
   end
 
-  def click_al_option(option_selector, offset=0)
-    ffj('.al-trigger')[offset].click
-    options = ffj('.al-options')[offset]
+  def click_al_option(option_selector, offset = 0)
+    ffj(".al-trigger")[offset].click
+    options = ffj(".al-options")[offset]
     expect(options).to be_displayed
     options.find_element(:css, option_selector).click
   end
@@ -168,26 +168,20 @@ module SchedulerCommon
     wait_for_ajaximations
   end
 
-  def edit_appointment_group(appointment_name = 'edited appointment', location_name = 'edited location')
-    expect(f('#edit_appointment_form')).to be_displayed
+  def edit_appointment_group(appointment_name = "edited appointment", location_name = "edited location")
+    expect(f("#edit_appointment_form")).to be_displayed
     replace_content(fj('input[name="title"]'), appointment_name)
     replace_content(fj('input[name="location"]'), location_name)
     driver.execute_script("$('.ui-dialog-buttonset .Button--primary').trigger('click')")
     wait_for_ajaximations
-    expect(f('.view_calendar_link').text).to eq appointment_name
-    expect(f('.ag-location')).to include_text(location_name)
-  end
-
-  def open_edit_dialog
-    driver.action.move_to(f('.appointment-group-item')).perform
-    click_al_option('.edit_link')
-    wait_for_ajaximations
+    expect(f(".view_calendar_link").text).to eq appointment_name
+    expect(f(".ag-location")).to include_text(location_name)
   end
 
   def open_edit_appointment_group_event_dialog
-    f('.agenda-event__item .agenda-event__item-container').click
-    expect(f('.edit_event_link')).to be_displayed
-    f('.edit_event_link').click
+    f(".agenda-event__item .agenda-event__item-container").click
+    expect(calendar_edit_event_link).to be_displayed
+    calendar_edit_event_link.click
     wait_for_ajaximations
   end
 
@@ -204,10 +198,10 @@ module SchedulerCommon
   end
 
   def agenda_item
-    f('.agenda-event__item .agenda-event__item-container')
+    f(".agenda-event__item .agenda-event__item-container")
   end
 
   def scheduler_event
-    f('.fc-event.scheduler-event')
+    f(".fc-event.scheduler-event")
   end
 end

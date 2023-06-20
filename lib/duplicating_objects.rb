@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -20,7 +22,7 @@ module DuplicatingObjects
   # Lowercases title and replaces spaces with hyphens (to allow to check for
   # matching titles that differ only in case or space/hyphens)
   def normalize_title(title)
-    title.gsub(/ /, '-').downcase
+    title.tr(" ", "-").downcase
   end
 
   # Given a title, returns the first "non-conflicting" title.  "entity"
@@ -37,7 +39,7 @@ module DuplicatingObjects
   # For the purposes of matching, conflicts are case-insensitive and also
   # treats hyphens and spaces as the same thing.
   def get_copy_title(entity, copy_suffix, entity_title)
-    is_multiple_copy = !(normalize_title(entity_title)=~
+    is_multiple_copy = !(normalize_title(entity_title) =~
       /#{Regexp.quote(copy_suffix.downcase)}-[0-9]*$/).nil?
     normalized_suffix = normalize_title(copy_suffix)
     if normalize_title(entity_title).end_with?(normalized_suffix) || is_multiple_copy
@@ -48,12 +50,13 @@ module DuplicatingObjects
       potential_title = "#{entity_title} #{copy_suffix}"
       num_to_try = 2
     end
-    title_base = !is_multiple_copy ? potential_title + " " : potential_title.gsub(/\d+$/, '')
+    title_base = is_multiple_copy ? potential_title.gsub(/\d+$/, "") : potential_title + " "
     title_search_term = title_base[0...-1]
-    conflicting_titles = entity.get_potentially_conflicting_titles(title_search_term).map {
-      |x| normalize_title(x)
-    }
+    conflicting_titles = entity.get_potentially_conflicting_titles(title_search_term).map do |x|
+      normalize_title(x)
+    end
     return potential_title unless conflicting_titles.include?(normalize_title(potential_title))
+
     loop do
       title_attempt = "#{title_base}#{num_to_try}"
       num_to_try = num_to_try.succ

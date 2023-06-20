@@ -16,9 +16,35 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 %>
 
+<%
+  presenter = Submission::ShowPresenter.new(
+    submission: @submission,
+    current_user: @current_user,
+    assessment_request: @assessment_request,
+    current_host: request.host
+  )
+
+  # Calls to doc_preview_attributes will result in this hash getting some
+  # attributes deleted; dup this hash before passing it to any methods.
+  preview_url_opts = {
+    anonymous_instructor_annotations: @anonymous_instructor_annotations,
+    enable_annotations: true,
+    enrollment_type: @enrollment_type,
+    moderated_grading_allow_list: @moderated_grading_allow_list,
+    submission_id: @submission.id
+  }
+
+  if @submission.submission_type == "student_annotation"
+    annotation_context = @submission.annotation_context(attempt: @submission.attempt)
+    preview_url_opts[:annotation_context] = annotation_context.launch_id
+  end
+%>
+
 <% css_bundle :submission %>
 
 <% user_name = params[:hide_student_name] ? t(:anonymous_username, "This Student") : submission_author_name_for(@assessment_request) %>
+<% show_updated_plagiarism_icons = @context.root_account.feature_enabled?(:new_gradebook_plagiarism_indicator) %>
+
 <% provide :page_title do %><%= join_title @assignment.title, t("Submission Preview") %><% end %>
 <% if @assignment.submission_types == 'discussion_topic' && @assignment.discussion_topic %>
   <div style="width: 600px; margin: 10px auto;">
@@ -107,13 +133,18 @@
   <% end %>
   </div>
 <% elsif @submission.submission_type == "online_text_entry" %>
-  <% js_bundle 'legacy/submissions_show_preview_text' %>
+  <% js_bundle 'submissions_show_preview_text' %>
   <div style="text-align: <%= direction('right') %>; margin-top: 15px;">
     <select class="data_view">
       <option aria-label="<%= t("Assignment %{assignment} submission Paper View", :assignment=> @assignment.title) %>" value="paper"><%= t('Paper View') %></option>
       <option aria-label="<%= t("Assignment %{assignment} submission Plain Text View", :assignment=> @assignment.title) %>" value="plain_text"><%= t('Plain Text View') %></option>
     </select>
-    <%= render :partial => 'submissions/originality_score', locals: { attachment: nil } %>
+    <%=
+      render partial: 'submissions/originality_score', locals: {
+        attachment: nil,
+        show_updated_icons: show_updated_plagiarism_icons
+      }
+    %>
   </div>
   <div id="submission_preview" class="paper user_content">
     <%= user_content(@submission.body) %>
@@ -158,12 +189,20 @@
         </div>
 
         <div class="file-upload-submission-turnitin">
-           <%= render :partial => 'submissions/originality_score', locals: { attachment: attachment } %>
+          <%=
+            render partial: 'submissions/originality_score', locals: {
+              attachment: attachment,
+              show_updated_icons: show_updated_plagiarism_icons
+            }
+          %>
         </div>
 
         <div class="file-upload-submission-attachment">
+          <% unread_annotations = @current_user&.unread_submission_annotations?(@submission) %>
           <% if attachment.crocodoc_available? || attachment.canvadoc.try(:has_annotations?) %>
-              <% preview_document = t('preview_crocodoc_document', 'Preview your submission and view teacher feedback, if available')
+              <% preview_document = unread_annotations ?
+                   t('Preview your submission and view teacher feedback. There are unread comments.') :
+                   t('preview_crocodoc_document', 'Preview your submission and view teacher feedback, if available')
                  button_text = t('view_feedback_button', 'View Feedback')
               %>
           <% elsif attachment.canvadocable? %>
@@ -180,19 +219,13 @@
               data-attachment_id="<%= attachment.id %>"
               data-submission_id="<%= @submission.id %>"
               data-dialog-title="<%= attachment.display_name %>"
-              <%=
-                doc_preview_attributes(
-                  attachment,
-                  anonymous_instructor_annotations: @anonymous_instructor_annotations,
-                  enable_annotations: true,
-                  enrollment_type: @enrollment_type,
-                  moderated_grading_whitelist: @moderated_grading_whitelist,
-                  submission_id: @submission.id
-                )
-              %>
+              <%= doc_preview_attributes(attachment, preview_url_opts.dup) %>
             >
               <%= button_text %>
             </a>
+            <% if unread_annotations %>
+              <span class="submission_annotation unread_indicator" aria-hidden="true"></span>
+            <% end %>
           <% end %>
         </div>
 
@@ -201,8 +234,8 @@
 
   <% end %>
 
-  <% js_bundle 'legacy/submissions_show_preview_upload' %>
-<% elsif @submission.submission_type == "online_quiz" %>
+  <% js_bundle 'submissions_show_preview_upload' %>
+<% elsif @submission.submission_type == "online_quiz" and  @assignment&.quiz&.id %>
   <meta HTTP-EQUIV="REFRESH" content="0; url=<%= context_url(@context, :context_quiz_history_url, @assignment.quiz.id, :user_id => @submission.user_id, :hide_student_name => params[:hide_student_name], :headless => 1, :version => @submission.quiz_submission_version) %>"/>
   <div style="text-align: center;">
     <%= t('quiz_submission', 'This submission was a quiz submission.  Redirecting to quiz page.') %>
@@ -215,9 +248,19 @@
   </div>
   <div class="media_comment_id" style="display: none;"><%= @submission.media_comment_id %></div>
 
-  <% js_bundle 'legacy/submissions_show_preview_media' %>
+  <% js_bundle 'submissions_show_preview_media' %>
 <% elsif @submission.submission_type == 'basic_lti_launch' %>
-  <meta HTTP-EQUIV="REFRESH" content="0; url=<%= retrieve_course_external_tools_url(@context.id, assignment_id: @assignment.id, display: 'borderless', url: @submission.external_tool_url) %>"/>
+  <meta HTTP-EQUIV="REFRESH" content="0; url=<%= presenter.submission_details_tool_launch_url %>"/>
+<% elsif @submission.submission_type == "student_annotation" %>
+  <div class="ef-file-preview-stretch">
+    <iframe
+      allowfullscreen
+      title="<%= t "Student Annotation submission" %>"
+      src="<%= annotation_context.attachment.canvadoc_url(@current_user, preview_url_opts.dup) %>"
+      class="ef-file-preview-frame annotated-document-submission"
+      style="height: 100vh; width: 100%;">
+    </iframe>
+  </div>
 <% elsif @submission.has_submission? || @assignment.expects_external_submission? %>
   <div style="margin: 20px auto; width: 400px; height: 50px; font-size: 1.5em;  font-weight: bold;">
     <%= t('no_preview_available', 'No Preview Available') %>

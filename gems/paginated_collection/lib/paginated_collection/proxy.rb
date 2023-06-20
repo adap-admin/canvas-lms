@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -34,7 +36,8 @@ module PaginatedCollection
 
     def configure_pager(pager, options)
       raise(ArgumentError, "per_page required") unless options[:per_page] && options[:per_page] > 0
-      current_page = options.fetch(:page) { nil }
+
+      current_page = options.fetch(:page, nil)
       current_page = pager.first_page if current_page.nil?
       pager.current_page = current_page
       pager.per_page = options[:per_page]
@@ -44,10 +47,11 @@ module PaginatedCollection
 
     def execute_pager(pager)
       pager = @block.call(pager)
-      if !pager.respond_to?(:current_page)
+      unless pager.respond_to?(:current_page)
         raise(ArgumentError, "The PaginatedCollection block needs to return a WillPaginate-style object")
       end
-      return pager
+
+      pager
     end
   end
 end

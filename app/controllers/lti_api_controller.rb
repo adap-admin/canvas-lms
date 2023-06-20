@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,13 +18,17 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'oauth'
-require 'oauth/request_proxy/action_controller_request'
-require 'nokogiri'
+require "oauth"
+require "oauth/request_proxy/action_controller_request"
+require "nokogiri"
 
 class LtiApiController < ApplicationController
   skip_before_action :load_user
   skip_before_action :verify_authenticity_token
+
+  # these exceptions will happen on bad external requests,
+  # we don't need to tell sentry about every one of them
+  rescue_from BasicLTI::BasicOutcomes::Unauthorized, BasicLTI::BasicOutcomes::InvalidRequest, with: :rescue_expected_error_type
 
   # this API endpoint passes all the existing tests for the LTI v1.1 outcome service specification
   def grade_passback
@@ -34,8 +40,20 @@ class LtiApiController < ApplicationController
 
     @xml = Nokogiri::XML.parse(request.body)
 
-    lti_response = check_outcome BasicLTI::BasicOutcomes.process_request(@tool, @xml)
-    render :body => lti_response.to_xml, :content_type => 'application/xml'
+    lti_response, status = check_outcome BasicLTI::BasicOutcomes.process_request(@tool, @xml)
+
+    # Data around New Quizzes submissions are not being propagated to the Apache logs.
+    # Adding this sourced_id and quiz submission time to header so that they can be
+    # parsed by TurboLogParser and used in the data/analytics pipeline owned by the OREO team.
+    if lti_response
+      RequestContext::Generator.add_meta_header("si", lti_response.sourcedid)
+
+      if lti_response.operation_ref_identifier == "replaceResult"
+        RequestContext::Generator.add_meta_header("sa", lti_response.submission_submitted_at)
+      end
+    end
+
+    render body: lti_response.to_xml, content_type: "application/xml", status:
   end
 
   # this similar API implements the older work-in-process BLTI 0.0.4 outcome
@@ -44,8 +62,8 @@ class LtiApiController < ApplicationController
   def legacy_grade_passback
     verify_oauth
 
-    lti_response = check_outcome BasicLTI::BasicOutcomes.process_legacy_request(@tool, params)
-    render :body => lti_response.to_xml, :content_type => 'application/xml'
+    lti_response, = check_outcome BasicLTI::BasicOutcomes.process_legacy_request(@tool, params)
+    render body: lti_response.to_xml, content_type: "application/xml"
   end
 
   # examples: https://github.com/adlnet/xAPI-Spec/blob/master/xAPI.md#AppendixA
@@ -79,7 +97,7 @@ class LtiApiController < ApplicationController
     verify_oauth(token.tool)
 
     if request.content_type != "application/json"
-      return head 415
+      return head :unsupported_media_type
     end
 
     Lti::XapiService.log_page_view(token, params)
@@ -132,20 +150,14 @@ class LtiApiController < ApplicationController
 
   def turnitin_outcomes_placement
     verify_oauth
-    _course, assignment, user = BasicLTI::BasicOutcomes.decode_source_id(@tool, params['lis_result_sourcedid'])
-    assignment.update_attribute(:turnitin_enabled,  false) if assignment.turnitin_enabled?
+    assignment, user = BasicLTI::BasicOutcomes.decode_source_id(@tool, params["lis_result_sourcedid"])
+    assignment.update_attribute(:turnitin_enabled, false) if assignment.turnitin_enabled?
     request.body.rewind
     turnitin_processor = Turnitin::OutcomeResponseProcessor.new(@tool, assignment, user, JSON.parse(request.body.read))
-    turnitin_processor.send_later_enqueue_args(
-      :process,
-      {
-        max_attempts: Turnitin::OutcomeResponseProcessor.max_attempts,
-        priority: Delayed::LOW_PRIORITY
-      }
-    )
-    render json: {}, status: 200
+    turnitin_processor.delay(max_attempts: Turnitin::OutcomeResponseProcessor.max_attempts,
+                             priority: Delayed::LOW_PRIORITY).process
+    render json: {}, status: :ok
   end
-
 
   protected
 
@@ -155,42 +167,52 @@ class LtiApiController < ApplicationController
 
     # verify the request oauth signature, timestamp and nonce
     begin
-      @signature = OAuth::Signature.build(request, :consumer_secret => @tool.shared_secret)
-      @signature.verify() or raise OAuth::Unauthorized.new(request)
-
+      @signature = OAuth::Signature.build(request, consumer_secret: @tool.shared_secret)
+      unless @signature.verify
+        Lti::Logging.lti_1_api_signature_verification_failed(@signature.signature_base_string)
+        raise OAuth::Unauthorized.new, request
+      end
     rescue OAuth::Signature::UnknownSignatureMethod, OAuth::Unauthorized => e
-      Canvas::Errors::Reporter.raise_canvas_error(BasicLTI::BasicOutcomes::Unauthorized, "Invalid authorization header", oauth_error_info.merge({error_class: e.class.name}))
+      Canvas::Errors::Reporter.raise_canvas_error(BasicLTI::BasicOutcomes::Unauthorized, "Invalid authorization header", oauth_error_info.merge({ error_class: e.class.name }))
     end
 
     timestamp = Time.zone.at(@signature.request.timestamp.to_i)
     # 90 minutes is suggested by the LTI spec
-    allowed_delta = Setting.get('oauth.allowed_timestamp_delta', 90.minutes.to_s).to_i
+    allowed_delta = Setting.get("oauth.allowed_timestamp_delta", 90.minutes.to_s).to_i
     if timestamp < allowed_delta.seconds.ago || timestamp > allowed_delta.seconds.from_now
       Canvas::Errors::Reporter.raise_canvas_error(BasicLTI::BasicOutcomes::Unauthorized, "Timestamp too old or too far in the future, request has expired", oauth_error_info)
     end
 
     cache_key = "nonce:#{@tool.asset_string}:#{@signature.request.nonce}"
-    unless Lti::Security::check_and_store_nonce(cache_key, timestamp, allowed_delta.seconds)
+    unless Lti::Security.check_and_store_nonce(cache_key, timestamp, allowed_delta.seconds)
       Canvas::Errors::Reporter.raise_canvas_error(BasicLTI::BasicOutcomes::Unauthorized, "Duplicate nonce detected", oauth_error_info)
     end
   end
 
   def oauth_error_info
     return {} unless @signature
+
     {
       generated_signature: @signature.signature
     }
   end
 
   def check_outcome(outcome)
-    if ['unsupported', 'failure'].include? outcome.code_major
-      opts = {type: :grade_passback}
-      error_info = Canvas::Errors::Info.new(request, @domain_root_account, @current_user, opts).to_h
+    return outcome, 200 unless ["unsupported", "failure"].include? outcome.code_major
+
+    opts = { type: :grade_passback }
+    error_info = Canvas::Errors::Info.new(request, @domain_root_account, @current_user, opts).to_h
+    error_info[:extra][:description] = outcome.description
+    error_info[:extra][:message] = outcome.code_major
+
+    begin
       error_info[:extra][:xml] = @xml.to_s if @xml
-      capture_outputs = Canvas::Errors.capture("Grade pass back #{outcome.code_major}", error_info)
-      outcome.description += "\n[EID_#{capture_outputs[:error_report]}]"
+    rescue => e
+      outcome.description += "\nInvalid XML: #{e.message}"
     end
 
-    outcome
+    capture_outputs = Canvas::Errors.capture("Grade pass back #{outcome.code_major}", error_info)
+    outcome.description += "\n[EID_#{capture_outputs[:error_report]}]"
+    [outcome, 422]
   end
 end

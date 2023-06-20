@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,37 +18,40 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/messages_helper')
+require_relative "messages_helper"
 
-describe 'appointment_deleted_for_user.twitter' do
+describe "appointment_deleted_for_user.twitter" do
   include MessagesCommon
 
-  it "should render" do
-    user = user_model(:name => 'bob')
-    appointment_participant_model(:participant => user)
-    @event.cancel_reason = 'just because'
+  it "renders" do
+    user = user_model(name: "bob")
+    appointment_participant_model(participant: user)
+    @event.cancel_reason = "just because"
 
-    generate_message(:appointment_deleted_for_user, :twitter, @event,
-                     :data => {:updating_user_name => @teacher.name,
-                               :cancel_reason => "just because"})
+    generate_message(:appointment_deleted_for_user,
+                     :twitter,
+                     @event,
+                     data: { updating_user_name: @teacher.name,
+                             cancel_reason: "just because" })
 
-    expect(@message.body).to include('some title')
+    expect(@message.body).to include("some title")
   end
 
-  it "should render for groups" do
-    user = user_model(:name => 'bob')
+  it "renders for groups" do
+    user = user_model(name: "bob")
     @course = course_model
     cat = group_category
-    @group = cat.groups.create(:context => @course)
+    @group = cat.groups.create(context: @course)
     @group.users << user
-    appointment_participant_model(:participant => @group, :course => @course)
-    @event.cancel_reason = 'just because'
+    appointment_participant_model(participant: @group, course: @course)
+    @event.cancel_reason = "just because"
 
-    generate_message(:appointment_deleted_for_user, :twitter, @event,
-                     :data => {:updating_user_name => @teacher.name,
-                               :cancel_reason => "just because"})
+    generate_message(:appointment_deleted_for_user,
+                     :twitter,
+                     @event,
+                     data: { updating_user_name: @teacher.name,
+                             cancel_reason: "just because" })
 
-    expect(@message.body).to include('some title')
+    expect(@message.body).to include("some title")
   end
 end

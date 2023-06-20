@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,11 +18,9 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
-
 describe FoldersController do
   def io
-    fixture_file_upload('docs/doc.doc', 'application/msword', true)
+    fixture_file_upload("docs/doc.doc", "application/msword", true)
   end
 
   def root_folder
@@ -28,7 +28,7 @@ describe FoldersController do
   end
 
   def course_folder
-    @folder = @root.sub_folders.create!(:name => "some folder", :context => @course)
+    @folder = @root.sub_folders.create!(name: "some folder", context: @course)
   end
 
   before :once do
@@ -38,35 +38,36 @@ describe FoldersController do
   end
 
   describe "GET 'show'" do
-    it "should not return hidden files for students" do
+    it "does not return hidden files for students" do
       user_session(@student)
       course_folder
-      file = @folder.active_file_attachments.build(:filename => 'long_unique_filename', :uploaded_data => io)
+      file = @folder.active_file_attachments.build(filename: "long_unique_filename", uploaded_data: io)
       file.context = @course
       file.save!
 
-      get 'show', params: {:course_id => @course.id, :id => @folder.id}, :format => 'json'
+      get "show", params: { course_id: @course.id, id: @folder.id }, format: "json"
       json = json_parse
-      expect(json['files'].count).to eql(1)
+      expect(json["files"].count).to be(1)
 
       file.hidden = true
       file.save!
-      get 'show', params: {:course_id => @course.id, :id => @folder.id}, :format => 'json'
+      get "show", params: { course_id: @course.id, id: @folder.id }, format: "json"
       json = json_parse
-      expect(json['files'].count).to eql(0)
+      expect(json["files"].count).to be(0)
     end
   end
 
   describe "PUT 'update'" do
     before(:once) { course_folder }
-    it "should require authorization" do
-      put 'update', params: {:course_id => @course.id, :id => @folder.id, :folder => {:name => "hi"}}
+
+    it "requires authorization" do
+      put "update", params: { course_id: @course.id, id: @folder.id, folder: { name: "hi" } }
       assert_unauthorized
     end
 
-    it "should update folder" do
+    it "updates folder" do
       user_session(@teacher)
-      put 'update', params: {:course_id => @course.id, :id => @folder.id, :folder => {:name => "new name"}}
+      put "update", params: { course_id: @course.id, id: @folder.id, folder: { name: "new name" } }
       expect(response).to be_redirect
       expect(assigns[:folder]).not_to be_nil
       expect(assigns[:folder]).to eql(@folder)
@@ -75,22 +76,22 @@ describe FoldersController do
   end
 
   describe "POST 'create'" do
-    it "should require authorization" do
-      post 'create', params: {:course_id => @course.id, :folder => {:name => "folder"}}
+    it "requires authorization" do
+      post "create", params: { course_id: @course.id, folder: { name: "folder" } }
       assert_unauthorized
     end
 
-    it "should create folder" do
+    it "creates folder" do
       user_session(@teacher)
-      post 'create', params: {:course_id => @course.id, :folder => {:name => "new name"}}
+      post "create", params: { course_id: @course.id, folder: { name: "new name" } }
       expect(response).to be_redirect
       expect(assigns[:folder]).not_to be_nil
       expect(assigns[:folder].name).to eql("new name")
     end
 
-    it "should force new folders to be sub_folders" do
+    it "forces new folders to be sub_folders" do
       user_session(@teacher)
-      post 'create', params: {:course_id => @course.id, :folder => {:name => "new name"}}
+      post "create", params: { course_id: @course.id, folder: { name: "new name" } }
       expect(response).to be_redirect
       expect(assigns[:folder]).not_to be_nil
       expect(assigns[:folder].name).to eql("new name")
@@ -98,25 +99,26 @@ describe FoldersController do
       # assigns[:folder].parent_folder.name.should eql("unfiled")
     end
 
-    it "should create sub_folder" do
+    it "creates sub_folder" do
       user_session(@teacher)
       course_folder
-      post 'create', params: {:course_id => @course.id, :folder => {:name => "new folder", :parent_folder_id => @folder.id}}
+      post "create", params: { course_id: @course.id, folder: { name: "new folder", parent_folder_id: @folder.id } }
       expect(response).to be_redirect
     end
   end
 
   describe "DELETE 'destroy'" do
     before(:once) { course_folder }
-    it "should require authorization" do
-      delete 'destroy', params: {:course_id => @course.id, :id => @folder.id}
+
+    it "requires authorization" do
+      delete "destroy", params: { course_id: @course.id, id: @folder.id }
       assert_unauthorized
     end
 
     def delete_folder
       user_session(@teacher)
       yield if block_given?
-      delete 'destroy', params: {:course_id => @course.id, :id => @folder.id}
+      delete "destroy", params: { course_id: @course.id, id: @folder.id }
       expect(response).to be_redirect
       expect(assigns[:folder]).not_to be_frozen
       expect(assigns[:folder]).to be_deleted
@@ -125,13 +127,13 @@ describe FoldersController do
       expect(@course.folders.active).not_to be_include(@folder)
     end
 
-    it "should delete folder" do
+    it "deletes folder" do
       delete_folder
     end
 
-    it "should delete folder with contents" do
+    it "deletes folder with contents" do
       delete_folder do
-        @folder.sub_folders.create!(:name => "folder2", :context => @course)
+        @folder.sub_folders.create!(name: "folder2", context: @course)
       end
     end
   end

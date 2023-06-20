@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,29 +18,28 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/../views_helper')
+require_relative "../views_helper"
 
-describe "/eportfolios/_section_list" do
+describe "eportfolios/_section_list" do
   before(:once) do
     eportfolio_with_user
   end
 
-  it "should render" do
+  it "renders" do
     view_portfolio
-    category = assign(:category, @portfolio.eportfolio_categories.create!(:name => "some category"))
+    category = assign(:category, @portfolio.eportfolio_categories.create!(name: "some category"))
     assign(:categories, [category])
-    assign(:page, @portfolio.eportfolio_entries.create!(:name => "some entry", :eportfolio_category => category))
-    render :partial => "eportfolios/section_list"
+    assign(:page, @portfolio.eportfolio_entries.create!(name: "some entry", eportfolio_category: category))
+    render partial: "eportfolios/section_list"
     expect(response).to have_tag("ul#section_list")
   end
 
-  it "should render even with a blank category slug" do
+  it "renders even with a blank category slug" do
     view_portfolio
-    category = assign(:category, @portfolio.eportfolio_categories.create!(:name => "+++"))
+    category = assign(:category, @portfolio.eportfolio_categories.create!(name: "+++"))
     assign(:categories, [category])
-    assign(:page, @portfolio.eportfolio_entries.create!(:name => "some entry", :eportfolio_category => category))
-    render :partial => "eportfolios/section_list"
+    assign(:page, @portfolio.eportfolio_entries.create!(name: "some entry", eportfolio_category: category))
+    render partial: "eportfolios/section_list"
     expect(response).to have_tag("ul#section_list")
   end
 end

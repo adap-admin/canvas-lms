@@ -15,47 +15,90 @@
  * You should have received a copy of the GNU Affero General Public License along
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-import React, {useState} from 'react'
-import {bool, func, oneOf, shape, string} from 'prop-types'
-import {Button,CloseButton} from '@instructure/ui-buttons'
+import React, {useEffect, useState} from 'react'
+import {checkPropTypes, bool, func, object, oneOf, shape, string} from 'prop-types'
+import {Button, CloseButton} from '@instructure/ui-buttons'
 
-import {Heading} from '@instructure/ui-elements'
+import {Alert} from '@instructure/ui-alerts'
+import {Heading} from '@instructure/ui-heading'
 import {FormFieldGroup} from '@instructure/ui-form-field'
-import {Checkbox} from '@instructure/ui-forms'
+import {Checkbox} from '@instructure/ui-checkbox'
+import {RadioInputGroup, RadioInput} from '@instructure/ui-radio-input'
 import {TextInput} from '@instructure/ui-text-input'
-import {Flex} from '@instructure/ui-layout'
-import {Tray} from '@instructure/ui-overlays'
+import {Flex} from '@instructure/ui-flex'
+import {Tray} from '@instructure/ui-tray'
+import {View} from '@instructure/ui-view'
+import validateURL from '../../validateURL'
 import formatMessage from '../../../../../format-message'
 import {
   DISPLAY_AS_LINK,
   DISPLAY_AS_EMBED,
-  DISPLAY_AS_EMBED_DISABLED
+  DISPLAY_AS_EMBED_DISABLED,
+  DISPLAY_AS_DOWNLOAD_LINK,
 } from '../../../shared/ContentSelection'
+import {getTrayHeight} from '../../../shared/trayUtils'
+import {instuiPopupMountNode} from '../../../../../util/fullscreenHelpers'
 
 export default function LinkOptionsTray(props) {
-  const {content} = props
-  const [text, setText] = useState(content.text || '')
+  const content = props.content || {}
+  const textToLink = content.text || ''
+  const showText = content.onlyTextSelected
+  const [text, setText] = useState(textToLink || '')
   const [url, setUrl] = useState(content.url || '')
+  const [err, setErr] = useState(null)
+  const [isValidURL, setIsValidURL] = useState(false)
   const [autoOpenPreview, setAutoOpenPreview] = useState(content.displayAs === DISPLAY_AS_EMBED)
-  const [disablePreview, setDisablePreview] = useState(content.displayAs === DISPLAY_AS_EMBED_DISABLED)
+  const [disableInlinePreview, setDisableInlinePreview] = useState(
+    content.displayAs === DISPLAY_AS_EMBED_DISABLED ||
+      content.displayAs === DISPLAY_AS_DOWNLOAD_LINK
+  )
+  const [displayOptionSelection, setDisplayOptionSelection] = useState(
+    initialPreviewSelection(content)
+  )
+
+  useEffect(() => {
+    try {
+      const v = validateURL(url)
+      setIsValidURL(v)
+      setErr(null)
+    } catch (ex) {
+      setIsValidURL(false)
+      setErr(ex.message)
+    }
+  }, [url])
 
   function handleSave(event) {
     event.preventDefault()
     const embedType = content.isPreviewable ? 'scribd' : null
 
     const linkAttrs = {
-      embed: embedType ? {
-        type: embedType,
-        autoOpenPreview: autoOpenPreview && !disablePreview,
-        disablePreview
-      } : null,
+      embed: embedType
+        ? {
+            type: embedType,
+            autoOpenPreview: autoOpenPreview && !disableInlinePreview,
+            disableInlinePreview,
+            noPreview: displayOptionSelection === 'disable',
+          }
+        : null,
       text,
-      target: '_blank',
       href: url,
-      id: content.id || null
+      id: content.id || null,
+      forceRename: true, // A change to "text" should always update the link's text
     }
 
     props.onSave(linkAttrs)
+  }
+  function initialPreviewSelection(previewContent) {
+    if (previewContent.displayAs === DISPLAY_AS_DOWNLOAD_LINK) {
+      return 'disable'
+    } else if (
+      previewContent.displayAs === DISPLAY_AS_EMBED ||
+      previewContent.displayAs === DISPLAY_AS_LINK
+    ) {
+      return 'inline'
+    } else {
+      return 'overlay'
+    }
   }
   function handleTextChange(event) {
     setText(event.target.value)
@@ -63,96 +106,130 @@ export default function LinkOptionsTray(props) {
   function handleLinkChange(event) {
     setUrl(event.target.value)
   }
-  function handleDisablePreviewChange(event) {
-    setDisablePreview(event.target.checked)
-  }
   function handlePreviewChange(event) {
     setAutoOpenPreview(event.target.checked)
   }
+  function handlePreviewOptionChange(_event, value) {
+    setDisableInlinePreview(value === 'overlay' || value === 'disable')
+    setDisplayOptionSelection(value)
+  }
+
+  function renderDisplayOptions() {
+    return (
+      <FormFieldGroup
+        description={formatMessage('Display Options')}
+        layout="stacked"
+        rowSpacing="small"
+      >
+        <RadioInputGroup
+          description=" " /* the FormFieldGroup is providing the label */
+          name="preview_option"
+          onChange={handlePreviewOptionChange}
+          value={displayOptionSelection}
+        >
+          <RadioInput key="disable" value="disable" label={formatMessage('Disable Preview')} />
+          <RadioInput key="overlay" value="overlay" label={formatMessage('Preview in overlay')} />
+          <RadioInput key="inline" value="inline" label={formatMessage('Preview inline')} />
+        </RadioInputGroup>
+        {!disableInlinePreview && (
+          <View as="div" margin="0 0 0 small">
+            <Checkbox
+              label={formatMessage('Expand preview by Default')}
+              name="auto-preview"
+              onChange={handlePreviewChange}
+              checked={autoOpenPreview}
+            />
+          </View>
+        )}
+      </FormFieldGroup>
+    )
+  }
+
   return (
     <Tray
       data-testid="RCELinkOptionsTray"
-      data-mce-component
+      data-mce-component={true}
       label={formatMessage('Link Options')}
+      mountNode={instuiPopupMountNode}
       onDismiss={props.onRequestClose}
       onEntered={props.onEntered}
       onExited={props.onExited}
       open={props.open}
       placement="end"
-      shouldCloseOnDocumentClick
-      shouldContainFocus
-      shouldReturnFocus
+      shouldCloseOnDocumentClick={true}
+      shouldContainFocus={true}
+      shouldReturnFocus={true}
     >
-      <Flex direction="column" height="100vh">
+      <Flex direction="column" height={getTrayHeight()}>
         <Flex.Item as="header" padding="medium">
           <Flex direction="row">
-            <Flex.Item>
-              <CloseButton placement="static" variant="icon" onClick={props.onRequestClose}>
-                {formatMessage('Close')}
-              </CloseButton>
+            <Flex.Item shouldGrow={true} shouldShrink={true}>
+              <Heading as="h2">{formatMessage('Link Options')}</Heading>
             </Flex.Item>
-            <Flex.Item grow shrink>
-              <Heading as="h2" margin="none none none medium">
-                {formatMessage('Link Options')}
-              </Heading>
+
+            <Flex.Item>
+              <CloseButton
+                color="primary"
+                onClick={props.onRequestClose}
+                screenReaderLabel={formatMessage('Close')}
+              />
             </Flex.Item>
           </Flex>
         </Flex.Item>
 
-        <Flex.Item as="form" grow margin="none" shrink onSubmit={handleSave}>
+        <Flex.Item
+          as="form"
+          shouldGrow={true}
+          margin="none"
+          shouldShrink={true}
+          onSubmit={handleSave}
+        >
           <Flex justifyItems="space-between" direction="column" height="100%">
-            <Flex.Item grow padding="small" shrink>
+            <Flex.Item shouldGrow={true} padding="small" shouldShrink={true}>
               <input type="submit" style={{display: 'none'}} />
               <Flex direction="column">
-                <Flex.Item padding="small">
-                  <TextInput
-                    renderLabel={() =>formatMessage('Text')}
-                    onChange={handleTextChange}
-                    value={text}
-                  />
-                </Flex.Item>
+                {showText && (
+                  <Flex.Item padding="small">
+                    <TextInput
+                      renderLabel={() => formatMessage('Text')}
+                      onChange={handleTextChange}
+                      value={text}
+                    />
+                  </Flex.Item>
+                )}
 
                 <Flex.Item padding="small">
                   <TextInput
-                    renderLabel={() =>formatMessage('Link')}
+                    renderLabel={() => formatMessage('Link')}
                     onChange={handleLinkChange}
                     value={url}
                   />
                 </Flex.Item>
+                {err && (
+                  <Flex.Item padding="small" data-testid="url-error">
+                    <Alert variant="error">{err}</Alert>
+                  </Flex.Item>
+                )}
 
                 {content.isPreviewable && (
                   <Flex.Item margin="small none none none" padding="small">
-                    <FormFieldGroup
-                      description={formatMessage('Display Options')}
-                      layout="stacked"
-                    >
-                      <Checkbox
-                        label={formatMessage('Disable in-line preview.')}
-                        name="disable-preview"
-                        onChange={handleDisablePreviewChange}
-                        checked={disablePreview}
-                      />
-                      {!disablePreview && (
-                        <Checkbox
-                          label={formatMessage('Automatically open an in-line preview. (Preview displays only after saving)')}
-                          name="auto-preview"
-                          onChange={handlePreviewChange}
-                          checked={autoOpenPreview}
-                        />
-                      )}
-                    </FormFieldGroup>
+                    {renderDisplayOptions()}
                   </Flex.Item>
                 )}
               </Flex>
             </Flex.Item>
 
             <Flex.Item
-              background="light"
+              background="secondary"
               borderWidth="small none none none"
               padding="small medium"
               textAlign="end"
             >
-              <Button disabled={!text || !url} onClick={handleSave} variant="primary">
+              <Button
+                disabled={(showText && text.trim().length === 0) || !(url && isValidURL)}
+                onClick={handleSave}
+                color="primary"
+              >
                 {formatMessage('Done')}
               </Button>
             </Flex.Item>
@@ -163,19 +240,32 @@ export default function LinkOptionsTray(props) {
   )
 }
 LinkOptionsTray.propTypes = {
-  content: shape({
-    dispalyAs: oneOf([DISPLAY_AS_LINK, DISPLAY_AS_EMBED]),
-    isPreviewable: bool,
-    text: string,
-    url: string
-  }).isRequired,
+  // content is required only if the tray is open
+  content: (props, _propName, _componentName) => {
+    if (props.open) {
+      checkPropTypes(
+        {
+          content: shape({
+            $element: object, // the DOM's HTMLElement
+            dispalyAs: oneOf([DISPLAY_AS_LINK, DISPLAY_AS_EMBED]),
+            isPreviewable: bool,
+            text: string,
+            url: string,
+          }).isRequired,
+        },
+        props,
+        'content',
+        'LinkOptionsTray'
+      )
+    }
+  },
   onEntered: func,
   onExited: func,
   onRequestClose: func.isRequired,
   onSave: func.isRequired,
-  open: bool.isRequired
+  open: bool.isRequired,
 }
 LinkOptionsTray.defaultProps = {
   onEntered: null,
-  onExited: null
+  onExited: null,
 }

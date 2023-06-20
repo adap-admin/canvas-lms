@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -25,7 +27,7 @@ module LiveAssessments
     def_delegators :@object, :user
 
     has_one :user, embed: :ids, embed_in_root: true
-    has_one :assessor, class_name: 'User', embed: :ids, embed_in_root: true
+    has_one :assessor, class_name: "User", embed: :ids, embed_in_root: true
     has_one :assessment, embed: :ids, embed_in_root: true
   end
 end

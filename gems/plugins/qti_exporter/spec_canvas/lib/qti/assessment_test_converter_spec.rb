@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -15,10 +17,10 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require File.expand_path(File.dirname(__FILE__) + '/../../qti_helper')
+require_relative "../../qti_helper"
 
 describe Qti::AssessmentTestConverter do
-  it "should interpret duration strings that include units" do
+  it "interprets duration strings that include units" do
     assess = Qti::AssessmentTestConverter
 
     minutes_in_hour = 60
@@ -31,26 +33,26 @@ describe Qti::AssessmentTestConverter do
     expect(assess.parse_time_limit("M120")).to eq 120
     expect(assess.parse_time_limit("m14")).to eq 14
 
-    #Canvas uses minutes, QTI uses seconds
+    # Canvas uses minutes, QTI uses seconds
     expect(assess.parse_time_limit("60")).to eq 1
     expect(assess.parse_time_limit("3600")).to eq 60
   end
 
   def test_section(select)
-    Nokogiri::XML(<<~SECTION).at_css('testPart')
+    Nokogiri::XML(<<~XML).at_css("testPart")
       <testPart identifier="BaseTestPart">
-      #{select && %Q{<selection select="#{select}">}}
+      #{select && %(<selection select="#{select}">)}
       </testPart>
-    SECTION
+    XML
   end
 
   it "accepts a numeric pick count even if it's zero" do
     assess = Qti::AssessmentTestConverter
-    expect(assess.parse_pick_count(test_section(' 1'))).to eq 1
-    expect(assess.parse_pick_count(test_section('0'))).to eq 0
-    expect(assess.parse_pick_count(test_section('-5'))).to eq nil
-    expect(assess.parse_pick_count(test_section(''))).to eq nil
-    expect(assess.parse_pick_count(test_section('puppies'))).to eq nil
-    expect(assess.parse_pick_count(test_section(nil))).to eq nil
+    expect(assess.parse_pick_count(test_section(" 1"))).to eq 1
+    expect(assess.parse_pick_count(test_section("0"))).to eq 0
+    expect(assess.parse_pick_count(test_section("-5"))).to be_nil
+    expect(assess.parse_pick_count(test_section(""))).to be_nil
+    expect(assess.parse_pick_count(test_section("puppies"))).to be_nil
+    expect(assess.parse_pick_count(test_section(nil))).to be_nil
   end
 end

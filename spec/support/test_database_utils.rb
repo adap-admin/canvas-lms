@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -17,11 +19,19 @@
 
 module TestDatabaseUtils
   class << self
-    # for when we fork
-    def reconnect!
-      ::ActiveRecord::Base.configurations['test']['database'] = "canvas_test_#{ENV["TEST_ENV_NUMBER"]}"
-      ::Switchman::DatabaseServer.remove_instance_variable(:@database_servers)
-      ::ActiveRecord::Base.establish_connection(:test)
+    def check_migrations!
+      if ENV["SKIP_MIGRATION_CHECK"] != "1"
+        migrations = ActiveRecord::Base.connection.migration_context.migrations
+        skipped_migrations = ActiveRecord::Migrator.new(:up, migrations, ActiveRecord::Base.connection.schema_migration).skipped_migrations
+
+        # total migration - all run migrations - all skipped migrations
+        needs_migration =
+          ActiveRecord::Base.connection.migration_context.migrations.collect(&:version).size -
+          ActiveRecord::Base.connection.migration_context.get_all_versions.size -
+          skipped_migrations.size
+
+        raise ActiveRecord::PendingMigrationError if needs_migration > 0
+      end
     end
 
     def reset_database!
@@ -32,7 +42,7 @@ module TestDatabaseUtils
       # this won't create/migrate them, but it will let us with_each_shard any
       # persistent ones that already exist
       require "switchman/test_helper"
-      ::Switchman::TestHelper.recreate_persistent_test_shards(dont_create: true)
+      ::Switchman::TestHelper.recreate_persistent_test_shards(dont_create: ENV["CREATE_SHARDS"] != "1")
 
       truncate_all_tables! if truncate_all_tables?
       randomize_sequences! if randomize_sequences?
@@ -41,60 +51,78 @@ module TestDatabaseUtils
       Shard.delete_all
       Shard.default(reload: true)
 
-      puts "finished resetting test db in #{Time.now - start} seconds"
+      # RSpecQ fails when using json formatter due to this output. Don't output when running on RSpecQ
+      puts "finished resetting test db in #{Time.now - start} seconds" unless ENV["SUPPRESS_OUTPUT"] == "1"
     end
 
-   private
+    # Like ActiveRecord::Base.connection.reset_pk_sequence! but handles the
+    # dummy Account (id=0) properly.
+    def reset_pk_sequence!(t)
+      if t == "accounts" && Account.maximum("id") == 0
+        # reset_pk_sequence! crashes if the only account is the dummy Account (id=0).
+        # Reset PK sequence manually. (Code from reset_pk_sequence!)
+        conn = ActiveRecord::Base.connection
+        _pk, sequence = conn.pk_and_sequence_for("accounts")
+        quoted_sequence = conn.quote_table_name(sequence)
+        conn.query_value("SELECT setval(#{conn.quote(quoted_sequence)}, 1, false)", "SCHEMA")
+      else
+        ActiveRecord::Base.connection.reset_pk_sequence!(t)
+      end
+    end
 
-    def each_connection
-      ::Shard.with_each_shard(::Shard.categories) do
+    private
+
+    def each_connection(&)
+      ::Shard.with_each_shard(::Shard.sharded_models) do
         models = ::ActiveRecord::Base.descendants
-        models.reject! { |m| m.shard_category == :unsharded } unless ::Shard.current.default?
+        models.reject! { |m| m.connection_class_for_self == [::Switchman::UnshardedRecord] } unless ::Shard.current.default?
         model_connections = models.map(&:connection).uniq
-        model_connections.each do |connection|
-          yield connection
-        end
+        model_connections.each(&)
       end
     end
 
     def get_table_names(connection)
       # use custom SQL to exclude tables from extensions
-      schema = connection.shard.name if connection.use_qualified_names?
-      table_names = connection.query(<<-SQL, 'SCHEMA').map(&:first)
-         SELECT relname
-         FROM pg_class INNER JOIN pg_namespace ON relnamespace=pg_namespace.oid
-         WHERE nspname = #{schema ? "'#{schema}'" : 'ANY (current_schemas(false))'}
-           AND relkind='r'
-           AND NOT EXISTS (
-             SELECT 1 FROM pg_depend WHERE deptype='e' AND objid=pg_class.oid
-           )
+      schema = connection.shard.name
+      table_names = connection.query(<<~SQL.squish, "SCHEMA").map(&:first)
+        SELECT relname
+        FROM pg_class INNER JOIN pg_namespace ON relnamespace=pg_namespace.oid
+        WHERE nspname = #{schema ? "'#{schema}'" : "ANY (current_schemas(false))"}
+          AND relkind='r'
+          AND NOT EXISTS (
+            SELECT 1 FROM pg_depend WHERE deptype='e' AND objid=pg_class.oid
+          )
       SQL
-      table_names.delete('schema_migrations')
-      table_names.delete('switchman_shards')
+      table_names.delete("schema_migrations")
+      table_names.delete("switchman_shards")
       table_names
     end
 
     def truncate_all_tables?
-      Account.any?
+      # Only account should be the dummy account with id=0
+      Account.where.not(id: 0).any? || Account.where(id: 0).none?
     end
 
     def truncate_all_tables!
-      puts "truncating all tables..."
+      # RSpecQ fails when using json formatter due to this output. Don't output when running on RSpecQ
+      puts "truncating all tables..." unless ENV["SUPPRESS_OUTPUT"] == "1"
       each_connection do |connection|
         table_names = get_table_names(connection)
         next if table_names.empty?
-        connection.execute("TRUNCATE TABLE #{table_names.map { |t| connection.quote_table_name(t) }.join(',')}")
+
+        connection.execute("TRUNCATE TABLE #{table_names.map { |t| connection.quote_table_name(t) }.join(",")}")
       end
+      Account.ensure_dummy_root_account
     end
 
     def get_sequences(connection)
-      schema = connection.shard.name if connection.use_qualified_names?
-      sequences = connection.query(<<-SQL, 'SCHEMA').map(&:first)
-         SELECT relname
-         FROM pg_class INNER JOIN pg_namespace ON relnamespace=pg_namespace.oid
-         WHERE nspname = #{schema ? "'#{schema}'" : 'ANY (current_schemas(false))'} AND relkind='S'
+      schema = connection.shard.name
+      sequences = connection.query(<<~SQL.squish, "SCHEMA").map(&:first)
+        SELECT relname
+        FROM pg_class INNER JOIN pg_namespace ON relnamespace=pg_namespace.oid
+        WHERE nspname = #{schema ? "'#{schema}'" : "ANY (current_schemas(false))"} AND relkind='S'
       SQL
-      sequences.delete('switchman_shards_id_seq')
+      sequences.delete("switchman_shards_id_seq")
       sequences
     end
 
@@ -103,7 +131,8 @@ module TestDatabaseUtils
     end
 
     def randomize_sequences!
-      puts "randomizing db sequences..."
+      # RSpecQ fails when using json formatter due to this output. Don't output when running on RSpecQ
+      puts "randomizing db sequences..." unless ENV["SUPPRESS_OUTPUT"] == "1"
       seed = ::RSpec.configuration.seed
       i = 0
       each_connection do |connection|

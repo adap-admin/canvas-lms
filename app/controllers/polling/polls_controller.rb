@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -73,7 +75,7 @@ module Polling
     #   }
     #
     def index
-      @polls = @current_user.polls.order('created_at DESC')
+      @polls = @current_user.polls.order("created_at DESC")
       json, meta = paginate_for(@polls)
 
       render json: serialize_jsonapi(json, meta)
@@ -144,7 +146,7 @@ module Polling
       if authorized_action(@poll, @current_user, :update)
         poll_params.delete(:is_correct) if poll_params && poll_params[:is_correct].blank?
 
-        if @poll.update_attributes(poll_params)
+        if @poll.update(poll_params)
           render json: serialize_jsonapi(@poll)
         else
           render json: @poll.errors, status: :bad_request
@@ -164,30 +166,31 @@ module Polling
     end
 
     protected
+
     def paginate_for(polls)
       meta = {}
       json = if accepts_jsonapi?
-              polls, meta = Api.jsonapi_paginate(polls, self, api_v1_polls_url)
-              meta[:primaryCollection] = 'polls'
-              polls
+               polls, meta = Api.jsonapi_paginate(polls, self, api_v1_polls_url)
+               meta[:primaryCollection] = "polls"
+               polls
              else
                Api.paginate(polls, self, api_v1_polls_url)
              end
 
-      return json, meta
+      [json, meta]
     end
 
     def serialize_jsonapi(polls, meta = {})
       polls = Array.wrap(polls)
 
       Canvas::APIArraySerializer.new(polls, {
-        each_serializer: Polling::PollSerializer,
-        controller: self,
-        root: :polls,
-        meta: meta,
-        scope: @current_user,
-        include_root: false
-      }).as_json
+                                       each_serializer: Polling::PollSerializer,
+                                       controller: self,
+                                       root: :polls,
+                                       meta:,
+                                       scope: @current_user,
+                                       include_root: false
+                                     }).as_json
     end
 
     def get_poll_params

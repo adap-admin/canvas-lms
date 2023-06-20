@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright (C) 2018 - present Instructure, Inc.
 #
 # This file is part of Canvas.
@@ -19,7 +21,7 @@ class CreateParallelImporters < ActiveRecord::Migration[5.0]
   tag :predeploy
 
   def change
-    drop_table :parallel_importers if ActiveRecord::Base.connection.table_exists? 'parallel_importers'
+    drop_table :parallel_importers if ActiveRecord::Base.connection.table_exists? "parallel_importers"
     create_table :parallel_importers do |t|
       t.integer :sis_batch_id, null: false, limit: 8
       t.string :workflow_state, null: false, limit: 255

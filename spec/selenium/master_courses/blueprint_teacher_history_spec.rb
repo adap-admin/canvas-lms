@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -15,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_relative '../common'
+require_relative "../common"
 
 describe "master courses - child courses - sync history for teacher" do
   include_context "in-process server selenium tests"
@@ -33,23 +35,23 @@ describe "master courses - child courses - sync history for teacher" do
   def run_master_migration
     @migration = MasterCourses::MasterMigration.start_new_migration!(@template, @admin)
     run_jobs
-    @cm = @copy_to.content_migrations.where(:child_subscription_id => @sub).last
+    @cm = @copy_to.content_migrations.where(child_subscription_id: @sub).last
   end
 
-  before :each do
+  before do
     user_session(@teacher)
   end
 
-  it "should show import history to a teacher", priority: "1", test_id: 3208649 do
+  it "shows import history to a teacher", priority: "1" do
     assmt = @copy_from.assignments.create!(title: "assmt", due_at: 2.days.from_now)
-    @template.create_content_tag_for!(assmt, {restrictions: {content: true}})
+    @template.create_content_tag_for!(assmt, { restrictions: { content: true } })
     topic = @copy_from.discussion_topics.create!(title: "something")
     run_master_migration # run the full export initially
 
-    assmt.update_attributes(due_at: 3.days.from_now) # updated
-    topic.update_attributes(title: "something new") # updated but won't apply
+    assmt.update(due_at: 3.days.from_now) # updated
+    topic.update(title: "something new") # updated but won't apply
     topic_to = @copy_to.discussion_topics.first
-    topic_to.update_attributes(title: "something that won't get overwritten")
+    topic_to.update(title: "something that won't get overwritten")
     page = @copy_from.wiki_pages.create!(title: "page") # new object
 
     run_master_migration # run selective export
@@ -58,16 +60,16 @@ describe "master courses - child courses - sync history for teacher" do
     wait_for_ajaximations
 
     rows = ff(".bcs__history-item__change-log-row")
-    assmt_row = rows.detect{|r| r.text.include?(assmt.title)}
+    assmt_row = rows.detect { |r| r.text.include?(assmt.title) }
     expect(assmt_row).to contain_css("svg[name=IconBlueprintLock]")
     expect(assmt_row).to include_text("Updated")
     expect(assmt_row).to include_text("Yes") # change applied
 
-    topic_row = rows.detect{|r| r.text.include?(topic_to.title)}
+    topic_row = rows.detect { |r| r.text.include?(topic_to.title) }
     expect(topic_row).to contain_css("svg[name=IconBlueprint]")
     expect(topic_row).to include_text("No") # change not applied
 
-    page_row = rows.detect{|r| r.text.include?(page.title)}
+    page_row = rows.detect { |r| r.text.include?(page.title) }
     expect(page_row).to include_text("Created")
   end
 end

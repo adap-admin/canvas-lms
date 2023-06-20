@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -18,12 +20,12 @@
 
 module IncomingMailProcessor
   class MailboxAccount
-    attr_accessor :protocol, :config, :address, :error_folder
+    attr_writer :address
+    attr_accessor :protocol, :config, :error_folder
 
     class << self
       attr_accessor :default_outgoing_email, :reply_to_enabled
     end
-
 
     def initialize(options = {})
       self.protocol     = options[:protocol]

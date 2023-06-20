@@ -16,29 +16,29 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Conversation from 'compiled/models/Conversation'
+import Conversation from '@canvas/message-students-dialog/backbone/models/Conversation'
 
 QUnit.module('Conversation', {
   setup() {
     this.conversation = new Conversation()
-  }
+  },
 })
 
-test('#validate validates body length', function() {
+test('#validate validates body length', function () {
   ok(this.conversation.validate({body: ''}))
   ok(this.conversation.validate({body: null}).body)
   ok(
     this.conversation.validate({
       body: 'body',
-      recipients: [{}]
+      recipients: [{}],
     }) === undefined
   )
 })
 
-test('#validate validates there must be at least one recipient object', function() {
+test('#validate validates there must be at least one recipient object', function () {
   const testData = {
     body: 'i love testing javascript',
-    recipients: [{}]
+    recipients: [{}],
   }
   ok(this.conversation.validate(testData) === undefined)
   testData.recipients = []
@@ -47,6 +47,6 @@ test('#validate validates there must be at least one recipient object', function
   ok(this.conversation.validate(testData).recipients)
 })
 
-test('#url is the correct API url', function() {
+test('#url is the correct API url', function () {
   equal(this.conversation.url, '/api/v1/conversations')
 })

@@ -16,12 +16,12 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Backbone from 'Backbone'
-import AssignmentGroupCollection from 'compiled/collections/AssignmentGroupCollection'
-import AssignmentCollection from 'compiled/collections/AssignmentCollection'
-import AssignmentGroup from 'compiled/models/AssignmentGroup'
-import Assignment from 'compiled/models/Assignment'
-import DeleteGroupView from 'compiled/views/assignments/DeleteGroupView'
+import Backbone from '@canvas/backbone'
+import AssignmentGroupCollection from '@canvas/assignments/backbone/collections/AssignmentGroupCollection'
+import AssignmentCollection from '@canvas/assignments/backbone/collections/AssignmentCollection'
+import AssignmentGroup from '@canvas/assignments/backbone/models/AssignmentGroup'
+import Assignment from '@canvas/assignments/backbone/models/Assignment'
+import DeleteGroupView from 'ui/features/assignment_index/backbone/views/DeleteGroupView'
 import $ from 'jquery'
 import assertions from 'helpers/assertions'
 import 'helpers/jquery.simulate'
@@ -30,13 +30,13 @@ const group = (assignments = true, id) =>
   new AssignmentGroup({
     id,
     name: `something cool ${id}`,
-    assignments: assignments ? [new Assignment(), new Assignment()] : []
+    assignments: assignments ? [new Assignment(), new Assignment()] : [],
   })
-const assignmentGroups = function(assignments = true, multiple = true) {
+const assignmentGroups = function (assignments = true, multiple = true) {
   const groups = multiple ? [group(assignments, 1), group(assignments, 2)] : [group(assignments, 1)]
   return new AssignmentGroupCollection(groups)
 }
-const createView = function(assignments = true, multiple = true) {
+const createView = function (assignments = true, multiple = true) {
   const ags = assignmentGroups(assignments, multiple)
   const ag_group = ags.first()
   return new DeleteGroupView({model: ag_group})
@@ -47,7 +47,7 @@ QUnit.module('DeleteGroupView', {
   teardown() {
     $('#fixtures').empty()
     return $('form.dialogFormView').remove()
-  }
+  },
 })
 
 test('should be accessible', assert => {
@@ -56,7 +56,7 @@ test('should be accessible', assert => {
   assertions.isAccessible(view, done, {a11yReport: true})
 })
 
-test('it should delete a group without assignments', function() {
+test('it should delete a group without assignments', () => {
   sandbox.stub(window, 'confirm').returns(true)
   const view = createView(false, true)
   sandbox.stub(view, 'destroyModel')
@@ -88,7 +88,7 @@ test('assignment and ag counts should update', () => {
   return view.close()
 })
 
-test('it should delete a group with assignments', function() {
+test('it should delete a group with assignments', () => {
   const view = createView(true, true)
   const destroy_spy = sandbox.stub(view, 'destroyModel').returns($.Deferred().resolve())
   view.render()
@@ -98,7 +98,7 @@ test('it should delete a group with assignments', function() {
   return view.close()
 })
 
-test('it validates that an assignment group to move to is selected', function() {
+test('it validates that an assignment group to move to is selected', () => {
   const view = createView(true, true)
   view.render()
   view.open()
@@ -107,7 +107,7 @@ test('it validates that an assignment group to move to is selected', function() 
   equal(errors.move_assignments_to[0].type, 'required')
 })
 
-test('it should move assignments to another group', function() {
+test('it should move assignments to another group', () => {
   const view = createView(true, true)
   const destroy_spy = sandbox.stub(view, 'destroyModel').returns($.Deferred().resolve())
   view.render()
@@ -119,7 +119,7 @@ test('it should move assignments to another group', function() {
   return view.close()
 })
 
-test('it should not delete the last assignment group', function() {
+test('it should not delete the last assignment group', () => {
   const alert_stub = sandbox.stub(window, 'alert').returns(true)
   const view = createView(true, false)
   const destroy_spy = sandbox.spy(view, 'destroyModel')

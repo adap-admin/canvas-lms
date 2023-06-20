@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 Instructure, Inc.
 #
@@ -19,22 +21,22 @@
 module DataFixup::DeleteInvalidCommunicationChannels
   def self.run
     scope = CommunicationChannel.where(path_type: CommunicationChannel::TYPE_EMAIL)
-    scope.find_ids_in_ranges(batch_size: 10000) do |min_id, max_id|
-      records = scope.where(id: min_id..max_id).pluck(:id, :user_id, :path).reject do |id, user_id, path|
+    scope.find_ids_in_ranges(batch_size: 10_000) do |min_id, max_id|
+      records = scope.where(id: min_id..max_id).pluck(:id, :user_id, :path).reject do |_id, _user_id, path|
         EmailAddressValidator.valid?(path)
       end
 
       # We have a number of email addresses in the system that are valid except
       # for leading or trailing whitespace.
-      r1, r2 = records.partition do |id, user_id, path|
+      r1, r2 = records.partition do |_id, _user_id, path|
         EmailAddressValidator.valid?(path.strip)
       end
 
       r1.each do |id, user_id, path|
-        if scope.by_path(path.strip).where(user_id: user_id).exists?
+        if scope.by_path(path.strip).where(user_id:).exists?
           r2 << [id, user_id, path]
         else
-          CommunicationChannel.where(id: id).update_all(path: path.strip)
+          CommunicationChannel.where(id:).update_all(path: path.strip)
         end
       end
 

@@ -17,7 +17,7 @@
  */
 
 import $ from 'jquery'
-import AvatarWidget from 'compiled/util/AvatarWidget'
+import AvatarWidget from '@canvas/avatar-dialog-view'
 
 QUnit.module('AvatarWidget', {
   setup() {},
@@ -25,7 +25,7 @@ QUnit.module('AvatarWidget', {
     $('.avatar-nav').remove()
     $('.ui-dialog').remove()
     $('#fixtures').empty()
-  }
+  },
 })
 
 test('opens dialog on element click', () => {

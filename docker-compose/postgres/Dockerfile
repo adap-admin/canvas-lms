@@ -1,25 +1,13 @@
-# Make sure you change the postgresql-server-dev package version when you change this
-FROM postgres:9.5
+ARG POSTGRES=14
+ARG POSTGRESIMAGE=postgres
 
-# Install dependencies for postgres extension for I18n sorting
-RUN apt-get update -qq \
-  && apt-get install -qqy \
-      build-essential \
-      ca-certificates \
-      libicu-dev \
-      postgresql-server-dev-9.5 \
-      pgxnclient \
-      unzip \
-  && rm -rf /var/lib/apt/lists/*
+FROM $POSTGRESIMAGE:$POSTGRES
 
-# Install postgres extension for I8n sorting
-# This is pretty horrible but the package won't install with the default Makefile
-# so we need to edit it a bit.
-ENV PG_COLLKEY_VERSION 0.5.1
-RUN pgxnclient download --yes --target ~ pg_collkey=${PG_COLLKEY_VERSION} \
-    && unzip ~/pg_collkey-${PG_COLLKEY_VERSION}.zip -d ~/ \
-    && cd ~/pg_collkey-${PG_COLLKEY_VERSION} \
-    && mv Makefile Makefile.orig \
-    && sed '/^DATA = \$(wildcard/d' Makefile.orig > Makefile \
-    && make \
-    && make install
+RUN echo "max_locks_per_transaction = 640" >> /usr/share/postgresql/$PG_MAJOR/postgresql.conf.sample \
+ && echo "max_stack_depth = 5MB" >> /usr/share/postgresql/$PG_MAJOR/postgresql.conf.sample \
+ && echo "random_page_cost = 1.0" >> /usr/share/postgresql/$PG_MAJOR/postgresql.conf.sample \
+ && echo "shared_buffers = 256MB" >> /usr/share/postgresql/$PG_MAJOR/postgresql.conf.sample \
+ && echo "effective_cache_size = 256MB" >> /usr/share/postgresql/$PG_MAJOR/postgresql.conf.sample
+
+COPY /create-dbs.sh /docker-entrypoint-initdb.d/
+COPY /wait-for-it /

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -17,7 +19,6 @@
 
 module Exporters
   class SubmissionExporter
-
     def self.export_user_submissions(user, base_folder, zipfile, files_in_zip)
       user.submissions.shard(user).each do |main_sub|
         base_path = File.join(*[base_folder, main_sub.context.name.presence, main_sub.assignment.name.presence].compact)
@@ -31,17 +32,17 @@ module Exporters
             attachment_ids = submission.attachment_ids.try(:split, ",")
             attachments = attachment_ids.present? ? main_sub.shard.activate { Attachment.where(id: attachment_ids) } : []
             attachments.each do |attachment|
-              # TODO handle missing attachments
+              # TODO: handle missing attachments
               path = File.join(base_path, attachment.display_name)
               ExporterHelper.add_attachment_to_zip(attachment, zipfile, path, files_in_zip)
             end
           elsif submission.submission_type == "online_url" && submission.url
             path = File.join(base_path, "submission_link_#{version.number}.html")
             content = "<a href=\"#{submission.url}\">#{submission.url}</a>"
-            zipfile.get_output_stream(path) {|f| f.puts content }
+            zipfile.get_output_stream(path) { |f| f.puts content }
           elsif submission.submission_type == "online_text_entry" && submission.body
             path = File.join(base_path, "submission_text_#{version.number}.html")
-            zipfile.get_output_stream(path) {|f| f.puts submission.body }
+            zipfile.get_output_stream(path) { |f| f.puts submission.body }
           end
         end
       end

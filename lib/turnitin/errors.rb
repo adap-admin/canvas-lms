@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -17,5 +19,13 @@
 
 module Turnitin::Errors
   class SubmissionNotScoredError < StandardError; end
-  class ScoreStillPendingError < StandardError; end
+
+  class OriginalSubmissionUnavailableError < StandardError
+    attr_reader :status_code
+
+    def initialize(status_code = nil)
+      super("#{self.class.name}, got #{status_code}")
+      @status_code = status_code
+    end
+  end
 end

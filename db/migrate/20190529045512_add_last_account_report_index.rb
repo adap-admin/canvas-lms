@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -20,9 +22,10 @@ class AddLastAccountReportIndex < ActiveRecord::Migration[5.1]
   disable_ddl_transaction!
 
   def change
-    add_index :account_reports, [:account_id, :report_type, :created_at],
+    add_index :account_reports,
+              %i[account_id report_type created_at],
               order: { created_at: :desc },
               algorithm: :concurrently,
-              name: 'index_account_reports_latest_of_type_per_account'
+              name: "index_account_reports_latest_of_type_per_account"
   end
 end

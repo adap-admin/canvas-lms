@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -19,7 +21,7 @@ class AddOldAttributesToPurgatory < ActiveRecord::Migration[5.1]
   tag :predeploy
 
   def change
-    add_column :purgatories, :old_display_name, :string, :limit => 255
-    add_column :purgatories, :old_content_type, :string, :limit => 255
+    add_column :purgatories, :old_display_name, :string, limit: 255
+    add_column :purgatories, :old_content_type, :string, limit: 255
   end
 end

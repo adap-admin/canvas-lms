@@ -20,8 +20,8 @@ import React from 'react'
 
 import TestUtils from 'react-dom/test-utils'
 import $ from 'jquery'
-import ExternalToolModalLauncher from 'jsx/shared/ExternalToolModalLauncher'
-import Modal from 'jsx/shared/modal'
+import ExternalToolModalLauncher from '@canvas/external-tools/react/components/ExternalToolModalLauncher'
+import {Modal} from '@instructure/ui-modal'
 
 const defaultWidth = 700
 const defaultHeight = 700
@@ -41,7 +41,7 @@ QUnit.module('ExternalToolModalLauncher', hooks => {
       contextType: 'course',
       contextId: 5,
       launchType: 'course_assignments_menu',
-      ...overrides
+      ...overrides,
     }
   }
 
@@ -72,7 +72,7 @@ QUnit.module('ExternalToolModalLauncher', hooks => {
       height: defaultHeight,
       padding: 0,
       display: 'flex',
-      flexDirection: 'column'
+      flexDirection: 'column',
     })
   })
 
@@ -84,7 +84,7 @@ QUnit.module('ExternalToolModalLauncher', hooks => {
     deepEqual(component.getDimensions().modalLaunchStyle, {
       width: defaultWidth,
       height: defaultHeight,
-      border: 'none'
+      border: 'none',
     })
   })
 
@@ -94,7 +94,7 @@ QUnit.module('ExternalToolModalLauncher', hooks => {
 
     const overrides = {
       tool: {placements: {course_assignments_menu: {launch_width: width, launch_height: height}}},
-      isOpen: true
+      isOpen: true,
     }
 
     const component = TestUtils.renderIntoDocument(
@@ -105,7 +105,7 @@ QUnit.module('ExternalToolModalLauncher', hooks => {
   })
 
   test('invokes onRequestClose prop when window receives externalContentReady event', () => {
-    const sandbox = sinon.sandbox.create()
+    const sandbox = sinon.createSandbox()
     const stub = sandbox.stub()
     const props = generateProps({onRequestClose: stub})
 
@@ -118,7 +118,7 @@ QUnit.module('ExternalToolModalLauncher', hooks => {
   })
 
   test('invokes onRequestClose prop when window receives externalContentCancel event', () => {
-    const sandbox = sinon.sandbox.create()
+    const sandbox = sinon.createSandbox()
     const stub = sandbox.stub()
     const props = generateProps({onRequestClose: stub})
 
@@ -135,5 +135,12 @@ QUnit.module('ExternalToolModalLauncher', hooks => {
       <ExternalToolModalLauncher {...generateProps({isOpen: true})} />
     )
     equal(component.iframe.getAttribute('allow'), ENV.LTI_LAUNCH_FRAME_ALLOWANCES.join('; '))
+  })
+
+  test('sets the iframe data-lti-launch attribute', () => {
+    const component = TestUtils.renderIntoDocument(
+      <ExternalToolModalLauncher {...generateProps({isOpen: true})} />
+    )
+    equal(component.iframe.getAttribute('data-lti-launch'), 'true')
   })
 })

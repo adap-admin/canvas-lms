@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -17,7 +19,7 @@
 #
 
 module LockedFor
-  def locked_for?(user, opts={})
+  def locked_for?(user, opts = {})
     lock_info = low_level_locked_for?(user, opts).dup
     return false if lock_info == false
 

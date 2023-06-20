@@ -16,19 +16,40 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import reducer from '../courses-reducer';
-import {gotGradesSuccess} from '../../actions';
+import reducer from '../courses-reducer'
+import {gotGradesSuccess, clearCourses} from '../../actions'
 
 it('merges grades into courses', () => {
   const courses = [
     {id: '1', otherData: 'first-other-fields'},
-    {id: '2', otherData: 'second-other-fields'},
-  ];
+    {id: '2', otherData: 'second-other-fields'}
+  ]
   const grades = {
-    '1': {courseId: '1', hasGradingPeriods: true, grade: '34.42%'},
-    '2': {courseId: '2', hasGradingPeriods: false, grade: '42.34%'},
-  };
-  const action = gotGradesSuccess(grades);
-  const nextState = reducer(courses, action);
-  expect(nextState).toMatchSnapshot();
-});
+    1: {courseId: '1', hasGradingPeriods: true, grade: '34.42%'},
+    2: {courseId: '2', hasGradingPeriods: false, grade: '42.34%'}
+  }
+  const action = gotGradesSuccess(grades)
+  const nextState = reducer(courses, action)
+  expect(nextState).toMatchSnapshot()
+})
+
+describe('CLEAR_COURSES', () => {
+  it('clears courses', () => {
+    const courses = [
+      {id: '1', otherData: 'first-other-fields'},
+      {id: '2', otherData: 'second-other-fields'}
+    ]
+
+    const action = clearCourses()
+    const nextState = reducer(courses, action)
+    expect(nextState).toEqual([])
+  })
+
+  it('does not clear courses in singleCourse mode', () => {
+    const courses = [{id: '1', otherData: 'just-one-course'}]
+
+    const action = clearCourses(true)
+    const nextState = reducer(courses, action)
+    expect(nextState).toBe(courses)
+  })
+})

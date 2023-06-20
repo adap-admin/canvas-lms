@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -16,7 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 class ScopeFilter
-  def initialize(context, user, relation=nil)
+  def initialize(context, user, relation = nil)
     @context = context
     @user = user
     @relation = relation
@@ -29,6 +31,7 @@ class ScopeFilter
   end
 
   private
+
   def can?(*permissions)
     permissions.all? do |permission|
       context.grants_right?(user, permission)

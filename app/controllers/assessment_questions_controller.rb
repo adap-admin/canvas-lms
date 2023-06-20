@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -30,7 +32,7 @@ class AssessmentQuestionsController < ApplicationController
       if @question.with_versioning(&:save)
         render json: question_json(@question, @current_user, session, [:assessment_question])
       else
-        render :json => @question.errors, :status => :bad_request
+        render json: @question.errors, status: :bad_request
       end
     end
   end
@@ -41,10 +43,10 @@ class AssessmentQuestionsController < ApplicationController
       params[:assessment_question] ||= {}
       params[:assessment_question][:form_question_data] ||= params[:question]
       @question.edited_independent_of_quiz_question
-      if @question.with_versioning { @question.update_attributes(assessment_question_params) }
+      if @question.with_versioning { @question.update(assessment_question_params) }
         render json: question_json(@question, @current_user, session, [:assessment_question])
       else
-        render :json => @question.errors, :status => :bad_request
+        render json: @question.errors, status: :bad_request
       end
     end
   end
@@ -53,16 +55,17 @@ class AssessmentQuestionsController < ApplicationController
     @question = @bank.assessment_questions.find(params[:id])
     if authorized_action(@question, @current_user, :delete)
       @question.destroy
-      render :json => @question
+      render json: @question
     end
   end
 
   private
+
   def require_bank
     @bank = @context.assessment_question_banks.active.find(params[:question_bank_id])
   end
 
   def assessment_question_params
-    params.require(:assessment_question).permit(:name, :form_question_data => strong_anything)
+    params.require(:assessment_question).permit(:name, form_question_data: strong_anything)
   end
 end

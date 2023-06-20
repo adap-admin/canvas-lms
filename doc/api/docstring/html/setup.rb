@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 Instructure, Inc.
 #
@@ -18,5 +20,6 @@
 
 def init
   return if object.docstring.blank?
-  sections :text, T('tags')
+
+  sections :text, T("tags")
 end

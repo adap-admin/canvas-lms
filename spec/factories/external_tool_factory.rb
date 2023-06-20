@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -18,10 +20,10 @@
 
 module Factories
   BASE_ATTRS = {
-    :name => "a",
-    :url => "http://google.com",
-    :consumer_key => '12345',
-    :shared_secret => 'secret'
+    name: "a",
+    url: "http://google.com",
+    consumer_key: "12345",
+    shared_secret: "secret"
   }.freeze
 
   def external_tool_model(context: nil, opts: {})
@@ -29,5 +31,11 @@ module Factories
     context.context_external_tools.create(
       BASE_ATTRS.merge(opts)
     )
+  end
+
+  def external_tool_1_3_model(context: nil, opts: {}, developer_key: nil)
+    developer_key ||= DeveloperKey.create!
+    opts = { developer_key_id: developer_key.id, lti_version: "1.3" }.merge(opts)
+    external_tool_model(context:, opts:)
   end
 end

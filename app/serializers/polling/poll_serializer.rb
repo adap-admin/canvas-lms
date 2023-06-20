@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -30,7 +32,7 @@ module Polling
       api_v1_poll_choices_url(object)
     end
 
-    def filter(keys)
+    def filter(_keys)
       if object.grants_right?(current_user, session, :update)
         student_keys + teacher_keys
       else
@@ -45,7 +47,7 @@ module Polling
     end
 
     def student_keys
-      [:id, :question, :description, :created_at]
+      %i[id question description created_at]
     end
   end
 end

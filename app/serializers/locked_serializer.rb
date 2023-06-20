@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -21,8 +23,9 @@ module LockedSerializer
   include Canvas::LockExplanation
   extend Forwardable
 
-  def_delegators :@controller, :course_context_modules_url,
-    :course_context_module_prerequisites_needing_finishing_path
+  def_delegators :@controller,
+                 :course_context_modules_url,
+                 :course_context_module_prerequisites_needing_finishing_path
 
   def lock_info
     locked_for_hash
@@ -37,12 +40,14 @@ module LockedSerializer
   end
 
   private
+
   def locked_for_hash
     return @_locked_for_hash unless @_locked_for_hash.nil?
+
     @_locked_for_hash = (
       if scope && object.respond_to?(:locked_for?)
         context = object.try(:context)
-        object.locked_for?(scope, check_policies: true, context: context)
+        object.locked_for?(scope, check_policies: true, context:)
       else
         false
       end
@@ -51,14 +56,13 @@ module LockedSerializer
 
   def filter(keys)
     excluded = if serializer_option(:skip_lock_tests)
-      [ :lock_info, :lock_explanation, :locked_for_user ]
-    elsif !locked_for_hash
-      [ :lock_info, :lock_explanation ]
-    else
-      []
-    end
+                 %i[lock_info lock_explanation locked_for_user]
+               elsif !locked_for_hash
+                 [:lock_info, :lock_explanation]
+               else
+                 []
+               end
 
     keys - excluded
   end
-
 end

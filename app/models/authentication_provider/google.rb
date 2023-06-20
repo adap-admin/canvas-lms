@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -26,39 +28,43 @@ class AuthenticationProvider::Google < AuthenticationProvider::OpenIDConnect
   end
 
   def self.recognized_params
-    [ :login_attribute, :jit_provisioning, :hosted_domain ].freeze
+    super - open_id_connect_params + %i[login_attribute jit_provisioning hosted_domain].freeze
   end
 
   # Rename db field
   alias_attribute :hosted_domain, :auth_filter
 
   def hosted_domain=(domain)
-    self.auth_filter = domain.presence
+    self.auth_filter = domain.presence&.strip
   end
 
   def self.login_attributes
-    ['sub'.freeze, 'email'.freeze].freeze
+    ["sub", "email"].freeze
   end
   validates :login_attribute, inclusion: login_attributes
 
   def self.recognized_federated_attributes
-    [
-      'email'.freeze,
-      'family_name'.freeze,
-      'given_name'.freeze,
-      'locale'.freeze,
-      'name'.freeze,
-      'sub'.freeze,
+    %w[
+      email
+      family_name
+      given_name
+      locale
+      name
+      sub
     ].freeze
   end
 
   def unique_id(token)
     id_token = claims(token)
-    if hosted_domain && id_token['hd'] != hosted_domain
-      # didn't make a "nice" exception for this, cause it should never happen.
-      # either we got MITM'ed (on the server side), or Google's docs lied;
-      # this check is just an extra precaution
-      raise "Non-matching hosted domain: #{id_token['hd'].inspect}"
+    if hosted_domain
+      if !id_token["hd"]
+        # didn't make a "nice" exception for this, cause it should never happen.
+        # either we got MITM'ed (on the server side), or Google's docs lied;
+        # this check is just an extra precaution
+        raise "Google Apps user not received, but required"
+      elsif hosted_domain != "*" && !hosted_domains.include?(id_token["hd"])
+        raise OAuthValidationError, t("User is from unacceptable domain %{domain}.", domain: id_token["hd"].inspect)
+      end
     end
     super
   end
@@ -66,7 +72,7 @@ class AuthenticationProvider::Google < AuthenticationProvider::OpenIDConnect
   protected
 
   def userinfo_endpoint
-    "https://www.googleapis.com/oauth2/v3/userinfo".freeze
+    "https://www.googleapis.com/oauth2/v3/userinfo"
   end
 
   def client_options
@@ -77,24 +83,30 @@ class AuthenticationProvider::Google < AuthenticationProvider::OpenIDConnect
 
   def authorize_options
     result = { scope: scope_for_options }
-    result[:hd] = hosted_domain if hosted_domain
+    if hosted_domain
+      result[:hd] = (hosted_domains.length == 1) ? hosted_domain : "*"
+    end
     result
   end
 
   def scope
     scopes = []
-    scopes << 'email' if login_attribute == 'email'.freeze ||
-        hosted_domain ||
-        federated_attributes.any? { |(_k, v)| v['attribute'] == 'email' }
-    scopes << 'profile' if federated_attributes.any? { |(_k, v)| v['attribute'] == 'name' }
-    scopes.join(' ')
+    scopes << "email" if login_attribute == "email" ||
+                         hosted_domain ||
+                         federated_attributes.any? { |(_k, v)| v["attribute"] == "email" }
+    scopes << "profile" if federated_attributes.any? { |(_k, v)| v["attribute"] == "name" }
+    scopes.join(" ")
   end
 
   def authorize_url
-    'https://accounts.google.com/o/oauth2/auth'.freeze
+    "https://accounts.google.com/o/oauth2/auth"
   end
 
   def token_url
-    'https://accounts.google.com/o/oauth2/token'.freeze
+    "https://accounts.google.com/o/oauth2/token"
+  end
+
+  def hosted_domains
+    hosted_domain.split(",").map(&:strip)
   end
 end

@@ -22,7 +22,8 @@
   @current_user_submission,
   Time.zone.utc_offset,
   @assigned_assessments.count,
-  @assigned_assessments.count(&:incomplete?)
+  @assigned_assessments.count(&:incomplete?),
+  @assignment.anonymous_peer_reviews ? 1 : 0
 ].cache_key) do %>
 <div class="details">
   <h2><%= t 'titles.submission', "Submission" %></h2>
@@ -42,6 +43,10 @@
     </div>
   <% end %>
   <div class="content">
+    <% if @current_user_submission.proxy_submitter %>
+      <%= t "by %{name}", name: @current_user_submission.proxy_submitter.short_name %>
+      <br />
+    <% end %>
     <span class="<%= "late" if @current_user_submission.late? %>">
       <% if @current_user_submission.late? %>
         <%= t 'messages.submission_late_timestamp', "%{submitted_at} (late)", :submitted_at => datetime_string(@current_user_submission.submitted_at) %>
@@ -75,7 +80,7 @@
         <span class="assignment_presenter_for_submission" style="display: none;"><%= AttachmentUploadStatus.upload_status(attachment) %></span>
         <span class="react_pill_container"></span>
       <% end %>
-    <% elsif @current_user_submission.submission_type == "online_quiz" %>
+    <% elsif @current_user_submission.submission_type == "online_quiz" and @assignment&.quiz&.id %>
       <a href="<%= context_url(@assignment.context, :context_quiz_url, @assignment.quiz.id) %>" target="_new">
         <i class="icon-quiz" aria-hidden="true"></i>
         <%= @assignment.quiz.survey? ? t('links.submission.view_survey', "View the Survey Submission") :
@@ -136,7 +141,7 @@
                 </div>
               <% end %>
             </div>
-            <div class="signature" style="font-size: 0.8em; text-align: <%= direction('right') %>; color: #888;">
+            <div class="signature" style="font-size: 0.8em; text-align: <%= direction('right') %>;">
               <%= t :comment_signature, "%{author}, %{created_at}", {
                 :author => comment_author_name_for(comment),
                 :created_at => datetime_string(comment.created_at)

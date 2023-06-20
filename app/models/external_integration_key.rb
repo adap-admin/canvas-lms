@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -19,15 +21,15 @@
 class ExternalIntegrationKey < ActiveRecord::Base
   belongs_to :context, polymorphic: [:account]
 
-  validates_presence_of :context_id
-  validates_presence_of :context_type
-  validates_presence_of :key_type
-  validates_presence_of :key_value
-  validates_inclusion_of :key_type, in: proc { self.key_types }
-  validates_uniqueness_of :key_type, scope: [ :context_type, :context_id ]
+  validates :context_id, presence: { unless: -> { new_record? && context&.new_record? } }
+  validates :context_type, presence: true
+  validates :key_type, presence: true
+  validates :key_value, presence: true
+  validates :key_type, inclusion: { in: proc { key_types } }
+  validates :key_type, uniqueness: { scope: [:context_type, :context_id] }
 
   def key_type
-    attributes['key_type'].try(:to_sym)
+    attributes["key_type"].try(:to_sym)
   end
 
   scope :of_type, ->(type) { where(key_type: type) }
@@ -45,54 +47,57 @@ class ExternalIntegrationKey < ActiveRecord::Base
   end
 
   set_policy do
-    given { |user| self.grants_right_for?(user, :read) }
+    given { |user| grants_right_for?(user, :read) }
     can :read
 
-    given { |user| self.grants_right_for?(user, :write) }
+    given { |user| grants_right_for?(user, :write) }
     can :write
   end
 
-  def self.indexed_keys_for(context)
-    keys = context.external_integration_keys.index_by(&:key_type)
-    key_types.each do |key_type|
-      next if keys.key?(key_type)
-      keys[key_type] = ExternalIntegrationKey.new
-      keys[key_type].context = context
-      keys[key_type].key_type = key_type
+  class << self
+    def indexed_keys_for(context)
+      keys = context.external_integration_keys.index_by(&:key_type)
+      key_types.each do |key_type|
+        next if keys.key?(key_type)
+
+        keys[key_type] = ExternalIntegrationKey.new
+        keys[key_type].context = context
+        keys[key_type].key_type = key_type
+      end
+      keys
     end
-    keys
-  end
 
-  def self.key_type(name, options = {})
-    key_types_known << name
-    key_type_labels[name] = options[:label]
-    key_type_rights[name] = options[:rights] || {}
-  end
-
-  def self.label_for(key_type)
-    key_label = key_type_labels[key_type]
-    if key_label.respond_to? :call
-      key_label.call
-    else
-      key_label
+    def key_type(name, options = {})
+      key_types_known << name
+      key_type_labels[name] = options[:label]
+      key_type_rights[name] = options[:rights] || {}
     end
-  end
 
-  def self.key_types
-    key_types_known.to_a
-  end
+    def label_for(key_type)
+      key_label = key_type_labels[key_type]
+      if key_label.respond_to? :call
+        key_label.call
+      else
+        key_label
+      end
+    end
 
-  private
+    def key_types
+      key_types_known.to_a
+    end
 
-  def self.key_types_known
-    @key_types_known ||= Set.new
-  end
+    def key_type_rights
+      @key_type_rights ||= {}
+    end
 
-  def self.key_type_labels
-    @key_types_labels ||= {}
-  end
+    private
 
-  def self.key_type_rights
-    @key_type_rights ||= {}
+    def key_types_known
+      @key_types_known ||= Set.new
+    end
+
+    def key_type_labels
+      @key_type_labels ||= {}
+    end
   end
 end

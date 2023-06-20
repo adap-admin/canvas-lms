@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -19,7 +21,7 @@
 module Quizzes::QuizQuestion::AnswerParsers
   class MultipleDropdowns < AnswerParser
     def parse(question)
-      variables = HashWithIndifferentAccess.new
+      variables = ActiveSupport::HashWithIndifferentAccess.new
 
       @answers.map_with_group! do |answer_group, answer|
         fields = Quizzes::QuizQuestion::RawFields.new(answer)
@@ -43,14 +45,13 @@ module Quizzes::QuizQuestion::AnswerParsers
       question.answers = @answers
 
       variables.each do |variable, found_correct|
-        if !found_correct
-          question.answers.each_with_index do |answer, idx|
-            if answer[:blank_id] == variable && !found_correct
-              question.answers[idx][:weight] = 100
-              found_correct = true
-            end
-          end
+        next if found_correct
 
+        question.answers.each_with_index do |answer, idx|
+          if answer[:blank_id] == variable && !found_correct
+            question.answers[idx][:weight] = 100
+            found_correct = true
+          end
         end
       end
 

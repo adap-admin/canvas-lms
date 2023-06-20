@@ -17,9 +17,9 @@
  */
 
 import $ from 'jquery'
-import WikiPage from 'compiled/models/WikiPage'
-import WikiPageRevision from 'compiled/models/WikiPageRevision'
-import 'jquery.ajaxJSON'
+import WikiPage from '@canvas/wiki/backbone/models/WikiPage'
+import WikiPageRevision from '@canvas/wiki/backbone/models/WikiPageRevision'
+import '@canvas/jquery/jquery.ajaxJSON'
 
 QUnit.module('WikiPageRevision::urls')
 
@@ -32,7 +32,7 @@ test('captures contextAssetString, page, pageUrl, latest, and summary as constru
       page,
       pageUrl: 'page-url',
       latest: true,
-      summary: true
+      summary: true,
     }
   )
   strictEqual(revision.contextAssetString, 'course_73', 'contextAssetString')
@@ -47,7 +47,7 @@ test('urlRoot uses the context path and pageUrl', () => {
     {},
     {
       contextAssetString: 'course_73',
-      pageUrl: 'page-url'
+      pageUrl: 'page-url',
     }
   )
   strictEqual(revision.urlRoot(), '/api/v1/courses/73/pages/page-url/revisions', 'base url')
@@ -58,7 +58,7 @@ test('url returns urlRoot if latest and id are not specified', () => {
     {},
     {
       contextAssetString: 'course_73',
-      pageUrl: 'page-url'
+      pageUrl: 'page-url',
     }
   )
   strictEqual(revision.url(), '/api/v1/courses/73/pages/page-url/revisions', 'base url')
@@ -69,7 +69,7 @@ test('url is affected by the revision_id attribute', () => {
     {revision_id: 42},
     {
       contextAssetString: 'course_73',
-      pageUrl: 'page-url'
+      pageUrl: 'page-url',
     }
   )
   strictEqual(revision.url(), '/api/v1/courses/73/pages/page-url/revisions/42', 'revision 42')
@@ -81,7 +81,7 @@ test('url is affected by the latest flag', () => {
     {
       contextAssetString: 'course_73',
       pageUrl: 'page-url',
-      latest: true
+      latest: true,
     }
   )
   strictEqual(revision.url(), '/api/v1/courses/73/pages/page-url/revisions/latest', 'latest')
@@ -99,12 +99,12 @@ test('toJSON omits the id', () => {
   strictEqual(revision.toJSON().id, undefined, 'id omitted')
 })
 
-test('restore POSTs to the revision', function() {
+test('restore POSTs to the revision', () => {
   const revision = new WikiPageRevision(
     {revision_id: 42},
     {
       contextAssetString: 'course_73',
-      pageUrl: 'page-url'
+      pageUrl: 'page-url',
     }
   )
   const mock = sandbox.mock($)
@@ -118,21 +118,21 @@ test('restore POSTs to the revision', function() {
 
 QUnit.module('WikiPageRevision::fetch')
 
-test('the summary flag is passed to the server', function() {
+test('the summary flag is passed to the server', () => {
   sandbox.stub($, 'ajax').returns($.Deferred())
   const revision = new WikiPageRevision(
     {},
     {
       contextAssetString: 'course_73',
       pageUrl: 'page-url',
-      summary: true
+      summary: true,
     }
   )
   revision.fetch()
   strictEqual($.ajax.args[0][0].data.summary, true, 'summary provided')
 })
 
-test('pollForChanges performs a fetch at most every interval', function() {
+test('pollForChanges performs a fetch at most every interval', () => {
   const revision = new WikiPageRevision({}, {pageUrl: 'page-url'})
   const clock = sinon.useFakeTimers()
   sandbox.stub(revision, 'fetch').returns($.Deferred())

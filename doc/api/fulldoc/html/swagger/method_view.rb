@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -16,15 +18,16 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'hash_view'
-require 'argument_view'
-require 'route_view'
-require 'return_view'
-require 'response_field_view'
-require 'deprecated_method_view'
+require "hash_view"
+require "argument_view"
+require "route_view"
+require "return_view"
+require "response_field_view"
+require "deprecated_method_view"
 
 class MethodView < HashView
   def initialize(method)
+    super()
     @method = method
   end
 
@@ -43,11 +46,11 @@ class MethodView < HashView
   end
 
   def nickname
-    summary.downcase.
-      gsub(/ the /, ' ').
-      gsub(/ an? /, ' ').
-      gsub(/[^a-z]+/, '_').
-      gsub(/^_+|_+$/, '')
+    summary.downcase
+           .gsub(/ the /, " ")
+           .gsub(/ an? /, " ")
+           .gsub(/[^a-z]+/, "_")
+           .gsub(/^_+|_+$/, "")
   end
 
   def desc
@@ -55,21 +58,21 @@ class MethodView < HashView
   end
 
   def deprecated?
-    select_tags('deprecated_method').any?
+    select_tags("deprecated_method").any?
   end
 
   def deprecation_description
-    tag = select_tags('deprecated_method').first
-    description = tag ? DeprecatedMethodView.new(tag).description : ''
+    tag = select_tags("deprecated_method").first
+    description = tag ? DeprecatedMethodView.new(tag).description : ""
     format(description)
   end
 
   def raw_arguments
-    select_tags(['argument', 'deprecated_argument'])
+    select_tags(["argument", "deprecated_argument"])
   end
 
   def raw_response_fields
-    select_tags(['response_field', 'deprecated_response_field'])
+    select_tags(["response_field", "deprecated_response_field"])
   end
 
   def return_tag
@@ -85,11 +88,11 @@ class MethodView < HashView
   end
 
   def controller
-    @method.parent.path.underscore.sub("_controller", '')
+    @method.parent.path.underscore.sub("_controller", "")
   end
 
   def action
-    @method.path.sub(/^.*#/, '').sub(/_with_.*$/, '')
+    @method.path.sub(/^.*#/, "").sub(/_with_.*$/, "")
   end
 
   def raw_routes
@@ -99,9 +102,9 @@ class MethodView < HashView
   def routes
     @routes ||= raw_routes.map do |raw_route|
       RouteView.new(raw_route, self)
-    end.select do |route|
-      route.api_path !~ /json$/
-    end.uniq { |route| route.swagger_path }
+    end.reject do |route|
+      route.api_path =~ /json$/
+    end.uniq(&:swagger_path)
   end
 
   def swagger_type
@@ -113,7 +116,7 @@ class MethodView < HashView
       "name" => name,
       "summary" => summary,
       "desc" => desc,
-      "arguments" => arguments.map{ |a| a.to_hash },
+      "arguments" => arguments.map(&:to_hash),
       "returns" => returns.to_hash,
       "route" => route.to_hash,
     }
@@ -121,18 +124,19 @@ class MethodView < HashView
 
   def unique_nickname_suffix(route)
     if routes.size == 1
-      ''
+      ""
     else
       @nickname_suffix ||= create_nickname_suffix
-      if @nickname_suffix[route.swagger_path].length > 0
-        "_#{@nickname_suffix[route.swagger_path]}"
+      if @nickname_suffix[route.swagger_path].empty?
+        ""
       else
-        ''
+        "_#{@nickname_suffix[route.swagger_path]}"
       end
     end
   end
 
   protected
+
   def select_tags(tag_names)
     names = Array.wrap(tag_names)
     @method.tags.select do |tag|
@@ -165,41 +169,41 @@ class MethodView < HashView
   #   distinguish the current method invocation.
   # The nickname_suffix contains a cached map of nickname suffixes
   def calculate_unique_nicknames(url_list, idx, prefix, nickname_suffix)
-      segments = {}
-      # Check the given segment for each URL, and save all possible values in the
-      # segments map.
-      url_list.each do |url|
-        if url.size == idx
-          # This URL terminates before the selected segment. Store a null value.
-          segments[:none] = [url]
-        end
-        if url.size > idx
-          # Associate this URL with an entry in the segments map.
-          segments[url[idx]] = [] unless segments[url[idx]]
-          segments[url[idx]] << url
-        end
+    segments = {}
+    # Check the given segment for each URL, and save all possible values in the
+    # segments map.
+    url_list.each do |url|
+      if url.size == idx
+        # This URL terminates before the selected segment. Store a null value.
+        segments[:none] = [url]
       end
+      next unless url.size > idx
 
-      # Do the recursive call based on whether the current segment matches or
-      # differs across all URLs.
-      if segments.size == 1
-        # There is only one option (ie, the segments match). Call this method on the
-        # next segment.
-        calculate_unique_nicknames url_list, idx + 1, prefix, nickname_suffix
-      end
-      if segments.size > 1
-        # There are at least two possible values for this segment. Handle each option.
-        segments.each do |option, urls|
-          # The path option forms part of the unique prefix, so add it to the prefix list.
-          p = option == :none ? prefix : prefix + [option.gsub(/\{|\}|\*/i, '')]
-          if urls.length == 1
-            # If there was only one URL with this value, we've found that URL's unique nickname.
-            nickname_suffix[urls.join("/")] = p.join("_")
-          else
-            # Otherwise recurse on the method with all URLs that have this prefix.
-            calculate_unique_nicknames urls, idx + 1, p, nickname_suffix
-          end
+      # Associate this URL with an entry in the segments map.
+      segments[url[idx]] = [] unless segments[url[idx]]
+      segments[url[idx]] << url
+    end
+
+    # Do the recursive call based on whether the current segment matches or
+    # differs across all URLs.
+    if segments.size == 1
+      # There is only one option (ie, the segments match). Call this method on the
+      # next segment.
+      calculate_unique_nicknames url_list, idx + 1, prefix, nickname_suffix
+    end
+    if segments.size > 1
+      # There are at least two possible values for this segment. Handle each option.
+      segments.each do |option, urls|
+        # The path option forms part of the unique prefix, so add it to the prefix list.
+        p = (option == :none) ? prefix : prefix + [option.gsub(/\{|\}|\*/i, "")]
+        if urls.length == 1
+          # If there was only one URL with this value, we've found that URL's unique nickname.
+          nickname_suffix[urls.join("/")] = p.join("_")
+        else
+          # Otherwise recurse on the method with all URLs that have this prefix.
+          calculate_unique_nicknames urls, idx + 1, p, nickname_suffix
         end
       end
+    end
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,25 +18,20 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper.rb')
-
 describe Lti::ReRegConstraint do
-
-  describe '#matches?' do
-    it 'returns true if the header VND-IMS-CONFIRM-URL is present' do
-      mock_request = double('mock_request')
-      allow(mock_request).to receive(:headers).and_return({'VND-IMS-CONFIRM-URL' => 'http://i-am-a-place-on-the-internet.dev/'})
-      allow(mock_request).to receive(:format).and_return('json')
+  describe "#matches?" do
+    it "returns true if the header VND-IMS-CONFIRM-URL is present" do
+      mock_request = double("mock_request")
+      allow(mock_request).to receive(:headers).and_return({ "VND-IMS-CONFIRM-URL" => "http://i-am-a-place-on-the-internet.dev/" })
+      allow(mock_request).to receive(:format).and_return("json")
       expect(subject.matches?(mock_request)).to be_truthy
     end
 
-    it 'returns failse if the format is not json' do
-      mock_request = double('mock_request')
-      allow(mock_request).to receive(:headers).and_return({'VND-IMS-CONFIRM-URL' => 'http://i-am-a-place-on-the-internet.dev/'})
-      allow(mock_request).to receive(:format).and_return('xml')
+    it "returns failse if the format is not json" do
+      mock_request = double("mock_request")
+      allow(mock_request).to receive(:headers).and_return({ "VND-IMS-CONFIRM-URL" => "http://i-am-a-place-on-the-internet.dev/" })
+      allow(mock_request).to receive(:format).and_return("xml")
       expect(subject.matches?(mock_request)).to be_falsey
     end
-
   end
-
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,17 +18,28 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/messages_helper')
+require_relative "messages_helper"
 
-describe 'new_files_added' do
+describe "new_files_added" do
   before :once do
     attachment_model
   end
 
+  file_names = ["file1.txt", "file2.txt", "file3.txt", "file4.txt", "file5.txt"]
+
   let(:asset) { @attachment }
-  let(:message_options) { { data: {count: 5} } }
+  let(:message_data) { { data: { count: 5, display_names: file_names } } }
   let(:notification_name) { :new_files_added }
 
   include_examples "a message"
+
+  context ".email" do
+    let(:path_type) { :email }
+
+    it "only displays max_displayed" do
+      stub_const("Attachment::NOTIFICATION_MAX_DISPLAY", 4)
+      msg = generate_message(notification_name, path_type, asset, message_data)
+      expect(msg.body).not_to include("file5.txt")
+    end
+  end
 end

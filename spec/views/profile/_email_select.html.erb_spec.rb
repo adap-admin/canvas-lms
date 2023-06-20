@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,18 +18,16 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/../views_helper')
+require_relative "../views_helper"
 
-describe "/profile/_email_select" do
-  it "should render" do
+describe "profile/_email_select" do
+  it "renders" do
     course_with_student
     view_context
-    cc = @user.communication_channels.create!(:path => 'user@example.com')
+    cc = communication_channel(@user, { username: "user@example.com" })
     assign(:email_channels, [cc])
 
-    render :partial => "profile/email_select", :object => cc
+    render partial: "profile/email_select", object: cc
     expect(response).not_to be_nil
   end
 end
-

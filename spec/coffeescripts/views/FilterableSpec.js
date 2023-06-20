@@ -16,9 +16,9 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Filterable from 'compiled/views/Filterable'
-import {Collection, View} from 'Backbone'
-import CollectionView from 'compiled/views/CollectionView'
+import Filterable from 'ui/features/manage_groups/backbone/mixins/Filterable'
+import {Collection, View} from '@canvas/backbone'
+import CollectionView from '@canvas/backbone-collection-view'
 import fakeENV from 'helpers/fakeENV'
 
 let view = null
@@ -30,6 +30,7 @@ QUnit.module('Filterable', {
       static initClass() {
         this.mixin(Filterable)
       }
+
       template() {
         return `\
 <input class="filterable">
@@ -41,22 +42,22 @@ QUnit.module('Filterable', {
     const collection = new Collection([
       {
         id: 1,
-        name: 'bob'
+        name: 'bob',
       },
       {
         id: 2,
-        name: 'joe'
-      }
+        name: 'joe',
+      },
     ])
     view = new MyCollectionView({
       collection,
-      itemView: View
+      itemView: View,
     })
     return view.render()
   },
   teardown() {
     fakeENV.teardown()
-  }
+  },
 })
 
 test("hides items that don't match the filter", () => {

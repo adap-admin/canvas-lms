@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,27 +18,34 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../../../spec/spec_helper')
-
-require 'csv'
-
 module ReportSpecHelper
   def read_report(type = @type, options = {})
     account_report = run_report(type, options)
-    raise ErrorReport.last&.message if account_report.workflow_state == 'error'
+    if account_report.workflow_state == "error" || !account_report.attachment_id
+      error_report = ErrorReport.last
+      # using the cerror_class was often leading to different args needed or other
+      # failures that made attempting to use the class less helpful
+      error_class = error_report&.category&.constantize
+      error = ReportSpecHelperError.new([error_class, error_report&.message].join("_"))
+      error.set_backtrace(error_report&.backtrace&.split("\n") || caller)
+      raise error
+    end
     parse_report(account_report, options)
   end
 
   def run_report(type = @type, options = {})
     account = options[:account] || @account
     parameters = options[:params]
-    account_report = AccountReport.new(:user => @admin || user_factory,
-                                       :account => account,
-                                       :report_type => type)
-    account_report.parameters = parameters
+    account_report = AccountReport.new(user: @admin || user_factory,
+                                       account:,
+                                       report_type: type)
+    parameters ||= {}
+    account_report.parameters = parameters.merge({ "skip_message" => true })
     account_report.save!
     if AccountReport.available_reports[type]
       AccountReports.generate_report(account_report)
+    else
+      raise ReportSpecHelperError, "report is not properly configured in engine."
     end
     run_jobs
     account_report.reload
@@ -44,9 +53,9 @@ module ReportSpecHelper
 
   def parse_report(report, options = {})
     a = report.attachment
-    if a.content_type == 'application/zip'
+    if a.content_type == "application/zip"
       parsed = {}
-      Zip::InputStream::open(a.open) do |io|
+      Zip::InputStream.open(a.open) do |io|
         while (entry = io.get_next_entry)
           parsed[entry.name] = parse_csv(io.read, options)
         end
@@ -59,27 +68,30 @@ module ReportSpecHelper
 
   def parse_csv(csv, options = {})
     csv_parse_opts = {
-      col_sep: options[:col_sep] || ',',
+      col_sep: options[:col_sep] || ",",
       headers: options[:parse_header] || false,
       return_headers: true,
     }
-    skip_order = true if options[:order] == 'skip'
+    skip_order = true if options[:order] == "skip"
     order = Array(options[:order]).presence || [0, 1]
-    all_parsed = CSV.parse(csv, csv_parse_opts).map.to_a
-    raise 'Must order report results to avoid brittle specs' unless options[:order].present? || all_parsed.count < 3
+    all_parsed = CSV.parse(csv, **csv_parse_opts).map.to_a
+    raise "Must order report results to avoid brittle specs" unless options[:order].present? || all_parsed.count < 3
+
     header = all_parsed.shift
     if all_parsed.present? && !skip_order
       # cast any numbery looking things so we sort them intuitively
-      type_casts = order.map { |k| all_parsed.map { |row| row[k] }.compact.first =~ /\A\d+(\.\d+)?\z/ ? :to_f : :to_s }
+      type_casts = order.map { |k| /\A\d+(\.\d+)?\z/.match?(all_parsed.filter_map { |row| row[k] }.first) ? :to_f : :to_s }
       all_parsed.sort_by! { |r| r.values_at(*order).each_with_index.map { |v, i| v.send type_casts[i] } }
     end
     all_parsed.unshift(header) if options[:header]
     all_parsed
   end
+
+  class ReportSpecHelperError < StandardError; end
 end
 
 RSpec::Matchers.define :eq_stringified_array do |expected|
-  stringify_csv_record = ->(item) {
+  stringify_csv_record = lambda do |item|
     if item.nil?
       nil
     elsif item.is_a? Array
@@ -87,7 +99,7 @@ RSpec::Matchers.define :eq_stringified_array do |expected|
     else
       item.to_s
     end
-  }
+  end
 
   match do |actual|
     actual == expected.map { |item| stringify_csv_record.call(item) }

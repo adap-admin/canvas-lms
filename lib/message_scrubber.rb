@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -18,7 +20,6 @@
 
 # Public: Delete old (> 360 days) records from messages table.
 class MessageScrubber
-
   # Public: The minimum wait time in seconds between processing batches.
   MIN_DELAY = 1
 
@@ -89,7 +90,7 @@ class MessageScrubber
   #
   # Returns a column name string.
   def filter_attribute
-    'updated_at'
+    "updated_at"
   end
 
   # Internal: The class object to delete records from (e.g. 'Message').
@@ -103,7 +104,7 @@ class MessageScrubber
   #
   # Returns a setting name string.
   def limit_setting
-    'message_scrubber_limit'
+    "message_scrubber_limit"
   end
 
   # Internal: The default limit (in days) to delete messages after.

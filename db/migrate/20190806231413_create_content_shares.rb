@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -31,8 +33,9 @@ class CreateContentShares < ActiveRecord::Migration[5.2]
 
     add_foreign_key :content_shares, :users
     add_foreign_key :content_shares, :users, column: :sender_id
-    add_index :content_shares, [:user_id, :content_export_id, :sender_id],
-      unique: true,
-      name: 'index_content_shares_on_user_and_content_export_and_sender_ids'
+    add_index :content_shares,
+              %i[user_id content_export_id sender_id],
+              unique: true,
+              name: "index_content_shares_on_user_and_content_export_and_sender_ids"
   end
 end

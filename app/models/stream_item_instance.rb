@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -21,9 +23,9 @@ class StreamItemInstance < ActiveRecord::Base
 
   belongs_to :user
   belongs_to :stream_item
-  belongs_to :context, polymorphic: [:course, :account, :group, :assignment_override]
+  belongs_to :context, polymorphic: %i[course account group assignment_override]
 
-  validates_presence_of :stream_item_id, :user_id, :context_id, :context_type
+  validates :stream_item_id, :user_id, :context_id, :context_type, presence: true
 
   before_save :set_context_code
   def set_context_code
@@ -36,7 +38,7 @@ class StreamItemInstance < ActiveRecord::Base
     # Don't use update_all() because there is an observer
     # on StreamItemInstance to invalidate some cache keys.
     # Use update_all_with_invalidation() instead.
-    def update_all(*args)
+    def update_all(*)
       raise "Using update_all will break things, use update_all_with_invalidation instead."
     end
 
@@ -44,7 +46,7 @@ class StreamItemInstance < ActiveRecord::Base
     # is an array of [context_type, context_id])
     def update_all_with_invalidation(contexts, updates)
       contexts.each { |context| StreamItemCache.invalidate_context_stream_item_key(context.first, context.last) }
-      self.original_update_all(updates)
+      in_batches(of: 10_000).update_all(updates)
     end
   end
 

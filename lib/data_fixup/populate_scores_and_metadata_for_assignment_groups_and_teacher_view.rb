@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -28,14 +30,8 @@
 module DataFixup::PopulateScoresAndMetadataForAssignmentGroupsAndTeacherView
   def self.run
     Course.published.find_ids_in_ranges do |min_id, max_id|
-      send_later_if_production_enqueue_args(
-        :run_for_course_range,
-        {
-          n_strand: ["DataFixup::PopulateScoresAndMetadataForAssignmentGroupsAndTeacherView", Shard.current.database_server.id],
-          priority: Delayed::MAX_PRIORITY
-        },
-        min_id, max_id
-      )
+      delay_if_production(n_strand: ["DataFixup::PopulateScoresAndMetadataForAssignmentGroupsAndTeacherView", Shard.current.database_server.id],
+                          priority: Delayed::MAX_PRIORITY).run_for_course_range(min_id, max_id)
     end
   end
 
@@ -64,14 +60,15 @@ module DataFixup::PopulateScoresAndMetadataForAssignmentGroupsAndTeacherView
       # course might have changed around the concluded enrollments. If
       # a concluded enrollment already has the unposted scores, we'll
       # want to use those
-      score_ids = Score.joins(:enrollment).
-        where(enrollments: { type: ['StudentEnrollment', 'StudentViewEnrollment'],
-                             course_id: course.id, user_id: user_ids_group },
-              unposted_current_score: nil, unposted_final_score: nil).pluck(:id)
+      score_ids = Score.joins(:enrollment)
+                       .where(enrollments: { type: ["StudentEnrollment", "StudentViewEnrollment"],
+                                             course_id: course.id,
+                                             user_id: user_ids_group },
+                              unposted_current_score: nil,
+                              unposted_final_score: nil).pluck(:id)
       score_ids.each_slice(1000) do |ids|
         Score.where(id: ids).update_all("unposted_current_score = current_score, unposted_final_score = final_score")
       end
-
 
       # This will add/update the assignment group scores and the
       # ScoreMetadata. It might be inaccurate if the course changed in

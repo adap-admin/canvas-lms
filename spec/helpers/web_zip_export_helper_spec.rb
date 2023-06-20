@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -16,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'spec_helper'
-
 describe WebZipExportHelper do
   include WebZipExportHelper
 
@@ -26,52 +26,52 @@ describe WebZipExportHelper do
     @context = @course
   end
 
-  describe '#course_allow_web_export_download?' do
-    it 'should return setting' do
-      expect(course_allow_web_export_download?).to eq false
+  describe "#course_allow_web_export_download?" do
+    it "returns setting" do
+      expect(course_allow_web_export_download?).to be false
       account = @context.account
       account.settings[:enable_offline_web_export] = true
       account.save!
       @context.reload
-      expect(course_allow_web_export_download?).to eq true
+      expect(course_allow_web_export_download?).to be true
     end
   end
 
-  describe '#allow_web_export_for_course_user?' do
-    it 'should return true for admins' do
+  describe "#allow_web_export_for_course_user?" do
+    it "returns true for admins" do
       @current_user = account_admin_user
-      expect(allow_web_export_for_course_user?).to eq true
+      expect(allow_web_export_for_course_user?).to be true
     end
 
-    it 'should return true for current course users' do
+    it "returns true for current course users" do
       @current_user = @student
-      expect(allow_web_export_for_course_user?).to eq true
+      expect(allow_web_export_for_course_user?).to be true
     end
 
-    it 'should return false for anonymous users' do
+    it "returns false for anonymous users" do
       @current_user = nil
-      expect(allow_web_export_for_course_user?).to eq false
+      expect(allow_web_export_for_course_user?).to be false
     end
 
-    it 'should return false for concluded users without access to the course' do
+    it "returns false for concluded users without access to the course" do
       @current_user = @student
       @context.start_at = 2.days.ago
       @context.conclude_at = 1.day.ago
       @context.restrict_student_past_view = true
       @context.restrict_enrollments_to_course_dates = true
       @context.save!
-      expect(allow_web_export_for_course_user?).to eq false
+      expect(allow_web_export_for_course_user?).to be false
     end
   end
 
-  describe '#allow_web_export_download?' do
-    it 'should return true if setting is enabled and user can export' do
+  describe "#allow_web_export_download?" do
+    it "returns true if setting is enabled and user can export" do
       account = @context.account
       account.settings[:enable_offline_web_export] = true
       account.save!
 
       @current_user = @student
-      expect(allow_web_export_download?).to eq true
+      expect(allow_web_export_download?).to be true
     end
   end
 end

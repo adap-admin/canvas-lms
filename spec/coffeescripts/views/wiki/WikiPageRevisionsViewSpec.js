@@ -18,14 +18,14 @@
 
 import $ from 'jquery'
 import {get} from 'lodash'
-import WikiPageRevisionsCollection from 'compiled/collections/WikiPageRevisionsCollection'
-import WikiPageRevisionsView from 'compiled/views/wiki/WikiPageRevisionsView'
+import WikiPageRevisionsCollection from 'ui/features/wiki_page_revisions/backbone/collections/WikiPageRevisionsCollection'
+import WikiPageRevisionsView from 'ui/features/wiki_page_revisions/backbone/views/WikiPageRevisionsView'
 
 QUnit.module('WikiPageRevisionsView', {
   setup() {},
   teardown() {
     document.getElementById('fixtures').innerHTML = ''
-  }
+  },
 })
 
 test('selecting a model/view sets the selected attribute on the model', () => {
@@ -46,35 +46,37 @@ test('selecting a model/view sets the selected attribute on the model', () => {
   fixture.remove()
 })
 
-test('prevPage fetches previous page from collection', function() {
+test('prevPage fetches previous page from collection', () => {
   const collection = new WikiPageRevisionsCollection()
-  sandbox.mock(collection)
+  sandbox
+    .mock(collection)
     .expects('fetch')
     .atLeast(1)
     .withArgs({
       page: 'prev',
-      reset: true
+      reset: true,
     })
     .returns($.Deferred())
   const view = new WikiPageRevisionsView({collection})
   view.prevPage()
 })
 
-test('nextPage fetches next page from collection', function() {
+test('nextPage fetches next page from collection', () => {
   const collection = new WikiPageRevisionsCollection()
-  sandbox.mock(collection)
+  sandbox
+    .mock(collection)
     .expects('fetch')
     .atLeast(1)
     .withArgs({
       page: 'next',
-      reset: true
+      reset: true,
     })
     .returns($.Deferred())
   const view = new WikiPageRevisionsView({collection})
   view.nextPage()
 })
 
-test('toJSON - CAN.FETCH_PREV', function() {
+test('toJSON - CAN.FETCH_PREV', () => {
   const collection = new WikiPageRevisionsCollection()
   const view = new WikiPageRevisionsView({collection})
   sandbox.stub(collection, 'canFetch').callsFake(arg => arg === 'prev')
@@ -82,7 +84,7 @@ test('toJSON - CAN.FETCH_PREV', function() {
   strictEqual(get(view.toJSON(), 'CAN.FETCH_PREV'), true, 'can fetch previous')
 })
 
-test('toJSON - CAN.FETCH_NEXT', function() {
+test('toJSON - CAN.FETCH_NEXT', () => {
   const collection = new WikiPageRevisionsCollection()
   const view = new WikiPageRevisionsView({collection})
   sandbox.stub(collection, 'canFetch').callsFake(arg => arg === 'next')

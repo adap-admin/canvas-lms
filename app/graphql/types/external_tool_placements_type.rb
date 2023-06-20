@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -18,7 +20,7 @@
 
 module Types
   class ExternalToolPlacementsType < ApplicationObjectType
-    graphql_name 'ExternalToolPlacements'
+    graphql_name "ExternalToolPlacements"
 
     field :canvas_icon_class, String, null: true
 

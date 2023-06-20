@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -18,19 +20,15 @@
 module SimpleTags
   module ReaderInstanceMethods
     def tags
-      @tag_array ||= if tags = read_attribute(:tags)
-        tags.split(',')
-      else
-        []
-      end
+      @tag_array ||= read_attribute(:tags)&.split(",") || []
     end
 
-    def serialized_tags(tags=self.tags)
-      SimpleTags.normalize_tags(tags).join(',')
+    def serialized_tags(tags = self.tags)
+      SimpleTags.normalize_tags(tags).join(",")
     end
 
     def self.included(klass)
-      klass.send :extend, ClassMethods
+      klass.extend ClassMethods
     end
   end
 
@@ -39,12 +37,14 @@ module SimpleTags
       options = tags.last.is_a?(Hash) ? tags.pop : {}
       options[:mode] ||= :or
       conditions = handle_tags(tags, options) +
-        tags.map{ |tag|
-          wildcard(quoted_table_name + '.tags', tag, :delimiter => ',')
-        }
-      conditions.empty? ?
-          none :
-          where(conditions.join(options[:mode] == :or ? " OR " : " AND "))
+                   tags.map do |tag|
+                     wildcard(ConversationParticipant.quoted_table_name + ".tags", tag, delimiter: ",")
+                   end
+      if conditions.empty?
+        none
+      else
+        where(conditions.join((options[:mode] == :or) ? " OR " : " AND "))
+      end
     end
 
     def tagged_scope_handler(pattern, &block)
@@ -53,12 +53,14 @@ module SimpleTags
     end
 
     protected
+
     def handle_tags(tags, options)
       return [] unless @tagged_scope_handlers
+
       @tagged_scope_handlers.inject([]) do |result, (pattern, handler)|
         handler_tags = []
         tags.delete_if do |tag|
-          handler_tags << tag and true if tag =~ pattern
+          handler_tags << tag and true if tag&.match?(pattern)
         end
         result.concat handler_tags.present? ? [handler.call(handler_tags, options)].flatten : []
       end
@@ -66,6 +68,10 @@ module SimpleTags
   end
 
   module WriterInstanceMethods
+    def self.included(klass)
+      klass.before_save :serialize_tags
+    end
+
     def tags=(new_tags)
       tags_will_change! unless tags == new_tags
       @tag_array = new_tags || []
@@ -77,33 +83,30 @@ module SimpleTags
     end
 
     protected
+
     def serialize_tags
       if @tag_array
         write_attribute(:tags, serialized_tags)
         remove_instance_variable :@tag_array
       end
     end
-
-    def self.included(klass)
-      klass.before_save :serialize_tags
-    end
   end
 
   def self.normalize_tags(tags)
-    tags.inject([]) { |ary, tag|
-      if tag =~ /\A((course|group)_\d+).*/
+    tags.each_with_object([]) do |tag, ary|
+      case tag
+      when /\A((course|group)_\d+).*/
         ary << $1
-      elsif tag =~ /\Asection_(\d+).*/
+      when /\Asection_(\d+).*/
         section = CourseSection.where(id: $1).first
         ary << section.course.asset_string if section
-      # TODO: allow user-defined tags, e.g. #foo
+        # TODO: allow user-defined tags, e.g. #foo
       end
-      ary
-    }.uniq
+    end.uniq
   end
 
   def self.included(klass)
-    klass.send :include, ReaderInstanceMethods
-    klass.send :include, WriterInstanceMethods
+    klass.include ReaderInstanceMethods
+    klass.include WriterInstanceMethods
   end
 end

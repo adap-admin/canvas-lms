@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -35,9 +37,9 @@ module CanvasQuizStatistics::Analyzers
 
     inherit :responses, :full_credit, from: :essay
     inherit :correct, :incorrect, from: :fill_in_multiple_blanks
-    
-    RANGE_ANSWER = 'range_answer'.freeze
-    PRECISION_ANSWER = 'precision_answer'.freeze
+
+    RANGE_ANSWER = "range_answer"
+    PRECISION_ANSWER = "precision_answer"
 
     # Statistics for the pre-defined answers.
     #
@@ -107,12 +109,12 @@ module CanvasQuizStatistics::Analyzers
         text = generate_text_for_answer(answer, answer_type)
 
         answer_stats.merge!({
-          text: text,
-          value: bounds,
-          responses: 0,
-          margin: answer[:margin].to_f,
-          is_range: answer_type == RANGE_ANSWER
-        })
+                              text:,
+                              value: bounds,
+                              responses: 0,
+                              margin: answer[:margin].to_f,
+                              is_range: answer_type == RANGE_ANSWER
+                            })
       end
 
       answers.tap { calculate_responses(responses, answers) }
@@ -130,17 +132,17 @@ module CanvasQuizStatistics::Analyzers
     # Range answers will look like this: "[3.00..54.12]"
     # Precision answers will look like this: "1 (with precision: 2)"
     def generate_text_for_answer(answer, answer_type)
-      format = ->(value) { sprintf('%.2f', value) }
+      format = ->(value) { sprintf("%.2f", value) }
 
       case answer_type
       when RANGE_ANSWER
-        range = [ answer[:start], answer[:end] ].map(&format).join('..')
+        range = [answer[:start], answer[:end]].map(&format).join("..")
         "[#{range}]"
       when PRECISION_ANSWER
         "#{answer[:approximate]} (with precision: #{answer[:precision]})"
       else
         value = format.call(answer[:exact])
-        "#{value}"
+        value.to_s
       end
     end
 
@@ -151,17 +153,17 @@ module CanvasQuizStatistics::Analyzers
       case answer_type
       when RANGE_ANSWER
         # there's no margin in range answers
-        [ answer[:start].to_f, answer[:end].to_f ]
+        [answer[:start].to_f, answer[:end].to_f]
       when PRECISION_ANSWER
-        [ answer[:approximate] - answer[:precision], answer[:approximate] + answer[:precision] ]
+        [answer[:approximate] - answer[:precision], answer[:approximate] + answer[:precision]]
       else
         margin = answer[:margin].to_f
-        [ answer[:exact] - margin, answer[:exact] + margin ]
+        [answer[:exact] - margin, answer[:exact] + margin]
       end
     end
 
     def locate_answer(response, answers)
-      answers.detect { |answer| answer[:id] == "#{response[:answer_id]}" }
+      answers.detect { |answer| answer[:id] == (response[:answer_id]).to_s }
     end
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -17,27 +19,29 @@
 #
 module CC
   module ExternalFeeds
-    def create_external_feeds(document=nil)
+    def create_external_feeds(document = nil)
       return nil unless @course.external_feeds.count > 0
+
       if document
         feed_file = nil
         rel_path = nil
       else
-        feed_file = File.new(File.join(@canvas_resource_dir, CCHelper::EXTERNAL_FEEDS), 'w')
+        feed_file = File.new(File.join(@canvas_resource_dir, CCHelper::EXTERNAL_FEEDS), "w")
         rel_path = File.join(CCHelper::COURSE_SETTINGS_DIR, CCHelper::EXTERNAL_FEEDS)
-        document = Builder::XmlMarkup.new(:target=>feed_file, :indent=>2)
+        document = Builder::XmlMarkup.new(target: feed_file, indent: 2)
       end
 
       document.instruct!
       document.externalFeeds(
-              "xmlns" => CCHelper::CANVAS_NAMESPACE,
-              "xmlns:xsi"=>"http://www.w3.org/2001/XMLSchema-instance",
-              "xsi:schemaLocation"=> "#{CCHelper::CANVAS_NAMESPACE} #{CCHelper::XSD_URI}"
+        "xmlns" => CCHelper::CANVAS_NAMESPACE,
+        "xmlns:xsi" => "http://www.w3.org/2001/XMLSchema-instance",
+        "xsi:schemaLocation" => "#{CCHelper::CANVAS_NAMESPACE} #{CCHelper::XSD_URI}"
       ) do |feeds_node|
         @course.external_feeds.each do |feed|
           next unless export_object?(feed)
+
           migration_id = create_key(feed)
-          feeds_node.externalFeed(:identifier=>migration_id) do |feed_node|
+          feeds_node.externalFeed(identifier: migration_id) do |feed_node|
             feed_node.title feed.title if feed.title
             feed_node.url feed.url
             feed_node.verbosity feed.verbosity
@@ -46,7 +50,7 @@ module CC
         end
       end
 
-      feed_file.close if feed_file
+      feed_file&.close
       rel_path
     end
   end

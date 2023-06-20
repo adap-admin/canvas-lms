@@ -19,7 +19,7 @@
 import React from 'react'
 import {mount} from 'enzyme'
 
-import PageNavigation from 'jsx/assignments/GradeSummary/components/GradesGrid/PageNavigation'
+import PageNavigation from 'ui/features/assignment_grade_summary/react/components/GradesGrid/PageNavigation'
 
 QUnit.module('GradeSummary PageNavigation', suiteHooks => {
   let props
@@ -29,7 +29,7 @@ QUnit.module('GradeSummary PageNavigation', suiteHooks => {
     props = {
       currentPage: 1,
       onPageClick: sinon.spy(),
-      pageCount: 10
+      pageCount: 10,
     }
   })
 

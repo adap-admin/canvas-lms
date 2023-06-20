@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -16,54 +18,54 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/swagger_helper')
-require 'model_view'
+require_relative "swagger_helper"
+require "model_view"
 
 describe ModelView do
   let(:text) do
     "Example\n{\n \"properties\": [],\n \"deprecated\": true,\n \"deprecation_description\": \"A description.\" }"
   end
 
-  let(:model) { double('Model', :text => text) }
+  let(:model) { double("Model", text:) }
 
-  describe '.new_from_model' do
+  describe ".new_from_model" do
     it "is created from model" do
       view = ModelView.new_from_model(model)
       expect(view.name).to eq "Example"
       expect(view.properties).to eq []
     end
 
-    it 'parses the deprecated attribute' do
+    it "parses the deprecated attribute" do
       view = ModelView.new_from_model(model)
       expect(view).to be_deprecated
     end
 
-    it 'parses the deprecation description' do
+    it "parses the deprecation description" do
       view = ModelView.new_from_model(model)
-      description = view.json_schema.dig('Example', 'deprecation_description')
-      expect(description).to eq 'A description.'
+      description = view.json_schema.dig("Example", "deprecation_description")
+      expect(description).to eq "A description."
     end
   end
 
   it "generates a schema" do
-    view = ModelView.new("Example", {"name" => {"type" => "string"}})
+    view = ModelView.new("Example", { "name" => { "type" => "string" } })
     expect(view.json_schema).to eq({
-      "Example" => {
-        "id" => "Example",
-        "properties" => {
-          "name" => {
-            "type" => "string"
-          }
-        },
-        "description" => "",
-        "required" => [],
-        "deprecated" => false,
-        "deprecation_description" => ""
-      }
-    })
+                                     "Example" => {
+                                       "id" => "Example",
+                                       "properties" => {
+                                         "name" => {
+                                           "type" => "string"
+                                         }
+                                       },
+                                       "description" => "",
+                                       "required" => [],
+                                       "deprecated" => false,
+                                       "deprecation_description" => ""
+                                     }
+                                   })
   end
 
-  describe '#deprecated?' do
+  describe "#deprecated?" do
     let(:properties) do
       {
         "foo" => {
@@ -74,13 +76,13 @@ describe ModelView do
       }
     end
 
-    it 'returns true if the model is deprecated' do
-      view = ModelView.new('Foo', properties, deprecated: true, deprecation_description: 'A description.')
+    it "returns true if the model is deprecated" do
+      view = ModelView.new("Foo", properties, deprecated: true, deprecation_description: "A description.")
       expect(view).to be_deprecated
     end
 
-    it 'returns false if the model is not deprecated' do
-      view = ModelView.new('Foo', properties)
+    it "returns false if the model is not deprecated" do
+      view = ModelView.new("Foo", properties)
       expect(view).not_to be_deprecated
     end
   end

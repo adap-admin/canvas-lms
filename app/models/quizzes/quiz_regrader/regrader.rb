@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -18,7 +20,6 @@
 
 module Quizzes::QuizRegrader
   class Regrader
-
     attr_reader :quiz, :quiz_version_number
 
     def initialize(options)
@@ -29,13 +30,14 @@ module Quizzes::QuizRegrader
 
     def regrade!
       regrade = quiz.current_regrade
-      return true unless regrade && question_regrades.size > 0
+      return true unless regrade && !question_regrades.empty?
 
       Quizzes::QuizRegradeRun.perform(regrade) do
         submissions.each do |submission|
           Quizzes::QuizRegrader::Submission.new(
-            :submission => submission,
-            :question_regrades => question_regrades).regrade!
+            submission: submission.latest_submitted_attempt,
+            question_regrades:
+          ).regrade!
         end
       end
     end
@@ -48,24 +50,24 @@ module Quizzes::QuizRegrader
       # Using a class level scope here because if a restored "model" from a quiz
       # version is passed (e.g. during the grade_submission method on SubmissionGrader
       # submissions), the association will always be empty.
-      @submissions ||= Quizzes::QuizSubmission.where(quiz_id: quiz.id).select(&:completed?)
+      @submissions ||= Quizzes::QuizSubmission.where(quiz_id: quiz.id).select { |qs| qs.latest_submitted_attempt.present? }
     end
 
     private
 
     def find_quiz_version(quiz)
       return quiz unless quiz_version_number.present?
+
       Version.where(
         versionable_type: Quizzes::Quiz.class_names,
         versionable_id: quiz.id,
-        number: quiz_version_number).first.model
+        number: quiz_version_number
+      ).first.model
     end
 
     # quiz question regrades keyed by question id
     def question_regrades
-      @questions ||= @quiz.current_quiz_question_regrades.each_with_object({}) do |qr, hash|
-        hash[qr.quiz_question_id] = qr
-      end
+      @question_regrades ||= @quiz.current_quiz_question_regrades.index_by(&:quiz_question_id)
     end
   end
 end

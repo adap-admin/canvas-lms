@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -19,13 +21,13 @@
 module Polling
   class Poll < ActiveRecord::Base
     belongs_to :user
-    has_many :poll_choices, -> { order(:position) }, class_name: 'Polling::PollChoice', dependent: :destroy
-    has_many :poll_submissions, class_name: 'Polling::PollSubmission', dependent: :destroy
-    has_many :poll_sessions, class_name: 'Polling::PollSession', dependent: :destroy
+    has_many :poll_choices, -> { order(:position) }, class_name: "Polling::PollChoice", dependent: :destroy
+    has_many :poll_submissions, class_name: "Polling::PollSubmission", dependent: :destroy
+    has_many :poll_sessions, class_name: "Polling::PollSession", dependent: :destroy
 
-    validates_presence_of :question, :user
-    validates_length_of :question, maximum: 255, allow_nil: true
-    validates_length_of :description, maximum: 255, allow_nil: true
+    validates :question, :user, presence: true
+    validates :question, length: { maximum: 255, allow_nil: true }
+    validates :description, length: { maximum: 255, allow_nil: true }
 
     set_policy do
       given { |user| self.user.present? && self.user == user }
@@ -34,19 +36,46 @@ module Polling
       given { |user| TeacherEnrollment.active.where(user_id: user).exists? }
       can :create
 
+      #################### Begin legacy permission block #########################
       given do |user, http_session|
-        self.poll_sessions.shard(self).preload(:course).any? do |session|
-          session.course.grants_right?(user, http_session, :manage_content)
-        end
+        !user&.account&.feature_enabled?(:granular_permissions_manage_course_content) &&
+          poll_sessions.shard(self).preload(:course).any? do |session|
+            session.course.grants_right?(user, http_session, :manage_content)
+          end
       end
       can :update and can :read and can :delete and can :submit
+      ##################### End legacy permission block ##########################
+
+      given do |user, http_session|
+        user&.account&.feature_enabled?(:granular_permissions_manage_course_content) &&
+          poll_sessions.shard(self).preload(:course).any? do |session|
+            session.course.grants_right?(user, http_session, :manage_course_content_add)
+          end
+      end
+      can :read and can :submit
+
+      given do |user, http_session|
+        user&.account&.feature_enabled?(:granular_permissions_manage_course_content) &&
+          poll_sessions.shard(self).preload(:course).any? do |session|
+            session.course.grants_right?(user, http_session, :manage_course_content_edit)
+          end
+      end
+      can :read and can :update
+
+      given do |user, http_session|
+        user&.account&.feature_enabled?(:granular_permissions_manage_course_content) &&
+          poll_sessions.shard(self).preload(:course).any? do |session|
+            session.course.grants_right?(user, http_session, :manage_course_content_delete)
+          end
+      end
+      can :read and can :delete
 
       given do |user|
         can_read = false
-        self.poll_sessions.shard(self).activate do |scope|
+        poll_sessions.shard(self).activate do |scope|
           if scope.where(["course_id IN (?) AND (course_section_id IS NULL OR course_section_id IN (?))",
-                       Enrollment.where(user_id: user).active.select(:course_id),
-                       Enrollment.where(user_id: user).active.select(:course_section_id)]).exists?
+                          Enrollment.where(user_id: user).active.select(:course_id),
+                          Enrollment.where(user_id: user).active.select(:course_section_id)]).exists?
             can_read = true
             break
           end
@@ -56,29 +85,26 @@ module Polling
       can :read
     end
 
-    def associated_shards
-      user.associated_shards
-    end
+    delegate :associated_shards, to: :user
 
     def closed_and_viewable_for?(user)
       poll_sessions.shard(self).activate do |scope|
         return true if scope
-        .joins(:poll_submissions)
-        .where(["polling_poll_submissions.user_id = ? AND is_published=? AND course_id IN (?) AND (course_section_id IS NULL OR course_section_id IN (?))",
-                user,
-                false,
-                Enrollment.where(user_id: user).active.select(:course_id),
-                Enrollment.where(user_id: user).active.select(:course_section_id)]
-              )
-        .order('polling_poll_sessions.created_at DESC')
-        .limit(1)
-        .exists?
+                       .joins(:poll_submissions)
+                       .where(["polling_poll_submissions.user_id = ? AND is_published=? AND course_id IN (?) AND (course_section_id IS NULL OR course_section_id IN (?))",
+                               user,
+                               false,
+                               Enrollment.where(user_id: user).active.select(:course_id),
+                               Enrollment.where(user_id: user).active.select(:course_section_id)])
+                       .order("polling_poll_sessions.created_at DESC")
+                       .limit(1)
+                       .exists?
       end
       false
     end
 
     def total_results
-      poll_submissions.shard(self).group('poll_choice_id').count
+      poll_submissions.shard(self).group("poll_choice_id").count
     end
   end
 end

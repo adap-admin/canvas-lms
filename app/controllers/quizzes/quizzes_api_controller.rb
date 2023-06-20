@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -290,8 +292,8 @@ class Quizzes::QuizzesApiController < ApplicationController
   include SubmittablesGradingPeriodProtection
 
   before_action :require_context
-  before_action :require_quiz, :only => [:show, :update, :destroy, :reorder, :validate_access_code]
-  before_action :check_differentiated_assignments, :only => [:show]
+  before_action :require_quiz, only: %i[show update destroy reorder validate_access_code]
+  before_action :check_differentiated_assignments, only: [:show]
 
   # @API List quizzes in a course
   #
@@ -307,11 +309,17 @@ class Quizzes::QuizzesApiController < ApplicationController
   # @returns [Quiz]
   def index
     if authorized_action(@context, @current_user, :read) && tab_enabled?(@context.class::TAB_QUIZZES)
-      updated = @context.quizzes.active.reorder('updated_at DESC').limit(1).pluck(:updated_at).first
-      cache_key = ['quizzes', @context.id, @context.quizzes.active.size,
-                   @current_user, updated, accepts_jsonapi?,
-                   params[:search_term], params[:page], params[:per_page]
-                  ].cache_key
+      log_api_asset_access(["quizzes", @context], "quizzes", "other")
+      updated = @context.quizzes.active.reorder("updated_at DESC").limit(1).pluck(:updated_at).first
+      cache_key = ["quizzes",
+                   @context.id,
+                   @context.quizzes.active.size,
+                   @current_user,
+                   updated,
+                   accepts_jsonapi?,
+                   params[:search_term],
+                   params[:page],
+                   params[:per_page]].cache_key
 
       value = Rails.cache.fetch(cache_key) do
         api_route = api_v1_course_quizzes_url(@context)
@@ -320,7 +328,7 @@ class Quizzes::QuizzesApiController < ApplicationController
 
         if accepts_jsonapi?
           {
-            json: jsonapi_quizzes_json(scope: scope, api_route: api_route)
+            json: jsonapi_quizzes_json(scope:, api_route:)
           }
         else
           @quizzes = Api.paginate(scope, self, api_route)
@@ -345,6 +353,7 @@ class Quizzes::QuizzesApiController < ApplicationController
   # @returns Quiz
   def show
     if authorized_action(@quiz, @current_user, :read)
+      log_asset_access(@quiz, "quizzes", "quizzes")
       render_json
     end
   end
@@ -477,10 +486,10 @@ class Quizzes::QuizzesApiController < ApplicationController
       return render_create_error(:forbidden) unless grading_periods_allow_submittable_create?(@quiz, quiz_params)
 
       update_api_quiz(@quiz, params)
-      unless @quiz.new_record?
-        render_json
-      else
+      if @quiz.new_record?
         render_create_error(:bad_request)
+      else
+        render_json
       end
     end
   end
@@ -519,6 +528,7 @@ class Quizzes::QuizzesApiController < ApplicationController
   def destroy
     if authorized_action(@quiz, @current_user, :delete)
       return render_unauthorized_action if editing_restricted?(@quiz)
+
       @quiz.destroy
       if accepts_jsonapi?
         head :no_content
@@ -541,7 +551,7 @@ class Quizzes::QuizzesApiController < ApplicationController
   # <b>204 No Content</b> response code is returned if the reorder was successful.
   def reorder
     if authorized_action(@quiz, @current_user, :update)
-      Quizzes::QuizSortables.new(:quiz => @quiz, :order => params[:order]).reorder!
+      Quizzes::QuizSortables.new(quiz: @quiz, order: params[:order]).reorder!
 
       head :no_content
     end
@@ -580,13 +590,13 @@ class Quizzes::QuizzesApiController < ApplicationController
   end
 
   def render_create_error(status)
-    render json: @quiz.errors, status: status
+    render json: @quiz.errors, status:
   end
 
   def render_update_error(status)
     errors = @quiz.errors.as_json[:errors]
     errors["published"] = errors.delete(:workflow_state) if errors.key?(:workflow_state)
-    render json: {errors: errors}, status: status
+    render json: { errors: }, status:
   end
 
   def quiz_params

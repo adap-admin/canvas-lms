@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -20,6 +22,8 @@ class FixEnrollmentAcceptedNotificationCategory < ActiveRecord::Migration[5.1]
   disable_ddl_transaction!
 
   def change
+    return if ::Rails.env.test?
+
     # Fix the category that this notification belongs to. Note that changing
     # the category doesn't actually change the notification policy for users
     # to use their settings for this category group. We manually fix those up
@@ -41,20 +45,20 @@ class FixEnrollmentAcceptedNotificationCategory < ActiveRecord::Migration[5.1]
     # These are what we need to update. They should now have the same frequency
     # settings as everything else in the "Other" notification category group
     communication_channel_ids_to_update = []
-    NotificationPolicy.find_ids_in_ranges(:batch_size => 100_000) do |min_id, max_id|
-      communication_channel_ids_to_update += NotificationPolicy.
-        where(id: min_id..max_id).
-        where(notification_id: n.id).
-        pluck(:communication_channel_id)
+    NotificationPolicy.find_ids_in_ranges(batch_size: 100_000) do |min_id, max_id|
+      communication_channel_ids_to_update += NotificationPolicy
+                                             .where(id: min_id..max_id)
+                                             .where(notification_id: n.id)
+                                             .pluck(:communication_channel_id)
     end
 
     # Get existing notifications in the "Other" group that we can use to find
     # the correct frequency to set the "Enrollment Accepted" to
-    other_category_target_ids = Notification.
-      where(category: "Other").
-      where(workflow_state: "active").
-      where.not(id: n.id).
-      pluck(:id)
+    other_category_target_ids = Notification
+                                .where(category: "Other")
+                                .where(workflow_state: "active")
+                                .where.not(id: n.id)
+                                .pluck(:id)
 
     # Batch update the required notification policies
     communication_channel_ids_to_update.each_slice(1000) do |batched_cc_ids|
@@ -63,11 +67,11 @@ class FixEnrollmentAcceptedNotificationCategory < ActiveRecord::Migration[5.1]
       # or using the default 'daily' value if no other notifications in these
       # categories have an override set.
       channel_freq_map = {}
-      other_category_targets = NotificationPolicy.
-        where(notification_id: other_category_target_ids).
-        where(communication_channel_id: batched_cc_ids)
+      other_category_targets = NotificationPolicy
+                               .where(notification_id: other_category_target_ids)
+                               .where(communication_channel_id: batched_cc_ids)
       batched_cc_ids.each do |communication_channel_id|
-        channel_freq_map[communication_channel_id] = 'daily'
+        channel_freq_map[communication_channel_id] = "daily"
       end
       other_category_targets.each do |np|
         channel_freq_map[np.communication_channel_id] = np.frequency
@@ -83,10 +87,10 @@ class FixEnrollmentAcceptedNotificationCategory < ActiveRecord::Migration[5.1]
 
       # Actually update items in the database
       frequency_grouping.each do |frequency, communication_channel_ids|
-        NotificationPolicy.
-          where(notification_id: n.id).
-          where(communication_channel_id: communication_channel_ids).
-          update_all(frequency: frequency)
+        NotificationPolicy
+          .where(notification_id: n.id)
+          .where(communication_channel_id: communication_channel_ids)
+          .update_all(frequency:)
       end
     end
   end

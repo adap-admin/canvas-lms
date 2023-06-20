@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -16,16 +18,31 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'simplecov'
+require "simplecov"
+require_relative "canvas_simplecov"
 
 class CoverageTool
   def self.start(command_name)
-    SimpleCov.merge_timeout(3600)
-    SimpleCov.command_name(command_name)
-    SimpleCov.start do
-      SimpleCov.coverage_dir("#{ENV['WORKSPACE']}/coverage") if ENV['WORKSPACE']
-      # no formatting by default, just get the json
-      SimpleCov.at_exit { SimpleCov.result }
+    # Make a unique index to avoid having duplicate rspec:{id} values at time of merge
+    parallel_index = ENV["CI_NODE_INDEX"] || "0"
+    rspec_command_index = (1_000_000_000 * parallel_index.to_i) + Process.pid
+
+    ::SimpleCov.merge_timeout(3600)
+    ::SimpleCov.command_name("#{command_name}:#{rspec_command_index}")
+
+    ::SimpleCov.start "canvas_rails" do
+      formatter ::SimpleCov::Formatter::MultiFormatter.new(
+        [
+          ::SimpleCov::Formatter::SimpleFormatter,
+          ::SimpleCov::Formatter::HTMLFormatter
+        ]
+      )
+
+      ::SimpleCov.at_exit do
+        # generate an HTML report if this is running locally / not on jenkins:
+        ::SimpleCov.result.format! unless ENV["RSPEC_PROCESSES"]
+        ::SimpleCov.result
+      end
     end
   end
 end

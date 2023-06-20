@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -17,50 +19,60 @@
 #
 
 class MarkDonePresenter
+  attr_reader :module, :item
 
   def initialize(ctrl, context, module_item_id, user, asset)
     @ctrl = ctrl
     @context = context
     @asset = asset
-    module_item_id ||= infer_item_id
+    module_item_id = use_or_infer_item_id(module_item_id)
     @item = ContentTag.find(module_item_id.to_i) if module_item_id
     @module = @item.context_module if @item
     @user = user
   end
 
-  def infer_item_id
-    item_context =
-      case @context
-      when Course
-        @context
-      when Group
-        @context.context
-      end
+  def use_or_infer_item_id(item_id)
+    return item_id if item_id.present? && item_id.respond_to?(:to_i)
+
+    item_context = case @context
+                   when Course
+                     @context
+                   when Group
+                     @context.context
+                   end
     return unless item_context.is_a?(Course)
 
-    item_ids = Shackles.activate(:slave) { item_context.module_items_visible_to(@user).where(:content_type => @asset.class.name, :content_id => @asset.id).reorder(nil).pluck(:id) }
+    item_ids = GuardRail.activate(:secondary) { item_context.module_items_visible_to(@user).where(content_type: @asset.class.name, content_id: @asset.id).reorder(nil).pluck(:id) }
     item_ids.first if item_ids.count == 1
   end
 
   def has_requirement?
     return false unless @module
     return false unless @context.grants_any_right?(@user, @ctrl.session, :participate_as_student)
+
     requirements = @module.completion_requirements
-    requirement = requirements.find {|i| i[:id] == @item.id}
+    requirement = requirements.find { |i| i[:id] == @item.id }
     return false unless requirement
-    requirement[:type] == 'must_mark_done'
+
+    requirement[:type] == "must_mark_done"
   end
 
   def checked?
     return false unless has_requirement?
-    progression = @module.context_module_progressions.find{|p| p[:user_id] == @user.id}
+
+    progression = if @module.context_module_progressions.loaded?
+                    @module.context_module_progressions.find { |p| p[:user_id] == @user.id }
+                  else
+                    @module.context_module_progressions.where(user_id: @user.id).first
+                  end
     return false unless progression
-    !!progression.requirements_met.find {|r| r[:id] == @item.id && r[:type] == "must_mark_done" }
+
+    !!progression.requirements_met.find { |r| r[:id] == @item.id && r[:type] == "must_mark_done" }
   end
 
   def api_url
-    @ctrl.api_v1_course_context_module_item_done_path(:course_id => @context.id,
-                                                      :module_id => @item.context_module_id,
-                                                      :id => @item.id)
+    @ctrl.api_v1_course_context_module_item_done_path(course_id: @context.id,
+                                                      module_id: @item.context_module_id,
+                                                      id: @item.id)
   end
 end

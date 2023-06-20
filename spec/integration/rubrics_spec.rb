@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
-
 describe "rubrics" do
   it "doesn't render edit links for outcome criterion rows" do
     course_with_teacher_logged_in(active_all: true)
@@ -25,14 +25,14 @@ describe "rubrics" do
     @rubric.rubric_associations.create!(
       association_object: @course,
       context: @course,
-      purpose: 'bookmark'
+      purpose: "bookmark"
     )
 
     get "/courses/#{@course.id}/rubrics/#{@rubric.id}"
 
     expect(response).to be_successful
-    page = Nokogiri::HTML(response.body)
-    expect(page.css('#rubrics .rubric_table .criterion:nth-child(1) .edit_criterion_link')).to be_empty
-    expect(page.css('#rubrics .rubric_table .criterion:nth-child(2) .edit_criterion_link')).not_to be_empty
+    page = Nokogiri::HTML5(response.body)
+    expect(page.css("#rubrics .rubric_table .criterion:nth-child(1) .edit_criterion_link")).to be_empty
+    expect(page.css("#rubrics .rubric_table .criterion:nth-child(2) .edit_criterion_link")).not_to be_empty
   end
 end

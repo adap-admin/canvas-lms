@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2019 - present Instructure, Inc.
+ * Copyright (C) 2022 - present Instructure, Inc.
  *
  * This file is part of Canvas.
  *
@@ -16,34 +16,87 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 module.exports = {
+  assumptions: {
+    setPublicClassFields: true,
+  },
+
+  env: {
+    development: {
+      plugins: ['babel-plugin-typescript-to-proptypes'],
+    },
+    production: {
+      plugins: [
+        '@babel/plugin-transform-react-constant-elements',
+        '@babel/plugin-transform-react-inline-elements',
+        'minify-constant-folding',
+        'minify-dead-code-elimination',
+        'minify-guarded-expressions',
+        'transform-react-remove-prop-types',
+      ],
+    },
+  },
+
   presets: [
+    '@babel/preset-typescript',
     [
-      '@instructure/ui-babel-preset',
+      '@babel/preset-env',
       {
-        coverage: process.env.BABEL_ENV === 'test-node',
-        transformImports: false,
-        node: ['test-node', 'test'].includes(process.env.BABEL_ENV) || process.env.JEST_WORKER_ID,
-        esModules: !(['test-node', 'test'].includes(process.env.BABEL_ENV) || process.env.JEST_WORKER_ID)
-      }
+        useBuiltIns: 'entry',
+        corejs: '3.20',
+        modules: false,
+        include: [
+          // This is needed to fix a Safari < 16 bug
+          // https://github.com/babel/babel/issues/14289
+          // https://bugs.webkit.org/show_bug.cgi?id=236843
+          '@babel/plugin-proposal-class-properties',
+
+          // This is needed because New Quizzes build isn't configured to handle the ?? operator
+          '@babel/plugin-proposal-nullish-coalescing-operator',
+        ],
+      },
     ],
+    ['@babel/preset-react', {useBuiltIns: true}],
     [
-      '@instructure/babel-preset-pretranslated-format-message',
+      '@instructure/babel-preset-pretranslated-translations-package-format-message',
       {
-        translationsDir: 'locales',
-        extractDefaultTranslations: false
-      }
-    ]
+        translationsDir: 'lib/canvas-rce',
+        extractDefaultTranslations: false,
+      },
+    ],
   ],
+
   plugins: [
-    'inline-json-import',
     [
       'transform-inline-environment-variables',
       {
-        include: ['BUILD_LOCALE']
-      }
+        include: ['BUILD_LOCALE'],
+      },
     ],
-    'minify-constant-folding',
-    'minify-guarded-expressions',
-    'minify-dead-code-elimination'
-  ]
+
+    [
+      '@babel/plugin-transform-runtime',
+      {
+        corejs: 3,
+        helpers: true,
+        useESModules: true,
+        regenerator: true,
+      },
+    ],
+
+    ['@babel/plugin-proposal-decorators', {legacy: true}],
+
+    [
+      '@instructure/babel-plugin-themeable-styles',
+      {
+        ignore: () => false,
+        postcssrc: require('@instructure/ui-postcss-config')()(),
+        themeablerc: {},
+      },
+    ],
+  ],
+
+  targets: {
+    browsers: 'last 2 versions',
+    esmodules: true,
+  },
 }

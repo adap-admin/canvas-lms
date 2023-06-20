@@ -4,18 +4,17 @@ exports[`renders all future items loaded regardless of other props 1`] = `
 <div>
   <View
     as="div"
-    borderColor="default"
-    debug={false}
+    borderColor="primary"
     display="auto"
     focusColor="info"
     focusPosition="offset"
-    focused={false}
     overflowX="visible"
     overflowY="visible"
     padding="x-large"
     position="static"
     shouldAnimateFocus={true}
     textAlign="center"
+    withVisualDebug={false}
   >
     <Text
       as="span"
@@ -24,7 +23,7 @@ exports[`renders all future items loaded regardless of other props 1`] = `
       size="small"
       wrap="normal"
     >
-      All items loaded
+      No more items to show
     </Text>
   </View>
 </div>
@@ -34,32 +33,27 @@ exports[`renders load more by default 1`] = `
 <div>
   <View
     as="div"
-    borderColor="default"
-    debug={false}
+    borderColor="primary"
     display="auto"
     focusColor="info"
     focusPosition="offset"
-    focused={false}
     overflowX="visible"
     overflowY="visible"
     padding="x-large"
     position="static"
     shouldAnimateFocus={true}
     textAlign="center"
+    withVisualDebug={false}
   >
-    <Button
+    <Link
       as="button"
-      buttonRef={[Function]}
-      cursor="pointer"
-      fluidWidth={false}
-      margin="0"
+      color="link"
+      iconPlacement="start"
+      isWithinText={false}
       onClick={[Function]}
-      size="medium"
-      type="button"
-      variant="link"
     >
       Load more
-    </Button>
+    </Link>
   </View>
 </div>
 `;
@@ -68,30 +62,28 @@ exports[`renders loading when indicated 1`] = `
 <div>
   <View
     as="div"
-    borderColor="default"
-    debug={false}
+    borderColor="primary"
     display="auto"
     focusColor="info"
     focusPosition="offset"
-    focused={false}
     overflowX="visible"
     overflowY="visible"
     padding="x-large"
     position="static"
     shouldAnimateFocus={true}
     textAlign="center"
+    withVisualDebug={false}
   >
     <View
-      borderColor="default"
-      debug={false}
+      borderColor="primary"
       display="auto"
       focusColor="info"
       focusPosition="offset"
-      focused={false}
       overflowX="visible"
       overflowY="visible"
       position="static"
       shouldAnimateFocus={true}
+      withVisualDebug={false}
     >
       <Spinner
         as="div"
@@ -118,18 +110,17 @@ exports[`shows an Alert when there's a query error 1`] = `
 <div>
   <View
     as="div"
-    borderColor="default"
-    debug={false}
+    borderColor="primary"
     display="auto"
     focusColor="info"
     focusPosition="offset"
-    focused={false}
     overflowX="visible"
     overflowY="visible"
     padding="x-large"
     position="static"
     shouldAnimateFocus={true}
     textAlign="center"
+    withVisualDebug={false}
   >
     <div
       style={
@@ -145,19 +136,15 @@ exports[`shows an Alert when there's a query error 1`] = `
         Error loading more items
       </ErrorAlert>
     </div>
-    <Button
+    <Link
       as="button"
-      buttonRef={[Function]}
-      cursor="pointer"
-      fluidWidth={false}
-      margin="0"
+      color="link"
+      iconPlacement="start"
+      isWithinText={false}
       onClick={[Function]}
-      size="medium"
-      type="button"
-      variant="link"
     >
       Load more
-    </Button>
+    </Link>
   </View>
 </div>
 `;

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -16,8 +18,8 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/swagger_helper')
-require 'return_view'
+require_relative "swagger_helper"
+require "return_view"
 
 describe ReturnView do
   context "with no type" do

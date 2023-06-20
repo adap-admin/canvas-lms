@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018 - present Instructure, Inc.
+ * Copyright (C) 2022 - present Instructure, Inc.
  *
  * This file is part of Canvas.
  *
@@ -20,51 +20,86 @@ const {defaults} = require('jest-config')
 
 module.exports = {
   moduleNameMapper: {
-    '^i18n!(.*$)': '<rootDir>/jest/i18nTransformer.js',
-    "\\.svg$": "<rootDir>/jest/imageMock.js",
-    '^compiled/(.*)$': '<rootDir>/app/coffeescripts/$1',
-    '^coffeescripts/(.*)$': '<rootDir>/app/coffeescripts/$1',
-    '^jsx/(.*)$': '<rootDir>/app/jsx/$1',
-    '^jst/(.*)$': '<rootDir>/app/views/jst/$1',
-    "^timezone$": "<rootDir>/public/javascripts/timezone_core.js",
-    'node_modules-version-of-backbone': require.resolve('backbone')
+    '\\.svg$': '<rootDir>/jest/imageMock.js',
+    'node_modules-version-of-backbone': require.resolve('backbone'),
+    'node_modules-version-of-react-modal': require.resolve('react-modal'),
+    underscore$: '<rootDir>/packages/lodash-underscore/index.js',
+    '^Backbone$': '<rootDir>/public/javascripts/Backbone.js',
+    // jest can't import the icons
+    '@instructure/ui-icons/es/svg': '<rootDir>/packages/canvas-rce/src/rce/__tests__/_mockIcons.js',
+    // redirect imports from es/rce to lib
+    '@instructure/canvas-rce/es/rce/tinyRCE': '<rootDir>/packages/canvas-rce/lib/rce/tinyRCE.js',
+    '@instructure/canvas-rce/es/rce/RCE': '<rootDir>/packages/canvas-rce/lib/rce/RCE.js',
+    '@instructure/canvas-rce/es/rce/plugins/shared/Upload/CategoryProcessor':
+      '<rootDir>/packages/canvas-rce/lib/rce/plugins/shared/Upload/CategoryProcessor',
+    // mock the tinymce-react Editor react component
+    '@tinymce/tinymce-react': '<rootDir>/packages/canvas-rce/src/rce/__mocks__/tinymceReact.js',
+    'decimal.js/decimal.mjs': 'decimal.js/decimal.js',
+    // https://github.com/ai/nanoid/issues/363
+    '^nanoid(/(.*)|$)': 'nanoid$1',
+    '\\.(css)$': '<rootDir>/jest/styleMock.js',
   },
-  roots: ['app/jsx', 'app/coffeescripts'],
-  moduleDirectories: [
-    'node_modules',
-    'public/javascripts',
-    'public/javascripts/vendor'
+  roots: ['<rootDir>/ui', 'gems/plugins', 'public/javascripts'],
+  moduleDirectories: ['ui/shims', 'public/javascripts', 'node_modules'],
+  reporters: [
+    'default',
+    [
+      'jest-junit',
+      {
+        suiteName: 'Jest Tests',
+        outputDirectory: process.env.TEST_RESULT_OUTPUT_DIR || './coverage-js/junit-reports',
+        outputName: 'jest.xml',
+        addFileAttribute: 'true',
+      },
+    ],
   ],
-  reporters: [ "default", "jest-junit" ],
-  snapshotSerializers: [
-    'enzyme-to-json/serializer'
-  ],
-  setupFiles: [
-    'jest-localstorage-mock',
-    'jest-canvas-mock',
-    '<rootDir>/jest/jest-setup.js'
-  ],
+  snapshotSerializers: ['enzyme-to-json/serializer'],
+  setupFiles: ['jest-localstorage-mock', 'jest-canvas-mock', '<rootDir>/jest/jest-setup.js'],
   setupFilesAfterEnv: [
-    '@testing-library/react/cleanup-after-each',
     '@testing-library/jest-dom/extend-expect',
-    './app/jsx/__tests__/ValidatedApolloCleanup'
+    './packages/validated-apollo/src/ValidatedApolloCleanup.js',
+    '<rootDir>/jest/stubInstUi.js',
   ],
-  testMatch: [
-    '**/__tests__/**/?(*.)(spec|test).js'
-  ],
+  testMatch: ['**/__tests__/**/?(*.)(spec|test).[jt]s?(x)'],
 
   coverageDirectory: '<rootDir>/coverage-jest/',
+
+  // skip flaky timeout tests from coverage until they can be addressed
+  // Related JIRA tickets for the skipped coverage tests;
+  // k5_dashboard: LS-2243
+  collectCoverageFrom: [
+    '**/__tests__/**/?(*.)(spec|test).[jt]s?(x)',
+    '!<rootDir>/ui/features/k5_dashboard/react/__tests__/k5DashboardPlanner.test.js',
+  ],
 
   moduleFileExtensions: [...defaults.moduleFileExtensions, 'coffee', 'handlebars'],
   restoreMocks: true,
 
-  testEnvironment: 'jest-environment-jsdom-fourteen',
+  testEnvironment: '<rootDir>/jest/strictTimeLimitEnvironment.js',
 
   transform: {
-    '^i18n': '<rootDir>/jest/i18nTransformer.js',
-    '^.+\\.coffee': '<rootDir>/jest/coffeeTransformer.js',
-    '^.+\\.handlebars': '<rootDir>/jest/handlebarsTransformer.js',
-    '^.+\\.jsx?$': 'babel-jest',
-    '\\.graphql$': 'jest-raw-loader'
+    '\\.handlebars$': '<rootDir>/jest/handlebarsTransformer.js',
+    '\\.graphql$': '<rootDir>/jest/rawLoader.js',
+    '\\.[jt]sx?$': [
+      'babel-jest',
+      {
+        configFile: false,
+        presets: [
+          [
+            '@babel/preset-env',
+            {
+              // until we're on Jest 27 and can look into loading ESMs natively;
+              // https://jestjs.io/docs/ecmascript-modules
+              modules: 'commonjs',
+            },
+          ],
+          ['@babel/preset-react', {useBuiltIns: true}],
+          ['@babel/preset-typescript', {}],
+        ],
+        targets: {
+          node: 'current',
+        },
+      },
+    ],
   },
 }

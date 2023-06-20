@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,17 +18,16 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/../views_helper')
+require_relative "../views_helper"
 
-describe "/assignments/edit" do
+describe "assignments/edit" do
   before do
     course_with_teacher(active_all: true)
     view_context(@course, @user)
     group = @course.assignment_groups.create!(name: "some group")
     @assignment = @course.assignments.create!(
       title: "some assignment",
-      submission_types: 'external_tool'
+      submission_types: "external_tool"
     )
     @assignment.assignment_group_id = group.id
     @assignment.save!
@@ -35,15 +36,14 @@ describe "/assignments/edit" do
     assign(:current_user_rubrics, [])
   end
 
-  it "should render" do
-    render 'assignments/edit'
+  it "renders" do
+    render "assignments/edit"
     expect(response).not_to be_nil # have_tag()
   end
 
-  it "should render rubrics" do
+  it "renders rubrics" do
     allow(@assignment).to receive(:quiz_lti?).and_return(true)
-    render 'assignments/edit'
-    expect(response).to render_template(partial: '_rubrics_component')
+    render "assignments/edit"
+    expect(response).to render_template(partial: "_rubrics_component")
   end
 end
-

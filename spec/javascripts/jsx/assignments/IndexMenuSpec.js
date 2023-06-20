@@ -18,10 +18,12 @@
 import React from 'react'
 import ReactDOM from 'react-dom'
 import TestUtils from 'react-dom/test-utils'
-import Modal from 'react-modal'
-import IndexMenu from 'jsx/assignments/IndexMenu'
-import Actions from 'jsx/assignments/actions/IndexMenuActions'
+import {Modal} from '@instructure/ui-modal'
+import IndexMenu from 'ui/features/assignment_index/react/IndexMenu'
+import Actions from 'ui/features/assignment_index/react/actions/IndexMenuActions'
 import createFakeStore from './createFakeStore'
+import {handleDeepLinking} from '@canvas/deep-linking/DeepLinking'
+import $ from 'jquery'
 
 QUnit.module('AssignmentsIndexMenu')
 
@@ -29,7 +31,7 @@ const generateProps = (overrides, initialState = {}) => {
   const state = {
     externalTools: [],
     selectedTool: null,
-    ...initialState
+    ...initialState,
   }
   return {
     store: createFakeStore(state),
@@ -42,7 +44,7 @@ const generateProps = (overrides, initialState = {}) => {
     sisName: 'PowerSchool',
     postToSisDefault: ENV.POST_TO_SIS_DEFAULT,
     hasAssignments: ENV.HAS_ASSIGNMENTS,
-    ...overrides
+    ...overrides,
   }
 }
 
@@ -51,9 +53,9 @@ const renderComponent = props => TestUtils.renderIntoDocument(<IndexMenu {...pro
 const context = {}
 
 const beforeEach = () => {
-  context.sinon = sinon.sandbox.create()
+  context.sinon = sinon.createSandbox()
   context.sinon.stub(Actions, 'apiGetLaunches').returns({
-    type: 'STUB_API_GET_TOOLS'
+    type: 'STUB_API_GET_TOOLS',
   })
 }
 
@@ -79,8 +81,34 @@ testCase('renders a dropdown menu trigger and options list', () => {
   ReactDOM.unmountComponentAtNode(component.node.parentElement)
 })
 
+testCase('renders a bulk edit option if property is specified', () => {
+  const requestBulkEditFn = sinon.stub()
+  const component = renderComponent(generateProps({requestBulkEdit: requestBulkEditFn}))
+
+  const menuitem = TestUtils.scryRenderedDOMComponentsWithClass(
+    component,
+    'requestBulkEditMenuItem'
+  )
+  equal(menuitem.length, 1)
+  TestUtils.Simulate.click(menuitem[0])
+  ok(requestBulkEditFn.called)
+  component.closeModal()
+  ReactDOM.unmountComponentAtNode(component.node.parentElement)
+})
+
+testCase('does not render a bulk edit option if property is not specified', () => {
+  const component = renderComponent(generateProps())
+  const menuitem = TestUtils.scryRenderedDOMComponentsWithClass(
+    component,
+    'requestBulkEditMenuItem'
+  )
+  equal(menuitem.length, 0)
+  component.closeModal()
+  ReactDOM.unmountComponentAtNode(component.node.parentElement)
+})
+
 testCase('renders a LTI tool modal', () => {
-  const component = renderComponent(generateProps({}))
+  const component = renderComponent(generateProps({}, {modalIsOpen: true}))
 
   const modals = TestUtils.scryRenderedComponentsWithType(component, Modal)
   equal(modals.length, 1)
@@ -91,11 +119,10 @@ testCase('renders a LTI tool modal', () => {
 testCase('Modal visibility agrees with state modalIsOpen', () => {
   const component1 = renderComponent(generateProps({}, {modalIsOpen: true}))
   const modal1 = TestUtils.findRenderedComponentWithType(component1, Modal)
-  equal(modal1.props.isOpen, true)
+  equal(modal1.props.open, true)
 
   const component2 = renderComponent(generateProps({}, {modalIsOpen: false}))
-  const modal2 = TestUtils.findRenderedComponentWithType(component2, Modal)
-  equal(modal2.props.isOpen, false)
+  equal(TestUtils.scryRenderedComponentsWithType(component2, Modal).length, 0)
   component1.closeModal()
   component2.closeModal()
   ReactDOM.unmountComponentAtNode(component1.node.parentElement)
@@ -104,7 +131,8 @@ testCase('Modal visibility agrees with state modalIsOpen', () => {
 
 testCase('renders no iframe when there is no selectedTool in state', () => {
   const component = renderComponent(generateProps({}, {selectedTool: null}))
-  const iframes = TestUtils.scryRenderedDOMComponentsWithTag(component, 'iframe')
+
+  const iframes = component.node.ownerDocument.body.querySelectorAll('iframe')
   equal(iframes.length, 0)
   component.closeModal()
   ReactDOM.unmountComponentAtNode(component.node.parentElement)
@@ -118,16 +146,12 @@ testCase('renders iframe when there is a selectedTool in state', () => {
         modalIsOpen: true,
         selectedTool: {
           placements: {course_assignments_menu: {title: 'foo'}},
-          definition_id: 100
-        }
+          definition_id: 100,
+        },
       }
     )
   )
-
-  const modal = TestUtils.findRenderedComponentWithType(component, Modal)
-  const modalPortal = modal.portal
-
-  const iframes = TestUtils.scryRenderedDOMComponentsWithTag(modalPortal, 'iframe')
+  const iframes = component.node.ownerDocument.body.querySelectorAll('iframe')
   equal(iframes.length, 1)
   component.closeModal()
   ReactDOM.unmountComponentAtNode(component.node.parentElement)
@@ -181,4 +205,50 @@ testCase('renders a dropdown menu with one option when sync to sis conditions ar
   equal(options.length, 1)
   component.closeModal()
   ReactDOM.unmountComponentAtNode(component.node.parentElement)
+})
+
+testCase('reloads the page when receiving a deep linking message', async () => {
+  ENV.DEEP_LINKING_POST_MESSAGE_ORIGIN = 'https://www.test.com'
+  ENV.FEATURES = {
+    lti_multiple_assignment_deep_linking: true,
+  }
+  const message = overrides => ({
+    origin: 'https://www.test.com',
+    data: {subject: 'LtiDeepLinkingResponse'},
+    ...overrides,
+  })
+  const initialState = {modalIsOpen: true}
+  const component = renderComponent(generateProps({}, initialState))
+  const reloadPage = sinon.stub()
+  await handleDeepLinking(reloadPage)(message())
+
+  ok(reloadPage.calledOnce)
+  component.closeModal()
+  ReactDOM.unmountComponentAtNode(component.node.parentElement)
+})
+
+testCase('reloads the page when assignment_index_menu receives externalContentReady', async () => {
+  ENV.assignment_index_menu_tools = [
+    {id: '1', title: 'test', base_url: 'https://example.com/launch'},
+  ]
+  $('#fixtures').append("<div id='external-tool-mount-point'></div>")
+
+  const mockWindow = {
+    location: {
+      reload: sinon.stub(),
+    },
+  }
+  const component = renderComponent(generateProps({currentWindow: mockWindow}))
+  const links = TestUtils.scryRenderedDOMComponentsWithTag(component, 'a')
+
+  // open tray
+  TestUtils.Simulate.click(links[links.length - 1])
+
+  // trigger event
+  $(window).trigger('externalContentReady')
+
+  ok(mockWindow.location.reload.calledOnce)
+
+  ReactDOM.unmountComponentAtNode(component.node.parentElement)
+  $('#fixtures').empty()
 })

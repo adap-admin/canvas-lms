@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -19,9 +21,16 @@
 class SubmissionVersion < ActiveRecord::Base
   belongs_to :assignment
   belongs_to :context, polymorphic: [:course]
-  belongs_to :version
+  belongs_to :root_account, class_name: "Account"
 
-  validates_presence_of :context_id, :version_id, :user_id, :assignment_id
+  # despite the fact that "Version" is aliased to "SimplyVersioned::Version"
+  # the classname inference here doesn't see that as an option and fails
+  # with a name error if you don't specify the class.
+  # Since "::Version" doesn't make it very clear WHY you have to
+  # specify the name, we might as well use the whole module/class name
+  belongs_to :version, class_name: "SimplyVersioned::Version"
+
+  validates :context_id, :version_id, :user_id, :assignment_id, presence: true
 
   class << self
     def index_version(version)
@@ -30,31 +39,31 @@ class SubmissionVersion < ActiveRecord::Base
     end
 
     def index_versions(versions, options = {})
-      records = versions.map{ |version| extract_version_attributes(version, options) }.compact
+      records = versions.filter_map { |version| extract_version_attributes(version, options) }
       bulk_insert(records) if records.present?
     end
 
     private
+
     def extract_version_attributes(version, options = {})
-      # TODO make context extraction more efficient in bulk case
       model = if options[:ignore_errors]
-        begin
-          return nil unless Submission.active.where(id: version.versionable_id).exists?
-          version.model
-        rescue Psych::SyntaxError
-          return nil
-        end
-      else
-        version.model
-      end
-      assignment = model.assignment
-      return nil unless assignment
+                begin
+                  Submission.active.where(id: version.versionable_id).exists? && version.model
+                rescue Psych::SyntaxError
+                  nil
+                end
+              else
+                version.model
+              end
+      return nil unless model.try(:assignment_id) # model _could_ be false here, so don't use &.
+
       {
-        :context_id => assignment.context_id,
-        :context_type => assignment.context_type,
-        :user_id => model.user_id,
-        :assignment_id => model.assignment_id,
-        :version_id => version.id
+        context_id: model.course_id,
+        context_type: "Course",
+        user_id: model.user_id,
+        assignment_id: model.assignment_id,
+        version_id: version.id,
+        root_account_id: model.root_account_id
       }
     end
   end

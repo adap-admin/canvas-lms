@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,11 +18,11 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'spec_helper'
+require "spec_helper"
 
 describe "Date#in_time_zone" do
   before do
-    @zones = ['America/Juneau', 'America/Denver', 'UTC', 'Asia/Baghdad', 'Asia/Shanghai'].map { |tzname| ActiveSupport::TimeZone.new(tzname) }
+    @zones = ["America/Juneau", "America/Denver", "UTC", "Asia/Baghdad", "Asia/Shanghai"].map { |tzname| ActiveSupport::TimeZone.new(tzname) }
     today = Time.zone.now
     @dates = [
       Date.parse("#{today.year}-01-01"),
@@ -28,7 +30,7 @@ describe "Date#in_time_zone" do
     ]
   end
 
-  it "should give midnight regardless of time zone" do
+  it "gives midnight regardless of time zone" do
     @dates.each do |date|
       @zones.each do |tz|
         time_in_tz = date.in_time_zone(tz.name)
@@ -40,7 +42,7 @@ describe "Date#in_time_zone" do
     end
   end
 
-  it "should give the same date regardless of time zone" do
+  it "gives the same date regardless of time zone" do
     @dates.each do |date|
       @zones.each do |tz|
         time_in_tz = date.in_time_zone(tz.name)
@@ -52,7 +54,7 @@ describe "Date#in_time_zone" do
     end
   end
 
-  it "should work with no explicit zone given" do
+  it "works with no explicit zone given" do
     @dates.each do |date|
       tz = @zones.first
       Time.use_zone(tz) do

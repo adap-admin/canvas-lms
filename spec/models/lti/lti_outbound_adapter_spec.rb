@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -16,64 +18,64 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper.rb')
+# rubcop:disable RSpec/MultipleMemoizedHelpers
 
 describe Lti::LtiOutboundAdapter do
-  let(:url) { '/launch/url' }
+  let(:url) { "/launch/url" }
   let(:account) { Account.new }
-  let(:return_url) { '/return/url' }
+  let(:return_url) { "/return/url" }
   let(:user) { User.new }
   let(:resource_type) { :lti_launch_type }
-  let(:tool_url) { 'http://www.tool.com/launch/url?firstname=rory' }
+  let(:tool_url) { "http://www.tool.com/launch/url?firstname=rory" }
 
-  let(:tool) {
+  let(:tool) do
     ContextExternalTool.new.tap do |tool|
-      allow(tool).to receive(:id).and_return('tool_id')
+      allow(tool).to receive(:id).and_return("tool_id")
       tool.url = tool_url
     end
-  }
+  end
 
   let(:user) { User.create! }
 
-  let(:context) {
+  let(:context) do
     Course.new.tap do |course|
-      allow(course).to receive(:id).and_return('course_id')
+      allow(course).to receive(:id).and_return("course_id")
       course.root_account = account
       course.account = account
     end
-  }
+  end
 
-  let(:assignment) {
+  let(:assignment) do
     Assignment.new.tap do |assignment|
-      allow(assignment).to receive(:id).and_return('assignment_id')
+      allow(assignment).to receive(:id).and_return("assignment_id")
     end
-  }
+  end
 
   let(:subject) { adapter }
   let(:adapter) { Lti::LtiOutboundAdapter.new(tool, user, context) }
   let(:lti_consumer_instance) { LtiOutbound::LTIConsumerInstance.new }
-  let(:lti_context) {
+  let(:lti_context) do
     LtiOutbound::LTIContext.new.tap do |lti_context|
       lti_context.consumer_instance = lti_consumer_instance
     end
-  }
+  end
   let(:lti_user) { LtiOutbound::LTIUser.new }
   let(:lti_tool) { LtiOutbound::LTITool.new }
   let(:lti_assignment) { LtiOutbound::LTIAssignment.new }
   let(:controller) do
-    request_mock = double('request')
-    allow(request_mock).to receive(:host).and_return('/my/url')
-    allow(request_mock).to receive(:scheme).and_return('https')
-    m = double('controller')
+    request_mock = double("request")
+    allow(request_mock).to receive(:host).and_return("/my/url")
+    allow(request_mock).to receive(:scheme).and_return("https")
+    m = double("controller")
     allow(m).to receive(:request).and_return(request_mock)
     allow(m).to receive(:logged_in_user).and_return(@user || user)
     m
   end
-  let(:variable_expander)do
-    Lti::VariableExpander.new(account, context, controller, current_user: user )
+  let(:variable_expander) do
+    Lti::VariableExpander.new(account, context, controller, current_user: user)
   end
 
-  before(:each) do
+  before do
     allow_any_instance_of(Lti::LtiContextCreator).to receive(:convert).and_return(lti_context)
     allow_any_instance_of(Lti::LtiUserCreator).to receive(:convert).and_return(lti_user)
     allow_any_instance_of(Lti::LtiToolCreator).to receive(:convert).and_return(lti_tool)
@@ -88,8 +90,8 @@ describe Lti::LtiOutboundAdapter do
     end
 
     it "generates the outgoing_email_address" do
-      allow(HostUrl).to receive(:outgoing_email_address).and_return('email@email.com')
-      expect(LtiOutbound::ToolLaunch).to receive(:new) { |options| expect(options[:outgoing_email_address]).to eq 'email@email.com' }
+      allow(HostUrl).to receive(:outgoing_email_address).and_return("email@email.com")
+      expect(LtiOutbound::ToolLaunch).to receive(:new) { |options| expect(options[:outgoing_email_address]).to eq "email@email.com" }
 
       adapter.prepare_tool_launch(return_url, variable_expander)
     end
@@ -102,10 +104,10 @@ describe Lti::LtiOutboundAdapter do
       end
 
       it "gets the launch url from the tool settings when resource_type is specified" do
-        expect(tool).to receive(:extension_setting).with(resource_type, :url).and_return('/resource/launch/url')
-        expect(LtiOutbound::ToolLaunch).to receive(:new) { |options| expect(options[:url]).to eq '/resource/launch/url' }
+        expect(tool).to receive(:extension_setting).with(resource_type, :url).and_return("/resource/launch/url")
+        expect(LtiOutbound::ToolLaunch).to receive(:new) { |options| expect(options[:url]).to eq "/resource/launch/url" }
 
-        adapter.prepare_tool_launch(return_url, variable_expander, resource_type: resource_type)
+        adapter.prepare_tool_launch(return_url, variable_expander, resource_type:)
       end
 
       it "passes the launch url through when provided" do
@@ -116,14 +118,14 @@ describe Lti::LtiOutboundAdapter do
     end
 
     it "accepts selected html" do
-      expect(LtiOutbound::ToolLaunch).to receive(:new) { |options| expect(options[:selected_html]).to eq '<div>something</div>' }
+      expect(LtiOutbound::ToolLaunch).to receive(:new) { |options| expect(options[:selected_html]).to eq "<div>something</div>" }
 
-      adapter.prepare_tool_launch(return_url, variable_expander, selected_html: '<div>something</div>')
+      adapter.prepare_tool_launch(return_url, variable_expander, selected_html: "<div>something</div>")
     end
 
     context "link code" do
       it "generates the link_code when excluded" do
-        generated_link_code = 'abc123'
+        generated_link_code = "abc123"
         tool = ContextExternalTool.new
         allow(tool).to receive(:opaque_identifier_for).and_return(generated_link_code)
         adapter = Lti::LtiOutboundAdapter.new(tool, user, context)
@@ -134,10 +136,10 @@ describe Lti::LtiOutboundAdapter do
       end
 
       it "passes the link_code through when provided" do
-        link_code = 'link_code'
+        link_code = "link_code"
         expect(LtiOutbound::ToolLaunch).to receive(:new) { |options| expect(options[:link_code]).to eq link_code }
 
-        adapter.prepare_tool_launch(return_url, variable_expander, link_code: link_code)
+        adapter.prepare_tool_launch(return_url, variable_expander, link_code:)
       end
     end
 
@@ -145,7 +147,7 @@ describe Lti::LtiOutboundAdapter do
       it "passes the resource_type through when provided" do
         expect(LtiOutbound::ToolLaunch).to receive(:new) { |options| expect(options[:resource_type]).to eq :lti_launch_type }
 
-        adapter.prepare_tool_launch(return_url, variable_expander, resource_type: resource_type)
+        adapter.prepare_tool_launch(return_url, variable_expander, resource_type:)
       end
     end
 
@@ -171,42 +173,83 @@ describe Lti::LtiOutboundAdapter do
   end
 
   context "link_params" do
-    let(:link_params) {{ext: {lti_assignment_id: "1234"}}}
+    let(:link_params) { { ext: { lti_assignment_id: "1234" } } }
 
     it "passes through the secure_parameters when provided" do
       expect(LtiOutbound::ToolLaunch).to receive(:new) { |options| expect(options[:link_params]).to eq link_params }
-      adapter.prepare_tool_launch(return_url, variable_expander, {link_params: link_params})
+      adapter.prepare_tool_launch(return_url, variable_expander, { link_params: })
     end
-
   end
 
   describe "#launch_url" do
     it "returns the launch url from the prepared tool launch" do
-      tool_launch = double('tool launch', url: '/launch/url?with_param')
+      tool_launch = double("tool launch", url: "/launch/url?with_param")
       allow(LtiOutbound::ToolLaunch).to receive(:new).and_return(tool_launch)
       adapter.prepare_tool_launch(return_url, variable_expander)
 
-      expect(adapter.launch_url).to eq '/launch/url?with_param'
+      expect(adapter.launch_url).to eq "/launch/url?with_param"
     end
 
-    context 'with post_only set to true' do
-      it 'removes the params from the url' do
-        tool_launch = double('tool launch', url: '/launch/url?with_param')
+    context "with post_only set to true" do
+      it "removes the params from the url" do
+        tool_launch = double("tool launch", url: "/launch/url?with_param")
         allow(LtiOutbound::ToolLaunch).to receive(:new).and_return(tool_launch)
         adapter.prepare_tool_launch(return_url, variable_expander)
 
-        expect(adapter.launch_url(post_only: true)).to eq '/launch/url'
+        expect(adapter.launch_url(post_only: true)).to eq "/launch/url"
       end
     end
 
     it "raises a not prepared error if the tool launch has not been prepared" do
-      expect { adapter.launch_url }.to raise_error(RuntimeError, 'Called launch_url before calling prepare_tool_launch')
+      expect { adapter.launch_url }.to raise_error(RuntimeError, "Called launch_url before calling prepare_tool_launch")
+    end
+  end
+
+  describe "#default_launch_url" do
+    subject { adapter.send :default_launch_url, placement }
+
+    let(:placement) { nil }
+
+    it "returns tool url" do
+      expect(subject).to eq tool.url
+    end
+
+    context "with placement provided" do
+      let(:placement) { :course_navigation }
+      let(:placement_url) { "https://example.com/course_navigation" }
+
+      before do
+        tool.course_navigation = { url: placement_url }
+      end
+
+      it "returns tool url for that placement" do
+        expect(subject).to eq placement_url
+      end
+    end
+
+    context "with environment-specific overrides" do
+      let(:override_url) { "http://www.example-beta.com/basic_lti" }
+      let(:url) { "http://www.example.com/basic_lti" }
+
+      before do
+        allow(ApplicationController).to receive(:test_cluster?).and_return(true)
+        allow(ApplicationController).to receive(:test_cluster_name).and_return("beta")
+        Account.site_admin.enable_feature! :dynamic_lti_environment_overrides
+
+        tool.settings[:environments] = {
+          launch_url: override_url
+        }
+      end
+
+      it "uses override for launch_url and includes query parameters" do
+        expect(subject).to eq override_url + "?firstname=rory"
+      end
     end
   end
 
   describe "#generate_post_payload" do
     it "calls generate on the tool launch" do
-      tool_launch = double('tool launch')
+      tool_launch = double("tool launch")
       expect(tool_launch).to receive_messages(generate: {})
       allow(tool_launch).to receive_messages(url: "http://example.com/launch")
       allow(LtiOutbound::ToolLaunch).to receive(:new).and_return(tool_launch)
@@ -214,73 +257,93 @@ describe Lti::LtiOutboundAdapter do
       adapter.generate_post_payload
     end
 
-    it "does not copy query params to the post body if oauth_compliant tool setting is enabled" do
-      allow(account).to receive(:all_account_users_for).with(user).and_return([])
-      tool.settings = {oauth_compliant: true}
+    it "errors if the url is ridiculous" do
+      tool_launch = double("tool launch")
+      expect(tool_launch).to receive_messages(generate: {})
+      allow(tool_launch).to receive_messages(url: "wat;no-way")
+      allow(LtiOutbound::ToolLaunch).to receive(:new).and_return(tool_launch)
       adapter.prepare_tool_launch(return_url, variable_expander)
-      payload = adapter.generate_post_payload
-      expect(payload['firstname']).to be_nil
+      expect { adapter.generate_post_payload }.to raise_error(Lti::Errors::InvalidLaunchUrlError)
     end
 
-    it "does not copy query params to the post body if post_only is set and  oauth_compliant tool setting is enabled" do
+    it "does not copy query params to the post body if oauth_compliant tool setting is enabled" do
       allow(account).to receive(:all_account_users_for).with(user).and_return([])
-      tool.settings = {oauth_compliant: true, post_only: true}
+      tool.settings = { oauth_compliant: true }
       adapter.prepare_tool_launch(return_url, variable_expander)
       payload = adapter.generate_post_payload
-      expect(payload['firstname']).to be_nil
+      expect(payload["firstname"]).to be_nil
+    end
+
+    it "does not copy query params to the post body if post_only is set and oauth_compliant tool setting is enabled" do
+      allow(account).to receive(:all_account_users_for).with(user).and_return([])
+      tool.settings = { oauth_compliant: true, post_only: true }
+      adapter.prepare_tool_launch(return_url, variable_expander)
+      payload = adapter.generate_post_payload
+      expect(payload["firstname"]).to be_nil
     end
 
     it "does copy query params to the post body if oauth_compliant tool setting not set and :disable_post_only is disabled on root account" do
       allow(account).to receive(:all_account_users_for).with(user).and_return([])
       adapter.prepare_tool_launch(return_url, variable_expander)
       payload = adapter.generate_post_payload
-      expect(payload['firstname']).to eq 'rory'
+      expect(payload["firstname"]).to eq "rory"
     end
 
     it "does not copy query params to the post body if :disable_post_only is set on root_Account" do
       allow(account).to receive(:all_account_users_for).with(user).and_return([])
+      allow(account).to receive(:feature_enabled?).with(:variable_substitution_numeric_to_string).and_return(false)
       allow(account).to receive(:feature_enabled?).with(:disable_lti_post_only).and_return(true)
       adapter.prepare_tool_launch(return_url, variable_expander)
       payload = adapter.generate_post_payload
-      expect(payload['firstname']).to be_nil
+      expect(payload["firstname"]).to be_nil
     end
 
     it "includes the 'ext_lti_assignment_id' if the optional assignment parameter is present" do
-      assignment.update_attributes(lti_context_id: SecureRandom.uuid)
+      assignment.update(lti_context_id: SecureRandom.uuid)
       adapter.prepare_tool_launch(return_url, variable_expander)
-      payload = adapter.generate_post_payload(assignment: assignment)
-      expect(payload['ext_lti_assignment_id']).to eq assignment.lti_context_id
+      payload = adapter.generate_post_payload(assignment:)
+      expect(payload["ext_lti_assignment_id"]).to eq assignment.lti_context_id
     end
 
     it "does not include the 'ext_lti_assignment_id' if the optional assignment parameter is absent" do
       adapter.prepare_tool_launch(return_url, variable_expander)
-      payload = adapter.generate_post_payload(assignment: assignment)
-      expect(payload.keys).not_to include 'ext_lti_assignment_id'
+      payload = adapter.generate_post_payload(assignment:)
+      expect(payload.keys).not_to include "ext_lti_assignment_id"
+    end
+
+    it "passes parent_frame_context to the return url if supplied" do
+      adapter.prepare_tool_launch("http://example.com/tool_launch?foo=bar", variable_expander, {
+                                    launch_url: "http://www.tool.com/launch/url?firstname=rory",
+                                    resource_type: "resource_selection",
+                                    parent_frame_context: "123456"
+                                  })
+      payload = adapter.generate_post_payload(assignment:)
+      expect(payload["ext_content_return_url"]).to include "&parent_frame_context=123456"
     end
 
     it "raises a not prepared error if the tool launch has not been prepared" do
-      expect { adapter.generate_post_payload }.to raise_error(RuntimeError, 'Called generate_post_payload before calling prepare_tool_launch')
+      expect { adapter.generate_post_payload }.to raise_error(RuntimeError, "Called generate_post_payload before calling prepare_tool_launch")
     end
   end
 
   describe "#generate_post_payload_for_assignment" do
-    let(:outcome_service_url) { '/outcome/service' }
-    let(:legacy_outcome_service_url) { '/legacy/service' }
-    let(:lti_turnitin_outcomes_placement_url) { 'turnitin/outcomes/placement' }
-    let(:tool_launch) { double('tool launch', generate: {}, url: "http://example.com/launch") }
+    let(:outcome_service_url) { "/outcome/service" }
+    let(:legacy_outcome_service_url) { "/legacy/service" }
+    let(:lti_turnitin_outcomes_placement_url) { "turnitin/outcomes/placement" }
+    let(:tool_launch) { double("tool launch", generate: {}, url: "http://example.com/launch") }
 
-    before(:each) do
+    before do
       allow(LtiOutbound::ToolLaunch).to receive(:new).and_return(tool_launch)
-      allow(BasicLTI::Sourcedid).to receive(:encryption_secret) {'encryption-secret-5T14NjaTbcYjc4'}
-      allow(BasicLTI::Sourcedid).to receive(:signing_secret) {'signing-secret-vp04BNqApwdwUYPUI'}
+      allow(BasicLTI::Sourcedid).to receive(:encryption_secret) { "encryption-secret-5T14NjaTbcYjc4" }
+      allow(BasicLTI::Sourcedid).to receive(:signing_secret) { "signing-secret-vp04BNqApwdwUYPUI" }
     end
 
     it "includes the 'ext_lti_assignment_id' parameter" do
-      assignment.update_attributes(lti_context_id: SecureRandom.uuid)
+      assignment.update(lti_context_id: SecureRandom.uuid)
       adapter.prepare_tool_launch(return_url, variable_expander)
       expect(tool_launch).to receive(:for_assignment!).with(lti_assignment, outcome_service_url, legacy_outcome_service_url, lti_turnitin_outcomes_placement_url)
       payload = adapter.generate_post_payload_for_assignment(assignment, outcome_service_url, legacy_outcome_service_url, lti_turnitin_outcomes_placement_url)
-      expect(payload['ext_lti_assignment_id']).to eq assignment.lti_context_id
+      expect(payload["ext_lti_assignment_id"]).to eq assignment.lti_context_id
     end
 
     it "creates an lti_assignment" do
@@ -292,16 +355,15 @@ describe Lti::LtiOutboundAdapter do
     end
 
     it "raises a not prepared error if the tool launch has not been prepared" do
-      expect {
+      expect do
         adapter.generate_post_payload_for_assignment(assignment, outcome_service_url, legacy_outcome_service_url, lti_turnitin_outcomes_placement_url)
-      }.to raise_error(RuntimeError, 'Called generate_post_payload_for_assignment before calling prepare_tool_launch')
+      end.to raise_error(RuntimeError, "Called generate_post_payload_for_assignment before calling prepare_tool_launch")
     end
-
   end
 
   describe "#generate_post_payload_for_homework_submission" do
     it "creates an lti_assignment" do
-      tool_launch = double('tool launch', generate: {}, url: "http://example.com/launch")
+      tool_launch = double("tool launch", generate: {}, url: "http://example.com/launch")
       allow(LtiOutbound::ToolLaunch).to receive(:new).and_return(tool_launch)
       adapter.prepare_tool_launch(return_url, variable_expander)
 
@@ -311,9 +373,9 @@ describe Lti::LtiOutboundAdapter do
     end
 
     it "raises a not prepared error if the tool launch has not been prepared" do
-      expect {
+      expect do
         adapter.generate_post_payload_for_homework_submission(assignment)
-      }.to raise_error(RuntimeError, 'Called generate_post_payload_for_homework_submission before calling prepare_tool_launch')
+      end.to raise_error(RuntimeError, "Called generate_post_payload_for_homework_submission before calling prepare_tool_launch")
     end
   end
 
@@ -337,7 +399,7 @@ describe Lti::LtiOutboundAdapter do
     end
   end
 
-  describe '#encode_source_id' do
+  describe "#encode_source_id" do
     let(:user) do
       student_in_course
       @student
@@ -346,36 +408,37 @@ describe Lti::LtiOutboundAdapter do
     let(:course) { assignment.course }
     let(:tool) { external_tool_model(context: course) }
     let(:adapter) { Lti::LtiOutboundAdapter.new(tool, user, course) }
-    let(:enrollment) { StudentEnrollment.create!(user: user, course: course, workflow_state: 'active') }
+    let(:enrollment) { StudentEnrollment.create!(user:, course:, workflow_state: "active") }
 
     before do
-      allow(BasicLTI::Sourcedid).to receive(:encryption_secret) {'encryption-secret-5T14NjaTbcYjc4'}
-      allow(BasicLTI::Sourcedid).to receive(:signing_secret) {'signing-secret-vp04BNqApwdwUYPUI'}
-      assignment.update_attributes!(
+      allow(BasicLTI::Sourcedid).to receive(:encryption_secret) { "encryption-secret-5T14NjaTbcYjc4" }
+      allow(BasicLTI::Sourcedid).to receive(:signing_secret) { "signing-secret-vp04BNqApwdwUYPUI" }
+      assignment.update!(
         external_tool_tag: ContentTag.create!(
           context: assignment,
           content: tool,
-          title: 'test',
+          title: "test",
           url: tool.url
         )
       )
+      allow_any_instance_of(Account).to receive(:feature_enabled?).and_call_original
     end
 
-    it 'builds the expected encrypted JWT with the correct course data' do
+    it "builds the expected encrypted JWT with the correct course data" do
       allow_any_instance_of(Account).to receive(:feature_enabled?).with(:encrypted_sourcedids).and_return(true)
       sourced_id = adapter.encode_source_id(assignment)
       parsed_sourced_id = BasicLTI::Sourcedid.load! sourced_id
       expect(parsed_sourced_id.course).to eq course
     end
 
-    it 'builds the expected encrypted JWT with the correct assignment data' do
+    it "builds the expected encrypted JWT with the correct assignment data" do
       allow_any_instance_of(Account).to receive(:feature_enabled?).with(:encrypted_sourcedids).and_return(true)
       sourced_id = adapter.encode_source_id(assignment)
       parsed_sourced_id = BasicLTI::Sourcedid.load! sourced_id
       expect(parsed_sourced_id.assignment).to eq assignment
     end
 
-    it 'builds the expected encrypted JWT with the correct user data' do
+    it "builds the expected encrypted JWT with the correct user data" do
       allow_any_instance_of(Account).to receive(:feature_enabled?).with(:encrypted_sourcedids).and_return(true)
       sourced_id = adapter.encode_source_id(assignment)
       parsed_sourced_id = BasicLTI::Sourcedid.load! sourced_id
@@ -395,3 +458,5 @@ describe Lti::LtiOutboundAdapter do
     end
   end
 end
+
+# rubcop:enable RSpec/MultipleMemoizedHelpers

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -31,9 +33,11 @@ module DataFixup
     #   the column(s), and the default_value is passed separately, and applied to all of
     #   the columns.
     def self.run(klass, fields, default_value: false, batch_size: 1000)
-      if fields.is_a?(Array)
-        fields = fields.map { |f| [f, default_value] }.to_h
-      elsif fields.is_a?(Hash)
+      case fields
+      when Array
+        fields = fields.index_with { default_value }
+      when Hash
+        # already correct type
       else
         fields = { fields => default_value }
       end
@@ -45,11 +49,11 @@ module DataFixup
       else
         # update all fields in a single query, by assigning the existing non-NULL values
         # over themselves, or the default value if it is NULL
-        updates = fields.map { |(f, v)| "#{f}=COALESCE(#{f},#{klass.connection.quote(v)})" }.join(', ')
+        updates = fields.map { |(f, v)| "#{f}=COALESCE(#{f},#{klass.connection.quote(v)})" }.join(", ")
       end
 
-      klass.find_ids_in_ranges(batch_size: batch_size) do |start_id, end_id|
-        update_count = scope.where(id: start_id..end_id).update_all(updates)
+      klass.find_ids_in_ranges(batch_size:) do |start_id, end_id|
+        update_count = scope.where(klass.primary_key => start_id..end_id).update_all(updates)
         sleep_interval_per_batch = Setting.get("sleep_interval_per_backfill_nulls_batch", nil).presence&.to_f
         sleep(sleep_interval_per_batch) if update_count > 0 && sleep_interval_per_batch
       end

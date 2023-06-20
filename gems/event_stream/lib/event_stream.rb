@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -15,21 +17,23 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'active_support'
-require 'active_record'
-require 'bookmarked_collection'
-require 'canvas_cassandra'
-require 'inst_statsd'
+require "active_support"
+require "active_record"
+require "bookmarked_collection"
+require "canvas_cassandra"
+require "inst_statsd"
 
 module EventStream
-  require 'event_stream/attr_config'
-  require 'event_stream/record'
-  require 'event_stream/failure'
-  require 'event_stream/stream'
-  require 'event_stream/index'
+  require "event_stream/attr_config"
+  require "event_stream/backend"
+  require "event_stream/record"
+  require "event_stream/failure"
+  require "event_stream/logger"
+  require "event_stream/stream"
+  require "event_stream/index"
 
   def self.current_shard
-    @current_shard_lookup and @current_shard_lookup.call
+    @current_shard_lookup&.call
   end
 
   def self.current_shard_lookup=(callable)
@@ -37,7 +41,7 @@ module EventStream
   end
 
   def self.get_index_ids(index, rows)
-    @get_index_ids_lookup ||= lambda { |index, rows| rows.map{ |row| row[index.id_column] } }
+    @get_index_ids_lookup ||= ->(index2, rows2) { rows2.pluck(index2.id_column) }
     @get_index_ids_lookup.call(index, rows)
   end
 

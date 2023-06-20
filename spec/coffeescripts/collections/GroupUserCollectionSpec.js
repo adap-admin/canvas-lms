@@ -16,12 +16,12 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import GroupUserCollection from 'compiled/collections/GroupUserCollection'
-import UnassignedGroupUserCollection from 'compiled/collections/UnassignedGroupUserCollection'
-import GroupCategory from 'compiled/models/GroupCategory'
-import GroupUser from 'compiled/models/GroupUser'
-import Group from 'compiled/models/Group'
-import Backbone from 'Backbone'
+import GroupUserCollection from '@canvas/groups/backbone/collections/GroupUserCollection'
+import UnassignedGroupUserCollection from '@canvas/groups/backbone/collections/UnassignedGroupUserCollection'
+import GroupCategory from '@canvas/groups/backbone/models/GroupCategory'
+import GroupUser from '@canvas/groups/backbone/models/GroupUser'
+import Group from '@canvas/groups/backbone/models/Group'
+import Backbone from '@canvas/backbone'
 
 let source = null
 let target = null
@@ -38,24 +38,24 @@ QUnit.module('GroupUserCollection', {
         id: 1,
         name: 'bob',
         sortable_name: 'bob',
-        group: null
+        group: null,
       }),
       new GroupUser({
         id: 2,
         name: 'joe',
         sortable_name: 'joe',
-        group: null
-      })
+        group: null,
+      }),
     ]
     source = new UnassignedGroupUserCollection(users, {category})
     category._unassignedUsers = source
     target = new GroupUserCollection(null, {
       group,
-      category
+      category,
     })
     target.loaded = true
     group._users = target
-  }
+  },
 })
 
 test("moves user to target group's collection when group changes", () => {

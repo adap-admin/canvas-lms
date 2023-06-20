@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -22,25 +24,25 @@ module Multipart
     end
 
     def size
-      @streams.map(&:size).sum
+      @streams.sum(&:size)
     end
 
-    def read(size=nil, outbuf="")
+    def read(size = nil, outbuf = +"")
       outbuf.replace("")
       if size.nil?
         # slurp up all remaining contents, even if that's just "" when eof at
         # beginning
         @streams.each { |stream| outbuf.concat(stream.read.force_encoding("utf-8")) }
-        return outbuf
+        outbuf
       elsif size.zero?
         # return "" (which is already in outbuf) even if eof at beginning
-        return outbuf
+        outbuf
       else
         # size >= 1 and not eof at beginning, read up to size
         read_any = false
         remaining = size
         @streams.each do |stream|
-          readbuf = ""
+          readbuf = +""
           while remaining > 0 && stream.read(remaining, readbuf)
             read_any = true
             remaining -= readbuf.length
@@ -48,7 +50,7 @@ module Multipart
             outbuf.concat(readbuf)
           end
         end
-        return read_any ? outbuf : nil
+        read_any ? outbuf : nil
       end
     end
   end

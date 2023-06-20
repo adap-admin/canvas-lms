@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -15,15 +17,12 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-module Canvas::Oauth
+module Canvas::OAuth
   class InvalidRequestError < RequestError
-    def to_render_data
+    def as_json
       {
-        status: 400,
-        json: {
-          error: :invalid_request,
-          error_description: @message
-        }
+        error: :invalid_request,
+        error_description: @message
       }
     end
 

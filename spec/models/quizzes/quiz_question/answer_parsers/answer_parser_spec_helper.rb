@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -24,7 +26,7 @@ RSpec::Matchers.define :have_answer do |expected|
 end
 
 shared_examples_for "All answer parsers" do
-  before(:each) do
+  before do
     question = Quizzes::QuizQuestion::QuestionData.new(question_params)
     question.answers = Quizzes::QuizQuestion::AnswerGroup.new(raw_answers)
     parser = parser_class.new(question.answers)
@@ -37,21 +39,19 @@ shared_examples_for "All answer parsers" do
   end
 
   it "formats the answers" do
-    expect(@answer_data).to be_kind_of(Quizzes::QuizQuestion::AnswerGroup)
+    expect(@answer_data).to be_a(Quizzes::QuizQuestion::AnswerGroup)
     raw_answers.each do |raw|
       expect(@answer_data.answers).to have_answer raw[:answer_text]
     end
   end
 
   it "provides IDs for the answers" do
-    ids = @answer_data.answers.map { |a| a[:id] }
-    ids.each { |id| expect(id).to be_kind_of(Integer) }
+    ids = @answer_data.answers.pluck(:id)
+    ids.each { |id| expect(id).to be_a(Integer) }
   end
 
   it "sanitizes answer comments" do
-    expect(@answer_data.first[:comments_html]).to include('<img')
-    expect(@answer_data.first[:comments_html]).not_to include('onerror')
+    expect(@answer_data.first[:comments_html]).to include("<img")
+    expect(@answer_data.first[:comments_html]).not_to include("onerror")
   end
 end
-
-

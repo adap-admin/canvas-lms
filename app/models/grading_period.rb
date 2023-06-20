@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -21,7 +23,10 @@ class GradingPeriod < ActiveRecord::Base
 
   belongs_to :grading_period_group, inverse_of: :grading_periods
   has_many :scores, -> { active }
-  has_many :submissions, -> { active }
+  has_many :submissions, -> { active }, inverse_of: :grading_period
+  has_many :auditor_grade_change_records,
+           class_name: "Auditors::ActiveRecord::GradeChangeRecord",
+           inverse_of: :grading_period
 
   validates :title, :start_date, :end_date, :close_date, :grading_period_group_id, presence: true
   validates :weight, numericality: true, allow_nil: true
@@ -32,24 +37,25 @@ class GradingPeriod < ActiveRecord::Base
   before_validation :adjust_close_date_for_course_period
   before_validation :ensure_close_date
 
+  before_save :set_root_account_id
   after_save :recompute_scores, if: :dates_or_weight_or_workflow_state_changed?
   after_destroy :destroy_grading_period_set, if: :last_remaining_legacy_period?
   after_destroy :destroy_scores
-  scope :current, -> do
+  scope :current, lambda {
     now = Time.zone.now.change(sec: 0)
     where(
       "date_trunc('minute', grading_periods.end_date) >= ? AND date_trunc('minute', grading_periods.start_date) < ?",
       now,
       now
     )
-  end
+  }
 
   scope :closed, -> { where("grading_periods.close_date < ?", Time.zone.now) }
   scope :open, -> { where("grading_periods.close_date IS NULL OR grading_periods.close_date >= ?", Time.zone.now) }
 
-  scope :grading_periods_by, ->(context_with_ids) do
+  scope :grading_periods_by, lambda { |context_with_ids|
     joins(:grading_period_group).where(grading_period_groups: context_with_ids).readonly(false)
-  end
+  }
 
   set_policy do
     %i[read create update delete].each do |permission|
@@ -62,7 +68,7 @@ class GradingPeriod < ActiveRecord::Base
   end
 
   def self.date_in_closed_grading_period?(course:, date:, periods: nil)
-    period = self.for_date_in_course(date: date, course: course, periods: periods)
+    period = for_date_in_course(date:, course:, periods:)
     period.present? && period.closed?
   end
 
@@ -70,7 +76,7 @@ class GradingPeriod < ActiveRecord::Base
     periods ||= self.for(course)
 
     if date.nil?
-      return periods.sort_by(&:end_date).last
+      periods.max_by(&:end_date)
     else
       periods.detect { |p| p.in_date_range?(date) }
     end
@@ -97,19 +103,22 @@ class GradingPeriod < ActiveRecord::Base
     grading_period_group.course_id.present?
   end
 
-  def assignments_for_student(assignments, student)
-    Assignment::FilterWithOverridesByDueAtForStudent.new(
-      assignments: assignments,
-      grading_period: self,
-      student: student
-    ).filter_assignments
+  def assignments_for_student(course, assignments, student, includes: [])
+    assignment_ids = GradebookGradingPeriodAssignments.new(course, student:, includes:).to_h.fetch(id, [])
+    if assignment_ids.empty?
+      []
+    else
+      assignments.select { |assignment| assignment_ids.include?(assignment.id.to_s) }
+    end
   end
 
-  def assignments(assignments)
-    Assignment::FilterWithOverridesByDueAtForClass.new(
-      assignments: assignments,
-      grading_period: self
-    ).filter_assignments
+  def assignments(course, assignments)
+    assignment_ids = GradebookGradingPeriodAssignments.new(course).to_h.fetch(id, [])
+    if assignment_ids.empty?
+      []
+    else
+      assignments.select { |assignment| assignment_ids.include?(assignment.id.to_s) }
+    end
   end
 
   def current?
@@ -124,10 +133,10 @@ class GradingPeriod < ActiveRecord::Base
   def last?
     # should never be nil, because self is part of the potential set
     @last_period ||= grading_period_group
-      .grading_periods
-      .active
-      .order(end_date: :desc)
-      .first
+                     .grading_periods
+                     .active
+                     .order(end_date: :desc)
+                     .first
     @last_period == self
   end
   alias_method :is_last, :last?
@@ -147,7 +156,7 @@ class GradingPeriod < ActiveRecord::Base
 
   def self.json_for(context, user)
     periods = self.for(context).sort_by(&:start_date)
-    self.periods_json(periods, user)
+    periods_json(periods, user)
   end
 
   def self.periods_json(periods, user)
@@ -158,13 +167,35 @@ class GradingPeriod < ActiveRecord::Base
 
   def as_json_with_user_permissions(user)
     as_json(
-      only: [:id, :title, :start_date, :end_date, :close_date, :weight],
-      permissions: { user: user },
-      methods: [:is_last, :is_closed],
+      only: %i[id title start_date end_date close_date weight],
+      permissions: { user: },
+      methods: [:is_last, :is_closed]
     ).fetch(:grading_period)
   end
 
+  def disable_post_to_sis
+    raise(RangeError, "The grading period is not yet closed.") if Time.zone.now < close_date
+
+    # This method is called from a job, to know if it is already processed we
+    # cache that the job has processed.
+    # If the look_back in the job is changed, the amount of time we cache needs
+    # to also follow, so using the same setting.
+    look_back = Setting.get("disable_post_to_sis_on_grading_period", "60").to_i + 10
+    Rails.cache.fetch(["disable_post_to_sis_in_completed", self].cache_key, expires_in: look_back.minutes) do
+      submissions.in_batches do |submissions_batch|
+        assignment_ids = submissions_batch.pluck(:assignment_id).uniq
+        Assignment.active.where(id: assignment_ids, post_to_sis: true).update_all(post_to_sis: false, updated_at: Time.zone.now)
+      end
+      # caching that it has completed, so if this gets called again, it can skip.
+      true
+    end
+  end
+
   private
+
+  def set_root_account_id
+    self.root_account_id ||= grading_period_group&.root_account_id
+  end
 
   def date_for_comparison(date)
     comparison_date = date.is_a?(String) ? Time.zone.parse(date) : date
@@ -189,19 +220,19 @@ class GradingPeriod < ActiveRecord::Base
     @_skip_not_overlapping_validator
   end
 
-  scope :overlaps, ->(from, to) do
+  scope :overlaps, lambda { |from, to|
     # sourced: http://c2.com/cgi/wiki?TestIfDateRangesOverlap
     where(
       "((date_trunc('minute', end_date) > ?) and (date_trunc('minute', start_date) < ?))",
       from&.change(sec: 0),
       to&.change(sec: 0)
     )
-  end
+  }
 
   def not_overlapping
     if overlapping?
-      errors.add(:base, t('errors.overlap_message',
-        "Grading period cannot overlap with existing grading periods in group"))
+      errors.add(:base, t("errors.overlap_message",
+                          "Grading period cannot overlap with existing grading periods in group"))
     end
   end
 
@@ -211,19 +242,19 @@ class GradingPeriod < ActiveRecord::Base
 
   def siblings
     grading_periods = self.class.where(
-      grading_period_group_id: grading_period_group_id
+      grading_period_group_id:
     )
 
     if new_record?
       grading_periods
     else
-      grading_periods.where("id <> ?", id)
+      grading_periods.where.not(id:)
     end
   end
 
   def start_date_is_before_end_date
     if start_date && end_date && end_date < start_date
-      errors.add(:end_date, t('must be after start date'))
+      errors.add(:end_date, t("must be after start date"))
     end
   end
 
@@ -237,7 +268,7 @@ class GradingPeriod < ActiveRecord::Base
 
   def close_date_is_on_or_after_end_date
     if close_date.present? && end_date.present? && close_date < end_date
-      errors.add(:close_date, t('must be on or after end date'))
+      errors.add(:close_date, t("must be on or after end date"))
     end
   end
 

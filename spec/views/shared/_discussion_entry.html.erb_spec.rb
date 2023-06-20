@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,15 +18,13 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/../views_helper')
+require_relative "../views_helper"
 
-describe "/shared/_discussion_entry" do
-  it "should render" do
+describe "shared/_discussion_entry" do
+  it "renders" do
     course_with_student
     view_context
-    render :partial => "shared/discussion_entry"
+    render partial: "shared/discussion_entry"
     expect(response).not_to be_nil
   end
 end
-

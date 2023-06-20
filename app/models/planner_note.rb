@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -23,16 +25,16 @@ class PlannerNote < ActiveRecord::Base
   belongs_to :user
   belongs_to :course
   belongs_to :linked_object, polymorphic:
-    [:announcement, :assignment, :discussion_topic, :wiki_page, quiz: 'Quizzes::Quiz']
+    [:announcement, :assignment, :discussion_topic, :wiki_page, quiz: "Quizzes::Quiz"]
   validates :user_id, presence: true
   validates :title, presence: true
   validates :todo_date, presence: true
   validates :workflow_state, presence: true
 
-  scope :for_user, -> (user) { where(user: user) }
-  scope :for_course, -> (course) { where(course: course) }
+  scope :for_user, ->(user) { where(user:) }
+  scope :for_course, ->(course) { where(course:) }
   scope :exclude_deleted_courses, -> { left_joins(:course).where("courses IS NULL OR courses.workflow_state <> 'deleted'") }
 
-  scope :before, -> (end_at) { where("todo_date <= ?", end_at) }
-  scope :after, -> (start_at) { where("todo_date >= ?", start_at) }
+  scope :before, ->(end_at) { where("todo_date <= ?", end_at) }
+  scope :after, ->(start_at) { where("todo_date >= ?", start_at) }
 end

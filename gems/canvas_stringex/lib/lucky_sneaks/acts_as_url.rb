@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -49,9 +51,10 @@ module LuckySneaks
         cattr_reader :only_when_blank
         attr_writer :only_when_blank
 
-        self.class_eval do
+        class_eval do
           def only_when_blank
             return @only_when_blank unless @only_when_blank.nil? # can override only_when_blank temporarily
+
             self.class.only_when_blank
           end
         end
@@ -59,7 +62,7 @@ module LuckySneaks
         if options[:sync_url]
           before_validation :ensure_unique_url
         else
-          before_validation(:ensure_unique_url, :on => :create)
+          before_validation(:ensure_unique_url, on: :create)
         end
 
         class_variable_set(:@@attribute_to_urlify, attribute)
@@ -76,7 +79,7 @@ module LuckySneaks
       # on a large selection, you will get much better results writing your own version with
       # using pagination.
       def initialize_urls
-        where(self.url_attribute => nil).each do |instance|
+        where(url_attribute => nil).each do |instance|
           instance.send :ensure_unique_url
           instance.save
         end
@@ -84,11 +87,12 @@ module LuckySneaks
     end
 
     private
+
     def ensure_unique_url
       url_attribute = self.class.url_attribute
-      base_url = self.send(url_attribute)
-      base_url = self.send(self.class.attribute_to_urlify).to_s.to_url if base_url.blank? || !self.only_when_blank
-      conditions = ["#{url_attribute} LIKE ?", base_url+'%']
+      base_url = send(url_attribute)
+      base_url = send(self.class.attribute_to_urlify).to_s.to_url if base_url.blank? || !only_when_blank
+      conditions = [+"#{url_attribute} LIKE ?", base_url + "%"]
       unless new_record?
         conditions.first << " and id != ?"
         conditions << id
@@ -98,14 +102,14 @@ module LuckySneaks
         conditions << send(self.class.scope_for_url)
       end
       url_owners = self.class.where(conditions).to_a
-      if url_owners.size > 0
+      if url_owners.empty?
+        write_attribute url_attribute, base_url
+      else
         n = 1
         while url_owners.detect { |u| u.send(url_attribute) == "#{base_url}-#{n}" }
           n = n.succ
         end
         write_attribute url_attribute, "#{base_url}-#{n}"
-      else
-        write_attribute url_attribute, base_url
       end
     end
   end

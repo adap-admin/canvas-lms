@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -15,13 +17,13 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'puma'
-require 'httparty'
+require "puma"
+require "httparty"
 
 class SpecFriendlyWebServer
   class << self
     def bind_address
-      '0.0.0.0'
+      "0.0.0.0"
     end
 
     def run(app, port:, timeout: 15)
@@ -35,12 +37,10 @@ class SpecFriendlyWebServer
       @server = Puma::Server.new(app, Puma::Events.stdio)
       @server.add_tcp_listener(bind_address, port)
       Thread.new do
-        begin
-          @server.run
-        rescue
-          $stderr.puts "Unexpected server error: #{$ERROR_INFO.message}"
-          exit! 1
-        end
+        @server.run
+      rescue
+        warn "Unexpected server error: #{$ERROR_INFO.message}"
+        exit! 1
       end
     rescue Errno::EADDRINUSE, Errno::EACCES
       raise SeleniumDriverSetup::ServerStartupError, $ERROR_INFO.message
@@ -51,7 +51,7 @@ class SpecFriendlyWebServer
       max_time = Time.zone.now + timeout
       while Time.zone.now < max_time
         response = HTTParty.get("http://#{bind_address}:#{port}/health_check") rescue nil
-        if response && response.success?
+        if response&.success?
           SeleniumDriverSetup.disallow_requests!
           puts " Done!"
           return
@@ -60,12 +60,12 @@ class SpecFriendlyWebServer
         sleep 1
       end
       puts "Failed!"
-      $stderr.puts "unable to start web server within #{timeout} seconds!"
+      warn "unable to start web server within #{timeout} seconds!"
       raise SeleniumDriverSetup::ServerStartupError # we'll rescue and retry on a new port
     end
 
     def shutdown
-      @server.stop if @server
+      @server&.stop
       @server = nil
     end
   end

@@ -1,4 +1,5 @@
-# coding: utf-8
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -17,14 +18,13 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper.rb')
-require 'delayed/testing'
+require "delayed/testing"
 
 describe BrandConfigHelpers do
   def setup_account_family_with_configs
     @parent_account = Account.default
     @parent_config = BrandConfig.for(
-      variables: {"ic-brand-primary" => "red"},
+      variables: { "ic-brand-primary" => "red" },
       js_overrides: nil,
       css_overrides: nil,
       mobile_js_overrides: nil,
@@ -35,9 +35,9 @@ describe BrandConfigHelpers do
     @parent_account.brand_config_md5 = @parent_config.md5
     @parent_account.save!
 
-    @child_account = Account.create!(:parent_account => @parent_account)
+    @child_account = Account.create!(parent_account: @parent_account)
     @child_config = BrandConfig.for(
-      variables: {"ic-brand-global-nav-bgd" => "white"},
+      variables: { "ic-brand-global-nav-bgd" => "white" },
       parent_md5: @parent_config.md5,
       js_overrides: nil,
       css_overrides: nil,
@@ -48,9 +48,9 @@ describe BrandConfigHelpers do
     @child_account.brand_config_md5 = @child_config.md5
     @child_account.save!
 
-    @grand_child_account = Account.create!(:parent_account => @child_account)
+    @grand_child_account = Account.create!(parent_account: @child_account)
     @grand_child_config = BrandConfig.for(
-      variables: {"ic-brand-global-nav-avatar-border" => "blue"},
+      variables: { "ic-brand-global-nav-avatar-border" => "blue" },
       parent_md5: @child_config.md5,
       js_overrides: nil,
       css_overrides: nil,
@@ -67,22 +67,22 @@ describe BrandConfigHelpers do
       setup_account_family_with_configs
     end
 
-    it "should return nill without a parent" do
+    it "returns nill without a parent" do
       expect(@parent_account.first_parent_brand_config).to be_nil
     end
 
-    it "should work when parent is a root account" do
+    it "works when parent is a root account" do
       expect(@child_account.first_parent_brand_config).to eq @parent_config
     end
 
-    it "should work when parent is a not root account" do
+    it "works when parent is a not root account" do
       expect(@grand_child_account.first_parent_brand_config).to eq @child_config
     end
 
-    it "should work with site_admin" do
-      site_admin_config = BrandConfig.for(variables: {"ic-brand-primary" => "orange"})
+    it "works with site_admin" do
+      site_admin_config = BrandConfig.for(variables: { "ic-brand-primary" => "orange" })
       site_admin_config.save!
-      regenerator = BrandConfigRegenerator.new(Account.site_admin, user_factory, site_admin_config)
+      BrandConfigRegenerator.process(Account.site_admin, user_factory, site_admin_config)
 
       Delayed::Testing.drain
 

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -16,16 +18,16 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'net/pop'
-require File.expand_path('../configurable_timeout', __FILE__)
-require 'zlib'
+require "net/pop"
+require "zlib"
+
+require_relative "configurable_timeout"
 
 module IncomingMailProcessor
-
   class Pop3Mailbox
     include ConfigurableTimeout
 
-    UsedPopMethods = [:start, :mails, :finish]
+    UsedPopMethods = %i[start mails finish].freeze
 
     attr_accessor :server, :port, :ssl, :username, :password
 
@@ -40,19 +42,20 @@ module IncomingMailProcessor
     def connect
       @pop = with_timeout { Net::POP3.new(server, port) }
       wrap_with_timeout(@pop, UsedPopMethods)
-      @pop.enable_ssl(OpenSSL::SSL::VERIFY_NONE) if ssl
+      @pop.enable_ssl(OpenSSL::SSL::VERIFY_PEER) if ssl
       @pop.start(username, password)
     end
 
     def disconnect
       @pop.finish
     rescue
+      nil
     end
 
-    def each_message(opts={})
+    def each_message(opts = {})
       mails = @pop.mails
-      # note that stride and offset require the pop server to support the optional UIDL command
-      mails = mails.select{|mail| Zlib.crc32(with_timeout {mail.uidl}) % opts[:stride] == opts[:offset]} if opts[:stride] && opts[:offset]
+      # NOTE: stride and offset require the pop server to support the optional UIDL command
+      mails = mails.select { |mail| Zlib.crc32(with_timeout { mail.uidl }) % opts[:stride] == opts[:offset] } if opts[:stride] && opts[:offset]
       mails.each do |message|
         yield message, message.pop
       end
@@ -62,7 +65,7 @@ module IncomingMailProcessor
       with_timeout { pop_message.delete }
     end
 
-    def move_message(pop_message, target_folder)
+    def move_message(pop_message, _target_folder)
       # pop can't do this -- just delete the message
       delete_message(pop_message)
     end

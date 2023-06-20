@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -16,24 +18,24 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + "/../../spec_helper")
 require_relative "../graphql_spec_helper"
+require_relative "./shared_examples/types_with_enumerable_workflow_states"
 
 describe Types::AssignmentType do
   let_once(:course) { course_factory(active_all: true) }
 
-  let_once(:teacher) { teacher_in_course(active_all: true, course: course).user }
-  let_once(:student) { student_in_course(course: course, active_all: true).user }
+  let_once(:teacher) { teacher_in_course(active_all: true, course:).user }
+  let_once(:student) { student_in_course(course:, active_all: true).user }
 
   let(:assignment) do
     course.assignments.create(title: "some assignment",
                               submission_types: ["online_text_entry"],
                               workflow_state: "published",
-                              allowed_extensions: ["doc", "xlt", "foo"])
+                              allowed_extensions: %w[doc xlt foo])
   end
 
   let(:assignment_type) { GraphQLTypeTester.new(assignment, current_user: student) }
-
+  let(:teacher_assignment_type) { GraphQLTypeTester.new(assignment, current_user: teacher) }
 
   it "works" do
     expect(assignment_type.resolve("_id")).to eq assignment.id.to_s
@@ -41,16 +43,26 @@ describe Types::AssignmentType do
     expect(assignment_type.resolve("state")).to eq assignment.workflow_state
     expect(assignment_type.resolve("onlyVisibleToOverrides")).to eq assignment.only_visible_to_overrides
     expect(assignment_type.resolve("assignmentGroup { _id }")).to eq assignment.assignment_group.id.to_s
-    expect(assignment_type.resolve("muted")).to eq assignment.muted?
     expect(assignment_type.resolve("allowedExtensions")).to eq assignment.allowed_extensions
     expect(assignment_type.resolve("createdAt").to_datetime).to eq assignment.created_at.to_s.to_datetime
     expect(assignment_type.resolve("updatedAt").to_datetime).to eq assignment.updated_at.to_s.to_datetime
     expect(assignment_type.resolve("gradeGroupStudentsIndividually")).to eq assignment.grade_group_students_individually
+    expect(assignment_type.resolve("originalityReportVisibility")).to eq assignment.turnitin_settings[:originality_report_visibility]
     expect(assignment_type.resolve("anonymousGrading")).to eq assignment.anonymous_grading
     expect(assignment_type.resolve("omitFromFinalGrade")).to eq assignment.omit_from_final_grade
     expect(assignment_type.resolve("anonymousInstructorAnnotations")).to eq assignment.anonymous_instructor_annotations
     expect(assignment_type.resolve("postToSis")).to eq assignment.post_to_sis
     expect(assignment_type.resolve("canUnpublish")).to eq assignment.can_unpublish?
+    expect(assignment_type.resolve("courseId")).to eq assignment.context_id.to_s
+    expect(assignment_type.resolve("gradesPublished")).to eq assignment.grades_published?
+    expect(assignment_type.resolve("moderatedGradingEnabled")).to eq assignment.moderated_grading?
+    expect(assignment_type.resolve("postManually")).to eq assignment.post_manually?
+    expect(assignment_type.resolve("published")).to eq assignment.published?
+  end
+
+  it_behaves_like "types with enumerable workflow states" do
+    let(:enum_class) { Types::AssignmentType::AssignmentStateType }
+    let(:model_class) { Assignment }
   end
 
   context "top-level permissions" do
@@ -62,23 +74,66 @@ describe Types::AssignmentType do
 
       # assignment
       expect(
-        CanvasSchema.execute(<<~GQL, context: {current_user: student}).dig("data", "assignment")
-          query { assignment(id: "#{assignment.id.to_s}") { id } }
+        CanvasSchema.execute(<<~GQL, context: { current_user: student }).dig("data", "assignment")
+          query { assignment(id: "#{assignment.id}") { id } }
+        GQL
+      ).to be_nil
+    end
+  end
+
+  context "sis field" do
+    let_once(:sis_assignment) do
+      assignment.update!(sis_source_id: "sisAssignment")
+      assignment
+    end
+
+    let(:admin) { account_admin_user_with_role_changes(role_changes: { read_sis: false }) }
+
+    it "returns sis_id if you have read_sis permissions" do
+      expect(
+        CanvasSchema.execute(<<~GQL, context: { current_user: teacher }).dig("data", "assignment", "sisId")
+          query { assignment(id: "#{sis_assignment.id}") { sisId } }
+        GQL
+      ).to eq("sisAssignment")
+    end
+
+    it "returns sis_id if you have manage_sis permissions" do
+      expect(
+        CanvasSchema.execute(<<~GQL, context: { current_user: admin }).dig("data", "assignment", "sisId")
+          query { assignment(id: "#{sis_assignment.id}") { sisId } }
+        GQL
+      ).to eq("sisAssignment")
+    end
+
+    it "doesn't return sis_id if you don't have read_sis or management_sis permissions" do
+      expect(
+        CanvasSchema.execute(<<~GQL, context: { current_user: student }).dig("data", "assignment", "sisId")
+          query { assignment(id: "#{sis_assignment.id}") { sisId } }
         GQL
       ).to be_nil
     end
   end
 
   it "works with rubric" do
-    rubric = Rubric.create!(title: 'hi', context: course)
-    assignment.build_rubric_association(:rubric => rubric,
-                                         :purpose => 'grading',
-                                         :use_for_grading => true,
-                                         :context => course)
-    assignment.rubric_association.save!
-    expect(assignment_type.resolve("rubric { _id }")).to eq rubric.id.to_s
-    expect(assignment_type.resolve("rubric { freeFormCriterionComments }")).to eq assignment.rubric.free_form_criterion_comments
-    expect(assignment_type.resolve("rubric { freeFormCriterionComments }")).to eq rubric.free_form_criterion_comments
+    rubric_for_course
+    rubric_association_model(context: course, rubric: @rubric, association_object: assignment, purpose: "grading")
+    expect(assignment_type.resolve("rubric { _id }")).to eq @rubric.id.to_s
+  end
+
+  describe "rubric association" do
+    before do
+      rubric_for_course
+      rubric_association_model(context: course, rubric: @rubric, association_object: assignment, purpose: "grading")
+    end
+
+    it "is returned if an association exists and is active" do
+      expect(assignment_type.resolve("rubricAssociation { _id }")).to eq @rubric_association.id.to_s
+    end
+
+    it "is not returned if the association is soft-deleted" do
+      @rubric_association.destroy!
+      expect(assignment_type.resolve("rubricAssociation { _id }")).to be_nil
+    end
   end
 
   it "works with moderated grading" do
@@ -86,7 +141,7 @@ describe Types::AssignmentType do
     assignment.grader_count = 1
     assignment.final_grader_id = teacher.id
     assignment.save!
-    assignment.update_attributes final_grader_id: teacher.id
+    assignment.update final_grader_id: teacher.id
     expect(assignment_type.resolve("moderatedGrading { enabled }")).to eq assignment.moderated_grading
     expect(assignment_type.resolve("moderatedGrading { finalGrader { _id } }")).to eq teacher.id.to_s
     expect(assignment_type.resolve("moderatedGrading { gradersAnonymousToGraders }")).to eq assignment.graders_anonymous_to_graders
@@ -106,6 +161,27 @@ describe Types::AssignmentType do
     expect(assignment_type.resolve("peerReviews { automaticReviews }")).to eq assignment.automatic_peer_reviews
   end
 
+  it "returns assessment requests for the current user" do
+    student2 = student_in_course(course:, name: "Matthew Lemon", active_all: true).user
+    student3 = student_in_course(course:, name: "Rob Orton", active_all: true).user
+
+    assignment.assign_peer_review(student, student2)
+    assignment.assign_peer_review(student2, student3)
+    assignment.assign_peer_review(student3, student)
+
+    result = assignment_type.resolve("assessmentRequestsForCurrentUser { user { name } }")
+    expect(result.count).to eq 1
+    expect(result[0]).to eq student2.name
+
+    result = GraphQLTypeTester.new(assignment, current_user: student2).resolve("assessmentRequestsForCurrentUser { user { name } }")
+    expect(result.count).to eq 1
+    expect(result[0]).to eq student3.name
+
+    result = GraphQLTypeTester.new(assignment, current_user: student3).resolve("assessmentRequestsForCurrentUser { user { name } }")
+    expect(result.count).to eq 1
+    expect(result[0]).to eq student.name
+  end
+
   it "works with timezone stuffs" do
     assignment.time_zone_edited = "Mountain Time (US & Canada)"
     assignment.save!
@@ -113,7 +189,7 @@ describe Types::AssignmentType do
   end
 
   it "returns needsGradingCount" do
-    assignment.submit_homework(student, {:body => "so cool", :submission_type => "online_text_entry"})
+    assignment.submit_homework(student, { body: "so cool", submission_type: "online_text_entry" })
     expect(assignment_type.resolve("needsGradingCount", current_user: teacher)).to eq 1
   end
 
@@ -125,20 +201,20 @@ describe Types::AssignmentType do
 
   context "description" do
     before do
-      assignment.update_attributes description: %|Hi <img src="/courses/#{course.id}/files/12/download"<h1>Content</h1>|
+      assignment.update description: %(Hi <img src="/courses/#{course.id}/files/12/download"<h1>Content</h1>)
     end
 
     it "includes description when lock settings allow" do
-      expect_any_instance_of(Assignment).
-        to receive(:low_level_locked_for?).
-        and_return(can_view: true)
+      expect_any_instance_of(Assignment)
+        .to receive(:low_level_locked_for?)
+        .and_return(can_view: true)
       expect(assignment_type.resolve("description", request: ActionDispatch::TestRequest.create)).to include "Content"
     end
 
     it "returns null when not allowed" do
-      expect_any_instance_of(Assignment).
-        to receive(:low_level_locked_for?).
-        and_return(can_view: false)
+      expect_any_instance_of(Assignment)
+        .to receive(:low_level_locked_for?)
+        .and_return(can_view: false)
       expect(assignment_type.resolve("description", request: ActionDispatch::TestRequest.create)).to be_nil
     end
 
@@ -161,23 +237,23 @@ describe Types::AssignmentType do
   end
 
   it "returns nil when allowed_attempts is unset" do
-    expect(assignment_type.resolve("allowedAttempts")).to eq nil
+    expect(assignment_type.resolve("allowedAttempts")).to be_nil
   end
 
   it "returns nil when allowed_attempts is an invalid non-positive value" do
-    assignment.update_attributes allowed_attempts: 0
-    expect(assignment_type.resolve("allowedAttempts")).to eq nil
-    assignment.update_attributes allowed_attempts: -1
-    expect(assignment_type.resolve("allowedAttempts")).to eq nil
+    assignment.update allowed_attempts: 0
+    expect(assignment_type.resolve("allowedAttempts")).to be_nil
+    assignment.update allowed_attempts: -1
+    expect(assignment_type.resolve("allowedAttempts")).to be_nil
   end
 
   it "returns allowed_attempts value set on the assignment" do
-    assignment.update_attributes allowed_attempts: 7
+    assignment.update allowed_attempts: 7
     expect(assignment_type.resolve("allowedAttempts")).to eq 7
   end
 
   describe "submissionsConnection" do
-    let_once(:other_student) { student_in_course(course: course, active_all: true).user }
+    let_once(:other_student) { student_in_course(course:, active_all: true).user }
 
     # This is kind of a catch-all test the assignment.submissionsConnection
     # graphql plumbing. The submission search specs handle testing the
@@ -192,30 +268,32 @@ describe Types::AssignmentType do
             states: submitted,
             sectionIds: 42,
             enrollmentTypes: StudentEnrollment,
-            userSearch: foo,
+            userSearch: "foo",
             scoredLessThan: 3
             scoredMoreThan: 1
+            gradingStatus: needs_grading
           }
           orderBy: {field: username, direction: descending}
         ) { nodes { _id } }
       GQL
       expect(SubmissionSearch).to have_received(:new).with(assignment, teacher, nil, {
-        states: ["submitted"],
-        section_ids: ["42"],
-        enrollment_types: ["StudentEnrollment"],
-        user_search: 'foo',
-        scored_less_than: 3.0,
-        scored_more_than: 1.0,
-        order_by: [{
-          field: "username",
-          direction: "descending"
-        }]
-      })
+                                                             states: ["submitted"],
+                                                             section_ids: ["42"],
+                                                             enrollment_types: ["StudentEnrollment"],
+                                                             user_search: "foo",
+                                                             scored_less_than: 3.0,
+                                                             scored_more_than: 1.0,
+                                                             grading_status: :needs_grading,
+                                                             order_by: [{
+                                                               field: "username",
+                                                               direction: "descending"
+                                                             }]
+                                                           })
     end
 
     it "returns 'real' submissions from with permissions" do
-      submission1 = assignment.submit_homework(student, {:body => "sub1", :submission_type => "online_text_entry"})
-      submission2 = assignment.submit_homework(other_student, {:body => "sub1", :submission_type => "online_text_entry"})
+      submission1 = assignment.submit_homework(student, { body: "sub1", submission_type: "online_text_entry" })
+      submission2 = assignment.submit_homework(other_student, { body: "sub1", submission_type: "online_text_entry" })
 
       expect(
         assignment_type.resolve(
@@ -271,11 +349,11 @@ describe Types::AssignmentType do
       let(:section2) { course.course_sections.create! }
       let(:teacher) { course.enroll_user(User.create!, "TeacherEnrollment", enrollment_state: "active").user }
 
-      before(:each) do
+      before do
         section1_student = section1.enroll_user(User.create!, "StudentEnrollment", "active").user
         section2_student = section2.enroll_user(User.create!, "StudentEnrollment", "active").user
         @section1_student_submission = assignment.submit_homework(section1_student, body: "hello world")
-        assignment.submit_homework(section2_student, body: "hello universe")
+        @section2_student_submission = assignment.submit_homework(section2_student, body: "hello universe")
       end
 
       it "returns submissions only for the given section" do
@@ -286,19 +364,102 @@ describe Types::AssignmentType do
         GQL
         expect(section1_submission_ids.map(&:to_i)).to contain_exactly(@section1_student_submission.id)
       end
+
+      it "respects visibility for limited teachers" do
+        teacher.enrollments.first.update! course_section: section2,
+                                          limit_privileges_to_course_section: true
+
+        submissions = assignment_type.resolve(<<~GQL, current_user: teacher)
+          submissionsConnection { nodes { _id } }
+        GQL
+
+        expect(submissions).not_to include @section1_student_submission.id.to_s
+        expect(submissions).to include @section2_student_submission.id.to_s
+      end
+    end
+  end
+
+  describe "groupSubmissionConnection" do
+    before(:once) do
+      course_with_teacher
+      assignment_model(group_category: "GROUPS!")
+      @group_category.create_groups(2)
+      2.times do
+        student_in_course
+        @group_category.groups.first.add_user(@user)
+      end
+      2.times do
+        student_in_course
+        @group_category.groups.last.add_user(@user)
+      end
+      @assignment.submit_homework(@group_category.groups.first.users.first, body: "Submit!")
+      @assignment.submit_homework(@group_category.groups.last.users.first, body: "Submit!")
+
+      @assignment_type = GraphQLTypeTester.new(@assignment, current_user: @teacher)
+    end
+
+    it "plumbs through filter options to SubmissionSearch" do
+      allow(SubmissionSearch).to receive(:new).and_call_original
+      @assignment_type.resolve(<<~GQL, current_user: @teacher)
+        groupSubmissionsConnection(
+          filter: {
+            states: submitted,
+            sectionIds: 42,
+            enrollmentTypes: StudentEnrollment,
+            userSearch: "foo",
+            scoredLessThan: 3
+            scoredMoreThan: 1
+            gradingStatus: needs_grading
+          }
+        ) { nodes { _id } }
+      GQL
+      expect(SubmissionSearch).to have_received(:new).with(@assignment, @teacher, nil, {
+                                                             states: ["submitted"],
+                                                             section_ids: ["42"],
+                                                             enrollment_types: ["StudentEnrollment"],
+                                                             user_search: "foo",
+                                                             scored_less_than: 3.0,
+                                                             scored_more_than: 1.0,
+                                                             grading_status: :needs_grading,
+                                                             order_by: []
+                                                           })
+    end
+
+    it "returns nil if not a group assignment" do
+      assignment = @course.assignments.create!
+      type = GraphQLTypeTester.new(assignment, current_user: @teacher)
+      result = type.resolve(<<~GQL, current_user: @teacher)
+        groupSubmissionsConnection {
+          edges { node { _id } }
+        }
+      GQL
+      expect(result).to be_nil
+    end
+
+    it "returns submissions grouped up" do
+      result = @assignment_type.resolve(<<~GQL, current_user: @teacher)
+        groupSubmissionsConnection(
+          filter: {
+            states: submitted
+          }
+        ) {
+          edges { node { _id } }
+        }
+      GQL
+      expect(result.count).to eq 2
     end
   end
 
   xit "validate assignment 404 return correctly with override instrumenter (ADMIN-2407)" do
-    result = CanvasSchema.execute(<<~GQL, context: {current_user: @teacher})
+    result = CanvasSchema.execute(<<~GQL, context: { current_user: @teacher })
       query {
         assignment(id: "987654321") {
           _id dueAt lockAt unlockAt
         }
       }
     GQL
-    expect(result.dig('errors')).to be_nil
-    expect(result.dig('data', 'assignment')).to be_nil
+    expect(result["errors"]).to be_nil
+    expect(result.dig("data", "assignment")).to be_nil
   end
 
   it "can access it's parent course" do
@@ -310,10 +471,10 @@ describe Types::AssignmentType do
   end
 
   it "has modules" do
-    module1 = assignment.course.context_modules.create!(name: 'Module 1')
-    module2 = assignment.course.context_modules.create!(name: 'Module 2')
-    assignment.context_module_tags.create!(context_module: module1, context: assignment.course, tag_type: 'context_module')
-    assignment.context_module_tags.create!(context_module: module2, context: assignment.course, tag_type: 'context_module')
+    module1 = assignment.course.context_modules.create!(name: "Module 1")
+    module2 = assignment.course.context_modules.create!(name: "Module 2")
+    assignment.context_module_tags.create!(context_module: module1, context: assignment.course, tag_type: "context_module")
+    assignment.context_module_tags.create!(context_module: module2, context: assignment.course, tag_type: "context_module")
     expect(assignment_type.resolve("modules { _id }").to_set).to eq [module1.id.to_s, module2.id.to_s].to_set
   end
 
@@ -390,8 +551,8 @@ describe Types::AssignmentType do
     it "works for groups" do
       gc = assignment.group_category = GroupCategory.create! name: "asdf", context: course
       group = gc.groups.create! name: "group", context: course
-      assignment.update_attributes group_category: gc
-      group_override = assignment.assignment_overrides.create!(set: group)
+      assignment.update group_category: gc
+      assignment.assignment_overrides.create!(set: group)
       expect(
         assignment_type.resolve(<<~GQL, current_user: teacher)
           assignmentOverrides { edges { node { set {
@@ -405,7 +566,7 @@ describe Types::AssignmentType do
 
     it "works for sections" do
       section = course.course_sections.create! name: "section"
-      section_override = assignment.assignment_overrides.create!(set: section)
+      assignment.assignment_overrides.create!(set: section)
       expect(
         assignment_type.resolve(<<~GQL, current_user: teacher)
           assignmentOverrides { edges { node { set {
@@ -420,7 +581,7 @@ describe Types::AssignmentType do
     it "works for adhoc students" do
       adhoc_override = assignment.assignment_overrides.new(set_type: "ADHOC")
       adhoc_override.assignment_override_students.build(
-        assignment: assignment,
+        assignment:,
         user: student,
         assignment_override: adhoc_override
       )
@@ -438,24 +599,40 @@ describe Types::AssignmentType do
         GQL
       ).to eq [[student.id.to_s]]
     end
+
+    it "works for Noop tags" do
+      account = course.account
+      account.settings[:conditional_release] = { value: true }
+      account.save!
+      assignment.assignment_overrides.create!(set_type: "Noop", set_id: 555)
+      expect(
+        assignment_type.resolve(<<~GQL, current_user: teacher)
+          assignmentOverrides { edges { node { set {
+            ... on Noop {
+              _id
+            }
+          } } } }
+        GQL
+      ).to eq ["555"]
+    end
   end
 
   describe Types::LockInfoType do
     it "works when lock_info is false" do
       expect(
         assignment_type.resolve("lockInfo { isLocked }")
-      ).to eq false
+      ).to be false
 
-      %i[lockAt unlockAt canView].each { |field|
+      %i[lockAt unlockAt canView].each do |field|
         expect(
           assignment_type.resolve("lockInfo { #{field} }")
-        ).to eq nil
-      }
+        ).to be_nil
+      end
     end
 
     it "works when lock_info is a hash" do
-      assignment.update_attributes! unlock_at: 1.month.from_now
-      expect(assignment_type.resolve("lockInfo { isLocked }")).to eq true
+      assignment.update! unlock_at: 1.month.from_now
+      expect(assignment_type.resolve("lockInfo { isLocked }")).to be true
     end
   end
 
@@ -479,7 +656,54 @@ describe Types::AssignmentType do
 
       it "returns null in place of the PostPolicy" do
         resolver = GraphQLTypeTester.new(assignment, context)
-        expect(resolver.resolve("postPolicy {_id}")).to be nil
+        expect(resolver.resolve("postPolicy {_id}")).to be_nil
+      end
+    end
+  end
+
+  describe "restrictQuantitativeData" do
+    it "returns false when restrictQuantitativeData is off" do
+      expect(
+        assignment_type.resolve("restrictQuantitativeData")
+      ).to be false
+    end
+
+    context "when RQD is enabled" do
+      before :once do
+        # truthy feature flag
+        Account.default.enable_feature! :restrict_quantitative_data
+
+        # truthy setting
+        Account.default.settings[:restrict_quantitative_data] = { value: true, locked: true }
+        Account.default.save!
+      end
+
+      context "default RQD state" do
+        it "returns true for student" do
+          expect(
+            assignment_type.resolve("restrictQuantitativeData")
+          ).to be true
+        end
+
+        it "returns true for teacher" do
+          expect(
+            teacher_assignment_type.resolve("restrictQuantitativeData")
+          ).to be true
+        end
+      end
+
+      context "checkExtraPermissions RQD state" do
+        it "returns true for student" do
+          expect(
+            assignment_type.resolve("restrictQuantitativeData(checkExtraPermissions: true)")
+          ).to be true
+        end
+
+        it "returns false for teacher" do
+          expect(
+            teacher_assignment_type.resolve("restrictQuantitativeData(checkExtraPermissions: true)")
+          ).to be false
+        end
       end
     end
   end

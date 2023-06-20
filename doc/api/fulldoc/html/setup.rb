@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 Instructure, Inc.
 #
@@ -16,16 +18,17 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-$LOAD_PATH.unshift(File.join(File.dirname(__FILE__), 'swagger'))
-$LOAD_PATH.unshift(File.join(File.dirname(__FILE__), 'api_scopes'))
-require 'controller_list_view'
-require 'api_scope_mapping_writer'
+$LOAD_PATH.unshift(File.join(File.dirname(__FILE__), "swagger"))
+$LOAD_PATH.unshift(File.join(File.dirname(__FILE__), "api_scopes"))
+require "controller_list_view"
+require "api_scope_mapping_writer"
+
+Rails.root.glob("doc/api/data_services/*.rb").sort.each { |file| require file }
 
 include Helpers::ModuleHelper
 include Helpers::FilterHelper
 
 module YARD::Templates::Helpers::BaseHelper
-
   def linkify_with_api(*args)
     # References to controller actions
     #
@@ -40,13 +43,13 @@ module YARD::Templates::Helpers::BaseHelper
     #   # => <a href="assignments.html#method.assignments_api.destroy">destruction</a>
     #
     # @note Action links inside the All Resources section will be relative.
-    if args.first.is_a?(String) && args.first =~ %r{^api:([^#]+)#(.*)}
+    if args.first.is_a?(String) && args.first =~ /^api:([^#]+)#(.*)/
       topic, controller = *lookup_topic($1.to_s)
       if topic
         html_file = "#{topicize topic.first}.html"
         action = $2
         name = controller.name.to_s
-        name = "#{controller.namespace.name.to_s}/#{name}" if controller.namespace.name != :root
+        name = "#{controller.namespace.name}/#{name}" if controller.namespace.name != :root
         link_url("#{html_file}#method.#{topicize(name).sub("_controller", "")}.#{action}", args[1])
       else
         raise "couldn't find API link for #{args.first}"
@@ -63,24 +66,24 @@ module YARD::Templates::Helpers::BaseHelper
     # @example Explicit resource reference with an overriden title
     #   # @return api:Assignments:AssignmentOverride An Assignment Override
     #   # => <a href="assignments.html#Assignment">An Assignment Override</a>
-    elsif args.first.is_a?(String) && args.first =~ %r{^api:([^:]+):(.*)}
-      scope_name, resource_name = $1.downcase, $2.gsub('+', ' ')
+    elsif args.first.is_a?(String) && args.first =~ /^api:([^:]+):(.*)/
+      scope_name, resource_name = $1.downcase, $2.tr("+", " ")
       link_url("#{scope_name}.html##{resource_name}", args[1] || resource_name)
-    elsif args.first.is_a?(String) && args.first == 'Appendix:' && args.size > 1
-      __errmsg = "unable to locate referenced appendix '#{args[1]}'"
+    elsif args.first.is_a?(String) && args.first == "Appendix:" && args.size > 1
+      errmsg = "unable to locate referenced appendix '#{args[1]}'"
 
-      unless appendix = lookup_appendix(args[1].to_s)
-        raise __errmsg
+      unless (appendix = lookup_appendix(args[1].to_s))
+        raise errmsg
       end
 
-      topic, controller = *lookup_topic(appendix.namespace.to_s)
+      topic, _controller = *lookup_topic(appendix.namespace.to_s)
 
       if topic
         html_file = "#{topicize topic.first}.html"
-        bookmark = "#{appendix.name.to_s.gsub(' ', '+')}-appendix"
-        ret = link_url("#{html_file}##{bookmark}", appendix.title)
+        bookmark = "#{appendix.name.to_s.tr(" ", "+")}-appendix"
+        link_url("#{html_file}##{bookmark}", appendix.title)
       else
-        raise __errmsg
+        raise errmsg
       end
 
     # A non-API link, delegate to YARD's HTML linker
@@ -94,14 +97,14 @@ module YARD::Templates::Helpers::BaseHelper
 
   def lookup_topic(controller_path)
     controller = nil
-    topic = options[:resources].find { |r,cs|
-      cs.any? { |c|
+    topic = options[:resources].find do |_r, cs|
+      cs.any? do |c|
         controller = c if c.path.to_s == controller_path
         !controller.nil?
-      }
-    }
+      end
+    end
 
-    [ topic, controller ]
+    [topic, controller]
   end
 
   def lookup_appendix(title)
@@ -125,57 +128,71 @@ module YARD::Templates::Helpers::HtmlHelper
   include CanvasAPI::Deprecatable
 
   def topicize(str)
-    str.gsub(' ', '_').underscore
+    str.tr(" ", "_").underscore
+  end
+
+  def make_api_doc_anchors(hash, options)
+    anchors = []
+    hash.each do |key, val|
+      link = url_for(key.to_s)
+      klass = []
+      klass << "current" if key == options[:object]
+      anchors << "<a class=\"#{klass.join(" ")}\" href=\"#{link}\">#{val}</a>"
+    end
+    anchors
   end
 
   def url_for_file(filename, anchor = nil)
     link = filename.filename
-    link += (anchor ? '#' + urlencode(anchor) : '')
+    link += (anchor ? "#" + urlencode(anchor) : "")
     link
   end
 
   # override yard-appendix link_appendix
   def link_appendix(ref)
-    __errmsg = "unable to locate referenced appendix '#{ref}'"
+    errmsg = "unable to locate referenced appendix '#{ref}'"
 
-    unless appendix = lookup_appendix(ref.to_s)
-      raise __errmsg
+    unless (appendix = lookup_appendix(ref.to_s))
+      raise errmsg
     end
 
-    topic, controller = *lookup_topic(appendix.namespace.to_s)
+    topic, _controller = *lookup_topic(appendix.namespace.to_s)
 
     unless topic
-      raise __errmsg
+      raise errmsg
     end
 
     html_file = "#{topicize topic.first}.html"
-    bookmark = "#{appendix.name.to_s.gsub(' ', '+')}-appendix"
+    bookmark = "#{appendix.name.to_s.tr(" ", "+")}-appendix"
     link_url("#{html_file}##{bookmark}", appendix.title)
   end
 end
 
 def init
   options[:objects] = run_verifier(options[:objects])
-  options[:resources] = options[:objects].
-    group_by { |o| o.tags('API').first.text }.
-    sort_by  { |o| o.first }
+  options[:resources] = options[:objects]
+                        .group_by { |o| o.tags("API").first.text }
+                        .sort_by  { |o| o.first.downcase }
   generate_swagger_json
+  generate_data_services_markdown_pages
   scope_writer = ApiScopeMappingWriter.new(options[:resources])
   scope_writer.generate_scope_mapper
 
   options[:page_title] = "Canvas LMS REST API Documentation"
 
   build_json_objects_map
+
   generate_assets
+
   serialize_index
-  serialize_static_pages
+  serialize_markdown_pages
 
   options.delete(:objects)
 
   options[:all_resources] = true
   options[:object] = "all_resources.html"
   Templates::Engine.with_serializer("all_resources.html", options[:serializer]) do
-    T('layout').run(options)
+    T("layout").run(options)
   end
   options.delete(:all_resources)
 
@@ -185,7 +202,7 @@ def init
 end
 
 def generate_swagger(filename, json)
-  output_dir = File.join(%w(public doc api))
+  output_dir = File.join(%w[public doc api])
   FileUtils.mkdir_p output_dir
 
   path = File.join(output_dir, filename)
@@ -196,7 +213,6 @@ end
 
 def generate_swagger_json
   api_resources = []
-  model_resources = []
   options[:resources].each do |name, controllers|
     view = ControllerListView.new(name, controllers)
     api_resources << view.swagger_reference
@@ -217,7 +233,7 @@ def serialize(object, page_title: nil)
   file_opts[:page_title] = page_title + " - " + options[:page_title] if page_title
   options[:object] = object
   Templates::Engine.with_serializer(object, options[:serializer]) do
-    T('layout').run(options.merge(file_opts))
+    T("layout").run(options.merge(file_opts))
   end
 end
 
@@ -225,23 +241,23 @@ def serialize_resource(resource, controllers)
   options[:object] = resource
   options[:controllers] = controllers
   Templates::Engine.with_serializer("#{topicize resource}.html", options[:serializer]) do
-    T('layout').run(options.merge(page_title: resource + " - " + options[:page_title]))
+    T("layout").run(options.merge(page_title: resource + " - " + options[:page_title]))
   end
   options.delete(:controllers)
 end
 
 def serialize_index
   options[:file] = "doc/api/README.md"
-  serialize('index.html')
+  serialize("index.html")
   options.delete(:file)
 end
 
 def asset(path, content)
-  options[:serializer].serialize(path, content) if options[:serializer]
+  options[:serializer]&.serialize(path, content)
 end
 
 def generate_assets
-  require 'pathname'
+  require "pathname"
   asset_root = Pathname.new(File.dirname(__FILE__))
   (Dir[asset_root + "css/**/*.css"] + Dir[asset_root + "js/**/*.js"] + [asset_root + "live.html"]).each do |file|
     file = Pathname.new(file).relative_path_from(asset_root).to_s
@@ -255,29 +271,31 @@ end
 # a redirect at the old name so people's old bookmarks don't 404
 def serialize_redirect(filename)
   path = File.join(options[:serializer].basepath, filename)
-  File.open(path, "wb") do |file|
-    file.write <<-HTML
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
-<html>
-<head>
-<title>#{options[:page_title]}</title>
-<meta http-equiv="REFRESH" content="0;url=file.#{filename}"></HEAD>
-<BODY>
-This page has moved. You will be redirected automatically, or you can <a href="file.#{filename}">click here</a> to go to the new page.
-</BODY>
-</HTML>
-HTML
-  end
+  File.binwrite(path, <<~HTML)
+    <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+    <html>
+    <head>
+    <title>#{options[:page_title]}</title>
+    <meta http-equiv="REFRESH" content="0;url=file.#{filename}"></HEAD>
+    <BODY>
+    This page has moved. You will be redirected automatically, or you can <a href="file.#{filename}">click here</a> to go to the new page.
+    </BODY>
+    </HTML>
+  HTML
 end
 
 def extract_page_title_from_markdown(file)
   File.open(file).readline
 end
 
-def serialize_static_pages
-  Dir.glob("doc/api/*.md").each do |file|
+def generate_data_services_markdown_pages
+  DataServicesMarkdownCreator.run
+end
+
+def serialize_markdown_pages
+  (Dir.glob("doc/api/*.md") + Dir.glob("doc/api/data_services/md/**/*.md")).each do |file|
     options[:file] = file
-    filename = File.split(file).last.sub(/\.md$/, '.html')
+    filename = File.split(file).last.sub(/\.md$/, ".html")
     serialize("file." + filename, page_title: extract_page_title_from_markdown(file))
     serialize_redirect(filename)
     options.delete(:file)
@@ -287,10 +305,10 @@ end
 def build_json_objects_map
   obj_map = {}
   resource_obj_list = {}
-  options[:resources].each do |r,cs|
+  options[:resources].each do |r, cs|
     cs.each do |controller|
       (controller.tags(:object) + controller.tags(:model)).each do |obj|
-        name, json = obj.text.split(%r{\n+}, 2).map(&:strip)
+        name, json = obj.text.split(/\n+/, 2).map(&:strip)
         obj_map[name] = topicize r
         resource_obj_list[r] ||= []
         resource_obj_list[r] << [name, json]

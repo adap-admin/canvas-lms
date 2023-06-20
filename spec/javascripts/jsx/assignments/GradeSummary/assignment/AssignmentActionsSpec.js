@@ -16,9 +16,9 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import * as AssignmentActions from 'jsx/assignments/GradeSummary/assignment/AssignmentActions'
-import * as AssignmentApi from 'jsx/assignments/GradeSummary/assignment/AssignmentApi'
-import configureStore from 'jsx/assignments/GradeSummary/configureStore'
+import * as AssignmentActions from 'ui/features/assignment_grade_summary/react/assignment/AssignmentActions'
+import * as AssignmentApi from 'ui/features/assignment_grade_summary/react/assignment/AssignmentApi'
+import configureStore from 'ui/features/assignment_grade_summary/react/configureStore'
 
 QUnit.module('GradeSummary AssignmentActions', suiteHooks => {
   let store
@@ -30,9 +30,9 @@ QUnit.module('GradeSummary AssignmentActions', suiteHooks => {
         gradesPublished: false,
         id: '2301',
         muted: true,
-        title: 'Example Assignment'
+        title: 'Example Assignment',
       },
-      graders: [{graderId: '1101'}, {graderId: '1102'}]
+      graders: [{graderId: '1101'}, {graderId: '1102'}],
     })
   })
 
@@ -58,7 +58,7 @@ QUnit.module('GradeSummary AssignmentActions', suiteHooks => {
 
         catch(callback) {
           rejectPromise = callback
-        }
+        },
       }
 
       sinon.stub(AssignmentApi, 'releaseGrades').callsFake((courseId, assignmentId) => {
@@ -136,7 +136,7 @@ QUnit.module('GradeSummary AssignmentActions', suiteHooks => {
 
         catch(callback) {
           rejectPromise = callback
-        }
+        },
       }
 
       sinon.stub(AssignmentApi, 'unmuteAssignment').callsFake((courseId, assignmentId) => {

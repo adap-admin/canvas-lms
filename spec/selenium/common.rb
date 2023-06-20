@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -15,20 +17,17 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
 require "nokogiri"
 require "selenium-webdriver"
-require "socket"
-require "timeout"
 require "sauce_whisk"
-require_relative 'test_setup/custom_selenium_rspec_matchers'
-require_relative 'test_setup/selenium_driver_setup'
-require_relative 'test_setup/selenium_extensions'
+require_relative "test_setup/custom_selenium_rspec_matchers"
+require_relative "test_setup/selenium_driver_setup"
+require_relative "test_setup/selenium_extensions"
 
 if ENV["TESTRAIL_RUN_ID"]
-  require 'testrailtagging'
+  require "testrailtagging"
   RSpec.configure do |config|
-    TestRailRSpecIntegration.register_rspec_integration(config,:canvas, add_formatter: false)
+    TestRailRSpecIntegration.register_rspec_integration(config, :canvas, add_formatter: false)
   end
 elsif ENV["TESTRAIL_ENTRY_RUN_ID"]
   require "testrailtagging"
@@ -37,60 +36,12 @@ elsif ENV["TESTRAIL_ENTRY_RUN_ID"]
   end
 end
 
-Dir[File.dirname(__FILE__) + '/test_setup/common_helper_methods/*.rb'].each {|file| require file }
+Dir[File.dirname(__FILE__) + "/test_setup/common_helper_methods/*.rb"].each { |file| require file }
 
-module SeleniumErrorRecovery
-  class RecoverableException < StandardError
-    extend Forwardable
-    def_delegators :@exception, :class, :message, :backtrace
-
-    def initialize(exception)
-      @exception = exception
-    end
-  end
-
-  # this gets called wherever an exception happens (example, before/after/around, each/all)
-  #
-  # the example will still fail, but if we recover successfully, subsequent
-  # specs should pass. additionally, the rerun phase will exempt this
-  # failure from the threshold, since it's not a problem with the spec
-  # per se
-  def set_exception(exception, *args)
-    exception = RecoverableException.new(exception) if maybe_recover_from_exception(exception)
-    super exception, *args
-  end
-
-  def maybe_recover_from_exception(exception)
-    case exception
-    when Errno::ENOMEM
-      # no sense trying anymore, give up and hope that other nodes pick up the slack
-      puts "Error: got `#{exception}`, aborting"
-      RSpec.world.wants_to_quit = true
-    when EOFError, Errno::ECONNREFUSED, Net::ReadTimeout
-      return false if SeleniumDriverSetup.saucelabs_test_run?
-      return false if RSpec.world.wants_to_quit
-      return false unless exception.backtrace.grep(/selenium-webdriver/).present?
-
-      puts "SELENIUM: webdriver is misbehaving.  Will try to re-initialize."
-      SeleniumDriverSetup.reset!
-      return true
-    end
-    false
-  end
-end
-RSpec::Core::Example.prepend(SeleniumErrorRecovery)
-
-if defined?(TestQueue::Runner::RSpec::LazyGroups)
-  # because test-queue's lazy loading requires this file *after* the before
-  # :suite hooks run, we can't do this in such a hook... so just do it as
-  # soon as this file is required. the TEST_ENV_NUMBER check ensures the
-  # background file loader doesn't also fire up firefox and a webserver
-  SeleniumDriverSetup.run if ENV["TEST_ENV_NUMBER"]
-else
-  RSpec.configure do |config|
-    config.before :suite do
-      SeleniumDriverSetup.run
-    end
+RSpec.configure do |config|
+  config.before :suite do
+    # For flakey spec catcher: if server and driver are already initialized, reuse instead of starting another instance
+    SeleniumDriverSetup.run unless SeleniumDriverSetup.server.present? && SeleniumDriverSetup.driver.present?
   end
 end
 
@@ -98,6 +49,7 @@ module SeleniumDependencies
   include SeleniumDriverSetup
   include OtherHelperMethods
   include CustomSeleniumActions
+  include CustomSeleniumRSpecMatchers
   include CustomAlertActions
   include CustomPageLoaders
   include CustomScreenActions
@@ -105,7 +57,17 @@ module SeleniumDependencies
   include CustomWaitMethods
   include CustomDateHelpers
   include LoginAndSessionMethods
-  include SeleniumErrorRecovery
+end
+
+# synchronize db connection methods for a modicum of thread safety
+module SynchronizeConnection
+  %w[cache_sql execute exec_cache exec_no_cache query transaction].each do |method|
+    class_eval <<~RUBY, __FILE__, __LINE__ + 1
+      def #{method}(...)                                         # def execute(...)
+        SeleniumDriverSetup.request_mutex.synchronize { super }  #   SeleniumDriverSetup.request_mutex.synchronize { super }
+      end                                                        # end
+    RUBY
+  end
 end
 
 shared_context "in-process server selenium tests" do
@@ -114,8 +76,14 @@ shared_context "in-process server selenium tests" do
   # set up so you can use rails urls helpers in your selenium tests
   include Rails.application.routes.url_helpers
 
-  prepend_before :each do
-    resize_screen_to_normal
+  prepend_before :all do
+    # building the schema is currently very slow.
+    # this ensures the schema is built before specs are run to avoid timeouts
+    CanvasSchema.graphql_definition
+  end
+
+  prepend_before do
+    resize_screen_to_standard
     SeleniumDriverSetup.allow_requests!
     driver.ready_for_interaction = false # need to `get` before we do anything selenium-y in a spec
   end
@@ -130,7 +98,7 @@ shared_context "in-process server selenium tests" do
     retry_count = 0
     begin
       default_url_options[:host] = app_host_and_port
-      close_modal_if_present { resize_screen_to_normal } unless @driver.nil?
+      close_modal_if_present { resize_screen_to_standard } unless @driver.nil?
     rescue
       if maybe_recover_from_exception($ERROR_INFO) && (retry_count += 1) < 3
         retry
@@ -140,7 +108,7 @@ shared_context "in-process server selenium tests" do
     end
   end
 
-  append_before :each do
+  append_before do
     EncryptedCookieStore.test_secret = SecureRandom.hex(64)
     enable_forgery_protection
   end
@@ -152,45 +120,36 @@ shared_context "in-process server selenium tests" do
     allow(HostUrl).to receive(:file_host).and_return(app_host_and_port)
   end
 
-  # synchronize db connection methods for a modicum of thread safety
-  module SynchronizeConnection
-    %w{execute exec_cache exec_no_cache query transaction}.each do |method|
-      class_eval <<-RUBY, __FILE__, __LINE__ + 1
-        def #{method}(*)
-          SeleniumDriverSetup.request_mutex.synchronize { super }
-        end
-      RUBY
-    end
-  end
-
   before(:all) do
     ActiveRecord::Base.connection.class.prepend(SynchronizeConnection)
   end
 
-  # tricksy tricksy. grab the current connection, and then always return the same one
-  # (even if on a different thread - i.e. the server's thread), so that it will be in
-  # the same transaction and see the same data
-  before do
-    @db_connection = ActiveRecord::Base.connection
-    @dj_connection = Delayed::Backend::ActiveRecord::Job.connection
-
-    allow(ActiveRecord::Base).to receive(:connection).and_return(@db_connection)
-    allow_any_instance_of(Switchman::ConnectionPoolProxy).to receive(:connection).and_return(@db_connection)
-    allow(Delayed::Backend::ActiveRecord::Job).to receive(:connection).and_return(@dj_connection)
-    allow(Delayed::Backend::ActiveRecord::Job::Failed).to receive(:connection).and_return(@dj_connection)
-  end
-
-  after(:each) do |example|
+  after do |example|
     begin
       clear_timers!
       # while disallow_requests! would generally get these, there's a small window
       # between the ajax request starting up and the middleware actually processing it
       wait_for_ajax_requests
-      move_mouse_to_known_position
     rescue Selenium::WebDriver::Error::WebDriverError
       # we want to ignore selenium errors when attempting to wait here
     ensure
       SeleniumDriverSetup.disallow_requests!
+    end
+
+    # we don't want to combine this into the above block to avoid x-test pollution
+    # if a previous step fails
+    begin
+      clear_local_storage
+    rescue Selenium::WebDriver::Error::WebDriverError
+      # we want to ignore selenium errors when attempting to wait here
+    end
+
+    # we don't want to combine this into the above block to avoid x-test pollution
+    # if a previous step fails
+    begin
+      driver.session_storage.clear
+    rescue Selenium::WebDriver::Error::WebDriverError
+      # we want to ignore selenium errors when attempting to wait here
     end
 
     if SeleniumDriverSetup.saucelabs_test_run?
@@ -207,24 +166,24 @@ shared_context "in-process server selenium tests" do
   end
 
   # logs everything that showed up in the browser console during selenium tests
-  after(:each) do |example|
+  after do |example|
     # safari driver and edge driver do not support driver.manage.logs
     # don't run for sauce labs smoke tests
     next if SeleniumDriverSetup.saucelabs_test_run?
 
     if example.exception
-      html = f('body').attribute('outerHTML')
-      document = Nokogiri::HTML(html)
+      html = f("body").attribute("outerHTML")
+      document = Nokogiri::HTML5(html)
       example.metadata[:page_html] = document.to_html
     end
 
-    browser_logs = driver.manage.logs.get(:browser)
+    browser_logs = driver.logs.get(:browser) rescue nil
 
     # log INSTUI deprecation warnings
     if browser_logs.present?
-      spec_file = example.file_path.sub(/.*spec\/selenium\//, '')
-      deprecations =  browser_logs.select {|l| l.message =~ /\[.*deprecated./}.map do |l|
-        ">>> #{spec_file}: \"#{example.description}\": #{driver.current_url}: #{l.message.gsub(/.*Warning/, 'Warning') }"
+      spec_file = example.file_path.sub(%r{.*spec/selenium/}, "")
+      deprecations = browser_logs.select { |l| l.message =~ /\[.*deprecated./ }.map do |l|
+        ">>> #{spec_file}: \"#{example.description}\": #{driver.current_url}: #{l.message.gsub(/.*Warning/, "Warning")}"
       end
       puts "\n", deprecations.uniq
     end
@@ -236,6 +195,9 @@ shared_context "in-process server selenium tests" do
 
       # if you run into something that doesn't make sense t
       browser_errors_we_dont_care_about = [
+        "Warning: Can't perform a React state update on an unmounted component",
+        "Replacing React-rendered children with a new root component.",
+        "A theme registry has already been initialized.",
         "Blocked attempt to show a 'beforeunload' confirmation panel for a frame that never had a user gesture since its load",
         "Error: <path> attribute d: Expected number",
         "elements with non-unique id #",
@@ -257,24 +219,36 @@ shared_context "in-process server selenium tests" do
         # COMMS-1815: Meeseeks should fix this one on the permissions page
         "Warning: [Select] The option 'All Roles' doesn't correspond to an option.",
         "Warning: [Focusable] Exactly one tabbable child is required (0 found).",
+        "Warning: [Alert] live region must have role='alert' set on page load in order to announce content",
         "[View] display style is set to 'inline'",
         "Uncaught TypeError: Failed to fetch",
         "Unexpected end of JSON input",
         "The google.com/jsapi JavaScript loader is deprecat",
         "Uncaught Error: Not Found", # for canvas-rce when no backend is set up
+        "Uncaught Error: Minified React error #188",
         "Uncaught Error: Minified React error #200", # this is coming from canvas-rce, but we should fix it
-        "Access to Font at 'http://cdnjs.cloudflare.com/ajax/libs/mathjax/"
+        "Uncaught Error: Loading chunk", # probably happens when the test ends when the browser is still loading some JS
+        "Access to Font at 'http://cdnjs.cloudflare.com/ajax/libs/mathjax/",
+        "Access to XMLHttpRequest at 'http://www.example.com/' from origin",
+        "The user aborted a request", # The server doesn't respond fast enough sometimes and requests can be aborted. For example: when a closing a dialog.
+        # Is fixed in Chrome 109, remove this once upgraded to or above Chrome 109 https://bugs.chromium.org/p/chromium/issues/detail?id=1307772
+        "Found a 'popup' attribute. If you are testing the popup API, you must enable Experimental Web Platform Features."
       ].freeze
 
       javascript_errors = browser_logs.select do |e|
         e.level == "SEVERE" &&
           e.message.present? &&
-          browser_errors_we_dont_care_about.none? {|s| e.message.include?(s)}
+          browser_errors_we_dont_care_about.none? { |s| e.message.include?(s) }
       end
 
-      if javascript_errors.present?
-        raise RuntimeError, javascript_errors.map(&:message).join("\n\n")
+      # Crystalball is going to get a few JS errors when using istanbul-instrumenter
+      if javascript_errors.present? && ENV["CRYSTALBALL_MAP"] != "1"
+        raise javascript_errors.map(&:message).join("\n\n")
       end
     end
+  end
+
+  after(:all) do
+    ENV.delete("CANVAS_CDN_HOST")
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -16,7 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 module ExternalAuthObservation
-  class Saml
+  class SAML
     attr_accessor :request, :response, :account_auth_config
 
     def initialize(account, request, response)
@@ -44,7 +46,7 @@ module ExternalAuthObservation
       private_key = AuthenticationProvider::SAML.private_key
       private_key = nil if aac.sig_alg.nil?
       SAML2::Bindings::HTTPRedirect.encode(logout_request,
-                                           private_key: private_key,
+                                           private_key:,
                                            sig_alg: aac.sig_alg)
     end
   end

@@ -19,7 +19,7 @@
 import React, {useRef} from 'react'
 import {fireEvent, render} from '@testing-library/react'
 
-import {buildImage} from '../../../../../sidebar/sources/fake'
+import {buildImage} from '../../../../../rcs/fake'
 import ImageList from '..'
 
 describe('RCE "Images" Plugin > ImageList', () => {
@@ -31,9 +31,10 @@ describe('RCE "Images" Plugin > ImageList', () => {
       images: [
         buildImage(0, 'example_1.png', 100, 200),
         buildImage(1, 'example_2.png', 101, 201),
-        buildImage(2, 'example_3.png', 102, 202)
+        buildImage(2, 'example_3.png', 102, 202),
       ],
-      onImageClick: jest.fn()
+      onImageClick: jest.fn(),
+      canvasOrigin: 'https://canvas.instructor.com',
     }
   })
 

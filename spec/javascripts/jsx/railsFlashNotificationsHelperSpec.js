@@ -16,11 +16,13 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import I18n from 'i18n!shared.flash_notices'
+import {useScope as useI18nScope} from '@canvas/i18n'
 
 import $ from 'jquery'
-import htmlEscape from 'str/htmlEscape'
-import NotificationsHelper from 'jsx/railsFlashNotificationsHelper'
+import htmlEscape from 'html-escape'
+import NotificationsHelper from '@canvas/rails-flash-notifications/jquery/helper'
+
+const I18n = useI18nScope('shared.flash_notices')
 
 let helper
 let fixtures
@@ -32,7 +34,7 @@ QUnit.module('RailsFlashNotificationsHelper#holderReady', {
   },
   teardown() {
     fixtures.innerHTML = ''
-  }
+  },
 })
 
 test('returns false if holder is initilialized without the flash message holder in the DOM', () => {
@@ -60,7 +62,7 @@ test('returns true after the holder is initialized with flash message holder in 
 QUnit.module('RailsFlashNotificationsHelper#getIconType', {
   setup() {
     helper = new NotificationsHelper()
-  }
+  },
 })
 
 test('returns check when given success', () => {
@@ -82,15 +84,15 @@ test('returns info when given any other input', () => {
 QUnit.module('RailsFlashNotificationsHelper#generateNodeHTML', {
   setup() {
     helper = new NotificationsHelper()
-  }
+  },
 })
 
 test('properly injects type, icon, and content into html', () => {
   const result = helper.generateNodeHTML('success', 'Some Data')
 
-  ok(result.search('class="ic-flash-success"') !== -1)
-  ok(result.search('class="icon-check"') !== -1)
-  ok(result.search('Some Data') !== -1)
+  notStrictEqual(result.search('ic-flash-success'), -1)
+  notStrictEqual(result.search('class="icon-check"'), -1)
+  notStrictEqual(result.search('Some Data'), -1)
 })
 
 QUnit.module('RailsFlashNotificationsHelper#createNode', {
@@ -102,7 +104,7 @@ QUnit.module('RailsFlashNotificationsHelper#createNode', {
   },
   teardown() {
     fixtures.innerHTML = ''
-  }
+  },
 })
 
 test('does not create a node before the holder is initialized', () => {
@@ -119,7 +121,8 @@ test('creates a node', () => {
 
   const holder = document.getElementById('flash_message_holder')
 
-  equal(holder.firstChild.tagName, 'LI')
+  equal(holder.firstChild.tagName, 'DIV')
+  ok(holder.firstChild.className.includes('flash-message-container'))
 })
 
 test('properly adds css options when creating a node', () => {
@@ -150,12 +153,39 @@ test('closes when the close button is clicked', () => {
   equal(holder.firstChild, null)
 })
 
+test('respects timeout parameter if ENV.flashAlertTimeout variable is not set', () => {
+  const clock = sinon.useFakeTimers()
+
+  helper.initHolder()
+  helper.createNode('success', 'Closable Alert', 11000)
+
+  clock.tick(12000)
+  const holder = document.getElementById('flash_message_holder')
+
+  equal(holder.firstChild, null)
+  clock.restore()
+})
+
+test('forces ENV.flashAlertTimeout if variable is set', () => {
+  const clock = sinon.useFakeTimers()
+  ENV.flashAlertTimeout = 86400000
+
+  helper.initHolder()
+  helper.createNode('success', 'Closable Alert', 11000)
+
+  clock.tick(12000)
+  const holder = document.getElementById('flash_message_holder')
+
+  notEqual(holder.firstChild, null)
+  clock.restore()
+})
+
 test('closes when the alert is clicked', () => {
   helper.initHolder()
   helper.createNode('success', 'Closable Alert')
 
   const holder = document.getElementById('flash_message_holder')
-  const alert = holder.getElementsByTagName('LI')
+  const alert = holder.getElementsByClassName('flash-message-container')
 
   equal(alert.length, 1)
 
@@ -178,7 +208,7 @@ QUnit.module('RailsFlashNotificationsHelper#screenreaderHolderReady', {
   },
   teardown() {
     fixtures.innerHTML = ''
-  }
+  },
 })
 
 test('returns false if screenreader holder is initialized without the screenreader message holder in the DOM', () => {
@@ -212,7 +242,7 @@ QUnit.module('RailsFlashNotificationsHelper#setScreenreaderAttributes', {
   },
   teardown() {
     fixtures.innerHTML = ''
-  }
+  },
 })
 
 test('does not apply attributes if screenreader holder is not initialized', () => {
@@ -255,7 +285,7 @@ QUnit.module('RailsFlashNotificationsHelper#resetScreenreaderAttributes', {
   },
   teardown() {
     fixtures.innerHTML = ''
-  }
+  },
 })
 
 test('does not break when the screen reader holder is not initialized', () => {
@@ -294,25 +324,25 @@ test('does not break when attributes do not exist', () => {
 QUnit.module('RailsFlashNotificationsHelper#generateScreenreaderNodeHTML', {
   setup() {
     helper = new NotificationsHelper()
-  }
+  },
 })
 
 test('properly injects content into html', () => {
   const result = helper.generateScreenreaderNodeHTML('Some Data')
 
-  ok(result.search('Some Data') !== -1)
+  notStrictEqual(result.search('Some Data'), -1)
 })
 
 test('properly includes the indication to close when given true', () => {
   const result = helper.generateScreenreaderNodeHTML('Some Data', true)
 
-  ok(result.search(htmlEscape(I18n.t('close', 'Close'))) !== -1)
+  notStrictEqual(result.search(htmlEscape(I18n.t('close', 'Close'))), -1)
 })
 
 test('properly excludes the indication to close when given false', () => {
   const result = helper.generateScreenreaderNodeHTML('Some Data', false)
 
-  ok(result.search(htmlEscape(I18n.t('close', 'Close'))) == -1)
+  equal(result.search(htmlEscape(I18n.t('close', 'Close'))), -1)
 })
 
 QUnit.module('RailsFlashNotificationsHelper#createScreenreaderNode', {
@@ -325,7 +355,7 @@ QUnit.module('RailsFlashNotificationsHelper#createScreenreaderNode', {
   },
   teardown() {
     fixtures.innerHTML = ''
-  }
+  },
 })
 
 test('creates a screenreader node', () => {
@@ -346,7 +376,7 @@ QUnit.module('RailsFlashNotificationsHelper#createScreenreaderNodeExclusive', {
   },
   teardown() {
     fixtures.innerHTML = ''
-  }
+  },
 })
 
 test('properly clears existing screenreader nodes and creates a new one', () => {
@@ -380,7 +410,7 @@ test('optionally toggles polite aria-live', () => {
 QUnit.module('RailsFlashNotificationsHelper#escapeContent', {
   setup() {
     helper = new NotificationsHelper()
-  }
+  },
 })
 
 test('returns html if content has html property', () => {

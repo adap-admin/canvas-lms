@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -21,7 +23,7 @@ module CustomDateHelpers
   # Formatted output: Mmm d, e.g. 'Jan 1'
   def format_date_for_view(date, format = nil)
     if format
-      I18n.l(date.to_date, format: format)
+      I18n.l(date.to_date, format:)
     else
       date_string(date, :no_words)
     end
@@ -34,15 +36,17 @@ module CustomDateHelpers
       "#{date} at #{time_string(time)}"
     else
       datetime_string(time, :no_words)
-    end.gsub(/ +/, ' ')
+    end.squeeze(" ")
   end
 
   def calendar_time_string(time)
-    time_string(time).sub(/m\z/, "").strip
+    time_string(time).delete_suffix("m").strip
   end
 
+  # this is for a datepicker that uses Intl.DateTimeFormat to format the field.
+  # Note this is somewhat sensitive to the formatting options being given to
+  # that browser-side formatter!
   def format_time_for_datepicker(time)
-    date = format_date_for_view(time.to_date, :medium)
-    "#{date}#{time_string(time)}"
+    I18n.l(time, format: "%b %-d, %Y, %-H:%M %p")
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -22,21 +24,25 @@ class Quizzes::QuizStatistics < ActiveRecord::Base
 
   self.table_name = :quiz_statistics
 
-  belongs_to :quiz, class_name: 'Quizzes::Quiz'
-  has_one :csv_attachment, :class_name => 'Attachment', :as => 'context',
-    :dependent => :destroy
-  has_one :progress, :as => 'context', :dependent => :destroy
+  belongs_to :quiz, class_name: "Quizzes::Quiz"
+  has_one :csv_attachment,
+          class_name: "Attachment",
+          as: "context",
+          dependent: :destroy
+  has_one :progress, as: "context", dependent: :destroy
 
-  scope :report_type, lambda { |type| where(:report_type => type) }
+  scope :report_type, ->(type) { where(report_type: type) }
 
   REPORTS = %w[student_analysis item_analysis].freeze
 
-  validates_inclusion_of :report_type, :in => REPORTS
+  validates :report_type, inclusion: { in: REPORTS }
 
   after_initialize do
     self.includes_all_versions ||= false
     self.includes_sis_ids ||= false
   end
+
+  delegate :context, to: :quiz
 
   # Test a given quiz if it's within the sanity limits for generating stats.
   # You should not generate stats for this quiz if this returns true.
@@ -47,9 +53,9 @@ class Quizzes::QuizStatistics < ActiveRecord::Base
   # still have to restart your Canvas instance for the settings to take effect.)
   def self.large_quiz?(quiz)
     (quiz.active_quiz_questions.size >
-      Setting.get('quiz_statistics_max_questions', DefaultMaxQuestions).to_i) ||
-    (quiz.quiz_submissions.size >
-      Setting.get('quiz_statistics_max_submissions', DefaultMaxSubmissions).to_i)
+      Setting.get("quiz_statistics_max_questions", DefaultMaxQuestions).to_i) ||
+      (quiz.quiz_submissions.size >
+        Setting.get("quiz_statistics_max_submissions", DefaultMaxSubmissions).to_i)
   end
 
   def report
@@ -61,13 +67,14 @@ class Quizzes::QuizStatistics < ActiveRecord::Base
   def generate_csv
     self.csv_attachment ||= begin
       attachment = build_csv_attachment(
-        content_type: 'text/csv',
+        content_type: "text/csv",
         filename: "quiz_#{report_type}_report.csv",
         display_name: t("%{quiz_title} %{quiz_type} %{report_type} Report", {
-            quiz_title: quiz.title,
-            quiz_type: quiz.readable_type,
-            report_type: readable_type
-          }) + ".csv")
+                          quiz_title: quiz.title,
+                          quiz_type: quiz.readable_type,
+                          report_type: readable_type
+                        }) + ".csv"
+      )
       Attachments::Storage.store_for_attachment(attachment, StringIO.new(report.to_csv))
       attachment.save!
       attachment
@@ -83,15 +90,15 @@ class Quizzes::QuizStatistics < ActiveRecord::Base
 
     progress.tag = self.class.name
     progress.completion = 0
-    progress.workflow_state = 'queued'
+    progress.workflow_state = "queued"
     progress.save!
 
     progress.process_job(self, :__process_csv_job, {
-      strand: csv_job_strand_id
-    })
+                           strand: csv_job_strand_id
+                         })
   end
 
-  def __process_csv_job(progress)
+  def __process_csv_job(_progress)
     generate_csv
   end
 
@@ -109,18 +116,18 @@ class Quizzes::QuizStatistics < ActiveRecord::Base
   end
 
   def abort_csv_generation
-    self.progress.destroy
-    self.reload
+    progress.destroy
+    reload
 
-    Delayed::Job.where({ strand: self.csv_job_strand_id }).destroy_all
+    Delayed::Job.where({ strand: csv_job_strand_id }).destroy_all
   end
 
   def self.csv_job_tag
-    'Quizzes::QuizStatistics#__process_csv_job'
+    "Quizzes::QuizStatistics#__process_csv_job"
   end
 
   def csv_job_strand_id
-    Shard.birth.activate { "quiz_statistics_#{quiz_id}_#{self.id}" }
+    Shard.birth.activate { "quiz_statistics_#{quiz_id}_#{id}" }
   end
 
   def update_progress(i, n)
@@ -139,9 +146,7 @@ class Quizzes::QuizStatistics < ActiveRecord::Base
     end
   end
 
-  def readable_type
-    report.readable_type
-  end
+  delegate :readable_type, to: :report
 
   set_policy do
     given do |user, session|
@@ -149,5 +154,11 @@ class Quizzes::QuizStatistics < ActiveRecord::Base
         (!includes_sis_ids || quiz.context.grants_any_right?(user, session, :read_sis, :manage_sis))
     end
     can :read
+
+    given do |user, session|
+      quiz.grants_right?(user, session, :read_statistics) &&
+        context.grants_any_right?(user, session, *RoleOverride::GRANULAR_FILE_PERMISSIONS)
+    end
+    can :manage_files
   end
 end

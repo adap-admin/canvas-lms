@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -15,47 +17,51 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require File.expand_path('../spec_helper', File.dirname( __FILE__ ))
-
 describe I18n do
-  describe '.bigeasy_locale' do
-    it 'does explicit overrides' do
-      I18n.locale = :fr
-      expect(I18n.bigeasy_locale).to eq 'fr_FR'
+  describe ".bigeasy_locale" do
+    it "does explicit overrides" do
+      I18n.with_locale(:fr) do
+        expect(I18n.bigeasy_locale).to eq "fr_FR"
+      end
     end
 
-    it 'does underscore conversion' do
-      I18n.locale = :'en-GB'
-      expect(I18n.bigeasy_locale).to eq 'en_GB'
-    end
-  end
-
-  describe '.moment_locale' do
-    it 'does explicit overrides' do
-      I18n.locale = :hy
-      expect(I18n.moment_locale).to eq 'hy-am'
-    end
-
-    it 'does lowercase conversion' do
-      I18n.locale = :'en-GB'
-      expect(I18n.moment_locale).to eq 'en-gb'
+    it "does underscore conversion" do
+      I18n.with_locale(:"en-GB") do
+        expect(I18n.bigeasy_locale).to eq "en_GB"
+      end
     end
   end
 
-  describe '.fullcalendar_locale' do
-    it 'does explicit overrides' do
-      I18n.locale = :hy
-      expect(I18n.fullcalendar_locale).to eq 'en'
+  describe ".moment_locale" do
+    it "does explicit overrides" do
+      I18n.with_locale(:hy) do
+        expect(I18n.moment_locale).to eq "hy-am"
+      end
     end
 
-    it 'does lowercase conversion' do
-      I18n.locale = :'en-GB'
-      expect(I18n.fullcalendar_locale).to eq 'en-gb'
+    it "does lowercase conversion" do
+      I18n.with_locale(:"en-GB") do
+        expect(I18n.moment_locale).to eq "en-gb"
+      end
+    end
+  end
+
+  describe ".fullcalendar_locale" do
+    it "does explicit overrides" do
+      I18n.with_locale(:hy) do
+        expect(I18n.fullcalendar_locale).to eq "en"
+      end
+    end
+
+    it "does lowercase conversion" do
+      I18n.with_locale(:"en-GB") do
+        expect(I18n.fullcalendar_locale).to eq "en-gb"
+      end
     end
   end
 
   describe ".i18nliner_scope" do
-    it "should be correct for model class and instances" do
+    it "is correct for model class and instances" do
       expect(User.i18nliner_scope.scope).to eq "user."
       expect(Group.new.i18nliner_scope.scope).to eq "group."
     end
@@ -63,19 +69,19 @@ describe I18n do
 
   describe "numbers" do
     it "formats count" do
-      expect(I18n.t({one: "1 thing", other: "%{count} things"}, {count: 1500})).to eq '1,500 things'
+      expect(I18n.t({ one: "1 thing", other: "%{count} things" }, { count: 1500 })).to eq "1,500 things"
     end
 
     it "formats interpolated numbers" do
-      expect(I18n.t("user count: %{foo}", {foo: 1500})).to eq "user count: 1,500"
+      expect(I18n.t("user count: %{foo}", { foo: 1500 })).to eq "user count: 1,500"
     end
 
     it "does not format numbery strings" do
-      expect(I18n.t("user count: %{foo}", {foo: "1500"})).to eq "user count: 1500"
+      expect(I18n.t("user count: %{foo}", { foo: "1500" })).to eq "user count: 1500"
     end
 
     it "does not mutate the options" do
-      options = {foo: 1500}
+      options = { foo: 1500 }
       I18n.t("user count: %{foo}", options)
       expect(options[:foo]).to eq 1500
     end
@@ -84,14 +90,14 @@ describe I18n do
   describe ".n" do
     before do
       format = {
-        delimiter: '_',
-        separator: ',',
+        delimiter: "_",
+        separator: ",",
         precision: 3,
-        format: '%n %'
+        format: "%n %"
       }
-      allow(I18n).to receive(:translate).with(:'number.format', anything).and_return(format)
-      allow(I18n).to receive(:translate).with(:'number.percentage.format', anything).and_return(format)
-      allow(I18n).to receive(:translate).with(:'number.precision.format', anything).and_return(format)
+      allow(I18n).to receive(:translate).with(:"number.format", anything).and_return(format)
+      allow(I18n).to receive(:translate).with(:"number.percentage.format", anything).and_return(format)
+      allow(I18n).to receive(:translate).with(:"number.precision.format", anything).and_return(format)
     end
 
     context "without precision" do

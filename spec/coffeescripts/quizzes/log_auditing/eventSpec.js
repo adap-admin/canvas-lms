@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import QuizEvent from 'compiled/quizzes/log_auditing/event'
+import QuizEvent from '@canvas/quiz-log-auditing/jquery/event'
 
 QUnit.module('Quizzes::LogAuditing::QuizEvent')
 
@@ -38,7 +38,7 @@ test('QuizEvent.fromJSON', () => {
   const descriptor = {
     client_timestamp: new Date().toJSON(),
     event_type: 'some_type',
-    event_data: {foo: 'bar'}
+    event_data: {foo: 'bar'},
   }
   const event = QuizEvent.fromJSON(descriptor)
   equal(event.recordedAt.toJSON(), descriptor.client_timestamp)

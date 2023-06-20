@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -20,20 +22,17 @@ module Canvas::Plugins::Validators::PandaPubValidator
   def self.validate(settings, plugin_setting)
     if settings.map(&:last).all?(&:blank?)
       {}
+    elsif settings.map(&:last).any?(&:blank?)
+      plugin_setting.errors.add(:base, I18n.t("canvas.plugins.errors.all_fields_required", "All fields are required"))
+      false
     else
-      if settings.map(&:last).any?(&:blank?)
-        plugin_setting.errors.add(:base, I18n.t('canvas.plugins.errors.all_fields_required', 'All fields are required'))
-        false
+      uri = URI.parse(settings[:base_url].strip) rescue nil
+      if uri
+        settings.slice(:base_url, :application_id, :key_id, :key_secret).to_h.with_indifferent_access
       else
-        uri = URI.parse(settings[:base_url].strip) rescue nil
-        if !uri
-          plugin_setting.errors.add(:base, I18n.t('canvas.plugins.errors.invalid_url', 'Invalid URL'))
-          false
-        else
-          settings.slice(:base_url, :application_id, :key_id, :key_secret).to_h.with_indifferent_access
-        end
+        plugin_setting.errors.add(:base, I18n.t("canvas.plugins.errors.invalid_url", "Invalid URL"))
+        false
       end
     end
   end
 end
-

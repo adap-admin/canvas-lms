@@ -17,8 +17,8 @@
  */
 
 import $ from 'jquery'
-import SelectContentView from 'compiled/views/content_migrations/SelectContentView'
-import ProgressingMigration from 'compiled/models/ProgressingContentMigration'
+import SelectContentView from 'ui/features/content_migrations/backbone/views/SelectContentView'
+import ProgressingMigration from 'ui/features/content_migrations/backbone/models/ProgressingContentMigration'
 import fakeENV from 'helpers/fakeENV'
 import assertions from 'helpers/assertions'
 import 'helpers/jquery.simulate'
@@ -27,9 +27,11 @@ class SelectContentHelper {
   static initClass() {
     this.url = '/api/v1/courses/42/content_migrations/5/selective_data'
   }
+
   static $caret() {
     return this.$fixtures.find('.checkbox-caret').first()
   }
+
   static toplevelCheckboxResponse() {
     return [
       200,
@@ -38,23 +40,24 @@ class SelectContentHelper {
         {
           type: 'course_settings',
           property: 'copy[all_course_settings]',
-          title: 'Course Settings'
+          title: 'Course Settings',
         },
         {
           type: 'syllabus_body',
           property: 'copy[all_syllabus_body]',
-          title: 'Syllabus Body'
+          title: 'Syllabus Body',
         },
         {
           count: 2,
           property: 'copy[all_assignments]',
           sub_items_url: this.url + '?type=assignments',
           title: 'Assignments',
-          type: 'assignments'
-        }
-      ])
+          type: 'assignments',
+        },
+      ]),
     ]
   }
+
   static sublevelCheckboxResponse() {
     return [
       200,
@@ -70,13 +73,13 @@ class SelectContentHelper {
               type: 'assignments',
               property: 'copy[assignments][id_i1a139fc4cbf94f961973c63bd90fc1c7]',
               title: 'Assignment 1',
-              migration_id: 'i1a139fc4cbf94f961973c63bd90fc1c7'
+              migration_id: 'i1a139fc4cbf94f961973c63bd90fc1c7',
             },
             {
               type: 'assignments',
               property: 'copy[assignments][id_i7af74171d7c7207f1578328d8bbf9dae]',
               title: 'Unnamed Quiz',
-              migration_id: 'i7af74171d7c7207f1578328d8bbf9dae'
+              migration_id: 'i7af74171d7c7207f1578328d8bbf9dae',
             },
             {
               type: 'assignments',
@@ -85,12 +88,12 @@ class SelectContentHelper {
               migration_id: 'i4af043da2399a5ec221f666b38714fa8',
               linked_resource: {
                 type: 'assignments',
-                migration_id: 'i7af74171d7c7207f1578328d8bbf9dae'
-              }
-            }
-          ]
-        }
-      ])
+                migration_id: 'i7af74171d7c7207f1578328d8bbf9dae',
+              },
+            },
+          ],
+        },
+      ]),
     ]
   }
 }
@@ -103,7 +106,7 @@ QUnit.module('SelectContentView: Integration Tests', {
     this.$fixtures = $('#fixtures')
     this.model = new ProgressingMigration({
       id: 5,
-      course_id: 42
+      course_id: 42,
     })
 
     this.selectContentView = new SelectContentView({
@@ -111,7 +114,7 @@ QUnit.module('SelectContentView: Integration Tests', {
       title: 'Select Content',
       width: 600,
       height: 400,
-      fixDialogButtons: false
+      fixDialogButtons: false,
     })
 
     this.$fixtures.append(this.selectContentView.$el)
@@ -130,20 +133,20 @@ QUnit.module('SelectContentView: Integration Tests', {
     fakeENV.teardown()
     this.server.restore()
     this.selectContentView.remove()
-  }
+  },
 })
 
-test('it should be accessible', function(assert) {
+test('it should be accessible', function (assert) {
   const done = assert.async()
   return assertions.isAccessible(this.selectContentView, done, {a11yReport: true})
 })
 
-test('render top level checkboxes when opened', function() {
+test('render top level checkboxes when opened', function () {
   const $checkboxes = this.selectContentView.$el.find('[type=checkbox]')
   equal($checkboxes.length, 3, 'Renders all checkboxes')
 })
 
-test('changes parents to intermediate when not all of the sublevel checkboxes are check', function() {
+test('changes parents to intermediate when not all of the sublevel checkboxes are check', function () {
   this.server.respondWith(
     'GET',
     SelectContentHelper.url + '?type=assignments',
@@ -165,12 +168,9 @@ test('changes parents to intermediate when not all of the sublevel checkboxes ar
   ok(indeterminate || indeterminate === 'true', 'Parent changed to intermediate')
 })
 
-test('clicking the caret shows and hides checkboxes', function() {
+test('clicking the caret shows and hides checkboxes', function () {
   const $caret = this.selectContentView.$el.find('[data-type=assignments] .checkbox-caret').first()
-  const $sublevelCheckboxes = $caret
-    .closest('div')
-    .siblings('ul')
-    .first()
+  const $sublevelCheckboxes = $caret.closest('div').siblings('ul').first()
 
   equal($caret.parents('[role=treeitem]').attr('aria-expanded'), 'false')
   $caret.simulate('click')
@@ -178,7 +178,7 @@ test('clicking the caret shows and hides checkboxes', function() {
   equal($caret.parents('[role=treeitem]').attr('aria-expanded'), 'true')
 })
 
-test('checking a checkbox checks all children checkboxes', function() {
+test('checking a checkbox checks all children checkboxes', function () {
   this.server.respondWith(
     'GET',
     SelectContentHelper.url + '?type=assignments',
@@ -196,13 +196,13 @@ test('checking a checkbox checks all children checkboxes', function() {
 
   clock.tick(1)
 
-  this.selectContentView.$el.find('[data-type=assignments] input[type=checkbox]').each(function() {
+  this.selectContentView.$el.find('[data-type=assignments] input[type=checkbox]').each(function () {
     ok($(this).is(':checked'), 'checkbox is checked')
   })
   clock.restore()
 })
 
-test('checking toplevel then expanding should also check all children when they are loaded', function() {
+test('checking toplevel then expanding should also check all children when they are loaded', function () {
   this.server.respondWith(
     'GET',
     SelectContentHelper.url + '?type=assignments',
@@ -218,39 +218,33 @@ test('checking toplevel then expanding should also check all children when they 
   this.server.respond()
 
   clock.tick(1)
-  this.selectContentView.$el.find('[data-type=assignments] input[type=checkbox]').each(function() {
+  this.selectContentView.$el.find('[data-type=assignments] input[type=checkbox]').each(function () {
     ok($(this).is(':checked'), 'checkbox is checked')
   })
 
   clock.restore()
 })
 
-test('pressing the cancel button closes the dialog view', function() {
+test('pressing the cancel button closes the dialog view', function () {
   this.selectContentView.$el.find('#cancelSelect').simulate('click')
   ok(!this.selectContentView.dialog.isOpen(), 'Dialog is closed')
 })
 
-test('select content button is disabled unless content is selected', function() {
+test('select content button is disabled unless content is selected', function () {
   ok(this.selectContentView.$el.find('#selectContentBtn').prop('disabled'), 'Disabled by default')
-  this.selectContentView.$el
-    .find('input[type=checkbox]')
-    .first()
-    .simulate('click')
+  this.selectContentView.$el.find('input[type=checkbox]').first().simulate('click')
   ok(
     !this.selectContentView.$el.find('#selectContentBtn').prop('disabled'),
     'Enabled after checking item'
   )
-  this.selectContentView.$el
-    .find('input[type=checkbox]')
-    .first()
-    .simulate('click')
+  this.selectContentView.$el.find('input[type=checkbox]').first().simulate('click')
   ok(
     this.selectContentView.$el.find('#selectContentBtn').prop('disabled'),
     're-disabled if no selected'
   )
 })
 
-test('pressing the up/down arrow selects the next treeitem', function() {
+test('pressing the up/down arrow selects the next treeitem', function () {
   const downEvent = jQuery.Event('keyup', {which: 40})
   const upEvent = jQuery.Event('keyup', {which: 38})
 
@@ -267,7 +261,7 @@ test('pressing the up/down arrow selects the next treeitem', function() {
   equal($treeitems.index($currentlySelected), 0, 'pressing up moves to the first item')
 })
 
-test('pressing home/end buttons move you to the first and last treeitem', function() {
+test('pressing home/end buttons move you to the first and last treeitem', function () {
   const homeEvent = jQuery.Event('keyup', {which: 36})
   const endEvent = jQuery.Event('keyup', {which: 35})
   const $treeitems = this.selectContentView.$el.find('[role=treeitem]:visible')
@@ -285,7 +279,7 @@ test('pressing home/end buttons move you to the first and last treeitem', functi
   equal($treeitems.index($currentlySelected), 0, 'pressing the home button moves to the first item')
 })
 
-test('pressing right arrow expands', function() {
+test('pressing right arrow expands', function () {
   const rightEvent = jQuery.Event('keyup', {which: 39})
   const downEvent = jQuery.Event('keyup', {which: 40})
 
@@ -302,7 +296,7 @@ test('pressing right arrow expands', function() {
   )
 })
 
-test('aria levels are correctly represented', function() {
+test('aria levels are correctly represented', function () {
   this.server.respondWith(
     'GET',
     SelectContentHelper.url + '?type=assignments',
@@ -339,7 +333,7 @@ test('aria levels are correctly represented', function() {
   clock.restore()
 })
 
-test('active decendant is set propertly when clicking on treeitems', function() {
+test('active decendant is set propertly when clicking on treeitems', function () {
   const $tree = this.selectContentView.$el.find('[role=tree]')
   const $treeitem = this.selectContentView.$el.find('[role=treeitem]:first')
   const $treeitemHeading = this.selectContentView.$el.find(

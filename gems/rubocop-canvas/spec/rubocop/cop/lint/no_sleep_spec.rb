@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -19,18 +21,18 @@ describe RuboCop::Cop::Lint::NoSleep do
   subject(:cop) { described_class.new }
 
   context "controller" do
-    before(:each) do
+    before do
       allow(cop).to receive(:file_name).and_return("knights_controller.rb")
     end
 
-    it 'disallows sleep' do
-      inspect_source(%{
+    it "disallows sleep" do
+      inspect_source(<<~RUBY)
         class KnightsController < ApplicationController
           def find_sword
             sleep 999
           end
         end
-      })
+      RUBY
       expect(cop.offenses.size).to eq(1)
       expect(cop.messages.first).to match(/tie up this process/)
       expect(cop.offenses.first.severity.name).to eq(:error)
@@ -38,18 +40,18 @@ describe RuboCop::Cop::Lint::NoSleep do
   end
 
   context "spec" do
-    before(:each) do
+    before do
       allow(cop).to receive(:file_name).and_return("alerts_spec.rb")
     end
 
-    it 'disallows sleep' do
-      inspect_source(%{
+    it "disallows sleep" do
+      inspect_source(<<~RUBY)
         describe "Alerts" do
           it "should validate the form" do
             sleep 2
           end
         end
-      })
+      RUBY
       expect(cop.offenses.size).to eq(1)
       expect(cop.messages.first).to match(/consider: Timecop/)
       expect(cop.offenses.first.severity.name).to eq(:warning)
@@ -57,20 +59,20 @@ describe RuboCop::Cop::Lint::NoSleep do
   end
 
   context "other" do
-    before(:each) do
+    before do
       allow(cop).to receive(:file_name).and_return("bookmark_service.rb")
     end
 
-    it 'disallows sleep' do
-      inspect_source(%{
+    it "disallows sleep" do
+      inspect_source(<<~RUBY)
         class BookmarkService < UserService
           def find_bookmarks(query)
             sleep Time.now - last_get
           end
         end
-      })
+      RUBY
       expect(cop.offenses.size).to eq(1)
-      expect(cop.messages.first).to eq("Avoid using sleep.")
+      expect(cop.messages.first).to eq("Lint/NoSleep: Avoid using sleep.")
       expect(cop.offenses.first.severity.name).to eq(:warning)
     end
   end

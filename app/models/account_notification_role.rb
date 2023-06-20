@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -20,9 +22,15 @@ class AccountNotificationRole < ActiveRecord::Base
   belongs_to :account_notification
 
   belongs_to :role
-  include Role::AssociationHelper
+  before_save :resolve_cross_account_role
+
+  def resolve_cross_account_role
+    if will_save_change_to_role_id? && role.root_account_id != account_notification.account.resolved_root_account_id
+      self.role = role.role_for_root_account_id(account_notification.account.resolved_root_account_id)
+    end
+  end
 
   def role_name
-    self.role_id ? role.name : 'NilEnrollment'
+    role_id ? role.name : "NilEnrollment"
   end
 end

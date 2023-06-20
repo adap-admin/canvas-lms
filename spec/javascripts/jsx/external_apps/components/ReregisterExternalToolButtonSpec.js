@@ -19,18 +19,20 @@
 import React from 'react'
 import ReactDOM from 'react-dom'
 import {Simulate} from 'react-dom/test-utils'
-import Modal from 'react-modal'
-import ReregisterExternalToolButton from 'jsx/external_apps/components/ReregisterExternalToolButton'
-import store from 'jsx/external_apps/lib/ExternalAppsStore'
+import Modal from '@canvas/react-modal'
+import ReregisterExternalToolButton from 'ui/features/external_apps/react/components/ReregisterExternalToolButton'
+import store from 'ui/features/external_apps/react/lib/ExternalAppsStore'
 
 const wrapper = document.getElementById('fixtures')
 Modal.setAppElement(wrapper)
 
-const createElement = data => <ReregisterExternalToolButton tool={data.tool} canAddEdit returnFocus={()=>{}} />
+const createElement = data => (
+  <ReregisterExternalToolButton tool={data.tool} canAdd canAddEdit returnFocus={() => {}} />
+)
 
 const renderComponent = data => ReactDOM.render(createElement(data), wrapper)
 
-const getDOMNodes = function(data) {
+const getDOMNodes = function (data) {
   const component = renderComponent(data)
   const btnTriggerReregister = component.refs.reregisterExternalToolButton
   return [component, btnTriggerReregister]
@@ -46,8 +48,8 @@ QUnit.module('ExternalApps.ReregisterExternalToolButton', {
         enabled: true,
         installed_locally: true,
         name: 'Twitter',
-        reregistration_url: 'http://some.lti/reregister'
-      }
+        reregistration_url: 'http://some.lti/reregister',
+      },
     ]
     store.reset()
     store.setState({externalTools: this.tools})
@@ -55,10 +57,10 @@ QUnit.module('ExternalApps.ReregisterExternalToolButton', {
   teardown() {
     store.reset()
     ReactDOM.unmountComponentAtNode(wrapper)
-  }
+  },
 })
 
-test('open and close modal', function() {
+test('open and close modal', function () {
   const data = {tool: this.tools[0]}
   const [component, btnTriggerReregister] = Array.from(getDOMNodes(data))
   Simulate.click(btnTriggerReregister)

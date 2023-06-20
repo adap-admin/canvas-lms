@@ -18,7 +18,7 @@
 
 import React from 'react'
 import {mount} from 'enzyme'
-import SpeedGraderSettingsMenu from 'jsx/speed_grader/SpeedGraderSettingsMenu'
+import SpeedGraderSettingsMenu from 'ui/features/speed_grader/react/SpeedGraderSettingsMenu'
 
 QUnit.module('SpeedGraderSettingsMenu', hooks => {
   let $container
@@ -41,7 +41,7 @@ QUnit.module('SpeedGraderSettingsMenu', hooks => {
       openOptionsModal() {},
       openKeyboardShortcutsModal() {},
       showHelpMenuItem: false,
-      showModerationMenuItem: false
+      showModerationMenuItem: false,
     }
 
     $container = document.createElement('div')
@@ -89,14 +89,24 @@ QUnit.module('SpeedGraderSettingsMenu', hooks => {
     })
   })
 
-  test('includes a "Keyboard Shortcuts" menu item', () => {
+  test('includes a "Keyboard Shortcuts" menu item when keyboard shortcuts are enabled', () => {
+    props.showKeyboardShortcutsMenuItem = true
     mountComponent()
     return clickToOpenMenu().then(() => {
       ok(getMenuItem('Keyboard Shortcuts'))
     })
   })
 
+  test('does not include a "Keyboard Shortcuts" menu item when keyboard shortcuts are disabled', () => {
+    props.showKeyboardShortcutsMenuItem = false
+    mountComponent()
+    return clickToOpenMenu().then(() => {
+      notOk(getMenuItem('Keyboard Shortcuts'))
+    })
+  })
+
   test('calls the openKeyboardShortcutsModal prop when "Keyboard Shortcuts" is clicked', () => {
+    props.showKeyboardShortcutsMenuItem = true
     props.openKeyboardShortcutsModal = sinon.stub()
     mountComponent()
     return clickToOpenMenu().then(() => {

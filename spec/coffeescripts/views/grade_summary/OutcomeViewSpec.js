@@ -16,43 +16,45 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+import $ from 'jquery'
 import {isUndefined} from 'lodash'
-import Outcome from 'compiled/models/grade_summary/Outcome'
-import OutcomePopoverView from 'compiled/views/grade_summary/OutcomePopoverView'
-import OutcomeDialogView from 'compiled/views/grade_summary/OutcomeDialogView'
-import OutcomeView from 'compiled/views/grade_summary/OutcomeView'
-import ProgressBarView from 'compiled/views/grade_summary/ProgressBarView'
+import Outcome from '@canvas/grade-summary/backbone/models/Outcome'
+import OutcomePopoverView from 'ui/features/grade_summary/backbone/views/OutcomePopoverView'
+import OutcomeDialogView from 'ui/features/grade_summary/backbone/views/OutcomeDialogView'
+import OutcomeView from 'ui/features/grade_summary/backbone/views/OutcomeView'
+import ProgressBarView from 'ui/features/grade_summary/backbone/views/ProgressBarView'
 import assertions from 'helpers/assertions'
 
 QUnit.module('OutcomeViewSpec', {
   setup() {
     this.outcomeView = new OutcomeView({
       el: $('<li><a class="more-details"></a></li>'),
-      model: new Outcome()
+      model: new Outcome(),
     })
-    this.e = function(name, options = {}) {
+    this.e = function (name, options = {}) {
       return $.Event(name, {...options, currentTarget: this.outcomeView.$el.find('a.more-details')})
     }
-  }
+  },
 })
 
-test('should be accessible', function(assert) {
+// eslint-disable-next-line qunit/resolve-async
+test('should be accessible', function (assert) {
   const done = assert.async()
   assertions.isAccessible(this.outcomeView, done, {a11yReport: true})
 })
 
-test('assign instance of ProgressBarView on init', function() {
+test('assign instance of ProgressBarView on init', function () {
   ok(this.outcomeView.progress instanceof ProgressBarView)
 })
 
-test('have after render behavior', function() {
-  ok(isUndefined(this.outcomeView.popover, 'precondition'))
+test('have after render behavior', function () {
+  ok(isUndefined(this.outcomeView.popover), 'precondition')
   this.outcomeView.render()
   ok(this.outcomeView.popover instanceof OutcomePopoverView)
   ok(this.outcomeView.dialog instanceof OutcomeDialogView)
 })
 
-test('click & keydown .more-details', function() {
+test('click & keydown .more-details', function () {
   this.outcomeView.render()
   const showSpy = sandbox.stub(this.outcomeView.dialog, 'show')
   this.outcomeView.$el.find('a.more-details').trigger(this.e('click'))

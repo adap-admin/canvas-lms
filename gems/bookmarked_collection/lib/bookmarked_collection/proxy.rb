@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -30,6 +32,6 @@ class BookmarkedCollection::Proxy < PaginatedCollection::Proxy
   end
 
   def configure_pager(pager, options)
-    super pager, options.merge(:total_entries => nil)
+    super pager, options.merge(total_entries: nil)
   end
 end

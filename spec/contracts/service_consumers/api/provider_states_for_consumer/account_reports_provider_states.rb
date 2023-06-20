@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -17,43 +19,42 @@
 
 PactConfig::Consumers::ALL.each do |consumer|
   Pact.provider_states_for consumer do
-
     # Account_Admin ID: 2 || Name: Admin1
     # Account ID: 2
     # Report ID: 1
-    provider_state 'a user with many account reports' do
+    provider_state "a user with many account reports" do
       set_up do
         @account_admin = Pact::Canvas.base_state.account_admins.first
         @report = AccountReport.new
         @report.account = @account_admin.account
         @report.user = @account_admin
-        @report.progress=rand(100)
-        @report.start_at=Time.zone.now
-        @report.end_at=(Time.zone.now + rand(60*60*4)).to_datetime
+        @report.progress = rand(100)
+        @report.start_at = Time.zone.now
+        @report.end_at = (Time.zone.now + rand(60 * 60 * 4)).to_datetime
         @report.report_type = "student_assignment_outcome_map_csv"
-        @report.parameters = HashWithIndifferentAccess['param' => 'test', 'error'=>'failed']
+        @report.parameters = ActiveSupport::HashWithIndifferentAccess["param" => "test", "error" => "failed"]
         folder = Folder.assert_path("test", @account_admin.account)
         @report.attachment = Attachment.create!(
-          :folder => folder, :context => @account_admin.account, :filename => "test.txt", :uploaded_data => StringIO.new("test file")
+          folder:, context: @account_admin.account, filename: "test.txt", uploaded_data: StringIO.new("test file")
         )
         @report.save!
       end
     end
 
-    provider_state 'a user with a robust account report' do
+    provider_state "a user with a robust account report" do
       set_up do
         @account_admin = Pact::Canvas.base_state.account_admins.first
         @account_user = AccountUser.create(account: @account, user: @user)
         @report = AccountReport.new
         @report.account = @account_admin.account
         @report.user = @account_admin
-        @report.progress=rand(100)
-        @report.start_at=Time.zone.now
-        @report.end_at=(Time.zone.now + rand(60*60*4)).to_datetime
+        @report.progress = rand(100)
+        @report.start_at = Time.zone.now
+        @report.end_at = (Time.zone.now + rand(60 * 60 * 4)).to_datetime
         @report.report_type = "student_assignment_outcome_map_csv"
-        @report.parameters = HashWithIndifferentAccess['purple' => 'test', 'lovely'=>'ears']
+        @report.parameters = ActiveSupport::HashWithIndifferentAccess["purple" => "test", "lovely" => "ears"]
         folder = Folder.assert_path("test", @account_admin.account)
-        @report.attachment = Attachment.create!(:folder => folder, :context => @account_admin.account, :filename => "test.txt", :uploaded_data => StringIO.new("test file"))
+        @report.attachment = Attachment.create!(folder:, context: @account_admin.account, filename: "test.txt", uploaded_data: StringIO.new("test file"))
         @report.save!
       end
     end

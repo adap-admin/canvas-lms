@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -20,9 +22,12 @@ module CanvasStringex
   require "lucky_sneaks/unidecoder"
   require "lucky_sneaks/acts_as_url"
 
-  String.send :include, LuckySneaks::StringExtensions
+  String.include LuckySneaks::StringExtensions
 
   if defined?(ActiveRecord)
-    ActiveRecord::Base.send :include, LuckySneaks::ActsAsUrl
+    # Prevents uninitialized constant ActiveRecord::DatabaseConfigurations::ConnectionUrlResolver::URI
+    # (probably only relevant for specs in practice)
+    require "uri"
+    ActiveRecord::Base.include LuckySneaks::ActsAsUrl
   end
 end

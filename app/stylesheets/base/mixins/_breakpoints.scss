@@ -16,36 +16,48 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+@import '../variables';
+
 // Breakpoints
-@mixin breakpoint($breakpoint) {
+@mixin breakpoint($breakpoint, $maximum: false) {
+  $dimension: false;
+
   @if $breakpoint == mini-tablet {
-    @media only screen and (min-width: 500px) { @content; }
+    $dimension: 500px;
   }
   @else if $breakpoint == tablet {
-    @media only screen and (min-width: 768px) { @content; }
+    $dimension: 768px;
   }
   @else if $breakpoint == desktop {
-    @media only screen and (min-width: 992px) { @content; }
+    $dimension: 992px;
   }
   @else if $breakpoint == desktop--nav-open {
-    @media only screen and (min-width: 1140px) { @content; }
+    $dimension: 1140px;
+  }
+
+  @if $dimension {
+    @if $maximum {
+      @media only screen and (max-width: $dimension) { @content; }
+    } @else {
+      @media only screen and (min-width: $dimension) { @content; }
+    }
   }
 }
 
 @mixin desktop-only {
-  @if $use_responsive_layout {
-    @media (min-width: 768px) {
-      @content;
-    }
-  }
-  @else {
+  @media (min-width: 768px) {
     @content;
   }
 }
 @mixin mobile-only {
-  @if $use_responsive_layout {
-    @media (max-width: 767px) {
-      @content;
-    }
+  @media not all and (min-width: 768px) {
+    @content;
+  }
+}
+
+@mixin lti-min-size {
+  // 2 container paddings (same value) * 2 sides
+  @media (max-width: 320px + ($ic-sp * 4)) {
+    @content;
   }
 }

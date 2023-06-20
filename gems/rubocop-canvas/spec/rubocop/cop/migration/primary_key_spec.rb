@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -18,7 +20,7 @@
 describe RuboCop::Cop::Migration::PrimaryKey do
   subject(:cop) { described_class.new }
 
-  it 'catches explicit id disabled' do
+  it "catches explicit id disabled" do
     inspect_source(%{
       class CreateNotificationEndpoints < ActiveRecord::Migration
         tag :predeploy

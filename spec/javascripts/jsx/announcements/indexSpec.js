@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import createAnnIndex from 'jsx/announcements/index'
+import createAnnIndex from 'ui/features/announcements/react/index'
 
 let app = null
 const container = document.getElementById('fixtures')
@@ -28,7 +28,7 @@ QUnit.module('Announcements app', {
       app = null
     }
     container.innerHTML = ''
-  }
+  },
 })
 
 const defaultData = () => ({

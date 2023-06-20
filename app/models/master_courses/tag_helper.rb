@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -22,18 +24,20 @@ module MasterCourses::TagHelper
   end
 
   def content_tags
-    self.send(self.content_tag_association)
+    send(content_tag_association)
   end
 
-  def load_tags!(objects=nil)
+  def load_tags!(objects = nil)
     return if @content_tag_index && !objects # if we already loaded everything don't worry
+
     @content_tag_index ||= {}
-    tag_scope = self.content_tags
+    tag_scope = content_tags
 
     if objects
       return unless objects.any?
-      objects_to_load = objects.map{|o| (o.is_a?(Assignment) && o.submittable_object) || o}
-      tag_scope = tag_scope.polymorphic_where(:content => objects_to_load)
+
+      objects_to_load = objects.map { |o| (o.is_a?(Assignment) && o.submittable_object) || o }
+      tag_scope = tag_scope.where(content: objects_to_load)
     end
     tag_scope.to_a.group_by(&:content_type).each do |content_type, typed_tags|
       @content_tag_index[content_type] = typed_tags.index_by(&:content_id).merge(@content_tag_index[content_type] || {})
@@ -41,12 +45,13 @@ module MasterCourses::TagHelper
     true
   end
 
-  def content_tag_for(content, defaults={})
+  def content_tag_for(content, defaults = {})
     return unless MasterCourses::ALLOWED_CONTENT_TYPES.include?(content.class.base_class.name)
-    if content.is_a?(Assignment) && submittable = content.submittable_object
+
+    if content.is_a?(Assignment) && (submittable = content.submittable_object)
       content = submittable # use one child tag
     end
-    return unless content && content.persisted?
+    return unless content&.persisted?
 
     if @content_tag_index
       tag = (@content_tag_index[content.class.base_class.name] || {})[content.id]
@@ -57,23 +62,25 @@ module MasterCourses::TagHelper
       end
       tag
     else
-      self.content_tags.polymorphic_where(:content => content).first || create_content_tag_for!(content, defaults)
+      content_tags.where(content:).first || create_content_tag_for!(content, defaults)
     end
   end
 
-  def create_content_tag_for!(content, defaults={})
+  def create_content_tag_for!(content, defaults = {})
     return if content.is_a?(Assignment) && Assignment::SUBMITTABLE_TYPES.include?(content.submission_types)
+
     self.class.unique_constraint_retry do |retry_count|
       tag = nil
-      tag = self.content_tags.polymorphic_where(:content => content).first if retry_count > 0
-      tag ||= self.content_tags.create!(defaults.merge(:content => content))
+      tag = content_tags.where(content:).first if retry_count > 0
+      tag ||= content_tags.create!(defaults.merge(content:))
       tag
     end
   end
 
   def cached_content_tag_for(content)
     raise "must call `load_tags!` first" unless @content_tag_index
-    if content.is_a?(Assignment) && submittable = content.submittable_object
+
+    if content.is_a?(Assignment) && (submittable = content.submittable_object)
       content = submittable # use one child tag
     end
     @content_tag_index.dig(content.class.base_class.name, content.id)

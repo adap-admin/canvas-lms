@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -24,7 +26,7 @@ class RubricAssessmentsController < ApplicationController
   before_action :require_context
   before_action :require_user
 
-
+  include Api::V1::SubmissionComment
   # @API Create a single rubric assessment
   #
   # Returns the rubric assessment with the given id.
@@ -64,7 +66,7 @@ class RubricAssessmentsController < ApplicationController
     @request = @association.assessment_requests.find(params[:assessment_request_id])
     if authorized_action(@association, @current_user, :manage)
       @request.send_reminder!
-      render :json => @request
+      render json: @request
     end
   end
 
@@ -111,7 +113,7 @@ class RubricAssessmentsController < ApplicationController
 
     # Funky flow to avoid a double-render, re-work it if you like
     if @assessment && !authorized_action(@assessment, @current_user, :update)
-      return
+      nil
     else
       opts = {}
       provisional = value_to_boolean(params[:provisional])
@@ -124,7 +126,7 @@ class RubricAssessmentsController < ApplicationController
       # slot for the submitting provisional grader (or throws an error if no
       # slots remain).
       begin
-        ensure_adjudication_possible(provisional: provisional) do
+        ensure_adjudication_possible(provisional:) do
           @asset, @user = @association_object.find_asset_for_assessment(@association, user_id, opts)
           unless @association.user_can_assess_for?(assessor: @current_user, assessee: @user)
             return render_unauthorized_action
@@ -142,22 +144,26 @@ class RubricAssessmentsController < ApplicationController
           artifact_includes =
             case @asset
             when Submission
-              { artifact: Submission.json_serialization_full_parameters, rubric_association: {} }
+              { artifact: Submission.json_serialization_full_parameters(except: [:submission_comments]), rubric_association: {} }
             when ModeratedGrading::ProvisionalGrade
               { rubric_association: {} }
             else
               [:artifact, :rubric_association]
             end
           json = @assessment.as_json(
-            methods: [:ratings, :assessor_name, :related_group_submissions_and_assessments],
+            methods: %i[ratings assessor_name related_group_submissions_and_assessments],
             include: artifact_includes,
             include_root: false
           )
 
-          if @asset.is_a?(ModeratedGrading::ProvisionalGrade)
-            json[:artifact] = @asset.submission.
-              as_json(Submission.json_serialization_full_parameters(include_root: false)).
-              merge(@asset.grade_attributes)
+          case @asset
+          when Submission
+            submission = @asset
+          when ModeratedGrading::ProvisionalGrade
+            submission = @asset.submission
+            json[:artifact] = @asset.submission
+                                    .as_json(Submission.json_serialization_full_parameters(except: [:submission_comments], include_root: false))
+                                    .merge(@asset.grade_attributes)
 
             if @association_object.moderated_grading? && !@association_object.can_view_other_grader_identities?(@current_user)
               current_user_moderation_grader = @association_object.moderation_graders.find_by(user: @current_user)
@@ -165,11 +171,22 @@ class RubricAssessmentsController < ApplicationController
             end
           end
 
-          render json: json
+          if submission.present?
+            json[:artifact][:submission_comments] = anonymous_moderated_submission_comments_json(
+              assignment: submission.assignment,
+              course: submission.assignment.course,
+              current_user: @current_user,
+              avatars: service_enabled?(:avatars),
+              submission_comments: submission.visible_submission_comments_for(@current_user),
+              submissions: [submission]
+            )
+          end
+
+          render json:
         end
-      rescue Assignment::GradeError => error
-        json = {errors: {base: error.to_s, error_code: error.error_code}}
-        render json: json, status: error.status_code || :bad_request
+      rescue Assignment::GradeError => e
+        json = { errors: { base: e.to_s, error_code: e.error_code } }
+        render json:, status: e.status_code || :bad_request
       end
     end
   end
@@ -185,18 +202,19 @@ class RubricAssessmentsController < ApplicationController
     @assessment = @rubric.rubric_assessments.find(params[:id])
     if authorized_action(@assessment, @current_user, :delete)
       if @assessment.destroy
-        render :json => @assessment
+        render json: @assessment
       else
-        render :json => @assessment.errors, :status => :bad_request
+        render json: @assessment.errors, status: :bad_request
       end
     end
   end
 
   private
+
   def resolve_user_id
     user_id = params[:rubric_assessment][:user_id]
     if user_id
-      user_id =~ Api::ID_REGEX ? user_id.to_i : nil
+      Api::ID_REGEX.match?(user_id) ? user_id.to_i : nil
     elsif params[:rubric_assessment][:anonymous_id]
       Submission.find_by!(
         anonymous_id: params[:rubric_assessment][:anonymous_id],
@@ -209,7 +227,7 @@ class RubricAssessmentsController < ApplicationController
     value_to_boolean(params[:final]) && @association_object.permits_moderation?(@current_user)
   end
 
-  def ensure_adjudication_possible(provisional:)
+  def ensure_adjudication_possible(provisional:, &block)
     # Non-assignment association objects crash if they're passed into this
     # controller, since find_asset_for_assessment only exists on assignments.
     # The check here thus serves only to make sure the crash doesn't happen on
@@ -218,10 +236,9 @@ class RubricAssessmentsController < ApplicationController
 
     @association_object.ensure_grader_can_adjudicate(
       grader: @current_user,
-      provisional: provisional,
-      occupy_slot: true
-    ) do
-      yield
-    end
+      provisional:,
+      occupy_slot: true,
+&block
+    )
   end
 end

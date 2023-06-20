@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -17,7 +19,6 @@
 #
 
 class Quizzes::QuizRegrader::AttemptVersion
-
   attr_reader :version, :question_regrades
 
   def initialize(hash)
@@ -27,9 +28,9 @@ class Quizzes::QuizRegrader::AttemptVersion
 
   def regrade!
     version.model = Quizzes::QuizRegrader::Submission.new(
-      :submission => version.model,
-      :question_regrades => question_regrades).rescored_submission
-      version.save!
+      submission: version.model,
+      question_regrades:
+    ).rescored_submission
+    version.save!
   end
-
 end

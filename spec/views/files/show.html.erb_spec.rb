@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,27 +18,25 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/../views_helper')
+require_relative "../views_helper"
 
-describe "/files/index" do
-  it "should render" do
+describe "files/index" do
+  it "renders" do
     course_with_student
     view_context
-    assign(:attachment, @course.attachments.create!(:uploaded_data => default_uploaded_data))
+    assign(:attachment, @course.attachments.create!(uploaded_data: default_uploaded_data))
     render "files/show"
     expect(response).not_to be_nil
   end
 
-  it "should display a message that the file is locked if user is a student and the file is locked/unpublished" do
+  it "displays a message that the file is locked if user is a student and the file is locked/unpublished" do
     course_with_student
     view_context
-    attachment = @course.attachments.create!(:uploaded_data => default_uploaded_data)
+    attachment = @course.attachments.create!(uploaded_data: default_uploaded_data)
     attachment.locked = true
     attachment.save!
     assign(:attachment, attachment)
     render "files/show"
-    expect(rendered).to match /This file is currently locked/
+    expect(rendered).to match(/This file is currently locked/)
   end
 end
-

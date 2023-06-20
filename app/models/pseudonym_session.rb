@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -17,10 +19,12 @@
 #
 
 class PseudonymSession < Authlogic::Session::Base
-  last_request_at_threshold  10.minutes
+  LAST_REQUEST_WINDOW = 10.minutes
+
+  last_request_at_threshold LAST_REQUEST_WINDOW
   verify_password_method :valid_arbitrary_credentials?
   login_field :unique_id
-  find_by_login_method :custom_find_by_unique_id
+  record_selection_method :custom_find_by_unique_id
   remember_me_for 2.weeks
   allow_http_basic_auth false
   consecutive_failed_logins_limit 0
@@ -47,13 +51,14 @@ class PseudonymSession < Authlogic::Session::Base
   # see the SessionPersistenceToken class for details
   def save_cookie
     return unless remember_me?
+
     token = SessionPersistenceToken.generate(record)
     controller.cookies[cookie_key] = {
-      :value => token.pseudonym_credentials,
-      :expires => remember_me_until,
-      :domain => controller.cookie_domain,
-      :httponly => httponly,
-      :secure => secure,
+      value: token.pseudonym_credentials,
+      expires: remember_me_until,
+      domain: controller.cookie_domain,
+      httponly:,
+      secure:,
     }
   end
 
@@ -62,13 +67,13 @@ class PseudonymSession < Authlogic::Session::Base
     if cookie
       token = SessionPersistenceToken.find_by_pseudonym_credentials(cookie)
       self.unauthorized_record = token.use! if token
-      is_valid = self.valid?
+      is_valid = valid?
       if is_valid
         # this token has been used -- destroy it, and generate a new one
         # remember_me is implicitly true when they login via the remember_me token
         controller.session[:used_remember_me_token] = true
         self.remember_me = true
-        self.save!
+        save!
       end
       is_valid
     else
@@ -78,8 +83,9 @@ class PseudonymSession < Authlogic::Session::Base
 
   # added behavior: destroy the server-side SessionPersistenceToken as well as the browser cookie
   def destroy_cookie
-    cookie = controller.cookies.delete cookie_key, :domain => controller.cookie_domain
+    cookie = controller.cookies.delete cookie_key, domain: controller.cookie_domain
     return true unless cookie
+
     token = SessionPersistenceToken.find_by_pseudonym_credentials(cookie)
     token.try(:destroy)
     true
@@ -99,12 +105,69 @@ class PseudonymSession < Authlogic::Session::Base
     # have to call super first, as that's what loads attempted_record
     if too_many_attempts? || attempted_record.try(:audit_login, remote_ip, !invalid_password?) == :too_many_attempts
       self.too_many_attempts = true
-      errors.add(password_field, I18n.t('errors.max_attempts', 'Too many failed login attempts. Please try again later or contact your system administrator.'))
-      return
+      errors.add(password_field, I18n.t("errors.max_attempts", "Too many failed login attempts. Please try again later or contact your system administrator."))
+      nil
     end
   end
 
   def too_many_attempts?
     too_many_attempts == true
+  end
+
+  # This block is pulled from Authlogic::Session::Base.find,
+  # which does all this same stuff but logs nothing making it hard
+  # to know why your user that was previously logged in is now not
+  # logged in.
+  def self.find_with_validation
+    with_scope(find_options: Pseudonym.eager_load(:user)) do
+      sess = new({ priority_record: nil }, nil)
+      if sess.nil?
+        Rails.logger.info "[AUTH] Failed to create pseudonym session"
+        next false
+      end
+      sess.priority_record = nil
+      if sess.persisting?
+        Rails.logger.info "[AUTH] Approved Authlogic session"
+        next sess
+      end
+      sess.errors.full_messages.each { |msg| Rails.logger.warn "[AUTH] Authlogic Validation Error: #{msg}" }
+      Rails.logger.warn "[AUTH] Authlogic Failed Find" if sess.attempted_record.nil?
+      # established AuthLogic behavior is to return false if the session is not valid
+      false
+    end
+  end
+
+  def persist_by_session_search(persistence_token, record_id)
+    return super unless record_id
+
+    Shard.shard_for(record_id).activate do
+      Rails.cache.fetch(["pseudonym_session", record_id].cache_key, expires_in: Setting.get("pseudonym_session_cache_ttl", 5).to_f.seconds) do
+        super
+      end
+    end
+  end
+
+  # this block is pulled from Authlogic::Session::Base.save_record, and does an update_columns in
+  # order to avoid a transaction and its associated db roundtrips.
+  # It also gives us a useful place to do a smarter update
+  # when we have last_request_at tweaks piling up
+  def save_record(alternate_record = nil)
+    r = alternate_record || record
+    if r != priority_record && r&.has_changes_to_save? && !r.readonly?
+      changed_columns = r.changes_to_save.keys
+      if changed_columns == ["last_request_at"]
+        # we're ONLY updating the last_request_at field.  This
+        # can create a problem when we're trying to do many of these at
+        # once, they pile up waiting on locks and each successful one writes
+        # a new version of the row which is I/O intensive since this happens
+        # a lot.  We want to use the SAME threshold we use for telling authlogic
+        # to not bother incrementing the value to make sure we don't update
+        # here if another process has already done so while we were waiting on the lock
+        time_clause = Pseudonym.arel_table[:last_request_at].lt(LAST_REQUEST_WINDOW.ago)
+        Pseudonym.where(id: r).where(time_clause).update_all(last_request_at: r.last_request_at)
+      else
+        r.save_without_transaction
+      end
+    end
   end
 end

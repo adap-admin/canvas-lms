@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -17,7 +19,6 @@
 #
 
 class Announcement < DiscussionTopic
-
   belongs_to :context, polymorphic: [:course, :group]
 
   has_a_broadcast_policy
@@ -28,16 +29,28 @@ class Announcement < DiscussionTopic
 
   before_save :infer_content
   before_save :respect_context_lock_rules
-  after_save :create_alert
-  validates_presence_of :context_id
-  validates_presence_of :context_type
-  validates_presence_of :message
+  after_save :create_observer_alerts_job
+  validates :context_id, presence: true
+  validates :context_type, presence: true
+  validates :message, presence: true
 
-  acts_as_list scope: { context: self, type: 'Announcement' }
+  acts_as_list scope: { context: self, type: "Announcement" }
+
+  scope :between, lambda { |start_date, end_date|
+    where("COALESCE(delayed_post_at, posted_at, created_at) BETWEEN ? AND ?", start_date, end_date)
+  }
+
+  scope :ordered_between, lambda { |start_date, end_date|
+    between(start_date, end_date).order(Arel.sql("COALESCE(delayed_post_at, posted_at, created_at) DESC"))
+  }
+
+  scope :ordered_between_by_context, lambda { |start_date, end_date|
+    between(start_date, end_date).order(Arel.sql("context_id, COALESCE(delayed_post_at, posted_at, created_at) DESC"))
+  }
 
   def validate_draft_state_change
-    old_draft_state, new_draft_state = self.changes['workflow_state']
-    self.errors.add :workflow_state, I18n.t('#announcements.error_draft_state', "This topic cannot be set to draft state because it is an announcement.") if new_draft_state == 'unpublished'
+    _old_draft_state, new_draft_state = changes["workflow_state"]
+    errors.add :workflow_state, I18n.t("#announcements.error_draft_state", "This topic cannot be set to draft state because it is an announcement.") if new_draft_state == "unpublished"
   end
 
   def infer_content
@@ -47,83 +60,95 @@ class Announcement < DiscussionTopic
 
   def respect_context_lock_rules
     self.locked = true if !locked? &&
-            context.is_a?(Course) &&
-            context.lock_all_announcements?
+                          context.is_a?(Course) &&
+                          context.lock_all_announcements?
   end
   protected :respect_context_lock_rules
 
   def self.lock_from_course(course)
     Announcement.where(
-      :context_type => 'Course',
-      :context_id => course,
-      :workflow_state => 'active'
-    ).update_all(:locked => true)
+      context_type: "Course",
+      context_id: course,
+      workflow_state: "active"
+    ).update_all(locked: true)
+  end
+
+  def course_broadcast_data
+    context&.broadcast_data
   end
 
   set_broadcast_policy! do
     dispatch :new_announcement
     to { users_with_permissions(active_participants_include_tas_and_teachers(true) - [user]) }
-    whenever { |record|
+    whenever do |record|
       record.send_notification_for_context? and
         ((record.just_created and !(record.post_delayed? || record.unpublished?)) || record.changed_state(:active, :unpublished) || record.changed_state(:active, :post_delayed))
-    }
+    end
+    data { course_broadcast_data }
 
     dispatch :announcement_created_by_you
     to { user }
-    whenever { |record|
+    whenever do |record|
       record.send_notification_for_context? and
         ((record.just_created and !(record.post_delayed? || record.unpublished?)) || record.changed_state(:active, :unpublished) || record.changed_state(:active, :post_delayed))
-    }
+    end
+    data { course_broadcast_data }
   end
 
   set_policy do
     given { |user| self.user.present? && self.user == user }
     can :update and can :reply and can :read
 
-    given { |user| self.user.present? && self.user == user && self.discussion_entries.active.empty? }
+    given { |user| self.user.present? && self.user == user && discussion_entries.active.empty? }
     can :delete
 
     given do |user|
-      self.grants_right?(user, :read) &&
-       (self.context.is_a?(Group) ||
-        (user &&
-         (self.context.grants_right?(user, :read_as_admin) ||
-          (self.context.is_a?(Course) &&
-           self.context.includes_user?(user)))))
+      grants_right?(user, :read) &&
+        (context.is_a?(Group) ||
+         (user &&
+          (context.grants_right?(user, :read_as_admin) ||
+           (context.is_a?(Course) &&
+            context.includes_user?(user)))))
     end
     can :read_replies
 
-    given { |user, session| self.context.grants_right?(user, session, :read_announcements) && self.visible_for?(user) }
+    given { |user, session| context.grants_right?(user, session, :read_announcements) && visible_for?(user) }
     can :read
 
-    given { |user, session| self.context.grants_right?(user, session, :post_to_forum) && !self.locked?}
+    given { |user, session| context.grants_right?(user, session, :post_to_forum) && !locked? }
     can :reply
 
-    given { |user, session| self.context.is_a?(Group) && self.context.grants_right?(user, session, :create_forum) }
+    given { |user, session| context.is_a?(Group) && context.grants_right?(user, session, :create_forum) }
     can :create
 
-    given { |user, session| self.context.grants_all_rights?(user, session, :read_announcements, :moderate_forum) } #admins.include?(user) }
+    given { |user, session| context.grants_all_rights?(user, session, :read_announcements, :moderate_forum) } # admins.include?(user) }
     can :update and can :read_as_admin and can :delete and can :reply and can :create and can :read and can :attach
 
     given do |user, session|
-      self.allow_rating && (!self.only_graders_can_rate ||
-                            self.context.grants_right?(user, session, :manage_grades))
+      allow_rating && (!only_graders_can_rate ||
+                            context.grants_right?(user, session, :manage_grades))
     end
     can :rate
   end
 
-  def is_announcement; true end
+  def is_announcement
+    true
+  end
+
+  def homeroom_announcement?(context)
+    context.is_a?(Course) && context.elementary_homeroom_course?
+  end
 
   # no one should receive discussion entry notifications for announcements
   def subscribers
     []
   end
 
-  def subscription_hold(user, context_enrollment, session)
+  def subscription_hold(_user, _session)
     :topic_is_announcement
   end
 
-  def can_unpublish?(opts=nil)
+  def can_unpublish?(*)
     false
   end
 
@@ -135,23 +160,33 @@ class Announcement < DiscussionTopic
     nil
   end
 
-  def create_alert
-    return if !saved_changes.keys.include?('workflow_state') || saved_changes['workflow_state'][1] != 'active'
-    return if self.context_type != 'Course'
+  def create_observer_alerts_job
+    return if !saved_changes.key?("workflow_state") || saved_changes["workflow_state"][1] != "active"
+    return if context_type != "Course"
 
-    observer_enrollments = self.course.enrollments.active.where(type: 'ObserverEnrollment')
-    observer_enrollments.each do |enrollment|
+    create_observer_alerts if course.enrollments.active.of_observer_type.where.not(associated_user_id: nil).exists?
+  end
+
+  def create_observer_alerts
+    course.enrollments.active.of_observer_type.where.not(associated_user_id: nil).find_each do |enrollment|
       observer = enrollment.user
       student = enrollment.associated_user
-      threshold = ObserverAlertThreshold.where(observer: observer, alert_type: 'course_announcement', student: student).first
+      next unless visible_for?(student)
+
+      threshold = ObserverAlertThreshold.where(observer:, alert_type: "course_announcement", student:).first
       next unless threshold
 
-      ObserverAlert.create!(observer: observer, student: student, observer_alert_threshold: threshold,
-                            context: self, alert_type: 'course_announcement', action_date: self.updated_at,
+      ObserverAlert.create!(observer:,
+                            student:,
+                            observer_alert_threshold: threshold,
+                            context: self,
+                            alert_type: "course_announcement",
+                            action_date: updated_at,
                             title: I18n.t("Course announcement: \"%{title}\" in %{course_code}", {
-                              title: self.title,
-                              course_code: self.course.course_code
-                            }))
+                                            title: self.title,
+                                            course_code: course.course_code
+                                          }))
     end
   end
+  handle_asynchronously :create_observer_alerts, priority: Delayed::LOW_PRIORITY, max_attempts: 1
 end

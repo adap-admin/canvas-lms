@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -17,19 +19,18 @@
 #
 
 class Quizzes::QuizQuestion::FileUploadQuestion < Quizzes::QuizQuestion::Base
-
-  def requires_manual_scoring?(user_answer)
+  def requires_manual_scoring?(_user_answer)
     true
   end
 
   # TODO: remove once new stats is on for everybody
   def stats(responses)
-    stats = {:file_upload_responses => []}
+    stats = { file_upload_responses: [] }
 
     responses.each do |response|
       stats[:file_upload_responses] << {
         # TODO: what does file upload quiz stats need?
-        :user_id => response[:user_id]
+        user_id: response[:user_id]
         # :filename => response[:text].strip
       }
     end
@@ -37,12 +38,10 @@ class Quizzes::QuizQuestion::FileUploadQuestion < Quizzes::QuizQuestion::Base
     @question_data.merge stats
   end
 
-
   def score_question(answer_data)
-    user_answer = Quizzes::QuizQuestion::FileUploadAnswer.new(self.question_id,
-                                                     self.points_possible,
-                                                     answer_data)
+    user_answer = Quizzes::QuizQuestion::FileUploadAnswer.new(question_id,
+                                                              points_possible,
+                                                              answer_data)
     super(answer_data, user_answer)
   end
-
 end

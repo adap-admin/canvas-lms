@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -16,12 +18,10 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper.rb')
-
 describe BrandableCSS do
   describe "all_brand_variable_values" do
     it "returns defaults if called without a brand config" do
-      expect(BrandableCSS.all_brand_variable_values["ic-link-color"]).to eq '#008EE2'
+      expect(BrandableCSS.all_brand_variable_values["ic-link-color"]).to eq "#0374B5"
     end
 
     it "includes image_url asset path for default images" do
@@ -37,11 +37,10 @@ describe BrandableCSS do
 
     describe "when called with a brand config" do
       before :once do
-        parent_account = Account.default
-        parent_config = BrandConfig.create(variables: {"ic-brand-primary" => "red"})
+        parent_config = BrandConfig.create(variables: { "ic-brand-primary" => "red" })
 
         subaccount_bc = BrandConfig.for(
-          variables: {"ic-brand-global-nav-bgd" => "#123"},
+          variables: { "ic-brand-global-nav-bgd" => "#123" },
           parent_md5: parent_config.md5,
           js_overrides: nil,
           css_overrides: nil,
@@ -53,16 +52,16 @@ describe BrandableCSS do
       end
 
       it "includes custom variables from brand config" do
-        expect(@brand_variables["ic-brand-global-nav-bgd"]).to eq '#123'
+        expect(@brand_variables["ic-brand-global-nav-bgd"]).to eq "#123"
       end
 
       it "includes custom variables from parent brand config" do
-        expect(@brand_variables["ic-brand-primary"]).to eq 'red'
+        expect(@brand_variables["ic-brand-primary"]).to eq "red"
       end
 
       it "handles named html colors when lightening/darkening" do
         {
-          "ic-brand-primary" => 'red',
+          "ic-brand-primary" => "red",
           "ic-brand-primary-darkened-5" => "#F30000",
           "ic-brand-primary-darkened-10" => "#E60000",
           "ic-brand-primary-darkened-15" => "#D90000",
@@ -77,43 +76,42 @@ describe BrandableCSS do
       end
 
       it "includes default variables not found in brand config" do
-        expect(@brand_variables["ic-link-color"]).to eq '#008EE2'
+        expect(@brand_variables["ic-link-color"]).to eq "#0374B5"
       end
     end
   end
 
   describe "all_brand_variable_values_as_js" do
     it "eports the default js to the right global variable" do
-      expected_js = "CANVAS_ACTIVE_BRAND_VARIABLES = #{BrandableCSS.default('json')};"
-      expect(BrandableCSS.default('js')).to eq expected_js
+      expected_js = "CANVAS_ACTIVE_BRAND_VARIABLES = #{BrandableCSS.default("json")};"
+      expect(BrandableCSS.default("js")).to eq expected_js
     end
   end
 
   describe "all_brand_variable_values_as_css" do
     it "defines the right default css values in the root scope" do
       expected_css = ":root {
-        #{BrandableCSS.all_brand_variable_values(nil, true).map{ |k, v| "--#{k}: #{v};"}.join("\n")}
+        #{BrandableCSS.all_brand_variable_values(nil, true).map { |k, v| "--#{k}: #{v};" }.join("\n")}
       }"
-      expect(BrandableCSS.default('css')).to eq expected_css
+      expect(BrandableCSS.default("css")).to eq expected_css
     end
   end
 
   describe "default_json" do
     it "includes default variables not found in brand config" do
-      brand_variables = JSON.parse(BrandableCSS.default('json'))
-      expect(brand_variables["ic-link-color"]).to eq '#008EE2'
+      brand_variables = JSON.parse(BrandableCSS.default("json"))
+      expect(brand_variables["ic-link-color"]).to eq "#0374B5"
     end
 
-    it "it has high contrast overrides for link and brand-primary" do
-      brand_variables = JSON.parse(BrandableCSS.default('json', !!:high_contrast))
+    it "has high contrast overrides for link and brand-primary" do
+      brand_variables = JSON.parse(BrandableCSS.default("json", true))
       expect(brand_variables["ic-brand-primary"]).to eq "#0770A3"
       expect(brand_variables["ic-link-color"]).to eq "#0073A7"
     end
-
   end
 
   [true, false].each do |high_contrast|
-    ['js', 'json', 'css'].each do |type|
+    %w[js json css].each do |type|
       describe "save_default!(#{type})" do
         it "writes the default json representation to the default json file" do
           allow(Canvas::Cdn).to receive(:enabled?).and_return(false)
@@ -123,9 +121,9 @@ describe BrandableCSS do
           expect(file.string).to eq BrandableCSS.default(type, high_contrast)
         end
 
-        it 'uploads json file to s3 if cdn is enabled' do
+        it "uploads json file to s3 if cdn is enabled" do
           allow(Canvas::Cdn).to receive(:enabled?).and_return(true)
-          allow(Canvas::Cdn).to receive(:config).and_return(ActiveSupport::OrderedOptions.new.merge(region: 'us-east-1', aws_access_key_id: 'id', aws_secret_access_key: 'secret', bucket: 'cdn'))
+          allow(Canvas::Cdn).to receive(:config).and_return(ActiveSupport::OrderedOptions.new.merge(region: "us-east-1", aws_access_key_id: "id", aws_secret_access_key: "secret", bucket: "cdn"))
 
           file = StringIO.new
           allow(BrandableCSS).to receive(:default_brand_file).with(type, high_contrast).and_return(file)
@@ -134,9 +132,9 @@ describe BrandableCSS do
           BrandableCSS.save_default!(type, high_contrast)
         end
 
-        it 'deletes the local json file if cdn is enabled' do
+        it "deletes the local json file if cdn is enabled" do
           allow(Canvas::Cdn).to receive(:enabled?).and_return(true)
-          allow(Canvas::Cdn).to receive(:config).and_return(ActiveSupport::OrderedOptions.new.merge(region: 'us-east-1', aws_access_key_id: 'id', aws_secret_access_key: 'secret', bucket: 'cdn'))
+          allow(Canvas::Cdn).to receive(:config).and_return(ActiveSupport::OrderedOptions.new.merge(region: "us-east-1", aws_access_key_id: "id", aws_secret_access_key: "secret", bucket: "cdn"))
           file = StringIO.new
           allow(BrandableCSS).to receive(:default_brand_file).with(type, high_contrast).and_return(file)
           expect(File).to receive(:delete).with(BrandableCSS.default_brand_file(type, high_contrast))
@@ -145,5 +143,36 @@ describe BrandableCSS do
         end
       end
     end
+  end
+
+  it "has a migration to generate BrandConfig records for the *latest* default variables" do
+    migration_version = BrandableCSS.migration_version
+    migration_name = BrandableCSS::MIGRATION_NAME.underscore
+
+    predeploy_file = "db/migrate/#{migration_version}_#{migration_name}_predeploy.rb"
+    postdeploy_file = "db/migrate/#{migration_version + 1}_#{migration_name}_postdeploy.rb"
+
+    help = lambda do |oldfile:, newfile:|
+      <<~TEXT
+        If you have made changes to "app/stylesheets/brandable_variables.json"
+        or any of the image files referenced in it, you must also rename the
+        corresponding database migration file with a command similar to:
+
+            mv #{oldfile} \\
+               #{newfile}
+
+        If you have no idea what this is about, reach out to the FOO team.
+      TEXT
+    end
+
+    expect(Rails.root.join(predeploy_file)).to exist, help.call(
+      oldfile: "db/migrate/*_#{migration_name}_predeploy.rb",
+      newfile: predeploy_file
+    )
+
+    expect(Rails.root.join(postdeploy_file)).to exist, help.call(
+      oldfile: "db/migrate/*_#{migration_name}_postdeploy.rb",
+      newfile: postdeploy_file
+    )
   end
 end

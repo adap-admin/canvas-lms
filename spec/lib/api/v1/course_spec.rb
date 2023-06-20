@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -15,7 +17,6 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-require File.expand_path(File.dirname(__FILE__) + '/../../../spec_helper.rb')
 
 describe Api::V1::Course do
   include Api::V1::Course
@@ -29,15 +30,15 @@ describe Api::V1::Course do
       @course = Course.create!
     end
 
-    it "should return course settings hash" do
+    it "returns course settings hash" do
       grading_standard = grading_standard_for(@course)
       @course.grading_standard = grading_standard
       @course.save
       course_settings = course_settings_json(@course)
-      expect(course_settings[:allow_student_discussion_topics]).to eq true
-      expect(course_settings[:allow_student_forum_attachments]).to eq true
-      expect(course_settings[:allow_student_discussion_editing]).to eq true
-      expect(course_settings[:grading_standard_enabled]).to eq true
+      expect(course_settings[:allow_student_discussion_topics]).to be true
+      expect(course_settings[:allow_student_forum_attachments]).to be true
+      expect(course_settings[:allow_student_discussion_editing]).to be true
+      expect(course_settings[:grading_standard_enabled]).to be true
       expect(course_settings[:grading_standard_id]).to eq grading_standard.id
     end
 
@@ -45,47 +46,62 @@ describe Api::V1::Course do
       course_settings = course_settings_json(@course)
       expect(course_settings).to have_key :filter_speed_grader_by_student_group
     end
+
+    it "includes conditional_release value in the settings hash" do
+      course_settings = course_settings_json(@course)
+      expect(course_settings).to have_key :conditional_release
+    end
   end
 
   describe "#course_json" do
-    it "should work for a logged-out user" do
+    it "works for a logged-out user" do
       course_factory
       hash = course_json(@course, nil, nil, [], nil)
-      expect(hash['id']).to be_present
+      expect(hash["id"]).to be_present
     end
 
-    it "should include course locale" do
+    it "includes course locale" do
       course_factory
-      @course.locale = 'tlh'
+      @course.locale = "tlh"
       @course.save
       hash = course_json(@course, nil, nil, [], nil)
-      expect(hash['locale']).to eql @course.locale
+      expect(hash["locale"]).to eql @course.locale
     end
 
-    it "should include the image when it is asked for and the feature flag is on" do
-      course_factory
-      @course.enable_feature!('course_card_images')
-      @course.image_url = "http://image.jpeg"
-      @course.save
+    describe "course_image" do
+      before :once do
+        course_factory
+        @course.image_url = "http://image.jpeg"
+        @course.save
+      end
 
-      hash = course_json(@course, nil, nil, ['course_image'], nil)
-      expect(hash['image_download_url']).to eql 'http://image.jpeg'
+      it "is included when requested" do
+        hash = course_json(@course, nil, nil, ["course_image"], nil)
+        expect(hash["image_download_url"]).to eql "http://image.jpeg"
+      end
+
+      it "is not included if the course_image include is not present" do
+        hash = course_json(@course, nil, nil, [], nil)
+        expect(hash["image_download_url"]).not_to be_present
+      end
     end
 
-    it "should not include the image if the feature flag is off" do
-      course_factory
-      @course.disable_feature!('course_card_images')
+    describe "banner_image" do
+      before :once do
+        course_factory
+        @course.banner_image_url = "http://image2.jpeg"
+        @course.save
+      end
 
-      hash = course_json(@course, nil, nil, ['course_image'], nil)
-      expect(hash['image_download_url']).not_to be_present
-    end
+      it "is included when requested" do
+        hash = course_json(@course, nil, nil, ["banner_image"], nil)
+        expect(hash["banner_image_download_url"]).to eql "http://image2.jpeg"
+      end
 
-    it "should not include the image if the course_image include is not present" do
-      course_factory
-      @course.enable_feature!('course_card_images')
-
-      hash = course_json(@course, nil, nil, [], nil)
-      expect(hash['image_download_url']).not_to be_present
+      it "is not included if the course_image include is not present" do
+        hash = course_json(@course, nil, nil, [], nil)
+        expect(hash["banner_image_download_url"]).not_to be_present
+      end
     end
   end
 end

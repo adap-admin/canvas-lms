@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -22,11 +24,11 @@ class WikiPages::ScopedToUser < ScopeFilter
     concat_scope { @relation.published unless can?(:view_unpublished_items) }
     concat_scope do
       wiki_context = context.is_a?(Wiki) ? context.context : context
-      if wiki_context.is_a?(Course) && wiki_context.feature_enabled?(:conditional_release)
+      if wiki_context.is_a?(Course) && wiki_context.conditional_release?
         return DifferentiableAssignment.scope_filter(@relation, user, wiki_context)
       end
+
       @relation
     end
   end
 end
-

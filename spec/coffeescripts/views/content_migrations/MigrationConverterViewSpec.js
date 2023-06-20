@@ -17,13 +17,14 @@
  */
 
 import $ from 'jquery'
-import Backbone from 'Backbone'
-import MigrationConverterView from 'compiled/views/content_migrations/MigrationConverterView'
+import Backbone from '@canvas/backbone'
+import MigrationConverterView from 'ui/features/content_migrations/backbone/views/MigrationConverterView'
 
 class SomeBackboneView extends Backbone.View {
   static initClass() {
     this.prototype.className = 'someViewRendered'
   }
+
   template() {
     return '<div id="rendered">Rendered</div>'
   }
@@ -37,20 +38,20 @@ QUnit.module('MigrationConverterView', {
       selectOptions: [
         {
           id: 'some_converter',
-          label: 'Some Converter'
-        }
+          label: 'Some Converter',
+        },
       ],
-      progressView: new Backbone.View()
+      progressView: new Backbone.View(),
     })
     return $('#fixtures').append(this.migrationConverterView.render().el)
   },
   teardown() {
     this.clock.restore()
     return this.migrationConverterView.remove()
-  }
+  },
 })
 
-test("renders a backbone view into it's main view container", 1, function() {
+test("renders a backbone view into it's main view container", function () {
   const subView = new SomeBackboneView()
   this.migrationConverterView.on('converterRendered', () =>
     ok(
@@ -62,7 +63,19 @@ test("renders a backbone view into it's main view container", 1, function() {
   return this.clock.tick(15)
 })
 
-test('trigger reset event when no subView is passed in to render', 1, function() {
+test('trigger reset event when no subView is passed in to render', function () {
   this.migrationConverterView.on('converterReset', () => ok(true, 'converterReset was called'))
   return this.migrationConverterView.renderConverter()
+})
+
+test('renders the overwrite warning', function () {
+  const subView = new SomeBackboneView()
+  this.migrationConverterView.on('converterRendered', () => {
+    strictEqual(
+      this.migrationConverterView.$el.find('#overwrite-warning').text(),
+      'Importing the same course content more than once will overwrite any existing content in the course.'
+    )
+  })
+  this.migrationConverterView.renderConverter(subView)
+  return this.clock.tick(15)
 })

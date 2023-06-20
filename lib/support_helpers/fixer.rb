@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -33,9 +35,9 @@ module SupportHelpers
       fix # actually do it
 
       notify "Success", success_message
-    rescue => error
-      notify "Error", error_message(error)
-      raise error
+    rescue => e
+      notify "Error", error_message(e)
+      raise e
     end
 
     def fix
@@ -43,13 +45,14 @@ module SupportHelpers
     end
 
     def fixer_name
-      [@prefix, self.class.name.demodulize, "##{job_id}"].compact.join(' ')
+      [@prefix, self.class.name.demodulize, "##{job_id}"].compact.join(" ")
     end
 
     private
 
     def elapsed_time
       return 0 unless @start_time
+
       (Time.now - @start_time).to_i
     end
 
@@ -75,7 +78,7 @@ module SupportHelpers
     end
 
     def mail_from
-      'supporthelperscript@instructure.com'
+      "supporthelperscript@instructure.com"
     end
 
     def mail_subject(status)

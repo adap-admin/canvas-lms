@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -16,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper.rb')
-
 shared_examples_for "an object whose dates are overridable" do
   # let(:overridable) - an Assignment or Quiz
   # let(:overridable_type) - :assignment or :quiz
@@ -27,7 +27,7 @@ shared_examples_for "an object whose dates are overridable" do
 
   describe "#teacher_due_date_for_display" do
     it "returns nil when differentiated with no due dates" do
-      student_in_course(course: course)
+      student_in_course(course:)
       overridable.update!(due_at: nil, only_visible_to_overrides: true)
       override.update!(set_type: "ADHOC")
       override.assignment_override_students.create(user: @student)
@@ -38,7 +38,7 @@ shared_examples_for "an object whose dates are overridable" do
 
   describe "overridden_for" do
     before do
-      student_in_course(:course => course)
+      student_in_course(course:)
     end
 
     context "when there are overrides" do
@@ -71,7 +71,7 @@ shared_examples_for "an object whose dates are overridable" do
 
   describe "assignment overrides_for" do
     before do
-      student_in_course(:course => course)
+      student_in_course(course:)
     end
 
     context "with adhoc" do
@@ -79,7 +79,6 @@ shared_examples_for "an object whose dates are overridable" do
         override.override_due_at(7.days.from_now)
         override.set_type = "ADHOC"
         override.save!
-
       end
 
       it "returns adhoc overrides when active students enrolled in adhoc set" do
@@ -111,7 +110,7 @@ shared_examples_for "an object whose dates are overridable" do
   describe "override teacher visibility" do
     context "when teacher restricted" do
       before do
-        2.times{ course.course_sections.create! }
+        2.times { course.course_sections.create! }
         @section_invisible = course.active_course_sections[2]
         @section_visible = course.active_course_sections.second
 
@@ -213,40 +212,41 @@ shared_examples_for "an object whose dates are overridable" do
 
     context "when it does" do
       before { override }
+
       it { is_expected.to be_truthy }
     end
 
     context "when it does but it's deleted" do
       before { override.destroy }
+
       it { is_expected.to be_falsey }
     end
 
     context "when it doesn't" do
       it { is_expected.to be_falsey }
     end
-
   end
 
   describe "has_active_overrides?" do
     context "has active overrides" do
       before { override }
+
       it "returns true" do
-        expect(overridable.reload.has_active_overrides?).to eq true
+        expect(overridable.reload.has_active_overrides?).to be true
       end
     end
+
     context "when it has deleted overrides" do
       it "returns false" do
         override.destroy
-        expect(overridable.reload.has_active_overrides?).to eq false
+        expect(overridable.reload.has_active_overrides?).to be false
       end
     end
-
   end
 
   describe "#all_dates_visible_to" do
-
     before do
-      @section2 = course.course_sections.create!(:name => "Summer session")
+      @section2 = course.course_sections.create!(name: "Summer session")
       override2 = assignment_override_model(overridable_type => overridable)
       override2.set = @section2
       override2.override_due_at(18.days.from_now)
@@ -268,13 +268,13 @@ shared_examples_for "an object whose dates are overridable" do
 
         dates_hash = overridable.dates_hash_visible_to(@teacher)
         expect(dates_hash.size).to eq 3
-        expect(dates_hash.map{ |d| d[:title] }).to eq [nil, "Summer session", "2 students"]
+        expect(dates_hash.pluck(:title)).to eq [nil, "Summer session", "2 students"]
       end
     end
 
     context "as a student" do
       it "only returns active overrides" do
-        course_with_student({:course => course, :active_all => true})
+        course_with_student({ course:, active_all: true })
         override.delete
         expect(overridable.all_dates_visible_to(@student).size).to eq 1
       end
@@ -282,9 +282,9 @@ shared_examples_for "an object whose dates are overridable" do
 
     context "as an observer with students" do
       before do
-        course_with_student({:course => course, :active_all => true})
-        course_with_observer({:course => course, :active_all => true})
-        course.enroll_user(@observer, "ObserverEnrollment", {:associated_user_id => @student.id})
+        course_with_student({ course:, active_all: true })
+        course_with_observer({ course:, active_all: true })
+        course.enroll_user(@observer, "ObserverEnrollment", { associated_user_id: @student.id })
       end
 
       it "only returns active overrides for a single student" do
@@ -293,8 +293,8 @@ shared_examples_for "an object whose dates are overridable" do
       end
 
       it "returns all active overrides for 2+ students" do
-        student2 = student_in_section(@section2, {:active_all => true})
-        course.enroll_user(@observer, "ObserverEnrollment", {:allow_multiple_enrollments => true, :associated_user_id => student2.id})
+        student2 = student_in_section(@section2, { active_all: true })
+        course.enroll_user(@observer, "ObserverEnrollment", { allow_multiple_enrollments: true, associated_user_id: student2.id })
         override.delete
         expect(overridable.all_dates_visible_to(@observer).size).to eq 2
       end
@@ -302,7 +302,7 @@ shared_examples_for "an object whose dates are overridable" do
 
     context "as an observer without students" do
       before do
-        course_with_observer({:course => course, :active_all => true})
+        course_with_observer({ course:, active_all: true })
         course.enroll_user(@observer, "ObserverEnrollment")
         override.delete
       end
@@ -323,21 +323,20 @@ shared_examples_for "an object whose dates are overridable" do
       all_dates = overridable.all_dates_visible_to(@user)
       last_hash = all_dates.last
       overridable_hash =
-        overridable.without_overrides.due_date_hash.merge(:base => true)
-      overridable_hash.each do |k,v|
+        overridable.without_overrides.due_date_hash.merge(base: true)
+      overridable_hash.each do |k, v|
         expect(last_hash[k]).to eq v
       end
     end
   end
 
   describe "#dates_hash_visible_to" do
-
-    before :each do
+    before do
       override.set = course.default_section
       override.override_due_at(7.days.from_now)
       override.save!
 
-      @section2 = course.course_sections.create!(:name => "Summer session")
+      @section2 = course.course_sections.create!(name: "Summer session")
     end
 
     it "only returns active overrides" do
@@ -348,10 +347,7 @@ shared_examples_for "an object whose dates are overridable" do
       dates_hash = overridable.dates_hash_visible_to(@teacher)
       expect(dates_hash.size).to eq 2
 
-      override = dates_hash[0]
-      original = dates_hash[1]
-
-      dates_hash.sort_by! {|d| d[:title].to_s }
+      dates_hash.sort_by! { |d| d[:title].to_s }
       expect(dates_hash[0][:title]).to be_nil
       expect(dates_hash[1][:title]).to eq "value for name"
     end
@@ -365,11 +361,10 @@ shared_examples_for "an object whose dates are overridable" do
       dates_hash = overridable.dates_hash_visible_to(@teacher)
       expect(dates_hash.size).to eq 2
 
-      dates_hash.sort_by! {|d| d[:title] }
+      dates_hash.sort_by! { |d| d[:title] }
       expect(dates_hash[0][:title]).to eq "Summer session"
       expect(dates_hash[1][:title]).to eq "value for name"
     end
-
   end
 
   describe "without_overrides" do
@@ -381,7 +376,7 @@ shared_examples_for "an object whose dates are overridable" do
   describe "due_date_hash" do
     it "returns the due at, lock_at, unlock_at, all day, and all day fields" do
       due = 5.days.from_now
-      due_params = {:due_at => due, :lock_at => due, :unlock_at => due}
+      due_params = { due_at: due, lock_at: due, unlock_at: due }
       a = overridable.class.new(due_params)
       if a.is_a?(Quizzes::Quiz)
         a.assignment = Assignment.new(due_params)
@@ -389,32 +384,31 @@ shared_examples_for "an object whose dates are overridable" do
       expect(a.due_date_hash[:due_at]).to eq due
       expect(a.due_date_hash[:lock_at]).to eq due
       expect(a.due_date_hash[:unlock_at]).to eq due
-      expect(a.due_date_hash[:all_day]).to eq false
-      expect(a.due_date_hash[:all_day_date]).to eq nil
+      expect(a.due_date_hash[:all_day]).to be false
+      expect(a.due_date_hash[:all_day_date]).to be_nil
     end
-
   end
 
   describe "observed_student_due_dates" do
     it "returns a list of overridden due date hashes" do
-      a = assignment_model(:course => @course)
+      a = assignment_model(course: @course)
       u = User.new
       student1, student2 = [double, double]
 
-      { student1 => '1', student2 => '2' }.each do |student, value|
-        expect(a).to receive(:all_dates_visible_to).with(student).and_return({ :student => value })
+      { student1 => "1", student2 => "2" }.each do |student, value|
+        expect(a).to receive(:all_dates_visible_to).with(student).and_return({ student: value })
       end
 
-      expect(ObserverEnrollment).to receive(:observed_students).and_return({student1 => [], student2 => []})
+      expect(ObserverEnrollment).to receive(:observed_students).and_return({ student1 => [], student2 => [] })
 
       override_hashes = a.observed_student_due_dates(u)
-      expect(override_hashes).to match_array [ { :student => '1' }, { :student => '2' } ]
+      expect(override_hashes).to match_array [{ student: "1" }, { student: "2" }]
     end
   end
 
   describe "multiple_due_dates?" do
     before do
-      course_with_student(:course => course)
+      course_with_student(course:)
       course.course_sections.create!
       override.set = course.active_course_sections.second
       override.override_due_at(2.days.ago)
@@ -424,13 +418,13 @@ shared_examples_for "an object whose dates are overridable" do
     context "when the object has been overridden" do
       context "and it has multiple due dates" do
         it "returns true" do
-          expect(overridable.overridden_for(@teacher).multiple_due_dates?).to eq true
+          expect(overridable.overridden_for(@teacher).multiple_due_dates?).to be true
         end
       end
 
       context "and it has one due date" do
         it "returns false" do
-          expect(overridable.overridden_for(@student).multiple_due_dates?).to eq false
+          expect(overridable.overridden_for(@student).multiple_due_dates?).to be false
         end
       end
     end
@@ -443,14 +437,14 @@ shared_examples_for "an object whose dates are overridable" do
 
     context "when the object has been overridden for a guest" do
       it "returns false" do
-        expect(overridable.overridden_for(nil).multiple_due_dates?).to eq false
+        expect(overridable.overridden_for(nil).multiple_due_dates?).to be false
       end
     end
   end
 
   describe "overridden_for?" do
     before do
-      course_with_student(:course => course)
+      course_with_student(course:)
     end
 
     context "when overridden for the user" do
@@ -480,12 +474,11 @@ shared_examples_for "an object whose dates are overridable" do
 
   describe "differentiated_assignments_applies?" do
     before do
-      course_with_student(:course => course)
+      course_with_student(course:)
     end
 
     it "returns false when there is no assignment" do
       if overridable_type == :quiz
-        as = overridable.assignment
         overridable.assignment = nil # a survey quiz
         expect(overridable.differentiated_assignments_applies?).to be_falsey
       end
@@ -508,15 +501,15 @@ shared_examples_for "an object whose dates are overridable" do
 end
 
 describe Assignment do
-  include_examples "an object whose dates are overridable"
-
-  let(:overridable) { assignment_model(:due_at => 5.days.ago) }
   let(:overridable_type) { :assignment }
+  let(:overridable) { assignment_model(due_at: 5.days.ago) }
+
+  include_examples "an object whose dates are overridable"
 end
 
 describe Quizzes::Quiz do
-  include_examples "an object whose dates are overridable"
-
-  let(:overridable) { quiz_model(:due_at => 5.days.ago) }
   let(:overridable_type) { :quiz }
+  let(:overridable) { quiz_model(due_at: 5.days.ago) }
+
+  include_examples "an object whose dates are overridable"
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -15,7 +17,6 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-require 'set'
 
 class RequestThrottle
   # this @@last_sample data isn't thread-safe, and if canvas ever becomes
@@ -40,8 +41,8 @@ class RequestThrottle
   end
 
   def call(env)
-    starting_mem = Canvas.sample_memory()
-    starting_cpu = Process.times()
+    starting_mem = Canvas.sample_memory
+    starting_cpu = Process.times
 
     request = ActionDispatch::Request.new(env)
 
@@ -55,16 +56,17 @@ class RequestThrottle
     bucket = LeakyBucket.new(client_identifier(request))
 
     up_front_cost = bucket.get_up_front_cost_for_path(path)
-    cost = bucket.reserve_capacity(up_front_cost) do
-      status, headers, response = if !allowed?(request, bucket)
-        throttled = true
-        rate_limit_exceeded
-      else
-        @app.call(env)
-      end
+    pre_judged = (approved?(request) || blocked?(request))
+    cost = bucket.reserve_capacity(up_front_cost, request_prejudged: pre_judged) do
+      status, headers, response = if allowed?(request, bucket)
+                                    @app.call(env)
+                                  else
+                                    throttled = true
+                                    rate_limit_exceeded
+                                  end
 
-      ending_cpu = Process.times()
-      ending_mem = Canvas.sample_memory()
+      ending_cpu = Process.times
+      ending_mem = Canvas.sample_memory
 
       user_cpu = ending_cpu.utime - starting_cpu.utime
       system_cpu = ending_cpu.stime - starting_cpu.stime
@@ -75,58 +77,63 @@ class RequestThrottle
       cost
     end
 
-    if client_identifier(request) && !client_identifier(request).starts_with?('session')
-      headers['X-Request-Cost'] = cost.to_s unless throttled
-      headers['X-Rate-Limit-Remaining'] = bucket.remaining.to_s
-      headers['X-Rate-Limit-Remaining'] = 0.0.to_s if blacklisted?(request)
+    if client_identifier(request) && !client_identifier(request).starts_with?("session")
+      headers["X-Request-Cost"] = cost.to_s unless throttled
+      headers["X-Rate-Limit-Remaining"] = bucket.remaining.to_s
+      headers["X-Rate-Limit-Remaining"] = 0.0.to_s if blocked?(request)
     end
 
     [status, headers, response]
   end
 
   # currently we define cost as the amount of user cpu time plus the amount
-  # of time spent in db queries, plus any arbitrary cost the app assigns
+  # of time spent in db queries, plus any arbitrary cost the app assigns.
+  # The CPU and DB costs are weighted according to settings so they
+  # can be dialed up or down individually if we need to have them contribute more or
+  # less to overall throttling behaviour.  Overall throttling prevelency
+  # not related to any specific subcategory of time sinks should be controlled by tuning the
+  # "request_throttle.outflow" setting instead, which impacts how quickly
+  # the bucket leaks.
   def calculate_cost(user_time, db_time, env)
     extra_time = env.fetch("extra-request-cost", 0)
     extra_time = 0 unless extra_time.is_a?(Numeric) && extra_time >= 0
-    user_time + db_time + extra_time
+    cpu_cost = Setting.get("request_throttle.cpu_cost_weight", "1.0").to_f
+    db_cost = Setting.get("request_throttle.db_cost_weight", "1.0").to_f
+    (user_time * cpu_cost) + (db_time * db_cost) + extra_time
   end
 
   def subject_to_throttling?(request)
-    self.class.enabled? && Canvas.redis_enabled? && !whitelisted?(request) && !blacklisted?(request)
+    self.class.enabled? && Canvas.redis_enabled? && !approved?(request) && !blocked?(request)
   end
 
   def allowed?(request, bucket)
-    unless self.class.enabled?
-      return true
-    end
-
-    if whitelisted?(request)
-      return true
-    elsif blacklisted?(request)
-      Rails.logger.info("blocking request due to blacklist, client id: #{client_identifiers(request).inspect} ip: #{request.remote_ip}")
-      InstStatsd::Statsd.increment("request_throttling.blacklisted")
-      return false
+    if approved?(request)
+      true
+    elsif blocked?(request)
+      # blocking is useful even if throttling is disabled, this is left in intentionally
+      Rails.logger.info("blocking request due to blocklist, client id: #{client_identifiers(request).inspect} ip: #{request.remote_ip}")
+      InstStatsd::Statsd.increment("request_throttling.blocked")
+      false
     else
       if bucket.full?
-        InstStatsd::Statsd.increment("request_throttling.throttled")
-        if Setting.get("request_throttle.enabled", "true") == "true"
+        if RequestThrottle.enabled?
+          InstStatsd::Statsd.increment("request_throttling.throttled")
           Rails.logger.info("blocking request due to throttling, client id: #{client_identifier(request)} bucket: #{bucket.to_json}")
           return false
         else
-          Rails.logger.info("would block request due to throttling, client id: #{client_identifier(request)} bucket: #{bucket.to_json}")
+          Rails.logger.info("WOULD HAVE throttled request (config disabled), client id: #{client_identifier(request)} bucket: #{bucket.to_json}")
         end
       end
-      return true
+      true
     end
   end
 
-  def blacklisted?(request)
-    client_identifiers(request).any? { |id| self.class.blacklist.include?(id) }
+  def blocked?(request)
+    client_identifiers(request).any? { |id| self.class.blocklist.include?(id) }
   end
 
-  def whitelisted?(request)
-    client_identifiers(request).any? { |id| self.class.whitelist.include?(id) }
+  def approved?(request)
+    client_identifiers(request).any? { |id| self.class.approvelist.include?(id) }
   end
 
   def client_identifier(request)
@@ -135,70 +142,117 @@ class RequestThrottle
 
   def tag_identifier(tag, identifier)
     return unless identifier
+
     "#{tag}:#{identifier}"
   end
 
   # This is cached on the request, so a theoretical change to the request
   # object won't be caught.
   def client_identifiers(request)
-    request.env['canvas.request_throttle.user_id'] ||= [
-        (token_string = AuthenticationMethods.access_token(request, :GET).presence) && "token:#{AccessToken.hashed_token(token_string)}",
-        tag_identifier("user", AuthenticationMethods.user_id(request).presence),
-        tag_identifier("session", session_id(request).presence),
-        tag_identifier("ip", request.ip)
-      ].compact
+    request.env["canvas.request_throttle.user_id"] ||= [
+      tag_identifier("lti_advantage", lti_advantage_client_id_and_cluster(request)),
+      tag_identifier("service_user_key", site_admin_service_user_key(request)),
+      (token_string = AuthenticationMethods.access_token(request, :GET).presence) && "token:#{AccessToken.hashed_token(token_string)}",
+      tag_identifier("user", AuthenticationMethods.user_id(request).presence),
+      tag_identifier("session", session_id(request).presence),
+      tag_identifier("tool", tool_id(request)),
+      tag_identifier("ip", request.ip)
+    ].compact
+  end
+
+  # Bucket based on LTI Advantage client_id. Routes are identified by a combination of path
+  # and whether the controller uses the LtiServices concern -- see lti_advantage_route? method.
+  def lti_advantage_client_id_and_cluster(request)
+    return unless Lti::IMS::AdvantageAccessTokenRequestHelper.lti_advantage_route?(request)
+
+    client_id = Lti::IMS::AdvantageAccessTokenRequestHelper.token(request)&.client_id
+    return unless client_id
+
+    cluster_id = request.env["canvas.domain_root_account"]&.shard&.database_server_id
+    "#{client_id}-#{cluster_id}"
+  rescue Lti::IMS::AdvantageErrors::AdvantageClientError
+    nil
+  end
+
+  def tool_id(request)
+    return unless request.request_method_symbol == :post && request.fullpath =~ %r{/api/lti/v1/tools/([^/]+)/(?:ext_)?grade_passback}
+
+    tool_id = $1
+    return unless Api::ID_REGEX.match?(tool_id)
+
+    # yes, a db lookup, but we're only loading it for these two actions,
+    # and only if another identifier couldn't be found
+    tool = ContextExternalTool.find_by(id: tool_id)
+    return unless tool
+
+    tool.domain
   end
 
   def session_id(request)
-    request.env['rack.session.options'].try(:[], :id)
+    request.env["rack.session.options"].try(:[], :id)
   end
 
-  def self.blacklist
-    @blacklist ||= list_from_setting('request_throttle.blacklist')
+  def site_admin_service_user_key(request)
+    # We only want to allow this approvelist method for User-Agent strings that match the following format:
+    # Example (short): `inst-service-name/2d0c1jk2`
+    # Example (full): `inst-service-name/2d0c1jk2 (region: us-east-1; host: 1de983c20j1ak2; env: production)`
+    regexp = %r{^inst-[a-z0-9_-]+/[a-z0-9]+.*$}i
+    return unless regexp.match?(request.user_agent)
+
+    return unless (token_string = AuthenticationMethods.access_token(request))
+
+    return unless AccessToken.site_admin?(token_string)
+
+    AccessToken.authenticate(token_string).global_developer_key_id
   end
 
-  def self.whitelist
-    @whitelist ||= list_from_setting('request_throttle.whitelist')
+  def self.blocklist
+    @blocklist ||= list_from_setting("request_throttle.blocklist")
+  end
+
+  def self.approvelist
+    @approvelist ||= list_from_setting("request_throttle.approvelist")
   end
 
   def self.reload!
-    @whitelist = @blacklist = @dynamic_settings = nil
+    @approvelist = @blocklist = @dynamic_settings = nil
     LeakyBucket.reload!
   end
 
   def self.enabled?
-    Setting.get("request_throttle.skip", "false") != 'true'
+    Setting.get("request_throttle.enabled", "true") == "true"
   end
 
   def self.list_from_setting(key)
-    Set.new(Setting.get(key, '').split(',').map(&:strip).reject(&:blank?))
+    Set.new(Setting.get(key, "").split(",").map { |i| i.gsub(/^\s+|\s*(?:;.+)?\s*$/, "") }.compact_blank)
   end
 
   def self.dynamic_settings
-    @dynamic_settings ||= YAML.safe_load(Canvas::DynamicSettings.find(tree: :private)['request_throttle.yml'] || '') || {}
+    @dynamic_settings ||= YAML.safe_load(DynamicSettings.find(tree: :private)["request_throttle.yml", failsafe: ""] || "") || {}
   end
 
   def rate_limit_exceeded
     [403,
-     {'Content-Type' => 'text/plain; charset=utf-8', 'X-Rate-Limit-Remaining' => '0.0'},
-     ["403 #{Rack::Utils::HTTP_STATUS_CODES[403]} (Rate Limit Exceeded)\n"]
-    ]
+     { "Content-Type" => "text/plain; charset=utf-8", "X-Rate-Limit-Remaining" => "0.0" },
+     ["403 #{Rack::Utils::HTTP_STATUS_CODES[403]} (Rate Limit Exceeded)\n"]]
   end
 
   def report_on_stats(db_runtime, account, starting_mem, ending_mem, user_cpu, system_cpu)
-    RequestContextGenerator.add_meta_header("b", starting_mem)
-    RequestContextGenerator.add_meta_header("m", ending_mem)
-    RequestContextGenerator.add_meta_header("u", "%.2f" % [user_cpu])
-    RequestContextGenerator.add_meta_header("y", "%.2f" % [system_cpu])
-    RequestContextGenerator.add_meta_header("d", "%.2f" % [db_runtime])
+    RequestContext::Generator.add_meta_header("b", starting_mem)
+    RequestContext::Generator.add_meta_header("m", ending_mem)
+    RequestContext::Generator.add_meta_header("u", "%.2f" % [user_cpu])
+    RequestContext::Generator.add_meta_header("y", "%.2f" % [system_cpu])
+    RequestContext::Generator.add_meta_header("d", "%.2f" % [db_runtime])
 
     if account&.shard&.database_server
-      InstStatsd::Statsd.timing("requests_system_cpu.cluster_#{account.shard.database_server.id}", system_cpu,
-                                short_stat: 'requests_system_cpu',
-                                tags: {cluster: account.shard.database_server.id})
-      InstStatsd::Statsd.timing("requests_user_cpu.cluster_#{account.shard.database_server.id}", user_cpu,
-                                short_stat: 'requests_user_cpu',
-                                tags: {cluster: account.shard.database_server.id})
+      InstStatsd::Statsd.timing("requests_system_cpu.cluster_#{account.shard.database_server.id}",
+                                system_cpu,
+                                short_stat: "requests_system_cpu",
+                                tags: { cluster: account.shard.database_server.id })
+      InstStatsd::Statsd.timing("requests_user_cpu.cluster_#{account.shard.database_server.id}",
+                                user_cpu,
+                                short_stat: "requests_user_cpu",
+                                tags: { cluster: account.shard.database_server.id })
     end
 
     mem_stat = if starting_mem == 0 || ending_mem == 0
@@ -220,7 +274,7 @@ class RequestThrottle
   # and hwm were equal, then the bucket would always leak at least a tiny bit
   # by the beginning of the next request, and thus would never be considered
   # full.
-  LeakyBucket = Struct.new(:client_identifier, :count, :last_touched) do
+  LeakyBucket = Struct.new(:client_identifier, :count, :last_touched) do # rubocop:disable Lint/StructNewOverride
     def initialize(client_identifier, count = 0.0, last_touched = nil)
       super
     end
@@ -238,14 +292,12 @@ class RequestThrottle
       "request_throttling:#{client_identifier}"
     end
 
-    SETTING_DEFAULTS = [
-      [:maximum, 800],
-      [:hwm, 600],
-      [:outflow, 10],
-      [:up_front_cost, 50],
-    ]
-
-    SETTING_DEFAULTS.each do |(setting, default)|
+    {
+      maximum: 800,
+      hwm: 600,
+      outflow: 10,
+      up_front_cost: 50,
+    }.each do |(setting, default)|
       define_method(setting) do
         (self.class.custom_settings_hash[client_identifier]&.[](setting.to_s) ||
           Setting.get("request_throttle.#{setting}", default)).to_f
@@ -255,7 +307,7 @@ class RequestThrottle
     def self.custom_settings_hash
       @custom_settings_hash ||= begin
         JSON.parse(
-          Setting.get('request_throttle.custom_settings', '{}')
+          Setting.get("request_throttle.custom_settings", "{}")
         )
       rescue JSON::JSONError
         {}
@@ -265,14 +317,14 @@ class RequestThrottle
     def self.up_front_cost_by_path_regex
       @up_front_cost_regex_map ||=
         begin
-          hash = RequestThrottle.dynamic_settings['up_front_cost_by_path_regex'] || {}
-          hash.keys.select{|k| k.is_a?(String)}.map{|k| hash[Regexp.new(k)] = hash.delete(k)} #regexify strings
+          hash = RequestThrottle.dynamic_settings["up_front_cost_by_path_regex"] || {}
+          hash.keys.select { |k| k.is_a?(String) }.map { |k| hash[Regexp.new(k)] = hash.delete(k) } # regexify strings
           hash.each do |k, v|
-            unless k.is_a?(Regexp) && v.is_a?(Numeric)
-              ::Rails.logger.error("ERROR in request_throttle.yml: up_front_cost_by_path_regex must use Regex => Numeric key-value pairs")
-              hash.clear
-              break
-            end
+            next if k.is_a?(Regexp) && v.is_a?(Numeric)
+
+            ::Rails.logger.error("ERROR in request_throttle.yml: up_front_cost_by_path_regex must use Regex => Numeric key-value pairs")
+            hash.clear
+            break
           end
           hash
         end
@@ -289,22 +341,20 @@ class RequestThrottle
     def get_up_front_cost_for_path(path)
       # if it matches any of the regexes in the setting, return the specified cost
       self.class.up_front_cost_by_path_regex.each do |regex, cost|
-        return cost if regex =~ path
+        return cost if regex&.match?(path)
       end
-      self.up_front_cost # otherwise use the default
+      up_front_cost # otherwise use the default
     end
 
     # This method does an initial increment by the up_front_cost, loading the
     # data out of redis at the same time. It then yields to the block,
     # expecting the block to return the final cost. It then increments again,
     # subtracting the initial up_front_cost from the final cost to erase it.
-    def reserve_capacity(up_front_cost = self.up_front_cost)
-      return (self.count = yield) unless RequestThrottle.enabled?
-
-      increment(0, up_front_cost)
+    def reserve_capacity(up_front_cost = self.up_front_cost, request_prejudged: false)
+      increment(0, up_front_cost) unless request_prejudged
       cost = yield
     ensure
-      increment(cost || 0, -up_front_cost) if RequestThrottle.enabled?
+      increment(cost || 0, -up_front_cost) unless request_prejudged
     end
 
     def full?
@@ -328,7 +378,7 @@ class RequestThrottle
       end
 
       current_time = current_time.to_f
-      Rails.logger.debug("request throttling increment: #{([amount, reserve_cost, current_time] + self.as_json.to_a).to_json}")
+      Rails.logger.debug("request throttling increment: #{([amount, reserve_cost, current_time] + as_json.to_a).to_json}")
       redis = self.redis
       count, last_touched = LeakyBucket.lua.run(:increment_bucket, [cache_key], [amount + reserve_cost, current_time, outflow, maximum], redis)
       self.count = count.to_f
@@ -336,3 +386,5 @@ class RequestThrottle
     end
   end
 end
+
+Canvas::Reloader.on_reload { RequestThrottle.reload! }

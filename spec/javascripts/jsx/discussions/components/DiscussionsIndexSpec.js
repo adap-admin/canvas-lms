@@ -17,10 +17,10 @@
  */
 
 import React from 'react'
-import { Provider } from 'react-redux'
-import { mount, shallow } from 'enzyme'
+import {Provider} from 'react-redux'
+import {mount, shallow} from 'enzyme'
 
-import DiscussionsIndex from 'jsx/discussions/components/DiscussionsIndex'
+import DiscussionsIndex from 'ui/features/discussion_topics_index/react/components/DiscussionsIndex'
 
 const defaultProps = () => ({
   closeForComments: () => {},
@@ -34,7 +34,7 @@ const defaultProps = () => ({
   permissions: {create: false, manage_content: false, moderate: false},
   pinnedDiscussions: [],
   pinnedDiscussionIds: [],
-  roles: ["student", "user"],
+  roles: ['student', 'user'],
   togglePin: () => {},
   unpinnedDiscussions: [],
   unpinnedDiscussionIds: [],
@@ -62,9 +62,9 @@ const store = {
     roles: ['user', 'teacher'],
     unpinnedDiscussionIds: [],
     userSettings: {collapse_global_nav: false, manual_mark_as_read: false},
-    copyToOpen: false,
-    sendToOpen: false,
-    DIRECT_SHARE_ENABLED: false
+    copyTo: {open: false, selection: {}},
+    sendTo: {open: false, selection: {}},
+    DIRECT_SHARE_ENABLED: false,
   }),
   // we only need to define these functions so that we match the react-redux contextTypes
   // shape for a store otherwise react-redux thinks our store is invalid

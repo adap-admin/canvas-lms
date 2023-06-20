@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -34,5 +36,4 @@ module Types
     argument :field, SubmissionSearchOrderFieldInputType, required: true
     argument :direction, OrderDirectionType, required: false
   end
-
 end

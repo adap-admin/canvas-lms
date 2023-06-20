@@ -17,30 +17,35 @@
  */
 
 import React from 'react'
-import { mount, shallow } from 'enzyme'
-import { Provider } from 'react-redux'
+import {mount, shallow} from 'enzyme'
+import {Provider} from 'react-redux'
 import _ from 'lodash'
 
-import AnnouncementsIndex from 'jsx/announcements/components/AnnouncementsIndex'
+import AnnouncementsIndex from 'ui/features/announcements/react/components/AnnouncementsIndex'
 import sampleData from '../sampleData'
 
-const makeProps = (props = {}) => _.merge({
-  announcements: [],
-  announcementsPage: 1,
-  isCourseContext: true,
-  isLoadingAnnouncements: false,
-  hasLoadedAnnouncements: false,
-  announcementsLastPage: 5,
-  permissions: {
-    create: true,
-    manage_content: true,
-    moderate: true,
-  },
-  getAnnouncements () {},
-  setAnnouncementSelection () {},
-  deleteAnnouncements () {},
-  toggleAnnouncementsLock () {},
-}, props)
+const makeProps = (props = {}) =>
+  _.merge(
+    {
+      announcements: [],
+      announcementsPage: 1,
+      isCourseContext: true,
+      isLoadingAnnouncements: false,
+      hasLoadedAnnouncements: false,
+      announcementsLastPage: 5,
+      permissions: {
+        create: true,
+        manage_course_content_delete: true,
+        manage_course_content_edit: true,
+        moderate: true,
+      },
+      getAnnouncements() {},
+      setAnnouncementSelection() {},
+      deleteAnnouncements() {},
+      toggleAnnouncementsLock() {},
+    },
+    props
+  )
 
 // necessary to mock this because we have a child Container/"Smart" component
 // that need to pull their props from the store state
@@ -50,7 +55,8 @@ const store = {
     contextId: '1',
     permissions: {
       create: true,
-      manage_content: true,
+      manage_course_content_delete: true,
+      manage_course_content_edit: true,
       moderate: true,
     },
     selectedAnnouncements: [],
@@ -74,7 +80,7 @@ test('renders the component', () => {
 })
 
 test('displays spinner when loading announcements', () => {
-  const tree = shallow(<AnnouncementsIndex {...makeProps({ isLoadingAnnouncements: true })} />)
+  const tree = shallow(<AnnouncementsIndex {...makeProps({isLoadingAnnouncements: true})} />)
   const node = tree.find('Spinner')
   ok(node.exists())
 })
@@ -83,34 +89,64 @@ test('calls getAnnouncements if hasLoadedAnnouncements is false', () => {
   const getAnnouncements = sinon.spy()
   mount(
     <Provider store={store}>
-      <AnnouncementsIndex {...makeProps({ getAnnouncements })} />
+      <AnnouncementsIndex {...makeProps({getAnnouncements})} />
     </Provider>
   )
   equal(getAnnouncements.callCount, 1)
 })
 
-test('should render IndexHeader if we have manage_content permissions', () => {
+test('should render IndexHeader if we have manage_course_content_edit/delete permissions', () => {
   const tree = mount(
     <Provider store={store}>
-      <AnnouncementsIndex {...makeProps({ permissions: { manage_content: true } })} />
+      <AnnouncementsIndex
+        {...makeProps({
+          permissions: {manage_course_content_delete: true, manage_course_content_edit: true},
+        })}
+      />
     </Provider>
   )
   const node = tree.find('IndexHeader')
   ok(node.exists())
 })
 
-test('should render IndexHeader even if we do not have manage_content permissions', () => {
+test('should render IndexHeader even if we do not have manage_course_content_edit/delete permissions', () => {
   const tree = mount(
     <Provider store={store}>
-      <AnnouncementsIndex {...makeProps({ permissions: { manage_content: false } })} />
+      <AnnouncementsIndex
+        {...makeProps({
+          permissions: {manage_course_content_delete: true, manage_course_content_edit: true},
+        })}
+      />
     </Provider>
   )
   const node = tree.find('IndexHeader')
   ok(node.exists())
 })
 
-test('clicking announcement checkbox triggers setAnnouncementSelection with correct data', (assert) => {
+test('clicking announcement checkbox triggers setAnnouncementSelection with correct data', assert => {
   const done = assert.async()
+  const selectSpy = sinon.spy()
+  const props = {
+    announcements: sampleData.announcements,
+    announcementSelectionChangeStart: selectSpy,
+    hasLoadedAnnouncements: true,
+    permissions: {moderate: true, manage_course_content_delete: true},
+  }
+  const tree = mount(
+    <Provider store={store}>
+      <AnnouncementsIndex {...makeProps(props)} />
+    </Provider>
+  )
+
+  tree.find('input[type="checkbox"]').simulate('change', {target: {checked: true}})
+  setTimeout(() => {
+    equal(selectSpy.callCount, 1)
+    deepEqual(selectSpy.firstCall.args, [{selected: true, id: sampleData.announcements[0].id}])
+    done()
+  })
+})
+
+test('does not show checkbox if manage_course_content_edit/delete is false ', () => {
   const selectSpy = sinon.spy()
   const props = {
     announcements: sampleData.announcements,
@@ -118,6 +154,8 @@ test('clicking announcement checkbox triggers setAnnouncementSelection with corr
     hasLoadedAnnouncements: true,
     permissions: {
       moderate: true,
+      manage_course_content_delete: false,
+      manage_course_content_edit: false,
     },
   }
   const tree = mount(
@@ -126,15 +164,11 @@ test('clicking announcement checkbox triggers setAnnouncementSelection with corr
     </Provider>
   )
 
-  tree.find('input[type="checkbox"]').simulate('change', { target: { checked: true } })
-  setTimeout(() => {
-    equal(selectSpy.callCount, 1)
-    deepEqual(selectSpy.firstCall.args, [{ selected: true, id: sampleData.announcements[0].id }])
-    done()
-  })
+  const node = tree.find('input[type="checkbox"]')
+  notOk(node.exists())
 })
 
-test('onManageAnnouncement shows delete modal when called with delete action', (assert) => {
+test('onManageAnnouncement shows delete modal when called with delete action', assert => {
   const done = assert.async()
   const props = {
     announcements: sampleData.announcements,
@@ -144,9 +178,9 @@ test('onManageAnnouncement shows delete modal when called with delete action', (
     },
   }
 
-  function indexRef (c) {
+  function indexRef(c) {
     if (c) {
-      c.onManageAnnouncement(null, { action: 'delete' })
+      c.onManageAnnouncement(null, {action: 'delete'})
 
       setTimeout(() => {
         ok(c.deleteModal)
@@ -163,7 +197,7 @@ test('onManageAnnouncement shows delete modal when called with delete action', (
   )
 })
 
-test('onManageAnnouncement calls toggleAnnouncementsLock when called with lock action', (assert) => {
+test('onManageAnnouncement calls toggleAnnouncementsLock when called with lock action', assert => {
   const done = assert.async()
   const lockSpy = sinon.spy()
   const props = {
@@ -175,9 +209,9 @@ test('onManageAnnouncement calls toggleAnnouncementsLock when called with lock a
     toggleAnnouncementsLock: lockSpy,
   }
 
-  function indexRef (c) {
+  function indexRef(c) {
     if (c) {
-      c.onManageAnnouncement(null, { action: 'lock' })
+      c.onManageAnnouncement(null, {action: 'lock'})
 
       setTimeout(() => {
         equal(lockSpy.callCount, 1)

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -51,11 +53,12 @@
 class Quizzes::QuizSubmissionQuestionsController < ApplicationController
   include Api::V1::QuizSubmissionQuestion
   include ::Filters::QuizSubmissions
+  include ActionView::Helpers::NumberHelper
 
   before_action :require_user, :require_quiz_submission, :export_scopes
-  before_action :require_question, only: [ :show, :flag, :unflag ]
-  before_action :prepare_service, only: [ :answer, :flag, :unflag ]
-  before_action :validate_ldb_status!, only: [ :answer, :flag, :unflag ]
+  before_action :require_question, only: %i[show flag unflag formatted_answer]
+  before_action :prepare_service, only: %i[answer flag unflag]
+  before_action :validate_ldb_status!, only: %i[answer flag unflag]
 
   # @API Get all quiz submission questions.
   #
@@ -73,7 +76,7 @@ class Quizzes::QuizSubmissionQuestionsController < ApplicationController
   def index
     retrieve_quiz_submission_attempt!(params[:quiz_submission_attempt]) if params[:quiz_submission_attempt]
 
-    reject! 'Cannot receive one question at a time questions in the API', 401 if @quiz.one_question_at_a_time && censored?
+    reject! "Cannot receive one question at a time questions in the API", 401 if @quiz.one_question_at_a_time && censored?
 
     if @quiz_submission.completed? && !@quiz_submission.results_visible?(user: @current_user)
       reject! "Cannot view questions due to quiz settings", 401
@@ -81,14 +84,14 @@ class Quizzes::QuizSubmissionQuestionsController < ApplicationController
 
     if authorized_action(@quiz_submission, @current_user, :read)
       render json: quiz_submission_questions_json(@quiz_submission.quiz_questions,
-        @quiz_submission,
-        {
-          user: @current_user,
-          session: session,
-          includes: extract_includes,
-          censored: censored?,
-          shuffle_answers: @quiz.shuffle_answers_for_user?(@current_user)
-        })
+                                                  @quiz_submission,
+                                                  {
+                                                    user: @current_user,
+                                                    session:,
+                                                    includes: extract_includes,
+                                                    censored: censored?,
+                                                    shuffle_answers: @quiz.shuffle_answers_for_user?(@current_user)
+                                                  })
     end
   end
 
@@ -131,15 +134,13 @@ class Quizzes::QuizSubmissionQuestionsController < ApplicationController
   # @returns [QuizSubmissionQuestion]
   def answer
     unless @quiz_submission.grants_right?(@service.participant.user, :update)
-      reject! 'you are not allowed to update questions for this quiz submission', 403
+      reject! "you are not allowed to update questions for this quiz submission", 403
     end
 
-    answers = params.to_unsafe_h.fetch(:quiz_questions, []).reduce({}) do |hsh, p|
+    answers = params.to_unsafe_h.fetch(:quiz_questions, []).each_with_object({}) do |p, hsh|
       if p[:id].present?
         hsh[p[:id].to_i] = p[:answer] || []
       end
-
-      hsh
     end
 
     quiz_questions = @quiz.quiz_questions.where(id: answers.keys)
@@ -161,6 +162,42 @@ class Quizzes::QuizSubmissionQuestionsController < ApplicationController
     @service.update_question(record, @quiz_submission, params[:attempt])
 
     render json: quiz_submission_questions_json(quiz_questions.all, @quiz_submission.reload, censored: true)
+  end
+
+  # @API Get a formatted student numerical answer.
+  #
+  # Matches the intended behavior of the UI when a numerical answer is entered
+  # and returns the resulting formatted number
+  #
+  # @argument answer [Required, Numeric]
+  #
+  # @example_response
+  #  {
+  #    "formatted_answer": 12.1234
+  #  }
+  def formatted_answer
+    student_answer = params[:answer]
+
+    if student_answer.blank?
+      reject! "answer param is required", 422
+    end
+
+    question = @question.question_data.question
+    question_type = question["question_type"]
+
+    if question_type == "numerical_question"
+      ## matches behavior of public/javascript/take_quiz.js when entering a numerical answer
+      question_has_precision_answers =
+        question[:answers].any? { |answer| answer[:numerical_answer_type] == "precision_answer" }
+      formatting_options = {
+        precision: question_has_precision_answers ? 16 : 4,
+        strip_insignificant_zeros: true,
+        significant: question_has_precision_answers
+      }
+      student_answer = number_with_precision(student_answer, formatting_options)
+    end
+
+    render json: { formatted_answer: student_answer }
   end
 
   # @API Flagging a question.
@@ -188,11 +225,11 @@ class Quizzes::QuizSubmissionQuestionsController < ApplicationController
   #  }
   def flag
     unless @quiz_submission.grants_right?(@service.participant.user, :update)
-      reject! 'you are not allowed to update questions for this quiz submission', 403
+      reject! "you are not allowed to update questions for this quiz submission", 403
     end
     flag_current_question(true)
-    render json: quiz_submission_questions_json([ @question ],
-      @quiz_submission.reload)
+    render json: quiz_submission_questions_json([@question],
+                                                @quiz_submission.reload)
   end
 
   # @API Unflagging a question.
@@ -220,11 +257,11 @@ class Quizzes::QuizSubmissionQuestionsController < ApplicationController
   #  }
   def unflag
     unless @quiz_submission.grants_right?(@service.participant.user, :update)
-      reject! 'you are not allowed to update questions for this quiz submission', 403
+      reject! "you are not allowed to update questions for this quiz submission", 403
     end
     flag_current_question(false)
-    render json: quiz_submission_questions_json([ @question ],
-      @quiz_submission.reload)
+    render json: quiz_submission_questions_json([@question],
+                                                @quiz_submission.reload)
   end
 
   private
@@ -247,10 +284,8 @@ class Quizzes::QuizSubmissionQuestionsController < ApplicationController
   #
   # [Transient:CNVS-10071]
   def validate_ldb_status!(quiz = @quiz)
-    if quiz.require_lockdown_browser?
-      unless ldb_plugin.authorized?(self)
-        reject! 'this quiz requires the lockdown browser', 403
-      end
+    if quiz.require_lockdown_browser? && !ldb_plugin.authorized?(self)
+      reject! "this quiz requires the lockdown browser", 403
     end
   end
 
@@ -272,10 +307,10 @@ class Quizzes::QuizSubmissionQuestionsController < ApplicationController
     question_record["question_#{@question.id}_marked"] = flagged_unflagged
 
     @service.update_question(question_record,
-      @quiz_submission,
-      params[:attempt],
-      # we don't want a snapshot generated for each flagging action
-      false)
+                             @quiz_submission,
+                             params[:attempt],
+                             # we don't want a snapshot generated for each flagging action
+                             false)
   end
 
   def extract_includes(key = :include, hash = params)

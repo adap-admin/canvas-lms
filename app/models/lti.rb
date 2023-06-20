@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -17,6 +19,6 @@
 
 module Lti
   def self.table_name_prefix
-    'lti_'
+    "lti_"
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -16,12 +18,11 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'spec_helper'
+require "spec_helper"
 
 describe CanvasKaltura::KalturaStringIO do
-  it "should set path" do
+  it "sets path" do
     io = CanvasKaltura::KalturaStringIO.new("hey there", "custom_path.csv")
     expect(io.path).to eq("custom_path.csv")
   end
-
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,34 +18,32 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
-
-require 'nokogiri'
+require "nokogiri"
 
 describe "syllabus" do
-  def anonymous_syllabus_access_allowed(property, value=true)
-    course_with_teacher(:course => @course, :active_all => true)
+  def anonymous_syllabus_access_allowed(property, value = true)
+    course_with_teacher(course: @course, active_all: true)
     @course.send("#{property}=", value)
     @course.save!
 
     get "/courses/#{@course.id}/assignments/syllabus"
 
     expect(response).to be_successful
-    page = Nokogiri::HTML(response.body)
+    page = Nokogiri::HTML5(response.body)
     expect(page.css('#identity a[href="/login"]')).not_to be_nil
-    expect(page.at_css('#syllabusContainer')).not_to be_nil
+    expect(page.at_css("#syllabusContainer")).not_to be_nil
   end
 
-  it "should allow access to public courses" do
+  it "allows access to public courses" do
     anonymous_syllabus_access_allowed :is_public
   end
 
-  it "should allow access to a public syllabus" do
+  it "allows access to a public syllabus" do
     anonymous_syllabus_access_allowed :public_syllabus
   end
 
   shared_examples_for "public syllabus file verifiers" do
-    it "should allow viewing available files in a public syllabus" do
+    it "allows viewing available files in a public syllabus" do
       course_factory(active_all: true)
       attachment_model
       @course.syllabus_body = "<a href=\"/courses/#{@course.id}/files/#{@attachment.id}/download\">linky</a>"
@@ -53,13 +53,13 @@ describe "syllabus" do
       get "/courses/#{@course.id}/assignments/syllabus"
 
       expect(response).to be_successful
-      page = Nokogiri::HTML(response.body)
+      page = Nokogiri::HTML5(response.body)
       expect(page.css('#identity a[href="/login"]')).not_to be_nil
-      link = page.at_css('#course_syllabus a')
-      expect(link.attributes['href'].value).to include("verifier=#{@attachment.uuid}")
+      link = page.at_css("#course_syllabus a")
+      expect(link.attributes["href"].value).to include("verifier=#{@attachment.uuid}")
     end
 
-    it "should not allow viewing locked files in a public syllabus" do
+    it "does not allow viewing locked files in a public syllabus" do
       course_factory(active_all: true)
       attachment_model
       @attachment.locked = true
@@ -72,15 +72,15 @@ describe "syllabus" do
       get "/courses/#{@course.id}/assignments/syllabus"
 
       expect(response).to be_successful
-      page = Nokogiri::HTML(response.body)
+      page = Nokogiri::HTML5(response.body)
       expect(page.css('#identity a[href="/login"]')).not_to be_nil
-      link = page.at_css('#course_syllabus a')
-      expect(link.attributes['href'].value).to_not include("verifier=#{@attachment.uuid}")
+      link = page.at_css("#course_syllabus a")
+      expect(link.attributes["href"].value).to_not include("verifier=#{@attachment.uuid}")
     end
   end
 
   shared_examples_for "public syllabus for authenticated file verifiers" do
-    it "should allow viewing available files in a public to authenticated syllabus" do
+    it "allows viewing available files in a public to authenticated syllabus" do
       course_factory(active_all: true)
       attachment_model
       @course.syllabus_body = "<a href=\"/courses/#{@course.id}/files/#{@attachment.id}/download\">linky</a>"
@@ -91,13 +91,13 @@ describe "syllabus" do
       get "/courses/#{@course.id}/assignments/syllabus"
 
       expect(response).to be_successful
-      page = Nokogiri::HTML(response.body)
+      page = Nokogiri::HTML5(response.body)
       expect(page.css('#identity a[href="/login"]')).not_to be_nil
-      link = page.at_css('#course_syllabus a')
-      expect(link.attributes['href'].value).to include("verifier=#{@attachment.uuid}")
+      link = page.at_css("#course_syllabus a")
+      expect(link.attributes["href"].value).to include("verifier=#{@attachment.uuid}")
     end
 
-    it "should not allow viewing locked files in a public to authenticated syllabus" do
+    it "does not allow viewing locked files in a public to authenticated syllabus" do
       course_factory(active_all: true)
       attachment_model
       @attachment.locked = true
@@ -111,15 +111,15 @@ describe "syllabus" do
       get "/courses/#{@course.id}/assignments/syllabus"
 
       expect(response).to be_successful
-      page = Nokogiri::HTML(response.body)
+      page = Nokogiri::HTML5(response.body)
       expect(page.css('#identity a[href="/login"]')).not_to be_nil
-      link = page.at_css('#course_syllabus a')
-      expect(link.attributes['href'].value).to_not include("verifier=#{@attachment.uuid}")
+      link = page.at_css("#course_syllabus a")
+      expect(link.attributes["href"].value).to_not include("verifier=#{@attachment.uuid}")
     end
   end
 
-  context "as an authenticated non-course user" do
-    before :each do
+  context "as an authenticated non-course user for authenticated file verifiers" do
+    before do
       user_factory(active_all: true)
       user_session(@user)
     end
@@ -132,7 +132,7 @@ describe "syllabus" do
   end
 
   context "as an authenticated non-course user" do
-    before :each do
+    before do
       user_factory(active_all: true)
       user_session(@user)
     end
@@ -146,11 +146,10 @@ describe "syllabus" do
     course_factory.save
     user_factory(active_user: true)
     user_session(@user)
-
   end
 
-  it "should display syllabus description on syllabus course home pages" do
-    course_with_teacher_logged_in(:active_all => true)
+  it "displays syllabus description on syllabus course home pages" do
+    course_with_teacher_logged_in(active_all: true)
     syllabus_body = "test syllabus body"
     @course.syllabus_body = syllabus_body
     @course.default_view = "syllabus"
@@ -159,7 +158,7 @@ describe "syllabus" do
     get "/courses/#{@course.id}"
 
     expect(response).to be_successful
-    page = Nokogiri::HTML(response.body)
-    expect(page.at_css('#course_syllabus').text).to include(syllabus_body)
+    page = Nokogiri::HTML5(response.body)
+    expect(page.at_css("#course_syllabus").text).to include(syllabus_body)
   end
 end

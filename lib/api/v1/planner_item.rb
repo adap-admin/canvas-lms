@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -29,10 +31,24 @@ module Api::V1::PlannerItem
   include Api::V1::AssessmentRequest
   include PlannerApiHelper
 
-  API_PLANNABLE_FIELDS = [:id, :title, :course_id, :location_name, :todo_date, :details, :url, :unread_count,
-                          :read_state, :created_at, :updated_at].freeze
-  CALENDAR_PLANNABLE_FIELDS = [:all_day, :location_address, :description, :start_at, :end_at].freeze
-  GRADABLE_FIELDS = [:assignment_id, :points_possible, :due_at].freeze
+  API_PLANNABLE_FIELDS = %i[id
+                            title
+                            course_id
+                            location_name
+                            todo_date
+                            details
+                            url
+                            unread_count
+                            read_state
+                            created_at
+                            updated_at].freeze
+  CALENDAR_PLANNABLE_FIELDS = %i[all_day
+                                 location_address
+                                 description
+                                 start_at
+                                 end_at
+                                 online_meeting_url].freeze
+  GRADABLE_FIELDS = %i[assignment_id points_possible due_at].freeze
   PLANNER_NOTE_FIELDS = [:user_id].freeze
   ASSESSMENT_REQUEST_FIELDS = [:workflow_state].freeze
 
@@ -40,11 +56,11 @@ module Api::V1::PlannerItem
     planner_override = item.planner_override_for(user)
     planner_override.plannable = item if planner_override
     context_data(item, use_effective_code: true).merge({
-      :plannable_id => item.id,
-      :planner_override => planner_override_json(planner_override, user, session, item.class_name),
-      :plannable_type => PlannerHelper::PLANNABLE_TYPES.key(item.class_name),
-      :new_activity => new_activity(item, user, opts)
-    }).merge(submission_statuses_for(user, item, opts)).tap do |hash|
+                                                         plannable_id: item.id,
+                                                         planner_override: planner_override_json(planner_override, user, session, item.class_name),
+                                                         plannable_type: PlannerHelper::PLANNABLE_TYPES.key(item.class_name),
+                                                         new_activity: new_activity(item, user, opts)
+                                                       }).merge(submission_statuses_for(user, item, opts)).tap do |hash|
       if item.is_a?(::CalendarEvent)
         hash[:plannable_date] = item.start_at || item.created_at
         hash[:plannable] = plannable_json(item.attributes, extra_fields: CALENDAR_PLANNABLE_FIELDS)
@@ -71,15 +87,15 @@ module Api::V1::PlannerItem
         hash[:planner_override] ||= planner_override_json(item.planner_override_for(user), user, session)
       elsif item.is_a?(Announcement)
         ann_hash = item.attributes
-        ann_hash.delete('todo_date')
+        ann_hash.delete("todo_date")
         unread_count, read_state = topics_status_for(user, item.id, opts[:topics_status])[item.id]
         hash[:plannable_date] = item.posted_at || item.created_at
-        hash[:plannable] = plannable_json({unread_count: unread_count, read_state: read_state}.merge(ann_hash))
+        hash[:plannable] = plannable_json({ unread_count:, read_state: }.merge(ann_hash))
         hash[:html_url] = named_context_url(item.context, :context_discussion_topic_url, item.id)
       elsif item.is_a?(DiscussionTopic) || (item.respond_to?(:discussion_topic?) && item.discussion_topic?)
         topic = item.is_a?(DiscussionTopic) ? item : item.discussion_topic
         unread_count, read_state = topics_status_for(user, topic.id, opts[:topics_status])[topic.id]
-        unread_attributes = {unread_count: unread_count, read_state: read_state}
+        unread_attributes = { unread_count:, read_state: }
         hash[:plannable_id] = topic.id
         hash[:plannable_date] = item[:user_due_date] || topic.todo_date || topic.posted_at || topic.created_at
         hash[:plannable_type] = PlannerHelper::PLANNABLE_TYPES.key(topic.class_name)
@@ -89,7 +105,7 @@ module Api::V1::PlannerItem
       elsif item.is_a?(AssessmentRequest)
         hash[:plannable_type] = PlannerHelper::PLANNABLE_TYPES.key(item.class_name)
         hash[:plannable_date] = item.asset.assignment.peer_reviews_due_at || item.assessor_asset.cached_due_date
-        title_date = {title: item.asset&.assignment&.title, todo_date: hash[:plannable_date]}
+        title_date = { title: item.asset&.assignment&.title, todo_date: hash[:plannable_date] }
         hash[:plannable] = plannable_json(title_date.merge(item.attributes), extra_fields: ASSESSMENT_REQUEST_FIELDS)
         hash[:html_url] = Submission::ShowPresenter.new(
           submission: item.asset,
@@ -101,10 +117,13 @@ module Api::V1::PlannerItem
         hash[:plannable] = plannable_json(item.attributes, extra_fields: GRADABLE_FIELDS)
         hash[:html_url] = assignment_html_url(item, user, hash[:submissions])
       end
+      if item.respond_to?(:restrict_quantitative_data?) && item.restrict_quantitative_data?(@current_user)
+        hash[:plannable][:restrict_quantitative_data] = true
+      end
     end.tap do |hash|
       if (context = item.try(:context) || item.try(:course))
         hash[:context_name] = context.try(:nickname_for, @user) || context.name
-        if context.is_a?(::Course) && context.feature_enabled?(:course_card_images)
+        if context.is_a?(::Course)
           hash[:context_image] = context.image
         end
       end
@@ -120,20 +139,20 @@ module Api::V1::PlannerItem
       end
     end
 
-    ActiveRecord::Associations::Preloader.new.preload(preload_items, :planner_overrides, ::PlannerOverride.where(user: user))
-    events, other_items = preload_items.partition{|i| i.is_a?(::CalendarEvent)}
-    ActiveRecord::Associations::Preloader.new.preload(events, :context) if events.any?
-    assessment_requests, plannable_items = other_items.partition{|i| i.is_a?(::AssessmentRequest)}
-    ActiveRecord::Associations::Preloader.new.preload(assessment_requests, [:assessor_asset, asset: {assignment: :context}]) if assessment_requests.any?
-    notes, context_items = plannable_items.partition{|i| i.is_a?(::PlannerNote)}
-    ActiveRecord::Associations::Preloader.new.preload(notes, user: {pseudonym: :account}) if notes.any?
-    ActiveRecord::Associations::Preloader.new.preload(context_items, {context: :root_account}) if context_items.any?
-    ss = submission_statuses(context_items.select{|i| i.is_a?(::Assignment)}, user)
-    discussions = context_items.select{|i| i.is_a?(::DiscussionTopic)}
+    ActiveRecord::Associations.preload(preload_items, :planner_overrides, ::PlannerOverride.where(user:))
+    events, other_items = preload_items.partition { |i| i.is_a?(::CalendarEvent) }
+    ActiveRecord::Associations.preload(events, :context) if events.any?
+    assessment_requests, plannable_items = other_items.partition { |i| i.is_a?(::AssessmentRequest) }
+    ActiveRecord::Associations.preload(assessment_requests, [:assessor_asset, asset: { assignment: :context }]) if assessment_requests.any?
+    notes, context_items = plannable_items.partition { |i| i.is_a?(::PlannerNote) }
+    ActiveRecord::Associations.preload(notes, user: { pseudonym: :account }) if notes.any?
+    ActiveRecord::Associations.preload(context_items, { context: :root_account }) if context_items.any?
+    ss = submission_statuses(context_items.select { |i| i.is_a?(::Assignment) }, user)
+    discussions = context_items.select { |i| i.is_a?(::DiscussionTopic) }
     topics_status = topics_status_for(user, discussions.map(&:id))
 
     items.map do |item|
-      planner_item_json(item, user, session, opts.merge(submission_statuses: ss, topics_status: topics_status))
+      planner_item_json(item, user, session, opts.merge(submission_statuses: ss, topics_status:))
     end
   end
 
@@ -143,20 +162,23 @@ module Api::V1::PlannerItem
   def plannable_json(item_hash, extra_fields: [])
     item_hash = item_hash.with_indifferent_access
     item_hash[:due_at] = item_hash.delete(:user_due_date) if item_hash.key?(:user_due_date)
+    url = online_meeting_url(item_hash[:description], item_hash[:location_name])
+    item_hash[:online_meeting_url] = url if url
     item_hash.slice(*API_PLANNABLE_FIELDS, *extra_fields)
   end
 
   def submission_statuses_for(user, item, opts = {})
-    submission_status = {submissions: false}
+    submission_status = { submissions: false }
     return submission_status unless item.is_a?(Assignment)
+
     ss = opts[:submission_statuses] || submission_statuses(item, user)
     submission_status[:submissions] = ss[item.id]&.except(:new_activity)
     submission_status
   end
 
   def submission_statuses(assignments, user)
-    subs = Submission.where(assignment: assignments, user: user).
-      preload([:content_participations, visible_submission_comments: :author])
+    subs = Submission.where(assignment: assignments, user:)
+                     .preload([:content_participations, visible_submission_comments: :author])
     subs_hash = subs.index_by(&:assignment_id)
     subs_data_hash = {}
     Array(assignments).each do |assign|
@@ -166,11 +188,13 @@ module Api::V1::PlannerItem
         submitted: submission&.has_submission?,
         excused: submission&.excused?,
         graded: submission&.graded?,
+        posted_at: submission&.posted_at,
         late: submission&.late?,
         missing: submission&.missing?,
         needs_grading: submission&.needs_grading?,
         has_feedback: submission&.last_teacher_comment.present?,
         new_activity: submission&.unread?(user),
+        redo_request: submission&.redo_request?
       }
       sub_data_hash[:feedback] = feedback_data(submission, user) if sub_data_hash[:has_feedback]
       subs_data_hash[assign.id] = sub_data_hash
@@ -191,22 +215,26 @@ module Api::V1::PlannerItem
     feedback_hash
   end
 
-  def topics_status_for(user, topic_ids, topics_status={})
+  def topics_status_for(user, topic_ids, topics_status = {})
     topics_status ||= {}
     unknown_topic_ids = Array(topic_ids) - topics_status.keys
     if unknown_topic_ids.any?
-      participant_info = DiscussionTopic.select("discussion_topics.id, COALESCE(dtp.unread_entry_count, COUNT(de.id)) AS unread_entry_count,
-        COALESCE(dtp.workflow_state, 'unread') AS unread_state").
-        joins("LEFT JOIN #{DiscussionTopicParticipant.quoted_table_name} AS dtp
-                 ON dtp.discussion_topic_id = discussion_topics.id
-                AND dtp.user_id = #{User.connection.quote(user)}
-               LEFT JOIN #{DiscussionEntry.quoted_table_name} AS de
-                 ON de.discussion_topic_id = discussion_topics.id
-                AND dtp.id IS NULL").
-        where(id: unknown_topic_ids).
-        group("discussion_topics.id, dtp.id")
-      participant_info.each do |pi|
-        topics_status[pi[:id]] = [pi[:unread_entry_count], pi[:unread_state]]
+      Shard.partition_by_shard(unknown_topic_ids) do |u_topic_ids|
+        DiscussionTopic
+          .select("discussion_topics.id,
+                   COALESCE(dtp.unread_entry_count, COUNT(de.id)) AS unread_entry_count,
+                   COALESCE(dtp.workflow_state, 'unread') AS unread_state")
+          .joins("LEFT JOIN #{DiscussionTopicParticipant.quoted_table_name} AS dtp
+                    ON dtp.discussion_topic_id = discussion_topics.id
+                    AND dtp.user_id = #{User.connection.quote(user&.id_for_database)}
+                  LEFT JOIN #{DiscussionEntry.quoted_table_name} AS de
+                    ON de.discussion_topic_id = discussion_topics.id
+                    AND dtp.id IS NULL")
+          .where(id: u_topic_ids)
+          .group("discussion_topics.id, dtp.id")
+          .each do |pi|
+          topics_status[pi[:id]] = [pi[:unread_entry_count], pi[:unread_state]]
+        end
       end
     end
     topics_status
@@ -221,7 +249,7 @@ module Api::V1::PlannerItem
     if item.is_a?(DiscussionTopic) || item.try(:discussion_topic)
       topic = item.try(:discussion_topic) || item
       unread_count, read_state = opts.dig(:topics_status, topic.id)
-      return (read_state == 'unread' || unread_count > 0) if unread_count && read_state
+      return (read_state == "unread" || unread_count > 0) if unread_count && read_state
       return (topic.unread?(user) || topic.unread_count(user) > 0) if topic
     end
     false
@@ -233,6 +261,7 @@ module Api::V1::PlannerItem
     return nil unless assignment
     return nil unless submission_info
     return nil unless submission_info[:submitted] || submission_info[:graded] || submission_info[:has_feedback]
+
     context_url(assignment.context, :context_assignment_submission_url, assignment.id, user.id)
   end
 
@@ -242,5 +271,35 @@ module Api::V1::PlannerItem
 
   def discussion_topic_html_url(topic, user, submission_info)
     assignment_feedback_url(topic.assignment, user, submission_info) || named_context_url(topic.context, :context_discussion_topic_url, topic.id)
+  end
+
+  def online_meeting_url(event_description, event_location)
+    config = DynamicSettings.find("canvas", tree: "config", service: "canvas")
+    default_regex = <<~'REGEX'
+      https:\/\/[\w-]+\.zoom\.us\/\d+(\?[\w\/\-=%]*)?
+      https:\/\/[\w-]+\.zoom\.us\/my\/[\w.]+(\?[\w\/\-=%]*)?
+      https:\/\/[\w-]+\.zoom\.us\/j\/\d+(\?[\w\/\-=%]*)?
+      https:\/\/teams\.microsoft\.com\/l\/meetup-join\/[\w.\/\-=%]+(\?[\w\/\-=%]*)?
+      https:\/\/teams\.live\.com\/meet\/\d+(\?[\w\/\-=%]*)?
+      https:\/\/[\w-]+\.webex\.com\/meet\/[\w.\/\-=%]+(\?[\w\/\-=%]*)?
+      https:\/\/[\w-]+\.webex\.com\/\w+\/j\.php(\?[\w\/\-=%]*)?
+      https:\/\/meet\.google\.com\/[\w\/\-=%]+(\?[\w\/\-=%]*)?
+      https?:\/\/.*\/conferences\/\d+\/join
+    REGEX
+    url_regex_str = config["online-meeting-url-regex"] || default_regex
+    url_regex_str = url_regex_str.split("\n").join("|")
+    url_regex = Regexp.new "(#{url_regex_str})"
+
+    if event_description
+      m = event_description.match(url_regex)
+      return m[0] if m
+    end
+
+    if event_location
+      m = event_location.match(url_regex)
+      return m[0] if m
+    end
+
+    nil
   end
 end

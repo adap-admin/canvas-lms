@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright (C) 2017 - present Instructure, Inc.
 #
 # This file is part of Canvas.
@@ -15,10 +17,8 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'spec_helper'
-
 describe Attachments::GarbageCollector do
-  describe 'FolderContextType' do
+  describe "FolderContextType" do
     let_once(:course) { Account.default.courses.create! }
     let_once(:folder) { Folder.root_folders(course).first }
     let(:att) do
@@ -28,6 +28,7 @@ describe Attachments::GarbageCollector do
         uploaded_data: stub_file_data("folder.zip", "hi", "application/zip")
       )
     end
+
     let_once(:gc) { Attachments::GarbageCollector::FolderContextType.new }
 
     before do
@@ -35,7 +36,7 @@ describe Attachments::GarbageCollector do
     end
 
     it "destroys content and deletes objects" do
-      expect(FileUtils).to receive(:rm).with(att.full_filename)
+      expect(FileUtils).to receive(:rm_f).with(att.full_filename)
 
       gc.delete_content
       expect(att.reload).to be_deleted
@@ -52,7 +53,7 @@ describe Attachments::GarbageCollector do
         uploaded_data: stub_file_data("folder.zip", "hi", "application/zip")
       )
       expect(att2.root_attachment_id).to eq att.id
-      expect(FileUtils).to receive(:rm).with(att.full_filename)
+      expect(FileUtils).to receive(:rm_f).with(att.full_filename)
 
       gc.delete_content
       expect(att.reload).to be_deleted
@@ -107,7 +108,7 @@ describe Attachments::GarbageCollector do
     end
   end
 
-  describe 'ContentExportContextType' do
+  describe "ContentExportContextType" do
     let_once(:course) { Account.default.courses.create! }
     let_once(:export) { course.content_exports.create! }
     let(:att) do
@@ -117,6 +118,7 @@ describe Attachments::GarbageCollector do
         uploaded_data: stub_file_data("folder.zip", "hi", "application/zip")
       )
     end
+
     let_once(:gc) { Attachments::GarbageCollector::ContentExportContextType.new(older_than: 1.day.ago) }
 
     it "only deletes older than given timestamp" do
@@ -176,7 +178,7 @@ describe Attachments::GarbageCollector do
       export.attachment = att
       export.save
       Attachment.where(id: att.id).update_all(created_at: 1.year.ago)
-      export.content_shares.create!(name: 'content export', read_state: 'read', user: user_model)
+      SentContentShare.create!(name: "content export", read_state: "read", user: user_model, content_export: export)
 
       gc.delete_content
       expect(att.reload).not_to be_deleted

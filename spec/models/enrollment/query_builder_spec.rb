@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -15,48 +17,53 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper.rb')
-
 describe "Enrollment::QueryBuilder" do
   describe "#conditions" do
     let(:conditions)     { Enrollment::QueryBuilder.new(state, options).conditions }
     let(:options)        { {} }
-    let(:account_id)     { create_record(Account, name: "Account") }
-    let(:term_id)        { create_record(EnrollmentTerm, name: "default", root_account_id: account_id) }
-    let(:user)           { create_record(User, {name: "User", workflow_state: "active"}, :record) }
+    let(:account_id)     { Account.create(name: "Account").id }
+    let(:term_id)        { create_record(EnrollmentTerm, name: "default", root_account_id: account_id, created_at: Time.now.utc, updated_at: Time.now.utc) }
+    let(:user)           { create_record(User, { name: "User", workflow_state: "active", created_at: Time.now.utc, updated_at: Time.now.utc }, :record) }
     let(:enrollment_map) { {} }
 
     # each item corresponds to a unique course the user is enrolled in
     def create_enrollments(*matrix)
-      course_ids = create_records(Course, matrix.map{ |e_state, c_state, type|
+      now = Time.now.utc
+      course_ids = create_records(Course, matrix.map do |_e_state, c_state, _type|
         {
           name: "Course",
-          account_id: account_id,
+          account_id:,
           workflow_state: c_state,
           root_account_id: account_id,
-          enrollment_term_id: term_id
+          enrollment_term_id: term_id,
+          created_at: now,
+          updated_at: now,
         }
-      })
+      end)
 
-      section_ids = create_records(CourseSection, course_ids.each_with_index.map{ |course_id, i|
+      section_ids = create_records(CourseSection, course_ids.each_index.map do |i|
         {
           course_id: course_ids[i],
           root_account_id: account_id,
-          name: "Section"
+          name: "Section",
+          created_at: now,
+          updated_at: now,
         }
-      })
+      end)
 
-      enrollment_ids = create_records(Enrollment, matrix.each_with_index.map{ |(e_state, _, type), i|
+      enrollment_ids = create_records(Enrollment, matrix.each_with_index.map do |(e_state, _, type), i|
         {
           user_id: user.id,
           course_id: course_ids[i],
-          type: type,
+          type:,
           workflow_state: e_state,
           course_section_id: section_ids[i],
-          role_id: Role.get_built_in_role(type).id,
-          root_account_id: account_id
+          role_id: Role.get_built_in_role(type, root_account_id: account_id).id,
+          root_account_id: account_id,
+          created_at: now,
+          updated_at: now,
         }
-      })
+      end)
 
       enrollment_ids.each_with_index do |id, i|
         enrollment_map[id] = matrix[i]
@@ -70,20 +77,20 @@ describe "Enrollment::QueryBuilder" do
     def enrollments(course_workflow_state = nil)
       scope = user.enrollments.joins(:course)
       if course_workflow_state
-        scope = scope.where("courses.workflow_state = ?", course_workflow_state)
+        scope = scope.where(courses: { workflow_state: course_workflow_state })
       end
       scope
     end
 
     shared_examples_for "enforce_course_workflow_state" do
-      let(:options){ {strict_checks: false} }
+      let(:options) { { strict_checks: false } }
 
       context "with :enforce_course_workflow_state=true" do
-        it "should reject enrollments in courses with a different workflow_state" do
+        it "rejects enrollments in courses with a different workflow_state" do
           create_enrollments(
             [state.to_s, "available", "StudentEnrollment"]
           )
-          options[:course_workflow_state] = 'unknown'
+          options[:course_workflow_state] = "unknown"
           options[:enforce_course_workflow_state] = true
 
           result = enrollments.where(conditions)
@@ -93,187 +100,172 @@ describe "Enrollment::QueryBuilder" do
     end
 
     context "with :active" do
-      let(:state){ :active }
+      let(:state) { :active }
 
       before do
         create_enrollments(
-          %w{active           available StudentEnrollment},
-          %w{active           available TeacherEnrollment},
-          %w{active           claimed   StudentEnrollment},
-          %w{active           claimed   TeacherEnrollment},
-          %w{invited          available StudentEnrollment}
+          %w[active available StudentEnrollment],
+          %w[active available TeacherEnrollment],
+          %w[active claimed StudentEnrollment],
+          %w[active claimed TeacherEnrollment],
+          %w[invited available StudentEnrollment]
         )
       end
 
       context "with strict_checks:true" do
-        let(:options){ {strict_checks: true} }
+        let(:options) { { strict_checks: true } }
 
-        it "should return sensible defaults" do
+        it "returns sensible defaults" do
           result = enrollments.where(conditions)
           expect(matches_for(result)).to eq [
-            %w{active           available StudentEnrollment},
-            %w{active           available TeacherEnrollment},
-            %w{active           claimed   TeacherEnrollment}
+            %w[active available StudentEnrollment],
+            %w[active available TeacherEnrollment],
+            %w[active claimed TeacherEnrollment]
           ]
         end
 
-        it "should return active enrollments in available courses" do
-          options[:course_workflow_state] = 'available'
-          result = enrollments('available').where(conditions)
+        it "returns active enrollments in available courses" do
+          options[:course_workflow_state] = "available"
+          result = enrollments("available").where(conditions)
           expect(matches_for(result)).to eq [
-            %w{active           available StudentEnrollment},
-            %w{active           available TeacherEnrollment}
+            %w[active available StudentEnrollment],
+            %w[active available TeacherEnrollment]
           ]
         end
 
-        it "should return visible enrollments in unpublished courses" do
-          options[:course_workflow_state] = 'claimed'
-          result = enrollments('claimed').where(conditions)
+        it "returns visible enrollments in unpublished courses" do
+          options[:course_workflow_state] = "claimed"
+          result = enrollments("claimed").where(conditions)
           expect(matches_for(result)).to eq [
-            %w{active           claimed   TeacherEnrollment}
+            %w[active claimed TeacherEnrollment]
           ]
         end
 
-        it "should return nothing for other course workflow states" do
-          options[:course_workflow_state] = 'deleted'
+        it "returns nothing for other course workflow states" do
+          options[:course_workflow_state] = "deleted"
           expect(conditions).to be_nil
         end
       end
 
       context "with strict_checks:false" do
-        let(:options){ {strict_checks: false} }
+        let(:options) { { strict_checks: false } }
 
-        it "should return sensible defaults" do
+        it "returns sensible defaults" do
           result = enrollments.where(conditions)
           expect(matches_for(result)).to eq [
-            %w{active           available StudentEnrollment},
-            %w{active           available TeacherEnrollment},
-            %w{active           claimed   StudentEnrollment},
-            %w{active           claimed   TeacherEnrollment}
+            %w[active available StudentEnrollment],
+            %w[active available TeacherEnrollment],
+            %w[active claimed StudentEnrollment],
+            %w[active claimed TeacherEnrollment]
           ]
         end
 
-        it "should not return anything if the course is deleted" do
-          options[:course_workflow_state] = 'deleted'
+        it "does not return anything if the course is deleted" do
+          options[:course_workflow_state] = "deleted"
           expect(conditions).to be_nil
         end
 
-        it "should return all active enrollments in non-deleted courses" do
-          options[:course_workflow_state] = 'claimed' # not enforcing state, so we get both claimed and available
+        it "returns all active enrollments in non-deleted courses" do
+          options[:course_workflow_state] = "claimed" # not enforcing state, so we get both claimed and available
           result = enrollments.where(conditions)
           expect(matches_for(result)).to eq [
-            %w{active           available StudentEnrollment},
-            %w{active           available TeacherEnrollment},
-            %w{active           claimed   StudentEnrollment},
-            %w{active           claimed   TeacherEnrollment}
+            %w[active available StudentEnrollment],
+            %w[active available TeacherEnrollment],
+            %w[active claimed StudentEnrollment],
+            %w[active claimed TeacherEnrollment]
           ]
         end
       end
 
-      it_should_behave_like "enforce_course_workflow_state"
+      it_behaves_like "enforce_course_workflow_state"
     end
 
     context "with :invited" do
-      let(:state){ :invited }
+      let(:state) { :invited }
 
       before do
         create_enrollments(
-          %w{creation_pending available StudentEnrollment},
-          %w{creation_pending available TeacherEnrollment},
-          %w{creation_pending claimed   StudentEnrollment},
-          %w{creation_pending claimed   TeacherEnrollment},
-          %w{invited          available StudentEnrollment},
-          %w{invited          available TeacherEnrollment},
-          %w{invited          claimed   StudentEnrollment},
-          %w{invited          claimed   TeacherEnrollment},
-          %w{active           available StudentEnrollment}
+          %w[creation_pending available StudentEnrollment],
+          %w[creation_pending available TeacherEnrollment],
+          %w[creation_pending claimed StudentEnrollment],
+          %w[creation_pending claimed TeacherEnrollment],
+          %w[invited available StudentEnrollment],
+          %w[invited available TeacherEnrollment],
+          %w[invited claimed StudentEnrollment],
+          %w[invited claimed TeacherEnrollment],
+          %w[active available StudentEnrollment]
         )
       end
 
       context "with strict_checks:true" do
-        let(:options){ {strict_checks: true} }
+        let(:options) { { strict_checks: true } }
 
-        it "should return sensible defaults" do
+        it "returns sensible defaults" do
           result = enrollments.where(conditions)
           expect(matches_for(result)).to eq [
-            %w{invited          available StudentEnrollment},
-            %w{invited          available TeacherEnrollment},
-            %w{invited          claimed   TeacherEnrollment}
+            %w[invited available StudentEnrollment],
+            %w[invited available TeacherEnrollment],
+            %w[invited claimed TeacherEnrollment]
           ]
         end
 
-        it "should return invitations in published courses" do
-          options[:course_workflow_state] = 'available'
-          result = enrollments('available').where(conditions)
+        it "returns invitations in published courses" do
+          options[:course_workflow_state] = "available"
+          result = enrollments("available").where(conditions)
           expect(matches_for(result)).to eq [
-            %w{invited          available StudentEnrollment},
-            %w{invited          available TeacherEnrollment}
+            %w[invited available StudentEnrollment],
+            %w[invited available TeacherEnrollment]
           ]
         end
 
-        it "should return invitations for admins in unpublished courses" do
-          options[:course_workflow_state] = 'claimed'
-          result = enrollments('claimed').where(conditions)
+        it "returns invitations for admins in unpublished courses" do
+          options[:course_workflow_state] = "claimed"
+          result = enrollments("claimed").where(conditions)
           expect(matches_for(result)).to eq [
-            %w{invited          claimed   TeacherEnrollment}
+            %w[invited claimed TeacherEnrollment]
           ]
         end
 
-        it "should not return anything if the course is deleted" do
-          options[:course_workflow_state] = 'deleted'
+        it "does not return anything if the course is deleted" do
+          options[:course_workflow_state] = "deleted"
           expect(conditions).to be_nil
         end
       end
 
       context "with strict_checks:false" do
-        let(:options){ {strict_checks: false} }
+        let(:options) { { strict_checks: false } }
 
-        it "should return sensible defaults" do
-          options[:course_workflow_state] = 'available'
+        it "returns sensible defaults" do
+          options[:course_workflow_state] = "available"
           result = enrollments.where(conditions)
           expect(matches_for(result)).to eq [
-            %w{creation_pending available StudentEnrollment},
-            %w{creation_pending available TeacherEnrollment},
-            %w{creation_pending claimed   StudentEnrollment},
-            %w{creation_pending claimed   TeacherEnrollment},
-            %w{invited          available StudentEnrollment},
-            %w{invited          available TeacherEnrollment},
-            %w{invited          claimed   StudentEnrollment},
-            %w{invited          claimed   TeacherEnrollment}
+            %w[creation_pending available StudentEnrollment],
+            %w[creation_pending available TeacherEnrollment],
+            %w[creation_pending claimed StudentEnrollment],
+            %w[creation_pending claimed TeacherEnrollment],
+            %w[invited available StudentEnrollment],
+            %w[invited available TeacherEnrollment],
+            %w[invited claimed StudentEnrollment],
+            %w[invited claimed TeacherEnrollment]
           ]
         end
 
-        it "should not return anything if the course is deleted" do
-          options[:course_workflow_state] = 'deleted'
+        it "does not return anything if the course is deleted" do
+          options[:course_workflow_state] = "deleted"
           expect(conditions).to be_nil
-        end
-
-        it "should return all invitation enrollments in non-deleted courses" do
-          options[:course_workflow_state] = 'available'
-          result = enrollments.where(conditions)
-          expect(matches_for(result)).to eq [
-            %w{creation_pending available StudentEnrollment},
-            %w{creation_pending available TeacherEnrollment},
-            %w{creation_pending claimed   StudentEnrollment},
-            %w{creation_pending claimed   TeacherEnrollment},
-            %w{invited          available StudentEnrollment},
-            %w{invited          available TeacherEnrollment},
-            %w{invited          claimed   StudentEnrollment},
-            %w{invited          claimed   TeacherEnrollment}
-          ]
         end
       end
 
-      it_should_behave_like "enforce_course_workflow_state"
+      it_behaves_like "enforce_course_workflow_state"
     end
 
-    [:deleted, :rejected, :completed, :creation_pending, :inactive].each do |state|
+    %i[deleted rejected completed creation_pending inactive].each do |state|
       context "with #{state.inspect}" do
-        let(:state){ state }
+        let(:state) { state }
 
-        it "should only return #{state} enrollments" do
+        it "only returns #{state} enrollments" do
           create_enrollments(
-            %w{active     available    StudentEnrollment},
+            %w[active available StudentEnrollment],
             [state.to_s, "available", "StudentEnrollment"]
           )
 
@@ -284,34 +276,34 @@ describe "Enrollment::QueryBuilder" do
           ]
         end
 
-        it_should_behave_like "enforce_course_workflow_state"
+        it_behaves_like "enforce_course_workflow_state"
       end
     end
 
     context "with :current_and_invited" do
       let(:state) { :current_and_invited }
 
-      it "should return sensible defaults" do
+      it "returns sensible defaults" do
         create_enrollments(
-          %w{active           available StudentEnrollment},
-          %w{active           available TeacherEnrollment},
-          %w{active           claimed   StudentEnrollment},
-          %w{active           claimed   TeacherEnrollment},
-          %w{invited          available StudentEnrollment},
-          %w{invited          available TeacherEnrollment},
-          %w{invited          claimed   StudentEnrollment},
-          %w{invited          claimed   TeacherEnrollment},
-          %w{creation_pending available StudentEnrollment}
+          %w[active available StudentEnrollment],
+          %w[active available TeacherEnrollment],
+          %w[active claimed StudentEnrollment],
+          %w[active claimed TeacherEnrollment],
+          %w[invited available StudentEnrollment],
+          %w[invited available TeacherEnrollment],
+          %w[invited claimed StudentEnrollment],
+          %w[invited claimed TeacherEnrollment],
+          %w[creation_pending available StudentEnrollment]
         )
 
         result = enrollments.where(conditions)
         expect(matches_for(result)).to eq [
-          %w{active           available StudentEnrollment},
-          %w{active           available TeacherEnrollment},
-          %w{active           claimed   TeacherEnrollment},
-          %w{invited          available StudentEnrollment},
-          %w{invited          available TeacherEnrollment},
-          %w{invited          claimed   TeacherEnrollment}
+          %w[active available StudentEnrollment],
+          %w[active available TeacherEnrollment],
+          %w[active claimed TeacherEnrollment],
+          %w[invited available StudentEnrollment],
+          %w[invited available TeacherEnrollment],
+          %w[invited claimed TeacherEnrollment]
         ]
       end
     end
@@ -319,28 +311,28 @@ describe "Enrollment::QueryBuilder" do
     context "with :current_and_future" do
       let(:state) { :current_and_future }
 
-      it "should return sensible defaults" do
+      it "returns sensible defaults" do
         create_enrollments(
-          %w{active           available StudentEnrollment},
-          %w{active           available TeacherEnrollment},
-          %w{active           claimed   StudentEnrollment},
-          %w{active           claimed   TeacherEnrollment},
-          %w{invited          available StudentEnrollment},
-          %w{invited          available TeacherEnrollment},
-          %w{invited          claimed   StudentEnrollment},
-          %w{invited          claimed   TeacherEnrollment},
-          %w{creation_pending available StudentEnrollment}
+          %w[active available StudentEnrollment],
+          %w[active available TeacherEnrollment],
+          %w[active claimed StudentEnrollment],
+          %w[active claimed TeacherEnrollment],
+          %w[invited available StudentEnrollment],
+          %w[invited available TeacherEnrollment],
+          %w[invited claimed StudentEnrollment],
+          %w[invited claimed TeacherEnrollment],
+          %w[creation_pending available StudentEnrollment]
         )
 
         result = enrollments.where(conditions)
         expect(matches_for(result)).to eq [
-          %w{active           available StudentEnrollment},
-          %w{active           available TeacherEnrollment},
-          %w{active           claimed   StudentEnrollment}, # students can see that they have an active enrollment in an unpublished course
-          %w{active           claimed   TeacherEnrollment},
-          %w{invited          available StudentEnrollment},
-          %w{invited          available TeacherEnrollment},
-          %w{invited          claimed   TeacherEnrollment}
+          %w[active available StudentEnrollment],
+          %w[active available TeacherEnrollment],
+          %w[active claimed StudentEnrollment], # students can see that they have an active enrollment in an unpublished course
+          %w[active claimed TeacherEnrollment],
+          %w[invited available StudentEnrollment],
+          %w[invited available TeacherEnrollment],
+          %w[invited claimed TeacherEnrollment]
         ]
       end
     end
@@ -348,22 +340,22 @@ describe "Enrollment::QueryBuilder" do
     context "with :current_and_concluded" do
       let(:state) { :current_and_concluded }
 
-      it "should return sensible defaults" do
+      it "returns sensible defaults" do
         create_enrollments(
-          %w{active           available StudentEnrollment},
-          %w{active           available TeacherEnrollment},
-          %w{active           claimed   StudentEnrollment},
-          %w{active           claimed   TeacherEnrollment},
-          %w{invited          available StudentEnrollment},
-          %w{completed        available StudentEnrollment}
+          %w[active available StudentEnrollment],
+          %w[active available TeacherEnrollment],
+          %w[active claimed StudentEnrollment],
+          %w[active claimed TeacherEnrollment],
+          %w[invited available StudentEnrollment],
+          %w[completed available StudentEnrollment]
         )
 
         result = enrollments.where(conditions)
         expect(matches_for(result)).to eq [
-          %w{active           available StudentEnrollment},
-          %w{active           available TeacherEnrollment},
-          %w{active           claimed   TeacherEnrollment},
-          %w{completed        available StudentEnrollment}
+          %w[active available StudentEnrollment],
+          %w[active available TeacherEnrollment],
+          %w[active claimed TeacherEnrollment],
+          %w[completed available StudentEnrollment]
         ]
       end
     end

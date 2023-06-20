@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -17,7 +19,7 @@
 #
 module CC
   module Events
-    def create_events(document=nil)
+    def create_events(document = nil)
       calendar_event_scope = @course.calendar_events.active.user_created
       return nil unless calendar_event_scope.count > 0
 
@@ -25,35 +27,36 @@ module CC
         events_file = nil
         rel_path = nil
       else
-        events_file = File.new(File.join(@canvas_resource_dir, CCHelper::EVENTS), 'w')
+        events_file = File.new(File.join(@canvas_resource_dir, CCHelper::EVENTS), "w")
         rel_path = File.join(CCHelper::COURSE_SETTINGS_DIR, CCHelper::EVENTS)
-        document = Builder::XmlMarkup.new(:target=>events_file, :indent=>2)
+        document = Builder::XmlMarkup.new(target: events_file, indent: 2)
       end
 
       document.instruct!
       document.events(
-              "xmlns" => CCHelper::CANVAS_NAMESPACE,
-              "xmlns:xsi"=>"http://www.w3.org/2001/XMLSchema-instance",
-              "xsi:schemaLocation"=> "#{CCHelper::CANVAS_NAMESPACE} #{CCHelper::XSD_URI}"
+        "xmlns" => CCHelper::CANVAS_NAMESPACE,
+        "xmlns:xsi" => "http://www.w3.org/2001/XMLSchema-instance",
+        "xsi:schemaLocation" => "#{CCHelper::CANVAS_NAMESPACE} #{CCHelper::XSD_URI}"
       ) do |events_node|
         calendar_event_scope.each do |event|
           next unless export_object?(event)
+
           add_exported_asset(event)
           migration_id = create_key(event)
-          events_node.event(:identifier=>migration_id) do |event_node|
+          events_node.event(identifier: migration_id) do |event_node|
             event_node.title event.title unless event.title.blank?
             event_node.description @html_exporter.html_content(event.description)
             event_node.start_at ims_datetime(event.start_at) if event.start_at
             event_node.end_at ims_datetime(event.end_at) if event.end_at
             if event.all_day
-              event_node.all_day 'true'
+              event_node.all_day "true"
               event_node.all_day_date ims_date(event.all_day_date) if event.all_day_date
             end
           end
         end
       end
 
-      events_file.close if events_file
+      events_file&.close
       rel_path
     end
   end

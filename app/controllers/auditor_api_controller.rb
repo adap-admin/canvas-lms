@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -17,14 +19,7 @@
 #
 
 class AuditorApiController < ApplicationController
-  before_action :check_configured
-
   private
-
-  def check_configured
-    return if Canvas::Cassandra::DatabaseBuilder.configured?('auditors')
-    render json: { message: "Auditors are not configured" }, status: :not_found
-  end
 
   def query_options
     start_time = CanvasTime.try_parse(params[:start_time])

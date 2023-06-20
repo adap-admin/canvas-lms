@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -16,48 +18,49 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'spec_helper.rb'
+require "spec_helper"
 
 describe Multipart::Post do
   def parse_params(query, header)
-    Rack::Utils::Multipart.parse_multipart({ 'CONTENT_TYPE' => header['Content-type'], 'CONTENT_LENGTH' => query.size, 'rack.input' => StringIO.new(query) })
+    Rack::Multipart.parse_multipart({ "CONTENT_TYPE" => header["Content-type"], "CONTENT_LENGTH" => query.size, "rack.input" => StringIO.new(query) })
   end
 
-  it "should prepare_query with a File" do
-    file = Tempfile.new(["test","txt"])
+  it "prepare_queries with a File" do
+    file = Tempfile.new(["test", "txt"])
     file.write("file on disk")
     file.rewind
-    query, header = subject.prepare_query(:a => "string", :b => file)
+    query, header = subject.prepare_query(a: "string", b: file)
     params = parse_params(query, header)
     expect(params["a"]).to eq("string")
     expect(params["b"][:filename]).to eq(File.basename(file.path))
     expect(params["b"][:tempfile].read).to eq("file on disk")
   end
 
-  it "should prepare_query with a StringIO" do
-    query, header = subject.prepare_query(:a => "string", :b => StringIO.new("file in mem"))
+  it "prepare_queries with a StringIO" do
+    query, header = subject.prepare_query(a: "string", b: StringIO.new("file in mem"))
     params = parse_params(query, header)
     expect(params["a"]).to eq("string")
     expect(params["b"][:filename]).to eq("b")
     expect(params["b"][:tempfile].read).to eq("file in mem")
   end
 
-  it "should prepare_query_stream with a File" do
-    file = Tempfile.new(["test","txt"])
+  it "prepare_query_streams with a File" do
+    file = Tempfile.new(["test", "txt"])
     file.write("file on disk")
     file.rewind
-    stream, header = subject.prepare_query_stream(:a => "string", :b => file)
+    stream, header = subject.prepare_query_stream(:a => "string", "test.txt" => file)
     params = parse_params(stream.read, header)
     expect(params["a"]).to eq("string")
-    expect(params["b"][:filename]).to eq(File.basename(file.path))
-    expect(params["b"][:tempfile].read).to eq("file on disk")
+    expect(params["test.txt"][:filename]).to eq(File.basename(file.path))
+    expect(params["test.txt"][:tempfile].read).to eq("file on disk")
+    expect(params["test.txt"][:head]).to include("Content-Type: text/plain")
   end
 
-  it "should prepare_query_stream with a StringIO" do
-    file = Tempfile.new(["test","txt"])
+  it "prepare_query_streams with a StringIO" do
+    file = Tempfile.new(["test", "txt"])
     file.write("file in mem")
     file.rewind
-    stream, header = subject.prepare_query_stream(:a => "string", :b => file)
+    stream, header = subject.prepare_query_stream(a: "string", b: file)
     params = parse_params(stream.read, header)
     expect(params["a"]).to eq("string")
     expect(params["b"][:filename]).to eq(File.basename(file.path))

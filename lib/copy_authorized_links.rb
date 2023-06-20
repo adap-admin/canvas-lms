@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -20,56 +22,50 @@ module CopyAuthorizedLinks
   module CopyAuthorizedLinksClassMethods
     attr_reader :copy_authorized_links_block
     attr_reader :copy_authorized_links_columns
- 
+
     def copy_authorized_links(column_names, &block)
       @copy_authorized_links_block = block
       @copy_authorized_links_columns = Array(column_names)
       before_save :copy_authorized_links_to_context
     end
   end
- 
+
   module CopyAuthorizedLinksInstanceMethods
     def repair_malformed_links(user)
       block = self.class.copy_authorized_links_block rescue nil
       columns = (self.class.copy_authorized_links_columns || []).compact
       @copy_authorized_links_override_user = user
       columns.each do |column|
-        if column == :custom
-        else
-          html = self.read_attribute(column) rescue nil
-          if html && !html.empty?
-            context, inferred_user = self.instance_eval(&block) if block
-            user = @copy_authorized_links_override_user || inferred_user
-            re = Regexp.new("/#{context.class.to_s.pluralize.underscore}/#{context.id}/files/(\\d+)")
-            ids = []
-            html.scan(re) do |match|
-              ids << match[0]
-            end
-            Attachment.where(id: ids.uniq).each do |file|
-              html = html.gsub(Regexp.new("/#{context.class.to_s.pluralize.underscore}/#{context.id}/files/#{file.id}"), "/#{file.context_type.pluralize.underscore}/#{file.context_id}/files/#{file.id}")
-            end
-            self.write_attribute(column, html) if html && !html.empty?
-          end
+        next if column == :custom
+
+        html = read_attribute(column) rescue nil
+        next if html.blank?
+
+        context, inferred_user = instance_eval(&block) if block
+        user = @copy_authorized_links_override_user || inferred_user
+        re = Regexp.new("/#{context.class.to_s.pluralize.underscore}/#{context.id}/files/(\\d+)")
+        ids = []
+        html.scan(re) do |match|
+          ids << match[0]
         end
+        Attachment.where(id: ids.uniq).each do |file|
+          html = html.gsub(Regexp.new("/#{context.class.to_s.pluralize.underscore}/#{context.id}/files/#{file.id}"), "/#{file.context_type.pluralize.underscore}/#{file.context_id}/files/#{file.id}")
+        end
+        write_attribute(column, html) if html.present?
       end
-      self.save
+      save
     end
-    
+
     def copy_authorized_links_to_context
-      block = self.class.copy_authorized_links_block rescue nil
       columns = (self.class.copy_authorized_links_columns || []).compact
       columns.each do |column|
         if column == :custom
-          if self.respond_to?(:copy_authorized_content_custom_column)
-            self.copy_authorized_content_custom_column(context, user)
+          if respond_to?(:copy_authorized_content_custom_column)
+            copy_authorized_content_custom_column(context, user)
           end
         else
-          html = self.read_attribute(column) rescue nil
-          if html && !html.empty?
-            context, inferred_user = self.instance_eval(&block) if block
-            user = @copy_authorized_links_override_user || inferred_user
-            self.write_attribute(column, html) if html && !html.empty?
-          end
+          html = read_attribute(column) rescue nil
+          write_attribute(column, html) if html.present?
         end
       end
       true
@@ -81,7 +77,7 @@ module CopyAuthorizedLinks
   end
 
   def self.included(klass)
-    klass.send :include, CopyAuthorizedLinksInstanceMethods
+    klass.include CopyAuthorizedLinksInstanceMethods
     klass.extend CopyAuthorizedLinksClassMethods
   end
 end

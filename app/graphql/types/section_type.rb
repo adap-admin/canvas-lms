@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -22,10 +24,24 @@ module Types
 
     implements GraphQL::Types::Relay::Node
     implements Interfaces::TimestampInterface
+    implements Interfaces::LegacyIDInterface
+
+    alias_method :section, :object
 
     global_id_field :id
-    field :_id, ID, "legacy canvas id", null: false, method: :id
 
     field :name, String, null: false
+
+    field :user_count, Int, null: false
+    def user_count
+      object.enrollments.not_fake.active_or_pending_by_date_ignoring_access.distinct.count(:user_id)
+    end
+
+    field :sis_id, String, null: true
+    def sis_id
+      load_association(:course).then do |course|
+        section.sis_source_id if course.grants_any_right?(current_user, :read_sis, :manage_sis)
+      end
+    end
   end
 end

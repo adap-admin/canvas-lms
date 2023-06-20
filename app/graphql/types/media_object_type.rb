@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -23,18 +25,18 @@ module Types
   ].freeze
 
   class MediaType < Types::BaseEnum
-    graphql_name 'MediaType'
+    graphql_name "MediaType"
 
     VALID_MEDIA_TYPES.each { |type| value(type) }
   end
 
   class MediaObjectType < ApplicationObjectType
-    graphql_name 'MediaObject'
+    graphql_name "MediaObject"
 
     implements GraphQL::Types::Relay::Node
 
     global_id_field :id
-    field :_id, ID, 'legacy canvas id', null: false, method: :media_id
+    field :_id, ID, "legacy canvas id", null: false, method: :media_id
 
     field :can_add_captions, Boolean, null: true
     def can_add_captions
@@ -51,5 +53,16 @@ module Types
 
     field :media_sources, [Types::MediaSourceType], null: true
     field :media_tracks, [Types::MediaTrackType], null: true
+
+    field :media_download_url, String, null: true
+    def media_download_url
+      opts = {
+        download: "1",
+        download_frd: "1",
+        host: context[:request].host_with_port,
+        protocol: context[:request].protocol
+      }
+      GraphQLHelpers::UrlHelpers.file_download_url(object, opts)
+    end
   end
 end

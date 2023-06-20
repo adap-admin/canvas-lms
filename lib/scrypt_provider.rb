@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -18,9 +20,9 @@
 
 ScryptProvider = Struct.new(:cost) do
   def encrypt(*tokens)
-    ::SCrypt::Password.create(
+    SCrypt::Password.create(
       join_tokens(tokens),
-      cost: cost
+      cost:
     )
   end
 
@@ -28,6 +30,7 @@ ScryptProvider = Struct.new(:cost) do
   def matches?(hash, *tokens)
     hash = new_from_hash(hash)
     return false if hash.blank?
+
     hash == join_tokens(tokens)
   end
 
@@ -42,8 +45,8 @@ ScryptProvider = Struct.new(:cost) do
   end
 
   def new_from_hash(hash)
-    ::SCrypt::Password.new(hash)
-  rescue ::SCrypt::Errors::InvalidHash
+    SCrypt::Password.new(hash)
+  rescue SCrypt::Errors::InvalidHash
     nil
   end
 end

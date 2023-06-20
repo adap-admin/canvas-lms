@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -17,5 +19,5 @@
 #
 
 module Login
-  MicrosoftController = Oauth2Controller
+  MicrosoftController = OAuth2Controller
 end

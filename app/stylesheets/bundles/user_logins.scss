@@ -37,20 +37,25 @@
       }
     }
   }
+  .unique_id, .sis_user_id, .integration_id, .login_details_value {
+    overflow-wrap: anywhere;
+  }
   .account_name {
     line-height: 3.0;
   }
-  .login_details {
+  .login_details_list {
+    list-style: none;
+    margin: 0;
     padding: 0;
   }
-  .login_details td:first-child {
+  .login_details {
+    padding: 0;
+    display: block;
+  }
+  .login_details_label {
     font-weight: bold;
   }
-  .login_details:last-child {
-    & td {
-     border-bottom: none;
-  }
-  }
+
   .login_details_link {
     font-style: normal;
   }
@@ -58,6 +63,33 @@
     white-space: nowrap;
     text-align: direction(right);
     font-size: 0.8em;
-    padding-#{direction(left)}: 30px;
+  }
+}
+
+#login_information.responsive {
+  .overview, .account, .details {
+    width: 100%;
+    display: inline-block;
+    padding-#{direction(right)}: 0;
+  }
+
+  .links {
+    padding-#{direction(left)}: 0;
+  }
+
+  @include breakpoint(desktop) {
+    tr.login > th, tr.login > td {
+      border-bottom: 1px solid #eee;
+    }
+
+    .overview, .account, .details {
+      width: initial;
+      display: table-cell;
+      padding-#{direction(right)}: initial;
+    }
+
+    .links {
+      padding-#{direction(left)}: 30px;
+    }
   }
 }

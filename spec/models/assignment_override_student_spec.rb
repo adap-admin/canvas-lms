@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -16,50 +18,47 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper.rb')
-require_relative '../sharding_spec_helper'
-
 describe AssignmentOverrideStudent do
   describe "validations" do
     before :once do
       student_in_course
-      @override = assignment_override_model(:course => @course)
+      @override = assignment_override_model(course: @course)
       @override_student = @override.assignment_override_students.build
       @override_student.user = @student
     end
 
-    it "should be valid in nominal setup" do
+    it "is valid in nominal setup" do
       expect(@override_student).to be_valid
     end
 
-    it "should always make assignment match the overridden assignment" do
+    it "always makes assignment match the overridden assignment" do
       assignment = assignment_model
       @override_student.assignment = assignment
       expect(@override_student).to be_valid
       expect(@override_student.assignment).to eq @override.assignment
     end
 
-    it "should reject an empty assignment_override" do
+    it "rejects an empty assignment_override" do
       @override_student.assignment_override = nil
       expect(@override_student).not_to be_valid
     end
 
-    it "should reject a non-adhoc assignment_override" do
+    it "rejects a non-adhoc assignment_override" do
       @override_student.assignment_override.set = @course.default_section
       expect(@override_student).not_to be_valid
     end
 
-    it "should reject an empty user" do
+    it "rejects an empty user" do
       @override_student.user = nil
       expect(@override_student).not_to be_valid
     end
 
-    it "should reject a student not in the course" do
+    it "rejects a student not in the course" do
       @override_student.user = user_model
       expect(@override_student).not_to be_valid
     end
 
-    it "should reject duplicate tuples" do
+    it "rejects duplicate tuples" do
       @override_student.save!
       @override_student2 = @override.assignment_override_students.build
       @override_student2.user = @student
@@ -67,7 +66,7 @@ describe AssignmentOverrideStudent do
     end
   end
 
-  describe 'recalculation of cached due dates' do
+  describe "recalculation of cached due dates" do
     before(:once) do
       course = Course.create!
       @student = User.create!
@@ -76,12 +75,12 @@ describe AssignmentOverrideStudent do
       @assignment_override = @assignment.assignment_overrides.create!
     end
 
-    it 'on creation, recalculates cached due dates on the assignment' do
+    it "on creation, recalculates cached due dates on the assignment" do
       expect(DueDateCacher).to receive(:recompute_users_for_course).with(@student.id, @assignment.context, [@assignment]).once
       @assignment_override.assignment_override_students.create!(user: @student)
     end
 
-    it 'on destroy, recalculates cached due dates on the assignment' do
+    it "on destroy, recalculates cached due dates on the assignment" do
       override_student = @assignment_override.assignment_override_students.create!(user: @student)
 
       # Expect DueDateCacher to be called once from AssignmentOverrideStudent after it's destroyed and another time
@@ -95,14 +94,14 @@ describe AssignmentOverrideStudent do
 
   describe "cross sharded users" do
     specs_require_sharding
-    it "should work outside of the users native account" do
+    it "works outside of the users native account" do
       course_with_student(account: @account, active_all: true, user: @student)
       @shard1.activate do
         account = Account.create!
         course = account.courses.create!
         e2 = course.enroll_student(@student)
-        e2.update_attribute(:workflow_state, 'active')
-        override = assignment_override_model(:course => course)
+        e2.update_attribute(:workflow_state, "active")
+        override = assignment_override_model(course:)
         override_student = override.assignment_override_students.build
         override_student.user = @student
         expect(override_student).to be_valid
@@ -110,10 +109,10 @@ describe AssignmentOverrideStudent do
     end
   end
 
-  it "should maintain assignment from assignment_override" do
+  it "maintains assignment from assignment_override" do
     student_in_course
-    @override1 = assignment_override_model(:course => @course)
-    @override2 = assignment_override_model(:course => @course)
+    @override1 = assignment_override_model(course: @course)
+    @override2 = assignment_override_model(course: @course)
     expect(@override1.assignment_id).not_to eq @override2.assignment_id
 
     @override_student = @override1.assignment_override_students.build
@@ -126,9 +125,9 @@ describe AssignmentOverrideStudent do
   end
 
   def adhoc_override_with_student
-    student_in_course(:active_all => true)
-    @assignment = assignment_model(:course => @course)
-    @ao = AssignmentOverride.new()
+    student_in_course(active_all: true)
+    @assignment = assignment_model(course: @course)
+    @ao = AssignmentOverride.new
     @ao.assignment = @assignment
     @ao.title = "ADHOC OVERRIDE"
     @ao.workflow_state = "active"
@@ -139,7 +138,7 @@ describe AssignmentOverrideStudent do
     @override_student.save!
   end
 
-  it "should call destroy its override if its the only student and is deleted" do
+  it "calls destroy its override if its the only student and is deleted" do
     adhoc_override_with_student
 
     expect(@ao).to be_active
@@ -161,32 +160,36 @@ describe AssignmentOverrideStudent do
       expect(@ao.reload).to be_deleted
     end
 
-    it "should delete overrides for inactive users" do
+    it "does not delete overrides for inactive users" do
       adhoc_override_with_student
       @user.enrollments.each(&:deactivate)
 
-      expect(@override_student).to be_active
-      AssignmentOverrideStudent.clean_up_for_assignment(@assignment)
-      expect(@override_student.reload).to be_deleted
+      expect do
+        AssignmentOverrideStudent.clean_up_for_assignment(@assignment)
+      end.not_to change {
+        @override_student.reload.active?
+      }.from(true)
     end
 
-    it "should delete overrides for conclude/completed users" do
+    it "does not delete overrides for conclude/completed users" do
       adhoc_override_with_student
       @user.enrollments.each(&:conclude)
 
-      expect(@override_student).to be_active
-      AssignmentOverrideStudent.clean_up_for_assignment(@assignment)
-      expect(@override_student.reload).to be_deleted
+      expect do
+        AssignmentOverrideStudent.clean_up_for_assignment(@assignment)
+      end.not_to change {
+        @override_student.reload.active?
+      }.from(true)
     end
 
-    it "should not broadcast notifications when processing a cleanup" do
+    it "does not broadcast notifications when processing a cleanup" do
       Timecop.freeze(1.day.ago) do
         adhoc_override_with_student
       end
-      Enrollment.where(:id => @enrollment).update_all(:workflow_state => "deleted") # skip callbacks
+      Enrollment.where(id: @enrollment).update_all(workflow_state: "deleted") # skip callbacks
 
       notification_name = "Assignment Due Date Override Changed"
-      @notification = Notification.create! :name => notification_name, :category => "TestImmediately"
+      @notification = Notification.create! name: notification_name, category: "TestImmediately"
       teacher_in_course(active_all: true)
       notification_policy_model
 
@@ -246,6 +249,13 @@ describe AssignmentOverrideStudent do
       it "has the quiz's ID" do
         expect(override_student.quiz_id).to eq quiz_id
       end
+    end
+  end
+
+  describe "create" do
+    it "sets the root_account_id using assignment" do
+      adhoc_override_with_student
+      expect(@override_student.root_account_id).to eq @assignment.root_account_id
     end
   end
 end

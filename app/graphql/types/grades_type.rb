@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -28,35 +30,36 @@ module Types
       value "deleted"
     end
 
-    field :current_score, Float, <<~DESC, null: true
+    field :current_score, Float, <<~MD, null: true
       The current score includes all graded assignments, excluding muted submissions.
-    DESC
-    field :unposted_current_score, Float, <<~DESC, null: true
+    MD
+    field :unposted_current_score, Float, <<~MD, null: true
       The current score includes all graded assignments, including muted submissions.
-    DESC
+    MD
     field :current_grade, String, null: true
     field :unposted_current_grade, String, null: true
 
-    field :final_score, Float, <<~DESC, null: true
+    field :final_score, Float, <<~MD, null: true
       The final score includes all assignments, excluding muted submissions
       (ungraded assignments are counted as 0 points).
-    DESC
-    field :unposted_final_score, Float, <<~DESC, null: true
+    MD
+    field :unposted_final_score, Float, <<~MD, null: true
       The final score includes all assignments, including muted submissions
       (ungraded assignments are counted as 0 points).
-    DESC
+    MD
     field :final_grade, String, null: true
     field :unposted_final_grade, String, null: true
 
-    field :override_score, Float, <<~DESC, null: true
+    field :override_score, Float, <<~MD, null: true
       The override score. Supersedes the computed final score if set.
-    DESC
+    MD
 
-    field :override_grade, String, <<~DESC, null: true
+    field :override_grade, String, <<~MD, null: true
       The override grade. Supersedes the computed final grade if set.
-    DESC
+    MD
     def override_grade
       return nil if object.override_score.blank?
+
       object.effective_final_grade
     end
 
@@ -76,6 +79,5 @@ module Types
     def enrollment
       load_association(:enrollment)
     end
-
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -16,7 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require_relative '../../spec_helper.rb'
+require_relative "../../spec_helper"
 
 describe AuthenticationProvider::PluginSettings do
   let(:klass) do
@@ -25,41 +27,41 @@ describe AuthenticationProvider::PluginSettings do
       self.plugin = :custom_plugin
 
       def noninherited_method
-        'noninherited'
+        "noninherited"
       end
 
       plugin_settings :auth_host, noninherited_method: :renamed_setting
     end
   end
 
-  let(:plugin) { double() }
+  let(:plugin) { double }
 
   before do
     allow(Canvas::Plugin).to receive(:find).with(:custom_plugin).and_return(plugin)
   end
 
-  describe '.globally_configured?' do
-    it 'chains to the plugin being enabled' do
+  describe ".globally_configured?" do
+    it "chains to the plugin being enabled" do
       allow(plugin).to receive(:enabled?).and_return(false)
-      expect(klass.globally_configured?).to eq false
+      expect(klass.globally_configured?).to be false
 
       allow(plugin).to receive(:enabled?).and_return(true)
-      expect(klass.globally_configured?).to eq true
+      expect(klass.globally_configured?).to be true
     end
   end
 
-  describe '.recognized_params' do
-    context 'with plugin config' do
-      it 'returns nothing' do
+  describe ".recognized_params" do
+    context "with plugin config" do
+      it "returns nothing" do
         allow(plugin).to receive(:enabled?).and_return(true)
-        expect(klass.recognized_params).to eq []
+        expect(klass.recognized_params).to eq %i[mfa_required skip_internal_mfa]
       end
     end
 
-    context 'without plugin config' do
-      it 'returns plugin params' do
+    context "without plugin config" do
+      it "returns plugin params" do
         allow(plugin).to receive(:enabled?).and_return(false)
-        expect(klass.recognized_params).to eq [:auth_host, :noninherited_method]
+        expect(klass.recognized_params).to eq %i[auth_host noninherited_method mfa_required skip_internal_mfa]
       end
     end
   end
@@ -67,14 +69,14 @@ describe AuthenticationProvider::PluginSettings do
   context "settings methods" do
     let(:aac) do
       aac = klass.new
-      aac.auth_host = 'host'
+      aac.auth_host = "host"
       aac
     end
 
     before do
-      allow(plugin).to receive(:settings).and_return(auth_host: 'ps',
-                                      noninherited_method: 'hidden',
-                                      renamed_setting: 'renamed')
+      allow(plugin).to receive(:settings).and_return(auth_host: "ps",
+                                                     noninherited_method: "hidden",
+                                                     renamed_setting: "renamed")
     end
 
     context "with plugin config" do
@@ -82,12 +84,12 @@ describe AuthenticationProvider::PluginSettings do
         allow(plugin).to receive(:enabled?).and_return(true)
       end
 
-      it 'uses settings from plugin' do
-        expect(aac.auth_host).to eq 'ps'
+      it "uses settings from plugin" do
+        expect(aac.auth_host).to eq "ps"
       end
 
-      it 'uses renamed settings from plugin' do
-        expect(aac.noninherited_method).to eq 'renamed'
+      it "uses renamed settings from plugin" do
+        expect(aac.noninherited_method).to eq "renamed"
       end
     end
 
@@ -96,8 +98,8 @@ describe AuthenticationProvider::PluginSettings do
         allow(plugin).to receive(:enabled?).and_return(false)
       end
 
-      it 'uses settings from plugin' do
-        expect(aac.auth_host).to eq 'host'
+      it "uses settings from plugin" do
+        expect(aac.auth_host).to eq "host"
       end
     end
   end

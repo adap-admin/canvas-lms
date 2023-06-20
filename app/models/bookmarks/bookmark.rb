@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -26,6 +28,6 @@ class Bookmarks::Bookmark < ActiveRecord::Base
   end
 
   def as_json
-    super(include_root: false, except: [:json, :user_id]).merge({data: data})
+    super(include_root: false, except: [:json, :user_id]).merge({ data: })
   end
 end

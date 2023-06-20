@@ -16,23 +16,23 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import getProperTray from 'jsx/new_user_tutorial/utils/getProperTray'
+import getProperTray from 'ui/features/new_user_tutorial/react/util/getProperTray'
 
-import HomeTray from 'jsx/new_user_tutorial/trays/HomeTray'
-import ModulesTray from 'jsx/new_user_tutorial/trays/ModulesTray'
-import PagesTray from 'jsx/new_user_tutorial/trays/PagesTray'
-import AssignmentsTray from 'jsx/new_user_tutorial/trays/AssignmentsTray'
-import QuizzesTray from 'jsx/new_user_tutorial/trays/QuizzesTray'
-import SettingsTray from 'jsx/new_user_tutorial/trays/SettingsTray'
-import FilesTray from 'jsx/new_user_tutorial/trays/FilesTray'
-import PeopleTray from 'jsx/new_user_tutorial/trays/PeopleTray'
-import AnnouncementsTray from 'jsx/new_user_tutorial/trays/AnnouncementsTray'
-import GradesTray from 'jsx/new_user_tutorial/trays/GradesTray'
-import DiscussionsTray from 'jsx/new_user_tutorial/trays/DiscussionsTray'
-import SyllabusTray from 'jsx/new_user_tutorial/trays/SyllabusTray'
-import CollaborationsTray from 'jsx/new_user_tutorial/trays/CollaborationsTray'
-import ImportTray from 'jsx/new_user_tutorial/trays/ImportTray'
-import ConferencesTray from 'jsx/new_user_tutorial/trays/ConferencesTray'
+import HomeTray from 'ui/features/new_user_tutorial/react/trays/HomeTray'
+import ModulesTray from 'ui/features/new_user_tutorial/react/trays/ModulesTray'
+import PagesTray from 'ui/features/new_user_tutorial/react/trays/PagesTray'
+import AssignmentsTray from 'ui/features/new_user_tutorial/react/trays/AssignmentsTray'
+import QuizzesTray from 'ui/features/new_user_tutorial/react/trays/QuizzesTray'
+import SettingsTray from 'ui/features/new_user_tutorial/react/trays/SettingsTray'
+import FilesTray from 'ui/features/new_user_tutorial/react/trays/FilesTray'
+import PeopleTray from 'ui/features/new_user_tutorial/react/trays/PeopleTray'
+import AnnouncementsTray from 'ui/features/new_user_tutorial/react/trays/AnnouncementsTray'
+import GradesTray from 'ui/features/new_user_tutorial/react/trays/GradesTray'
+import DiscussionsTray from 'ui/features/new_user_tutorial/react/trays/DiscussionsTray'
+import SyllabusTray from 'ui/features/new_user_tutorial/react/trays/SyllabusTray'
+import CollaborationsTray from 'ui/features/new_user_tutorial/react/trays/CollaborationsTray'
+import ImportTray from 'ui/features/new_user_tutorial/react/trays/ImportTray'
+import ConferencesTray from 'ui/features/new_user_tutorial/react/trays/ConferencesTray'
 
 QUnit.module('getProperTray test')
 

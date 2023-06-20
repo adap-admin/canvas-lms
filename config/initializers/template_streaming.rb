@@ -1,5 +1,7 @@
+# frozen_string_literal: true
+
 module MarkTemplateStreaming
-  def render_to_body(options={})
+  def render_to_body(options = {})
     @streaming_template = true if options[:stream]
     super
   end
@@ -12,7 +14,8 @@ module MarkTemplateStreaming
       # Same as org implmenation except don't set the transfer-encoding header
       # The Rack::Chunked middleware will handle it
       headers["Cache-Control"] ||= "no-cache"
-      headers.delete('Content-Length')
+      headers["Last-Modified"] ||= Time.now.httpdate
+      headers.delete("Content-Length")
       options[:stream] = stream
     end
   end
@@ -48,8 +51,8 @@ module StreamingViewExtensions
   end
 
   def provide(name, content = nil, &block)
-    if block_given?
-      content = capture(&block) || '' # still carry on even if the block doesn't return anything
+    if block
+      content = capture(&block) || "" # still carry on even if the block doesn't return anything
       provide(name, content)
     else
       super
@@ -59,7 +62,7 @@ module StreamingViewExtensions
   # short-hand to provide blank content for multiple keys at once
   def provide_blank(*keys)
     keys.each do |key|
-      provide(key, '')
+      provide(key, "")
     end
   end
 end
@@ -79,7 +82,7 @@ module StreamingContentChecks
     super
   end
 
-  def append(key, value)
+  def append(key, _value)
     raise "Streaming template used `content_for` with #{key.inspect} instead of `provide`,
       which is preferred (`provide` unblocks the rendering)"
   end
@@ -93,12 +96,25 @@ module StreamingContentChecks
     val
   end
 end
-ActionView::StreamingFlow.prepend(StreamingContentChecks) unless ::Rails.env.production?
+ActionView::StreamingFlow.prepend(StreamingContentChecks) unless Rails.env.production?
 
 module SkipEmptyTemplateConcats
   def initialize(original_block)
-    new_block = -> (value) { original_block.call(value) if value.size > 0}
+    new_block = ->(value) { original_block.call(value) unless value.empty? }
     super(new_block)
   end
 end
 ActionView::StreamingBuffer.prepend(SkipEmptyTemplateConcats)
+
+module ActivateShardsOnRender
+  def render(view, *, **)
+    if (active_shard = view.request&.env&.[]("canvas.active_shard"))
+      active_shard.activate do
+        super
+      end
+    else
+      super
+    end
+  end
+end
+ActionView::Template.prepend(ActivateShardsOnRender)

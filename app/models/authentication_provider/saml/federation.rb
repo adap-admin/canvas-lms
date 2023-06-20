@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -16,7 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'saml2'
+require "saml2"
 
 class AuthenticationProvider::SAML::Federation < AuthenticationProvider::SAML::MetadataRefresher
   class << self
@@ -32,8 +34,8 @@ class AuthenticationProvider::SAML::Federation < AuthenticationProvider::SAML::M
     end
 
     def refresh_providers(shard_scope: Shard.in_current_region, providers: nil)
-      providers ||= AuthenticationProvider::SAML.active.
-        where(metadata_uri: self::URN).shard(shard_scope)
+      providers ||= AuthenticationProvider::SAML.active
+                                                .where(metadata_uri: self::URN).shard(shard_scope)
 
       # don't even bother checking the federation if no one is using it
       # (but a multi-shard environment probably is, and it's expensive
@@ -74,14 +76,14 @@ class AuthenticationProvider::SAML::Federation < AuthenticationProvider::SAML::M
         raise "Problem with validUntil: #{entities.valid_until}"
       end
       raise "Not signed!" unless entities.signed?
-      unless entities.valid_signature?(cert: cert)
+      unless entities.valid_signature?(cert:)
         raise "Invalid signature!"
       end
 
       entities.index_by(&:entity_id)
     end
 
-    def refresh_if_necessary(*)
+    def refresh_if_necessary(...)
       result = super
       # save the new data if there is any
       if Canvas.redis_enabled? && result
@@ -91,8 +93,3 @@ class AuthenticationProvider::SAML::Federation < AuthenticationProvider::SAML::M
     end
   end
 end
-
-# make sure to force these to eager load, otherwise we may try to iterate
-# all federations, but there won't be any
-require_dependency 'authentication_provider/saml/in_common'
-require_dependency 'authentication_provider/saml/uk_federation'

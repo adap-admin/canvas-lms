@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -16,13 +18,11 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'pathname'
-
 class PackageRoot
   # initialize with the root directory of an extracted package
   def initialize(root_path)
     @root_path = Pathname(root_path).realpath
-    @prefix = @root_path.to_s + '/'
+    @prefix = @root_path.to_s + "/"
   end
 
   # return the root path. NOTE: don't manually File.join this; use item_path instead
@@ -35,7 +35,8 @@ class PackageRoot
   # raises an error if ".." path entries would traverse above the root_path in the file system.
   def item_path(*relative_path_entries)
     path = Pathname(File.join(@prefix, *relative_path_entries)).cleanpath.to_s
-    raise ArgumentError, "invalid relative_path_entries" unless path.start_with?(@prefix)
+    raise ArgumentError, "invalid relative_path_entries: #{relative_path_entries.inspect}" unless path.start_with?(@prefix)
+
     path
   end
 
@@ -45,8 +46,7 @@ class PackageRoot
   end
 
   # enumerate files matching the given pattern
-  def contents(pattern = '**/*')
+  def contents(pattern = "**/*")
     Dir[@root_path.join(pattern).to_s]
   end
-
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -16,11 +18,9 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../../../spec_helper.rb')
-require File.expand_path(File.dirname(__FILE__) + '/answer_parser_spec_helper.rb')
+require_relative "answer_parser_spec_helper"
 
 describe Quizzes::QuizQuestion::AnswerParsers::MultipleDropdowns do
-
   context "#parse" do
     let(:raw_answers) do
       [
@@ -29,7 +29,7 @@ describe Quizzes::QuizQuestion::AnswerParsers::MultipleDropdowns do
           answer_comments: "This is answer 1",
           answer_comment_html: '<img src="x" onerror="alert(1)">',
           answer_weight: 0,
-          id: '1000'
+          id: "1000"
 
         },
         {
@@ -46,10 +46,9 @@ describe Quizzes::QuizQuestion::AnswerParsers::MultipleDropdowns do
       ]
     end
 
-    let(:question_params) { Hash.new }
+    let(:question_params) { {} }
     let(:parser_class) { Quizzes::QuizQuestion::AnswerParsers::MultipleDropdowns }
 
     include_examples "All answer parsers"
-
   end
 end

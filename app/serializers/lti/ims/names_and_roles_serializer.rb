@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -15,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-module Lti::Ims
+module Lti::IMS
   class NamesAndRolesSerializer
     def initialize(page)
       @page = page
@@ -51,36 +53,57 @@ module Lti::Ims
     end
 
     def variable_expander(enrollment)
+      # the variables substitution in the whitelist have the following guards:
+      # - @current_user
+      # - @context.is_a?(Course)
+      # - @tool
+
       Lti::VariableExpander.new(
         page[:context].root_account,
-        Lti::Ims::Providers::MembershipsProvider.unwrap(page[:context]),
+        Lti::IMS::Providers::MembershipsProvider.unwrap(page[:context]),
         page[:controller],
         {
-          current_user: Lti::Ims::Providers::MembershipsProvider.unwrap(enrollment.user),
+          current_user: Lti::IMS::Providers::MembershipsProvider.unwrap(enrollment.user),
           tool: page[:tool],
-          enrollment: enrollment,
-          variable_whitelist: %w(
-            Person.name.full
-            Person.name.display
-            Person.name.family
-            Person.name.given
-            User.image
-            User.id
-            Canvas.user.id
-            vnd.instructure.User.uuid
+          enrollment:,
+          variable_whitelist: %w[
+            Caliper.url
+            Canvas.course.endAt
+            Canvas.course.gradePassbackSetting
+            Canvas.course.hideDistributionGraphs
+            Canvas.course.id
+            Canvas.course.name
+            Canvas.course.previousContextIds
+            Canvas.course.previousContextIds.recursive
+            Canvas.course.previousCourseIds
+            Canvas.course.sectionIds
+            Canvas.course.sectionRestricted
+            Canvas.course.sectionSisSourceIds
+            Canvas.course.sisSourceId
+            Canvas.course.startAt
+            Canvas.course.workflowState
+            Canvas.group.contextIds
             Canvas.user.globalId
-            Canvas.user.sisSourceId
-            Person.sourcedId
-            Message.locale
-            vnd.Canvas.Person.email.sis
-            Person.email.primary
-            Person.address.timezone
-            User.username
+            Canvas.user.id
             Canvas.user.loginId
             Canvas.user.sisIntegrationId
+            Canvas.user.sisSourceId
             Canvas.xapi.url
-            Caliper.url
-          )
+            Message.locale
+            Person.address.timezone
+            Person.email.primary
+            Person.name.display
+            Person.name.family
+            Person.name.full
+            Person.name.given
+            Person.sourcedId
+            User.id
+            User.image
+            User.username
+            com.instructure.User.sectionNames
+            vnd.Canvas.Person.email.sis
+            vnd.instructure.User.uuid
+          ]
         }
       )
     end
@@ -88,7 +111,7 @@ module Lti::Ims
     def member(enrollment, expander)
       user = enrollment.user
       {
-        status: 'Active',
+        status: "Active",
         name: (user.name if page[:tool].include_name?),
         picture: (user.avatar_url if page[:tool].public?),
         given_name: (user.first_name if page[:tool].include_name?),
@@ -96,48 +119,50 @@ module Lti::Ims
         email: (user.email if page[:tool].include_email?),
         lis_person_sourcedid: (member_sourced_id(expander) if page[:tool].include_name?),
         user_id: user.past_lti_ids.first&.user_lti_id || user.lti_id,
+        lti11_legacy_user_id: Lti::Asset.opaque_identifier_for(user),
         roles: enrollment.lti_roles
       }.compact
     end
 
     def member_sourced_id(expander)
-      expanded = expander.expand_variables!({value: '$Person.sourcedId'})[:value]
-      expanded == '$Person.sourcedId' ? nil : expanded
+      expanded = expander.expand_variables!({ value: "$Person.sourcedId" })[:value]
+      (expanded == "$Person.sourcedId") ? nil : expanded
     end
 
     def message(enrollment, expander)
       return {} if page[:opts].blank? || page[:opts][:rlid].blank?
-      orig_locale = I18n.locale
+
       orig_time_zone = Time.zone
       begin
-        I18n.locale = enrollment.user.locale || orig_locale
-        Time.zone = enrollment.user.time_zone || orig_time_zone
-        launch = Lti::Messages::ResourceLinkRequest.new(
-          tool: page[:tool],
-          context: unwrap(page[:context]),
-          user: enrollment.user,
-          expander: expander,
-          return_url: nil,
-          opts: {
-            # See #variable_expander for additional constraints on custom param expansion
-            claim_group_whitelist: [ :public, :i18n, :custom_params ],
-            extension_whitelist: [ :canvas_user_id, :canvas_user_login_id ]
-          }
-        ).generate_post_payload_message(validate_launch: false)
+        launch = I18n.with_locale(enrollment.user.locale) do
+          Time.zone = enrollment.user.time_zone || orig_time_zone
+          Lti::Messages::ResourceLinkRequest.new(
+            tool: page[:tool],
+            context: unwrap(page[:context]),
+            user: enrollment.user,
+            expander:,
+            return_url: nil,
+            opts: {
+              # See #variable_expander for additional constraints on custom param expansion
+              claim_group_whitelist: %i[public i18n custom_params],
+              extension_whitelist: [:canvas_user_id, :canvas_user_login_id],
+              resource_link: page[:opts][:rlid].present? ? Lti::ResourceLink.find_by(resource_link_uuid: page[:opts][:rlid]) : nil
+            }
+          ).generate_post_payload_message(validate_launch: false)
+        end
       ensure
-        I18n.locale = orig_locale
         Time.zone = orig_time_zone
       end
 
       # A few straggler fields we can't readily control via white/blacklists
-      launch_hash = launch.to_h.
-        except!("#{LtiAdvantage::Serializers::JwtMessageSerializer::IMS_CLAIM_PREFIX}version").
-        except!("picture")
-      { message: [ launch_hash ] }
+      launch_hash = launch.to_h
+                          .except!("#{LtiAdvantage::Serializers::JwtMessageSerializer::IMS_CLAIM_PREFIX}version")
+                          .except!("picture")
+      { message: [launch_hash] }
     end
 
     def unwrap(wrapped)
-      Lti::Ims::Providers::MembershipsProvider.unwrap(wrapped)
+      Lti::IMS::Providers::MembershipsProvider.unwrap(wrapped)
     end
 
     attr_reader :page

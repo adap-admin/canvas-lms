@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -26,7 +28,7 @@ class Quizzes::QuizSortables
   end
 
   def reorder!
-    items.each_with_index { |item, i| item.position = i+1 }
+    items.each_with_index { |item, i| item.position = i + 1 }
     questions.each { |question| question.quiz_group_id = quiz_group_id }
     update_object_positions!
     quiz.mark_edited!
@@ -42,16 +44,16 @@ class Quizzes::QuizSortables
   # items is in format: [{"type" => "question", "id" => 1},
   #                      {"type" => "group",    "id" => 3}]
   def build_items(items)
-    items.each_with_index.map { |item, i| find_object_for_item(item) }.compact
+    items.filter_map { |item| find_object_for_item(item) }
   end
 
   def find_object_for_item(item)
-    all_objects_hash["quiz_#{item['type']}_#{item['id']}"]
+    all_objects_hash["quiz_#{item["type"]}_#{item["id"]}"]
   end
 
   def all_objects_hash
-    @quiz_objects_hash ||= all_objects.each_with_object({}) do |obj, hash|
-      hash["#{obj.class.name.demodulize.underscore}_#{obj.id}"] = obj
+    @quiz_objects_hash ||= all_objects.index_by do |obj|
+      "#{obj.class.name.demodulize.underscore}_#{obj.id}"
     end
   end
 
@@ -68,6 +70,6 @@ class Quizzes::QuizSortables
   end
 
   def quiz_group_id
-    group.id if group
+    group&.id
   end
 end

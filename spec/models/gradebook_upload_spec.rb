@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -15,16 +17,16 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-require_relative '../spec_helper'
+require_relative "../spec_helper"
 
 describe GradebookUpload do
   describe ".queue_from" do
-    let(:teacher_enrollment){ teacher_in_course }
-    let(:teacher){ teacher_enrollment.user }
-    let(:gradebook_course){ teacher_enrollment.course }
-    let(:attachment_data){ {dummy: "data"} }
+    let(:teacher_enrollment) { teacher_in_course }
+    let(:teacher) { teacher_enrollment.user }
+    let(:gradebook_course) { teacher_enrollment.course }
+    let(:attachment_data) { { dummy: "data" } }
 
-    before(:each) do
+    before do
       # actual attachment integration covered in gradebook_uploads_controller_spec;
       # that means in the spec the dummy hash will be enqueued instead of a real attachment
       # object

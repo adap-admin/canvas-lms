@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -15,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'mini_magick'
+require "mini_magick"
 
 module AttachmentFu # :nodoc:
   module Processors
@@ -26,27 +28,30 @@ module AttachmentFu # :nodoc:
 
       module ClassMethods
         # Yields a block containing an MiniMagick Image for the given binary data.
-        def with_image(file, &block)
+        def with_image(file)
           begin
-            binary_data = file.is_a?(MiniMagick::Image) ? file : MiniMagick::Image.open(file) unless !Object.const_defined?(:MiniMagick)
+            binary_data = file.is_a?(MiniMagick::Image) ? file : MiniMagick::Image.open(file) if Object.const_defined?(:MiniMagick)
           rescue
             # Log the failure to load the image.
             logger.debug("Exception working with image: #{$!}")
             binary_data = nil
           end
-          block.call binary_data if block && binary_data
+          yield binary_data if block_given? && binary_data
         ensure
           !binary_data.nil?
         end
       end
 
-    protected
+      protected
+
       def process_attachment
         return unless super
+
         if image? && !@resized
           with_image do |img|
             max_image_size = attachment_options[:thumbnail_max_image_size_pixels]
-            raise ThumbnailError.new("source image too large") if max_image_size && img[:width] * img[:height] > max_image_size
+            raise ThumbnailError, "source image too large" if max_image_size && img[:width] * img[:height] > max_image_size
+
             resize_image_or_thumbnail! img
             self.width = img[:width] if respond_to?(:width)
             self.height = img[:height] if respond_to?(:height)
@@ -65,27 +70,27 @@ module AttachmentFu # :nodoc:
           commands.limit("disk", "1000MB") # because arbitrary numbers are arbitrary
 
           # gif are not handled correct, this is a hack, but it seems to work.
-          if img[:format] =~ /GIF/
+          if img[:format].include?("GIF")
             img.format("png")
           end
 
           if size.is_a?(Integer) || (size.is_a?(Array) && size.first.is_a?(Integer))
             if size.is_a?(Integer)
               size = [size, size]
-              commands.resize(size.join('x'))
+              commands.resize(size.join("x"))
             else
-              commands.resize(size.join('x') + '!')
+              commands.resize(size.join("x") + "!")
             end
           # extend to thumbnail size
-          elsif size.is_a?(String) and size =~ /e$/
-            size = size.gsub(/e/, '')
-            commands.resize(size.to_s + '>')
-            commands.background('#ffffff')
-            commands.gravity('center')
+          elsif size.is_a?(String) && size =~ /e$/
+            size = size.delete("e")
+            commands.resize(size.to_s + ">")
+            commands.background("#ffffff")
+            commands.gravity("center")
             commands.extent(size)
           # crop thumbnail, the smart way
-          elsif size.is_a?(String) and size =~ /c$/
-             size = size.gsub(/c/, '')
+          elsif size.is_a?(String) && size =~ /c$/
+            size = size.delete("c")
 
             # calculate sizes and aspect ratio
             thumb_width, thumb_height = size.split("x")
@@ -97,21 +102,21 @@ module AttachmentFu # :nodoc:
             image_aspect = image_width / image_height
 
             # only crop if image is not smaller in both dimensions
-            unless image_width < thumb_width and image_height < thumb_height
-              command = calculate_offset(image_width,image_height,image_aspect,thumb_width,thumb_height,thumb_aspect)
+            unless image_width < thumb_width && image_height < thumb_height
+              command = calculate_offset(image_width, image_height, image_aspect, thumb_width, thumb_height, thumb_aspect)
 
               # crop image
               commands.extract(command)
             end
 
             # don not resize if image is not as height or width then thumbnail
-            if image_width < thumb_width or image_height < thumb_height
-                commands.background('#ffffff')
-                commands.gravity('center')
-                commands.extent(size)
+            if image_width < thumb_width || image_height < thumb_height
+              commands.background("#ffffff")
+              commands.gravity("center")
+              commands.extent(size)
             # resize image
             else
-              commands.resize("#{size}")
+              commands.resize(size.to_s)
             end
           # crop end
           else
@@ -121,8 +126,8 @@ module AttachmentFu # :nodoc:
         self.temp_path = img
       end
 
-      def calculate_offset(image_width,image_height,image_aspect,thumb_width,thumb_height,thumb_aspect)
-      # only crop if image is not smaller in both dimensions
+      def calculate_offset(image_width, image_height, image_aspect, thumb_width, thumb_height, thumb_aspect)
+        # only crop if image is not smaller in both dimensions
 
         # special cases, image smaller in one dimension then thumbsize
         if image_width < thumb_width
@@ -134,7 +139,7 @@ module AttachmentFu # :nodoc:
 
         # normal thumbnail generation
         # calculate height and offset y, width is fixed
-        elsif (image_aspect <= thumb_aspect or image_width < thumb_width) and image_height > thumb_height
+        elsif (image_aspect <= thumb_aspect || image_width < thumb_width) && image_height > thumb_height
           height = image_width / thumb_aspect
           offset = (image_height / 2) - (height / 2)
           command = "#{image_width}x#{height}+0+#{offset}"
@@ -147,8 +152,6 @@ module AttachmentFu # :nodoc:
         # crop image
         command
       end
-
-
     end
   end
 end

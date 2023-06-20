@@ -16,8 +16,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import folder from "./folder";
-import * as actions from "../actions/files";
+import folder from './folder'
+import * as actions from '../actions/files'
 
 export default function foldersReducer(state = {}, action) {
   switch (action.type) {
@@ -30,9 +30,9 @@ export default function foldersReducer(state = {}, action) {
     case actions.TOGGLE:
       return {
         ...state,
-        [action.id]: folder(state[action.id], action)
-      };
+        [action.id]: folder(state[action.id], action),
+      }
     default:
-      return state;
+      return state
   }
 }

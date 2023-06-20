@@ -19,7 +19,7 @@
 import React from 'react'
 
 import TestUtils from 'react-dom/test-utils'
-import StudentRangeItem from 'jsx/conditional_release_stats/components/student-range-item'
+import StudentRangeItem from '@canvas/conditional-release-stats/react/components/student-range-item'
 
 QUnit.module('Student Range Item')
 
@@ -27,9 +27,9 @@ const defaultProps = () => ({
   studentIndex: 0,
   student: {
     user: {name: 'Foo Bar'},
-    trend: 0
+    trend: 0,
   },
-  selectStudent: () => {}
+  selectStudent: () => {},
 })
 
 const renderComponent = props => TestUtils.renderIntoDocument(<StudentRangeItem {...props} />)

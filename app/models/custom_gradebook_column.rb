@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -18,15 +20,23 @@
 
 class CustomGradebookColumn < ActiveRecord::Base
   include Workflow
-  acts_as_list :scope => :course_id
+  acts_as_list scope: :course_id
 
   belongs_to :course
   has_many :custom_gradebook_column_data
 
   validates :title, presence: true
-  validates :teacher_notes, inclusion: { in: [true, false], message: "teacher_notes must be true or false" }
-  validates :title, length: { maximum: maximum_string_length },
-    :allow_nil => true
+
+  validates :teacher_notes, inclusion: { in: [true, false], message: -> { t("teacher_notes must be true or false") } }
+  validates :title,
+            length: { maximum: maximum_string_length },
+            exclusion: {
+              in: GradebookImporter::GRADEBOOK_IMPORTER_RESERVED_NAMES,
+              message: -> { t("cannot use gradebook importer reserved names") }
+            },
+            allow_nil: true
+
+  before_create :set_root_account_id
 
   workflow do
     state :active
@@ -38,21 +48,29 @@ class CustomGradebookColumn < ActiveRecord::Base
   scope :not_deleted, -> { where("workflow_state != 'deleted'") }
 
   set_policy do
-    given { |user, session|
+    given do |user, session|
       course.grants_any_right?(user, session, :view_all_grades, :manage_grades)
-    }
+    end
     can :read, :manage
   end
 
   def hidden=(hidden)
-    self.workflow_state = Canvas::Plugin::value_to_boolean(hidden) ?
-                            "hidden" :
+    self.workflow_state = if Canvas::Plugin.value_to_boolean(hidden)
+                            "hidden"
+                          else
                             "active"
+                          end
   end
 
   alias_method :destroy_permanently!, :destroy
   def destroy
     self.workflow_state = "deleted"
     save!
+  end
+
+  private
+
+  def set_root_account_id
+    self.root_account_id ||= course.root_account_id
   end
 end

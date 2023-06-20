@@ -20,29 +20,29 @@ import {isEmpty} from 'lodash'
 import React from 'react'
 import ReactDOM from 'react-dom'
 import TestUtils from 'react-dom/test-utils'
-import App from 'jsx/epub_exports/App'
-import CourseEpubExportStore from 'jsx/epub_exports/CourseStore'
+import App from 'ui/features/epub_exports/react/App'
+import CourseEpubExportStore from 'ui/features/epub_exports/react/CourseStore'
 
 QUnit.module('AppSpec', {
   setup() {
     this.props = {
       1: {
         name: 'Maths 101',
-        id: 1
+        id: 1,
       },
       2: {
         name: 'Physics 101',
-        id: 2
-      }
+        id: 2,
+      },
     }
     return sinon.stub(CourseEpubExportStore, 'getAll').returns(true)
   },
   teardown() {
     return CourseEpubExportStore.getAll.restore()
-  }
+  },
 })
 
-test('handeCourseStoreChange', function() {
+test('handeCourseStoreChange', function () {
   const AppElement = <App />
   const component = TestUtils.renderIntoDocument(AppElement)
   ok(isEmpty(component.state), 'precondition')

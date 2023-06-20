@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -49,14 +51,15 @@
 # Note that the block needs to edit the AR collection in-place, because it's a
 # subclass of Array with paging information, rather than just a raw array.
 
-require 'folio'
+require "folio"
 
 module PaginatedCollection
-  require 'paginated_collection/proxy'
-  require 'paginated_collection/collection'
+  require "paginated_collection/proxy"
+  require "paginated_collection/collection"
 
   def self.build(&block)
     raise(ArgumentError, "block required") unless block
+
     PaginatedCollection::Proxy.new(block)
   end
 end

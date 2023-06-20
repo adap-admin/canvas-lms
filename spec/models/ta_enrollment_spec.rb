@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,9 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper.rb')
-
-
 #
 # Table name: enrollments
 #
@@ -32,7 +31,7 @@ require File.expand_path(File.dirname(__FILE__) + '/../spec_helper.rb')
 #
 
 describe TaEnrollment do
-  it "should subclass Enrollment" do
+  it "subclasses Enrollment" do
     expect(TaEnrollment.ancestors).to be_include(Enrollment)
   end
 end

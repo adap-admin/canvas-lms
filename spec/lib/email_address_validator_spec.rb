@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -15,18 +17,16 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper.rb')
-
 describe "EmailAddressValidator" do
   it "accepts good addresses with domains" do
-    ['user@example.com', '"non\@triv"/ial@example.com'].each do |addr|
-      expect(EmailAddressValidator.valid?(addr)).to eq true
+    ["user@example.com", '"non\@triv"/ial@example.com'].each do |addr|
+      expect(EmailAddressValidator.valid?(addr)).to be true
     end
   end
 
   it "rejects bad, local, or multiple addresses" do
-    ['None', '@example.com', 'user@', 'user1@example.com, user2@example.com'].each do |addr|
-      expect(EmailAddressValidator.valid?(addr)).to eq false
+    ["None", "@example.com", "user@", "user1@example.com, user2@example.com"].each do |addr|
+      expect(EmailAddressValidator.valid?(addr)).to be false
     end
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -28,35 +30,37 @@ class ReportSnapshot < ActiveRecord::Base
   def self.report_value_over_time(report, key)
     items = []
     now = Time.now.utc.to_i
-    report['monthly'].each do |month|
-      if month[key]
-        stamp = ((Time.utc(month['year'], month['month'], 1).to_date >> 1) - 1.day).to_time.to_i
-        next if stamp > now
-        items << [stamp.to_i*1000, month[key]]
-      end
+    report["monthly"].each do |month|
+      next unless month[key]
+
+      stamp = ((Time.utc(month["year"], month["month"], 1).to_date >> 1) - 1.day).to_time.to_i
+      next if stamp > now
+
+      items << [stamp.to_i * 1000, month[key]]
     end
-    report['weekly'].each do |week|
-      if week[key]
-        stamp = (week['week'] * 604800) + ((week['year'] - 1970) * 31556926)
-        next if stamp > now
-        items << [stamp*1000, week[key]]
-      end
+    report["weekly"].each do |week|
+      next unless week[key]
+
+      stamp = (week["week"] * 604_800) + ((week["year"] - 1970) * 31_556_926)
+      next if stamp > now
+
+      items << [stamp * 1000, week[key]]
     end
     items.sort_by(&:first).uniq(&:first)
   end
 
   def report_value_over_time(*args)
     if args.length == 1
-      ReportSnapshot.report_value_over_time(self.data, args.first)
+      ReportSnapshot.report_value_over_time(data, args.first)
     else
-      ReportSnapshot.report_value_over_time(self.data[args.first], args.last)
+      ReportSnapshot.report_value_over_time(data[args.first], args.last)
     end
   end
 
   def data
-    if !@data
-      @data = JSON.parse(read_attribute(:data) || '{}')
-      @data['generated_at'] = Time.at(@data['generated_at'].to_i/1000) if @data['generated_at']
+    unless @data
+      @data = JSON.parse(read_attribute(:data) || "{}")
+      @data["generated_at"] = Time.at(@data["generated_at"].to_i / 1000) if @data["generated_at"]
     end
     @data
   end
@@ -67,38 +71,37 @@ class ReportSnapshot < ActiveRecord::Base
 
   def serialize_data
     return unless @data
+
     data = @data.dup
-    data['generated_at'] = data['generated_at'].to_i * 1000 if data['generated_at']
+    data["generated_at"] = data["generated_at"].to_i * 1000 if data["generated_at"]
     write_attribute(:data, data.to_json)
   end
 
-  scope :detailed, -> { where(:report_type => 'counts_detailed') }
-  scope :progressive, -> { where(:report_type => 'counts_progressive_detailed') }
+  scope :detailed, -> { where(report_type: "counts_detailed") }
+  scope :progressive, -> { where(report_type: "counts_progressive_detailed") }
 
   def push_to_instructure_if_collection_enabled
-    begin
-      return if self.report_type != REPORT_TO_SEND
-      return if self.account != Account.default
-      collection_type = Setting.get("usage_statistics_collection", "opt_out")
-      return if collection_type  == "opt_out"
+    return if report_type != REPORT_TO_SEND
+    return if account != Account.default
 
-      require 'lib/ssl_common'
+    collection_type = Setting.get("usage_statistics_collection", "opt_out")
+    return if collection_type == "opt_out"
 
-      data = {
-          "collection_type" => collection_type,
-          "installation_uuid" => Canvas.installation_uuid,
-          "report_type" => self.report_type,
-          "data" => read_attribute(:data),
-          "rails_env" => Rails.env
-        }
+    data = {
+      "collection_type" => collection_type,
+      "installation_uuid" => Canvas.installation_uuid,
+      "report_type" => report_type,
+      "data" => read_attribute(:data),
+      "rails_env" => Rails.env
+    }
 
-      if collection_type == "opt_in"
-        data["account_name"] = Account.default.name
-        data["admin_email"] = Account.site_admin.users.first.pseudonyms.first.unique_id
-      end
-
-      SSLCommon.post_form(STATS_COLLECTION_URL, data)
-    rescue
+    if collection_type == "opt_in"
+      data["account_name"] = Account.default.name
+      data["admin_email"] = Account.site_admin.users.first.pseudonyms.first.unique_id
     end
+
+    SSLCommon.post_form(STATS_COLLECTION_URL, data)
+  rescue
+    nil
   end
 end

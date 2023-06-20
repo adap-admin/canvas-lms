@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -25,8 +27,6 @@ describe Mutations::SetCoursePostPolicy do
   let(:student) { course.enroll_user(User.create!, "StudentEnrollment", enrollment_state: "active").user }
   let(:teacher) { course.enroll_user(User.create!, "TeacherEnrollment", enrollment_state: "active").user }
 
-  before(:each) { PostPolicy.enable_feature! }
-
   def mutation_str(course_id: nil, post_manually: nil)
     input_string = course_id ? "courseId: #{course_id}" : ""
     input_string += " postManually: #{post_manually}" if post_manually.present?
@@ -53,7 +53,7 @@ describe Mutations::SetCoursePostPolicy do
   end
 
   def execute_query(mutation_str, context)
-    CanvasSchema.execute(mutation_str, context: context)
+    CanvasSchema.execute(mutation_str, context:)
   end
 
   context "when user has manage_grades permission" do
@@ -80,18 +80,12 @@ describe Mutations::SetCoursePostPolicy do
 
     it "returns the related post policy" do
       result = execute_query(mutation_str(course_id: course.id, post_manually: true), context)
-      policy = PostPolicy.find_by(course: course, assignment: nil)
-      expect(result.dig("data", "setCoursePostPolicy", "postPolicy", "_id").to_i).to be policy.id
-    end
-
-    it "updates an existing course post policy when one exists" do
-      policy = PostPolicy.create!(course: course, post_manually: false)
-      result = execute_query(mutation_str(course_id: course.id, post_manually: true), context)
+      policy = PostPolicy.find_by(course:, assignment: nil)
       expect(result.dig("data", "setCoursePostPolicy", "postPolicy", "_id").to_i).to be policy.id
     end
 
     describe "updating the post policy of assignments in the course" do
-      let(:policy) { PostPolicy.create!(course: course, post_manually: false) }
+      let(:policy) { PostPolicy.create!(course:, post_manually: false) }
       let(:post_manually_mutation) { mutation_str(course_id: course.id, post_manually: true) }
 
       let(:assignment) { course.assignments.create! }
@@ -120,25 +114,25 @@ describe Mutations::SetCoursePostPolicy do
       it "does not update assignments that have an equivalent post policy" do
         assignment.ensure_post_policy(post_manually: true)
 
-        expect {
+        expect do
           execute_query(post_manually_mutation, context)
-        }.not_to change {
-          PostPolicy.find_by!(assignment: assignment).updated_at
+        end.not_to change {
+          PostPolicy.find_by!(assignment:).updated_at
         }
       end
 
       it "does not update anonymous assignments" do
-        expect {
+        expect do
           execute_query(post_manually_mutation, context)
-        }.not_to change {
+        end.not_to change {
           PostPolicy.find_by!(assignment: anonymous_assignment).updated_at
         }
       end
 
       it "does not update moderated assignments" do
-        expect {
+        expect do
           execute_query(post_manually_mutation, context)
-        }.not_to change {
+        end.not_to change {
           PostPolicy.find_by!(assignment: moderated_assignment).updated_at
         }
       end
@@ -155,7 +149,7 @@ describe Mutations::SetCoursePostPolicy do
 
     it "does not return data for the related post policy" do
       result = execute_query(mutation_str(course_id: course.id, post_manually: true), context)
-      expect(result.dig("data", "setCoursePostPolicy")).to be nil
+      expect(result.dig("data", "setCoursePostPolicy")).to be_nil
     end
   end
 end

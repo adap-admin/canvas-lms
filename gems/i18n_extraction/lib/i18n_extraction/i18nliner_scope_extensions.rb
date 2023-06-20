@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -21,9 +23,12 @@ class I18nliner::Scope
   ABSOLUTE_KEY = /\A#/
 
   def normalize_key(key, inferred_key, explicit_scope_option)
+    return nil if key.nil?
+
     key = key.to_s
     key = key.dup if key.frozen?
-    return key if key.sub!(ABSOLUTE_KEY, '') || !scope || inferred_key || explicit_scope_option
+    return key if key.sub!(ABSOLUTE_KEY, "") || !scope || inferred_key || explicit_scope_option
+
     scope + key
   end
 end

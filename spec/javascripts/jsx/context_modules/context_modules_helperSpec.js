@@ -16,27 +16,40 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Helper from 'context_modules_helper'
+import Helper from '@canvas/context-modules/jquery/context_modules_helper'
 
 QUnit.module('ContextModulesHelper', {
-  setup () {
+  setup() {
     sinon.stub(Helper, 'setWindowLocation')
   },
 
-  teardown () {
+  teardown() {
     Helper.setWindowLocation.restore()
   },
 })
 
 test('externalUrlLinkClick', () => {
   const event = {
-    preventDefault: sinon.spy()
+    preventDefault: sinon.spy(),
   }
   const elt = {
-    attr: sinon.spy()
+    attr: sinon.stub().returns('http://example.com'),
   }
   Helper.externalUrlLinkClick(event, elt)
   ok(event.preventDefault.calledOnce, 'preventDefault not called')
   ok(elt.attr.calledWith('data-item-href'), 'elt.attr not called')
-  ok(Helper.setWindowLocation.calledOnce, 'window redirected')
+  ok(Helper.setWindowLocation.calledOnceWith('http://example.com'), 'window redirected')
+})
+
+test('externalUrlLinkClick sanitizeUrl', () => {
+  const event = {
+    preventDefault: sinon.spy(),
+  }
+  const elt = {
+    // eslint-disable-next-line no-script-url
+    attr: sinon.stub().returns('javascript:alert("hi")'),
+  }
+  Helper.externalUrlLinkClick(event, elt)
+  ok(event.preventDefault.calledOnce, 'preventDefault not called')
+  ok(Helper.setWindowLocation.calledOnceWith('about:blank'), 'redirect sanitized')
 })

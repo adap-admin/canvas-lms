@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -18,16 +20,16 @@
 
 class EnrollmentsFromUserList
   class << self
-    def process(list, course, opts={})
+    def process(list, course, opts = {})
       EnrollmentsFromUserList.new(course, opts).process(list)
     end
   end
 
   attr_reader :students, :course
 
-  def initialize(course, opts={})
+  def initialize(course, opts = {})
     @course = course
-    @enrollment_type = opts[:enrollment_type] || 'StudentEnrollment'
+    @enrollment_type = opts[:enrollment_type] || "StudentEnrollment"
     @role = opts[:role]
     @limit = opts[:limit]
     @section = (opts[:course_section_id].present? ? @course.course_sections.active.where(id: opts[:course_section_id].to_i).first : nil) || @course.default_section
@@ -38,21 +40,22 @@ class EnrollmentsFromUserList
 
   def process(list)
     raise ArgumentError, "Must provide a UserList or Array (of user tokens)" unless list.is_a?(UserList) || list.is_a?(Array)
+
     @enrollments = []
     @user_ids_to_touch = []
 
     users =
       if list.is_a?(UserList)
-        list.addresses.slice!(0,@limit) if @limit
+        list.addresses.slice!(0, @limit) if @limit
         list.users
       else
         # list of user ids
         User.from_tokens(list)
       end
-    users.each_slice(Setting.get('enrollments_from_user_list_batch_size', 50).to_i) do |users|
+    users.each_slice(Setting.get("enrollments_from_user_list_batch_size", 50).to_i) do |users_slice|
       @course.transaction do
         Enrollment.suspend_callbacks(:set_update_cached_due_dates) do
-          users.each { |user| enroll_user(user) }
+          users_slice.each { |user| enroll_user(user) }
         end
       end
     end
@@ -80,14 +83,16 @@ class EnrollmentsFromUserList
 
   def enroll_user(user)
     return unless user
-    return if @enrolled_users.has_key?(user.id)
+    return if @enrolled_users.key?(user.id)
+
     @enrolled_users[user.id] = true
-    enrollment = @course.enroll_user(user, @enrollment_type,
-                        :section => @section,
-                        :limit_privileges_to_course_section => @limit_privileges_to_course_section,
-                        :allow_multiple_enrollments => true,
-                        :role => @role,
-                        :skip_touch_user => true)
+    enrollment = @course.enroll_user(user,
+                                     @enrollment_type,
+                                     section: @section,
+                                     limit_privileges_to_course_section: @limit_privileges_to_course_section,
+                                     allow_multiple_enrollments: true,
+                                     role: @role,
+                                     skip_touch_user: true)
     if enrollment
       @enrollments << enrollment
       if enrollment.need_touch_user

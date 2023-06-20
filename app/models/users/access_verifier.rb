@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -15,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'openssl'
+require "openssl"
 
 module Users
   module AccessVerifier
@@ -45,6 +47,7 @@ module Users
 
     def self.validate(fields)
       return {} if fields[:sf_verifier].blank?
+
       claims = Canvas::Security.decode_jwt(fields[:sf_verifier])
 
       real_user = user = User.where(id: claims[:user_id]).first
@@ -52,27 +55,26 @@ module Users
       raise InvalidVerifier unless user && real_user
 
       if claims[:developer_key_id].present?
-        developer_key = DeveloperKey.where(id: claims[:developer_key_id]).first
+        developer_key = DeveloperKey.find_cached(claims[:developer_key_id])
         raise InvalidVerifier unless developer_key
       end
 
       if claims[:root_account_id].present?
-        root_account = Account.where(id: claims[:root_account_id]).first
+        root_account = Account.find_cached(claims[:root_account_id])
         raise InvalidVerifier unless root_account
       end
 
       oauth_host = claims[:oauth_host]
       return_url = claims[:return_url]
 
-      return {
-        user: user,
-        real_user: real_user,
-        developer_key: developer_key,
-        root_account: root_account,
-        oauth_host: oauth_host,
-        return_url: return_url
+      {
+        user:,
+        real_user:,
+        developer_key:,
+        root_account:,
+        oauth_host:,
+        return_url:
       }
-
     rescue Canvas::Security::InvalidToken
       raise InvalidVerifier
     end

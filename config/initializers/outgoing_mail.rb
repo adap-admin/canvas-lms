@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -19,15 +21,14 @@
 
 # This doesn't get required if we're not using smtp, and there's some
 # references to SMTP exception classes in the code.
-require 'net/smtp'
 
 config = {
-  :domain => "unknowndomain.example.com",
-  :delivery_method => :smtp,
-}.merge((ConfigFile.load("outgoing_mail") || {}).symbolize_keys)
+  domain: "unknowndomain.example.com",
+  delivery_method: :smtp,
+}.merge((ConfigFile.load("outgoing_mail").dup || {}).symbolize_keys)
 
 [:authentication, :delivery_method].each do |key|
-  config[key] = config[key].to_sym if config.has_key?(key)
+  config[key] = config[key].to_sym if config.key?(key)
 end
 
 Rails.configuration.to_prepare do
@@ -36,7 +37,7 @@ Rails.configuration.to_prepare do
   HostUrl.outgoing_email_default_name = config[:default_name]
 
   IncomingMail::ReplyToAddress.address_pool = config[:reply_to_addresses] ||
-    Array(HostUrl.outgoing_email_address)
+                                              Array(HostUrl.outgoing_email_address)
   IncomingMailProcessor::MailboxAccount.default_outgoing_email = HostUrl.outgoing_email_address
   IncomingMailProcessor::MailboxAccount.reply_to_enabled = config[:reply_to_disabled].blank?
 end
@@ -44,7 +45,7 @@ end
 # delivery_method can be :smtp, :sendmail, :letter_opener, or :test
 ActionMailer::Base.delivery_method = config[:delivery_method]
 
-ActionMailer::Base.perform_deliveries = config[:perform_deliveries] if config.has_key?(:perform_deliveries)
+ActionMailer::Base.perform_deliveries = config[:perform_deliveries] if config.key?(:perform_deliveries)
 
 case config[:delivery_method]
 when :smtp

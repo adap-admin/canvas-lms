@@ -17,8 +17,8 @@
  */
 
 import $ from 'jquery'
-import SpeedGraderHelpers from 'speed_grader_helpers'
-import SpeedGraderSelectMenu from 'speed_grader_select_menu'
+import SpeedGraderHelpers from 'ui/features/speed_grader/jquery/speed_grader_helpers'
+import SpeedGraderSelectMenu from 'ui/features/speed_grader/jquery/speed_grader_select_menu'
 
 QUnit.module('SpeedGraderSelectMenu', () => {
   QUnit.module('#updateSelectMenuStatus', updateSelectMenuStatusHooks => {
@@ -28,15 +28,15 @@ QUnit.module('SpeedGraderSelectMenu', () => {
         id: 4,
         name: 'Guy B. Studying',
         submission_state: 'not_graded',
-        submission: {score: null, grade: null}
+        submission: {score: null, grade: null},
       },
       {
         index: 1,
         id: 12,
         name: 'Sil E. Bus',
         submission_state: 'graded',
-        submission: {score: 7, grade: 70}
-      }
+        submission: {score: 7, grade: 70},
+      },
     ]
 
     const menuOptions = students.map(student => {
@@ -80,7 +80,7 @@ QUnit.module('SpeedGraderSelectMenu', () => {
           student,
           isCurrentStudent,
           newStudentInfo,
-          anonymizableId: 'id'
+          anonymizableId: 'id',
         })
         strictEqual(status.hasClass('graded'), false)
 
@@ -89,7 +89,7 @@ QUnit.module('SpeedGraderSelectMenu', () => {
           student,
           isCurrentStudent,
           newStudentInfo,
-          anonymizableId: 'id'
+          anonymizableId: 'id',
         })
         strictEqual(status.hasClass('graded'), true)
       })
@@ -103,13 +103,10 @@ QUnit.module('SpeedGraderSelectMenu', () => {
           student,
           isCurrentStudent,
           newStudentInfo,
-          anonymizableId: 'id'
+          anonymizableId: 'id',
         })
 
-        const entry = selectMenu
-          .data('selectmenu')
-          .list.find('li:eq(0)')
-          .children()
+        const entry = selectMenu.data('selectmenu').list.find('li:eq(0)').children()
         strictEqual(
           entry.find('span.ui-selectmenu-item-icon.speedgrader-selectmenu-icon i.icon-check')
             .length,
@@ -126,7 +123,7 @@ QUnit.module('SpeedGraderSelectMenu', () => {
         strictEqual(option.hasClass('graded'), true)
       })
 
-      test('updates to not_graded', function() {
+      test('updates to not_graded', () => {
         const student = students[1]
         student.submission_state = 'not_graded'
         const isCurrentStudent = false
@@ -135,13 +132,10 @@ QUnit.module('SpeedGraderSelectMenu', () => {
           student,
           isCurrentStudent,
           newStudentInfo,
-          anonymizableId: 'id'
+          anonymizableId: 'id',
         })
 
-        const entry = selectMenu
-          .data('selectmenu')
-          .list.find('li:eq(1)')
-          .children()
+        const entry = selectMenu.data('selectmenu').list.find('li:eq(1)').children()
         strictEqual(
           entry.find('span.ui-selectmenu-item-icon.speedgrader-selectmenu-icon:contains("●")')
             .length,
@@ -157,7 +151,7 @@ QUnit.module('SpeedGraderSelectMenu', () => {
 
       // We really never go to not_submitted, but a background update
       // *could* potentially do this, so we should handle it.
-      test('updates to not_submitted', function() {
+      test('updates to not_submitted', () => {
         const student = students[0]
         student.submission_state = 'not_submitted'
         selectMenu.updateSelectMenuStatus(student, false, 'Guy B. Studying – not submitted')
@@ -167,13 +161,10 @@ QUnit.module('SpeedGraderSelectMenu', () => {
           student,
           isCurrentStudent,
           newStudentInfo,
-          anonymizableId: 'id'
+          anonymizableId: 'id',
         })
 
-        const entry = selectMenu
-          .data('selectmenu')
-          .list.find('li:eq(0)')
-          .children()
+        const entry = selectMenu.data('selectmenu').list.find('li:eq(0)').children()
         strictEqual(
           entry.find('span.ui-selectmenu-item-icon.speedgrader-selectmenu-icon').length,
           1
@@ -191,7 +182,7 @@ QUnit.module('SpeedGraderSelectMenu', () => {
 
       // We really never go to resubmitted, but a backgroud update *could*
       // potentially do this, so we should handle it.
-      test('updates to resubmitted', function() {
+      test('updates to resubmitted', () => {
         const student = students[1]
         student.submission_state = 'resubmitted'
         student.submission.submitted_at = '2017-07-10T17:00:00Z'
@@ -201,13 +192,10 @@ QUnit.module('SpeedGraderSelectMenu', () => {
           student,
           isCurrentStudent,
           newStudentInfo,
-          anonymizableId: 'id'
+          anonymizableId: 'id',
         })
 
-        const entry = selectMenu
-          .data('selectmenu')
-          .list.find('li:eq(0)')
-          .children()
+        const entry = selectMenu.data('selectmenu').list.find('li:eq(0)').children()
         strictEqual(
           entry.find('span.ui-selectmenu-item-icon.speedgrader-selectmenu-icon:contains("●")')
             .length,
@@ -226,7 +214,7 @@ QUnit.module('SpeedGraderSelectMenu', () => {
 
       // We really never go to not_gradable, but a backgroud update *could*
       // potentially do this, so we should handle it.
-      test('updates to not_gradable', function() {
+      test('updates to not_gradable', () => {
         const student = students[0]
         student.submission_state = 'not_gradeable'
         student.submission.submitted_at = '2017-07-10T17:00:00Z'
@@ -236,13 +224,10 @@ QUnit.module('SpeedGraderSelectMenu', () => {
           student,
           isCurrentStudent,
           newStudentInfo,
-          anonymizableId: 'id'
+          anonymizableId: 'id',
         })
 
-        const entry = selectMenu
-          .data('selectmenu')
-          .list.find('li:eq(0)')
-          .children()
+        const entry = selectMenu.data('selectmenu').list.find('li:eq(0)').children()
         strictEqual(
           entry.find('span.ui-selectmenu-item-icon.speedgrader-selectmenu-icon > i.icon-check')
             .length,
@@ -270,15 +255,15 @@ QUnit.module('SpeedGraderSelectMenu', () => {
               id: 'section_0',
               data: {'section-id': 0},
               name: 'Show all sections',
-              className: {raw: 'section_0'}
+              className: {raw: 'section_0'},
             },
             {
               id: 'section_123',
               data: {'section-id': 123},
               name: 'Not everybody',
-              className: {raw: 'section_123'}
-            }
-          ]
+              className: {raw: 'section_123'},
+            },
+          ],
         }
         menuOptions.unshift(sections)
       })
@@ -292,13 +277,10 @@ QUnit.module('SpeedGraderSelectMenu', () => {
           student,
           isCurrentStudent,
           newStudentInfo,
-          anonymizableId: 'id'
+          anonymizableId: 'id',
         })
 
-        const entry = selectMenu
-          .data('selectmenu')
-          .list.find('li:eq(0)')
-          .children()
+        const entry = selectMenu.data('selectmenu').list.find('li:eq(0)').children()
         strictEqual(
           entry.find('span.ui-selectmenu-item-icon.speedgrader-selectmenu-icon i.icon-check')
             .length,

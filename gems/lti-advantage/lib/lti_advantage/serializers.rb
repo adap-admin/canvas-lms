@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -17,6 +19,6 @@
 
 module LtiAdvantage
   module Serializers
-    require_relative 'serializers/jwt_message_serializer'
+    require_relative "serializers/jwt_message_serializer"
   end
 end

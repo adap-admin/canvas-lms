@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -26,25 +28,24 @@ class SubmissionDetails
     end
 
     def comment_list_div
-      f('.comment_list')
+      f(".comment_list")
     end
 
     def comments
-      f('.comment_list .comment .comment')
+      f(".comment_list .comment .comment")
     end
 
     def view_feedback_link
-      f("div .file-upload-submission-attachment a").attribute('text')
+      f("div .file-upload-submission-attachment a").attribute("text")
     end
 
     def add_comment_text_area
-      f('.ic-Input.grading_comment')
+      f(".ic-Input.grading_comment")
     end
 
     def comment_save_button
       fj('button:contains("Save")')
     end
-
 
     # page actions
 

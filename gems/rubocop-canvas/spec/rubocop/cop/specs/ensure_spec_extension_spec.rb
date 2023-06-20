@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -19,12 +21,12 @@ describe RuboCop::Cop::Specs::EnsureSpecExtension do
   subject(:cop) { described_class.new }
 
   context "named as *_spec.rb" do
-    before(:each) do
+    before do
       allow(cop).to receive(:file_name).and_return("dragoon_spec.rb")
     end
 
     context "top level context" do
-      it 'does not warn for *_spec.rb extension' do
+      it "does not warn for *_spec.rb extension" do
         inspect_source(%{
           context AuthenticationProvider::BlueDragoon do
             describe '#fire' do
@@ -39,7 +41,7 @@ describe RuboCop::Cop::Specs::EnsureSpecExtension do
     end
 
     context "top level describe" do
-      it 'does not warn for *_spec.rb extension' do
+      it "does not warn for *_spec.rb extension" do
         inspect_source(%{
           describe AuthenticationProvider::GreenDragoon do
             describe '#green' do
@@ -55,12 +57,12 @@ describe RuboCop::Cop::Specs::EnsureSpecExtension do
   end
 
   context "not named as *_spec.rb" do
-    before(:each) do
+    before do
       allow(cop).to receive(:file_name).and_return("dragoon.rb")
     end
 
     context "top level context" do
-      it 'warns for *_spec.rb extension' do
+      it "warns for *_spec.rb extension" do
         inspect_source(%{
           context AuthenticationProvider::BlueDragoon do
             describe '#fire' do
@@ -77,7 +79,7 @@ describe RuboCop::Cop::Specs::EnsureSpecExtension do
     end
 
     context "top level describe" do
-      it 'warns for *_spec.rb extension' do
+      it "warns for *_spec.rb extension" do
         inspect_source(%{
           describe AuthenticationProvider::GreenDragoon do
             describe '#green' do

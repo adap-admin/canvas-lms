@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,8 +18,10 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-class OauthRequest < ActiveRecord::Base
+class OAuthRequest < ActiveRecord::Base
   belongs_to :user
 
-  def self.serialization_excludes; [:secret, :user_secret]; end
+  def self.serialization_excludes
+    [:secret, :user_secret]
+  end
 end

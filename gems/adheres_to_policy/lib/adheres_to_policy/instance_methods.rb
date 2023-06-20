@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -15,6 +17,8 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
+
+require "active_support/core_ext/enumerable"
 
 module AdheresToPolicy
   module InstanceMethods
@@ -45,7 +49,7 @@ module AdheresToPolicy
       end
     end
     # alias so its backwards compatible.
-    alias :check_policy :granted_rights
+    alias_method :check_policy, :granted_rights
 
     # Public: Gets the requested rights and their status to a user.
     #
@@ -66,9 +70,8 @@ module AdheresToPolicy
       session, sought_rights = parse_args(args)
       sought_rights ||= []
       sought_rights = self.class.policy.available_rights if sought_rights.empty?
-      sought_rights.inject({}) do |h, r|
-        h[r] = check_right?(user, session, r)
-        h
+      sought_rights.index_with do |r|
+        check_right?(user, session, r)
       end
     end
 
@@ -121,6 +124,7 @@ module AdheresToPolicy
     def grants_all_rights?(user, *args)
       session, sought_rights = parse_args(args)
       return false if sought_rights.empty?
+
       sought_rights.none? do |sought_right|
         !check_right?(user, session, sought_right)
       end
@@ -129,7 +133,7 @@ module AdheresToPolicy
     # Public: Checks the right passed in for a user.
     #
     # user - The user for which to determine the right.
-    # session - The session to use if the rights are dependend upon the session.
+    # session - The session to use if the rights are dependent upon the session.
     # right - The right to get the status for.  Will return true if the user
     #         is granted the right provided.
     #
@@ -144,11 +148,11 @@ module AdheresToPolicy
     #   grants_right?(user, session, :update)
     #   # => true
     #
-    # Returns true if any of the provided rights are granted to the user.  False
-    # if none of the provided rights are granted.
+    # Returns true if the provided right is granted. Otherwise, returns false.
     def grants_right?(user, *args)
       session, sought_rights = parse_args(args)
       raise ArgumentError if sought_rights.length > 1
+
       check_right?(user, session, sought_rights.first)
     end
 
@@ -167,6 +171,7 @@ module AdheresToPolicy
     #
     def clear_permissions_cache(user, session = nil)
       return if respond_to?(:new_record?) && new_record?
+
       Cache.clear
       self.class.policy.available_rights.each do |available_right|
         Rails.cache.delete(permission_cache_key_for(user, session, available_right))
@@ -192,13 +197,13 @@ module AdheresToPolicy
     # of the sought rights.
     def parse_args(args)
       session = nil
-      if !args[0].is_a? Symbol
+      unless args[0].is_a? Symbol
         session = args.shift
       end
       args.compact!
       args.uniq!
 
-      return session, args
+      [session, args]
     end
 
     # Internal: Checks the right for a user based on session.
@@ -229,8 +234,8 @@ module AdheresToPolicy
       blacklist = config.blacklist
 
       use_rails_cache = config.cache_permissions &&
-        !blacklist.include?(sought_right_cookie) &&
-        (Thread.current[:primary_permission_under_evaluation] || config.cache_intermediate_permissions)
+                        !blacklist.include?(sought_right_cookie) &&
+                        (Thread.current[:primary_permission_under_evaluation] || config.cache_intermediate_permissions)
 
       was_primary_permission, Thread.current[:primary_permission_under_evaluation] =
         Thread.current[:primary_permission_under_evaluation], false
@@ -238,18 +243,16 @@ module AdheresToPolicy
       # Check the cache for the sought_right.  If it exists in the cache its
       # state (true or false) will be returned.  Otherwise we calculate the
       # state and cache it.
-      value, how_it_got_it = Cache.fetch(
+      value, _how_it_got_it = Cache.fetch(
         permission_cache_key_for(user, session, sought_right),
-        use_rails_cache: use_rails_cache
+        use_rails_cache:
       ) do
-
         conditions = self.class.policy.conditions[sought_right]
         next false unless conditions
 
         # Loop through all the conditions until we find the first one that
         # grants us the sought_right.
         conditions.any? do |condition|
-          condition_applies = false
           start_time = Time.now
           condition_applies = condition.applies?(self, user, session)
           elapsed_time = Time.now - start_time
@@ -259,19 +262,17 @@ module AdheresToPolicy
             # that belong to it and cache them.  This will short circut the above
             # Rails.cache.fetch for future checks that we won't have to do again.
             condition.rights.each do |condition_right|
-
               # Skip the condition_right if its the one we are looking for.
               # The Rails.cache.fetch will take care of caching it for us.
-              if condition_right != sought_right
+              next unless condition_right != sought_right
 
-                Thread.current[:last_cache_generate] = elapsed_time # so we can record it in the logs
-                # Cache the condition_right since we already know they have access.
-                Cache.write(
-                  permission_cache_key_for(user, session, condition_right),
-                  true,
-                  use_rails_cache: config.cache_permissions && config.cache_related_permissions
-                )
-              end
+              Thread.current[:last_cache_generate] = elapsed_time # so we can record it in the logs
+              # Cache the condition_right since we already know they have access.
+              Cache.write(
+                permission_cache_key_for(user, session, condition_right),
+                true,
+                use_rails_cache: config.cache_permissions && config.cache_related_permissions
+              )
             end
 
             true
@@ -302,13 +303,14 @@ module AdheresToPolicy
     # provided user and/or right.
     def permission_cache_key_for(user, session, right)
       return nil if respond_to?(:new_record?) && new_record?
+
       # If you're going to add something to the user session that
       # affects permissions, you'd durn well better a :permissions_key
       # on the session as well
-      permissions_key = session ? (session[:permissions_key] || 'default') : nil # no session != no permissions_key
-      ['permissions', self, user, permissions_key, right].compact.
-        map{ |element| ActiveSupport::Cache.expand_cache_key(element) }.
-        to_param
+      permissions_key = session ? (session[:permissions_key] || "default") : nil # no session != no permissions_key
+      ["permissions", self, user, permissions_key, right].compact
+                                                         .map { |element| ActiveSupport::Cache.expand_cache_key(element) }
+                                                         .to_param
     end
   end
 end

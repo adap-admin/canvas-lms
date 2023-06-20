@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -32,15 +34,16 @@ module ErrorContext
       # always send js errors to stdout, even if the spec passed. we have to
       # empty the JSErrorCollector anyway, so we might as well show it.
       summary.js_errors&.each do |error|
-        output << "  JS Error: #{error['errorMessage']} (#{error['sourceName']}:#{error['lineNumber']})"
+        output << "  JS Error: #{error["errorMessage"]} (#{error["sourceName"]}:#{error["lineNumber"]})"
       end
 
       output << "  Screenshot: #{File.join(errors_path, summary.screenshot_name)}" if summary.screenshot_name
-      output << "  Screen capture: #{File.join(errors_path, summary.screen_capture_name)}" if summary.screen_capture_name
+      # TODO: doesn't work in new docker builds
+      # output << "  Screen capture: #{File.join(errors_path, summary.screen_capture_name)}" if summary.screen_capture_name
 
       if output.any?
         output.unshift RerunArgument.for(summary.example)
-        $stderr.puts output.join("\n")
+        warn output.join("\n")
       end
     end
   end

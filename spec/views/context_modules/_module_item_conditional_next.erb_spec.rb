@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,28 +18,27 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/../views_helper')
+require_relative "../views_helper"
 
-describe "/context_modules/_module_item_conditional_next" do
+describe "context_modules/_module_item_conditional_next" do
   let_once(:module_item) do
     course_factory
     assignment_model course: @course
     context_module = @course.context_modules.create!
-    context_module.add_item type: 'assignment', id: @assignment.id
+    context_module.add_item type: "assignment", id: @assignment.id
   end
 
-  it "should show mastery path selection" do
-    render partial: 'context_modules/module_item_conditional_next', locals: {
-      module_item: module_item,
+  it "shows mastery path selection" do
+    render partial: "context_modules/module_item_conditional_next", locals: {
+      module_item:,
       item_data: { mastery_paths: { locked: true } }
     }
     expect(rendered).to match(/until .* is graded/)
   end
 
-  it "should show mastery path locked" do
-    render partial: 'context_modules/module_item_conditional_next', locals: {
-      module_item: module_item,
+  it "shows mastery path locked" do
+    render partial: "context_modules/module_item_conditional_next", locals: {
+      module_item:,
       item_data: {
         mastery_paths: {
           awaiting_choice: true,
@@ -45,14 +46,14 @@ describe "/context_modules/_module_item_conditional_next" do
         }
       }
     }
-    expect(rendered).to match('Choose Assignment Group')
+    expect(rendered).to match("Choose Assignment Group")
   end
 
-  it "should show mastery path still processing" do
-    render partial: 'context_modules/module_item_conditional_next', locals: {
-      module_item: module_item,
+  it "shows mastery path still processing" do
+    render partial: "context_modules/module_item_conditional_next", locals: {
+      module_item:,
       item_data: { mastery_paths: { still_processing: true } }
     }
-    expect(rendered).to match('until mastery path is processed')
+    expect(rendered).to match("until mastery path is processed")
   end
 end

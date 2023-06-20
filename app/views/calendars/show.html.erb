@@ -26,16 +26,15 @@
     :VIEW_START => @view_start,
     :CAL2_ONLY => true,
     :SHOW_SCHEDULER => @domain_root_account.show_scheduler?,
-    :BETTER_SCHEDULER => @domain_root_account.feature_enabled?(:better_scheduler) && @domain_root_account.show_scheduler?,
     :MAX_GROUP_CONVERSATION_SIZE => Conversation.max_group_conversation_size,
     :VISIBLE_CONTEXTS_LIMIT => @domain_root_account.settings[:calendar_contexts_limit] || 10,
+    :ACCOUNT_CALENDAR_EVENTS_SEEN => @account_calendar_events_seen
   }
   js_env({
-    :STUDENT_PLANNER_ENABLED => @domain_root_account&.feature_enabled?(:student_planner) && @current_user.has_student_enrollment?,
-    :PLANNER_ENABLED => @domain_root_account&.feature_enabled?(:student_planner)
+    :STUDENT_PLANNER_ENABLED => @current_user.has_student_enrollment?,
   })
 
-  js_bundle :calendar2
+  js_bundle :calendar
   css_bundle :calendar2, :agenda_view
   crumbs.clear
   add_body_class "full-width no-page-block hide-content-while-scripts-not-loaded"
@@ -43,24 +42,44 @@
 <h1 class="screenreader-only"><%= t(:page_title_header, "Calendar") %></h1>
 
 <% provide :right_side do %>
-  <a href="#" class="screenreader-only skip-to-calendar"><%= t(:skip_to_calendar, "Skip to calendar") %></a>
-
   <div class="rs-section hidden-phone">
     <div id="minical"></div>
   </div>
   <div id="select-course-component" class="rs-section"></div>
   <div class="rs-section">
-    <span role="button" id="calendar-toggle-button" class="element_toggler" aria-controls="context-list-holder" aria-expanded="true"
-        aria-label="<%= t("Calendars toggle list visibility") %>" tabindex="0">
-      <i class="icon-mini-arrow-down auto_rotate"></i> <%= t(:calendars, "Calendars") %>
-    </span>
-    <div id="context-list-holder"></div>
+    <h2 tabindex="-1">
+      <span role="button" id="calendar-toggle-button"   class="element_toggler" aria-controls="calendar-list-holder"   aria-expanded="true"
+          aria-label="<%= t("Calendars toggle list visibility") %>" tabindex="0">
+          <i class="icon-mini-arrow-down auto_rotate"></i> <%= t(:calendars, "Calendars") %>
+      </span>
+    </h2>
+    <div id="calendar-list-holder"></div>
   </div>
+  <% if @show_account_calendars %>
+    <div id="select-other-calendars-component" class="rs-section"></div>
+    <div class="rs-section">
+      <div id="other-calendars-section-header">
+        <h2 tabindex="-1" id="other-calendar-actions-row">
+          <span role="button" id="other-calendars-toggle-button"   class="element_toggler" aria-controls="other-calendars-list-holder"   aria-expanded="true"
+            aria-label="<%= t("Other Calendars toggle list visibility") %>" tabindex="0">
+            <i class="icon-mini-arrow-down auto_rotate"></i> <%= t(:other_calendars, "Other Calendars") %>
+          </span>
+          <% if !@account_calendar_events_seen %>
+          <div class="new-feature-pill"><%= t("New") %></div>
+          <% end %>
+        </h2>
+        <div id="manage-accounts-btn" ></div>
+      </div>
+      <div id="other-calendars-list-holder" class="editable-list-holder"></div>
+    </div>
+  <% end %>
   <div class="rs-section" id="undated-events-section">
-    <span href="#" role="button" id="undated-events-button" class="element_toggler" aria-controls="undated-events" aria-expanded="false"
-        aria-label="<%= t("Undated items toggle list visibility") %>" tabindex="0">
-      <i class="icon-mini-arrow-right auto_rotate"></i> <%= t(:undated_items, "Undated") %>
-    </span>
+    <h2 tabindex="-1">
+      <span href="#" role="button" id="undated-events-button" class="element_toggler" aria-controls="undated-events" aria-expanded="false"
+          aria-label="<%= t("Undated items toggle list visibility") %>" tabindex="0">
+        <i class="icon-mini-arrow-right auto_rotate"></i> <%= t(:undated_items, "Undated") %>
+      </span>
+    </h2>
     <div id="undated-events"></div>
   </div>
   <div class="rs-section" id="calendar-feed">
@@ -74,11 +93,12 @@
     <%= t "calendar_feed_instructions", "Copy the link below and paste it into any calendar app that takes iCal feeds (Google Calendar, iCal, Outlook, etc.)" %>
   </p>
   <p id="calendar-feed-box-lower">
-    <input value="<%= @feed_url%>.ics"><br>
-    <a href="<%= @feed_url%>.ics"><%= t "links.feed", 'click here to view the feed' %></a>
+    <label for="calendar-feed-url-input" class="screenreader-only"><%= t('Calendar Feed Url') %></label>
+    <input id="calendar-feed-url-input" value="<%= @feed_url%>.ics"><br>
+    <a href="<%= @feed_url%>.ics"><%= t "Click to view Calendar Feed" %></a>
   </p>
 </div>
 
 <div id="calendar_header"></div>
-<div id="calendar-app" role="tabpanel" class="<%= 'wrap-calendar-event-titles' if @wrap_titles %>"></div>
+<div id="calendar-app" role="tabpanel" class="<%= 'inline-calendar-event-titles' %>"></div>
 <div id="calendar-drag-and-drop-container"></div>

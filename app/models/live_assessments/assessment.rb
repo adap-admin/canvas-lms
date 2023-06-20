@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -19,34 +21,51 @@
 module LiveAssessments
   class Assessment < ActiveRecord::Base
     belongs_to :context, polymorphic: [:course]
-    has_many :submissions, class_name: 'LiveAssessments::Submission'
-    has_many :results, class_name: 'LiveAssessments::Result'
+    has_many :submissions, class_name: "LiveAssessments::Submission"
+    has_many :results, class_name: "LiveAssessments::Result"
 
-    has_many :learning_outcome_alignments, -> { where("content_tags.tag_type='learning_outcome' AND content_tags.workflow_state<>'deleted'").preload(:learning_outcome) }, as: :content, inverse_of: :content, class_name: 'ContentTag'
+    has_many :learning_outcome_alignments, -> { where("content_tags.tag_type='learning_outcome' AND content_tags.workflow_state<>'deleted'").preload(:learning_outcome) }, as: :content, inverse_of: :content, class_name: "ContentTag"
 
-    validates_presence_of :context_id, :context_type, :key, :title
-    validates_length_of :title, maximum: maximum_string_length
-    validates_length_of :key, maximum: maximum_string_length
+    validates :context_id, :context_type, :key, :title, presence: true
+    validates :title, length: { maximum: maximum_string_length }
+    validates :key, length: { maximum: maximum_string_length }
 
-    scope :for_context, lambda { |context| where(:context_id => context, :context_type => context.class.to_s) }
+    scope :for_context, ->(context) { where(context_id: context, context_type: context.class.to_s) }
 
     set_policy do
-      given { |user, session| self.context.grants_right?(user, session, :manage_assignments) }
+      given do |user, session|
+        !context.root_account.feature_enabled?(:granular_permissions_manage_assignments) &&
+          context.grants_right?(user, session, :manage_assignments)
+      end
       can :create and can :update
 
-      given { |user, session| self.context.grants_right?(user, session, :view_all_grades) }
+      given do |user, session|
+        context.root_account.feature_enabled?(:granular_permissions_manage_assignments) &&
+          context.grants_right?(user, session, :manage_assignments_add)
+      end
+      can :create
+
+      given do |user, session|
+        context.root_account.feature_enabled?(:granular_permissions_manage_assignments) &&
+          context.grants_right?(user, session, :manage_assignments_edit)
+      end
+      can :update
+
+      given { |user, session| context.grants_right?(user, session, :view_all_grades) }
       can :read
     end
 
     def generate_submissions_for(users)
       # if we aren't aligned, we don't need submissions
       return unless learning_outcome_alignments.any?
+
       Assessment.transaction do
         users.each do |user|
           submission = submissions.where(user_id: user.id).first_or_initialize
 
           user_results = results.for_user(user).to_a
           next unless user_results.any?
+
           submission.possible = user_results.count
           submission.score = user_results.count(&:passed)
           submission.assessed_at = user_results.map(&:assessed_at).max

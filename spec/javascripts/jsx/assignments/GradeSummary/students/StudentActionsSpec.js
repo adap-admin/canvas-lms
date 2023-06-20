@@ -16,9 +16,9 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import * as StudentActions from 'jsx/assignments/GradeSummary/students/StudentActions'
-import * as StudentsApi from 'jsx/assignments/GradeSummary/students/StudentsApi'
-import configureStore from 'jsx/assignments/GradeSummary/configureStore'
+import * as StudentActions from 'ui/features/assignment_grade_summary/react/students/StudentActions'
+import * as StudentsApi from 'ui/features/assignment_grade_summary/react/students/StudentsApi'
+import configureStore from 'ui/features/assignment_grade_summary/react/configureStore'
 
 QUnit.module('GradeSummary StudentActions', suiteHooks => {
   let store
@@ -28,9 +28,9 @@ QUnit.module('GradeSummary StudentActions', suiteHooks => {
       assignment: {
         courseId: '1201',
         id: '2301',
-        title: 'Example Assignment'
+        title: 'Example Assignment',
       },
-      graders: [{graderId: '1101'}, {graderId: '1102'}]
+      graders: [{graderId: '1101'}, {graderId: '1102'}],
     })
   })
 
@@ -50,18 +50,21 @@ QUnit.module('GradeSummary StudentActions', suiteHooks => {
           graderId: '1101',
           id: '4601',
           score: 10,
-          studentId: '1111'
+          studentId: '1111',
         },
         {
           grade: 'B',
           graderId: '1102',
           id: '4602',
           score: 9,
-          studentId: '1112'
-        }
+          studentId: '1112',
+        },
       ]
 
-      students = [{id: '1111', displayName: 'Adam Jones'}, {id: '1112', displayName: 'Betty Ford'}]
+      students = [
+        {id: '1111', displayName: 'Adam Jones'},
+        {id: '1112', displayName: 'Betty Ford'},
+      ]
     })
 
     hooks.afterEach(() => {

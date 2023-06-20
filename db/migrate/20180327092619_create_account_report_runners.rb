@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -21,9 +23,10 @@ class CreateAccountReportRunners < ActiveRecord::Migration[5.1]
 
   def change
     return if table_exists? :account_report_runners
+
     create_table :account_report_runners do |t|
       t.integer :account_report_id, null: false, limit: 8
-      t.string :workflow_state, null: false, default: 'created', limit: 255
+      t.string :workflow_state, null: false, default: "created", limit: 255
       t.string :batch_items, array: true, default: []
       t.timestamps
       t.datetime :started_at

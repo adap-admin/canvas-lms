@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,27 +18,27 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'securerandom'
-
 class EportfolioEntriesController < ApplicationController
   include EportfolioPage
   before_action :rce_js_env
   before_action :get_eportfolio
 
+  class EportfolioNotFound < StandardError; end
+  rescue_from EportfolioNotFound, with: :rescue_expected_error_type
+
   def create
     if authorized_action(@portfolio, @current_user, :update)
       @category = @portfolio.eportfolio_categories.find(params[:eportfolio_entry].delete(:eportfolio_category_id))
 
-      page_names = @category.eportfolio_entries.map{|c| c.name}
       @page = @portfolio.eportfolio_entries.build(eportfolio_entry_params)
       @page.eportfolio_category = @category
       @page.parse_content(params)
       respond_to do |format|
         if @page.save
           format.html { redirect_to eportfolio_entry_url(@portfolio, @page) }
-          format.json { render :json => @page.as_json(:methods => :category_slug) }
+          format.json { render json: @page.as_json(methods: :category_slug) }
         else
-          format.json { render :json => @page.errors }
+          format.json { render json: @page.errors }
         end
       end
     end
@@ -57,8 +59,8 @@ class EportfolioEntriesController < ApplicationController
       elsif params[:entry_name] && @category
         @page = @category.eportfolio_entries.where(slug: params[:entry_name]).first
       end
-      if !@page
-        flash[:notice] = t('notices.missing_page', "Couldn't find that page")
+      unless @page
+        flash[:notice] = t("notices.missing_page", "Couldn't find that page")
         redirect_to eportfolio_url(@portfolio.id)
         return
       end
@@ -79,17 +81,15 @@ class EportfolioEntriesController < ApplicationController
         entry_params[:eportfolio_category] = category
       end
       respond_to do |format|
-        if @entry.update_attributes!(entry_params)
-          format.html { redirect_to eportfolio_entry_url(@portfolio, @entry) }
-          format.json { render :json => @entry }
+        if @entry.update!(entry_params)
+          format.json { render json: @entry }
         else
-          format.html { redirect_to eportfolio_entry_url(@portfolio, @entry) }
-          format.json { render :json => @entry.errors, :status => :bad_request }
+          format.json { render json: @entry.errors, status: :bad_request }
         end
+        format.html { redirect_to eportfolio_entry_url(@portfolio, @entry) }
       end
     end
   end
-
 
   def destroy
     if authorized_action(@portfolio, @current_user, :update)
@@ -98,8 +98,7 @@ class EportfolioEntriesController < ApplicationController
       respond_to do |format|
         if @entry.destroy
           format.html { redirect_to eportfolio_category_url(@portfolio, @category) }
-          format.json { render :json => @entry }
-        else
+          format.json { render json: @entry }
         end
       end
     end
@@ -110,11 +109,16 @@ class EportfolioEntriesController < ApplicationController
       @entry = @portfolio.eportfolio_entries.find(params[:entry_id])
       @category = @entry.eportfolio_category
       @attachment = @portfolio.user.all_attachments.shard(@portfolio.user).where(uuid: params[:attachment_id]).first
+      unless @attachment.present?
+        return render json: { message: t("errors.not_found", "Not Found") }, status: :not_found
+      end
+
       # @entry.check_for_matching_attachment_id
       begin
-        redirect_to file_download_url(@attachment, { :verifier => @attachment.uuid })
-      rescue
-        raise t('errors.not_found', "Not Found")
+        redirect_to file_download_url(@attachment, { verifier: @attachment.uuid })
+      rescue => e
+        Canvas::Errors.capture_exception(:eportfolios, e, :warn)
+        raise EportfolioNotFound, t("errors.not_found", "Not Found")
       end
     end
   end
@@ -129,13 +133,14 @@ class EportfolioEntriesController < ApplicationController
       @context = @assignment.context
       # @entry.check_for_matching_attachment_id
       @headers = false
-      render template: 'submissions/show_preview', locals: {
+      render template: "submissions/show_preview", locals: {
         anonymize_students: @assignment.anonymize_students?
       }
     end
   end
 
   protected
+
   def eportfolio_entry_params
     params.require(:eportfolio_entry).permit(:name, :allow_comments, :show_comments)
   end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -16,7 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'spec_helper.rb'
+require "spec_helper"
 
 describe Multipart::SequencedStream do
   def test_copy(content, content_string)
@@ -27,28 +29,35 @@ describe Multipart::SequencedStream do
     expect(destination.read).to eq("prefix|#{content_string}|suffix")
   end
 
-  it "should work as a source for IO.copy_stream" do
-    file = Tempfile.new(["test","txt"])
+  let(:custom_stream) do
+    Class.new do
+      def initialize(content_string, &reader)
+        @source = StringIO.new(content_string)
+        @reader = reader
+      end
+
+      def size
+        @source.size
+      end
+
+      def read(*args)
+        @reader.call(@source, *args)
+      end
+    end
+  end
+
+  it "works as a source for IO.copy_stream" do
+    file = Tempfile.new(["test", "txt"])
     file.write("file on disk")
     file.rewind
     test_copy(file, "file on disk")
-  end
-
-  class CustomStream
-    def initialize(content_string, &reader)
-      @source = StringIO.new(content_string)
-      @reader = lambda { |*args| reader.(@source, *args) }
-    end
-
-    def size; @source.size; end
-    def read(*args); @reader.call(*args); end
   end
 
   it "only requires `size` and `read` on the component stream" do
     # just delegate read to the source, but it's wrapped to hide the other
     # StringIO methods
     content_string = "howdy, howdy, howdy!"
-    content = CustomStream.new(content_string) do |source, *args|
+    content = custom_stream.new(content_string) do |source, *args|
       source.read(*args)
     end
     test_copy(content, content_string)
@@ -58,7 +67,7 @@ describe Multipart::SequencedStream do
     # leave read() and read(0) alone, but restrict to one byte returned at a
     # time for read(n)
     content_string = "howdy, howdy, howdy!"
-    content = CustomStream.new(content_string) do |source, n, *args|
+    content = custom_stream.new(content_string) do |source, n, *args|
       n = 1 if n && n > 0
       source.read(n, *args)
     end

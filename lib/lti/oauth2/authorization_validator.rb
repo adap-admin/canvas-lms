@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -15,17 +17,18 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'json/jwt'
-
 module Lti
-  module Oauth2
+  module OAuth2
     class AuthorizationValidator
       class InvalidSignature < StandardError
       end
+
       class SecretNotFound < StandardError
       end
+
       class InvalidAuthJwt < StandardError
       end
+
       class MissingAuthorizationCode < StandardError
       end
 
@@ -43,6 +46,7 @@ module Lti
           unless validator.valid?
             raise InvalidAuthJwt, validator.error_message
           end
+
           validated_jwt
         end
       end
@@ -50,26 +54,28 @@ module Lti
       alias_method :validate!, :jwt
 
       def tool_proxy
-        @_tool_proxy ||= begin
-          tp = ToolProxy.where(guid: unverified_jwt[:sub], workflow_state: 'active').first
-          return nil unless tp.present?
-          developer_key = tp.product_family.developer_key
-          raise InvalidAuthJwt, "the Developer Key is not active or available in this environment" if developer_key.present? && !developer_key.usable?
-          ims_tool_proxy = IMS::LTI::Models::ToolProxy.from_json(tp.raw_data)
-          if (ims_tool_proxy.enabled_capabilities & ['Security.splitSecret', 'OAuth.splitSecret']).blank?
-            raise InvalidAuthJwt, "the Tool Proxy must be using a split secret"
+        @tool_proxy ||=
+          if (tp = ToolProxy.where(guid: unverified_jwt[:sub], workflow_state: "active").first)
+            developer_key = tp.product_family.developer_key
+            raise InvalidAuthJwt, "the Developer Key is not active or available in this environment" if developer_key.present? && !developer_key.usable?
+
+            ims_tool_proxy = ::IMS::LTI::Models::ToolProxy.from_json(tp.raw_data)
+            unless ims_tool_proxy.enabled_capabilities.intersect?(["Security.splitSecret", "OAuth.splitSecret"])
+              raise InvalidAuthJwt, "the Tool Proxy must be using a split secret"
+            end
+
+            tp
           end
-          tp
-        end
       end
 
       def developer_key
         @_developer_key ||= begin
           dev_key = DeveloperKey.find_cached(unverified_jwt[:sub])
           raise MissingAuthorizationCode if dev_key && @code.blank?
+
           dev_key
         rescue ActiveRecord::RecordNotFound
-          return nil
+          nil
         end
       end
 
@@ -84,6 +90,7 @@ module Lti
         secret ||= developer_key&.api_key
         secret ||= (RegistrationRequestService.retrieve_registration_password(@context, unverified_jwt[:sub]) || {})[:reg_password]
         return secret if secret.present?
+
         raise SecretNotFound, "either the tool proxy or developer key were not found"
       end
 

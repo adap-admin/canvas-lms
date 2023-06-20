@@ -18,7 +18,7 @@
 
 import React from 'react'
 import {mount} from 'enzyme'
-import GraderCommentVisibilityCheckbox from 'jsx/assignments/GraderCommentVisibilityCheckbox'
+import GraderCommentVisibilityCheckbox from 'ui/features/assignment_edit/react/GraderCommentVisibilityCheckbox'
 
 QUnit.module('GraderCommentVisibilityCheckbox', hooks => {
   let props
@@ -27,7 +27,7 @@ QUnit.module('GraderCommentVisibilityCheckbox', hooks => {
   hooks.beforeEach(() => {
     props = {
       checked: false,
-      onChange() {}
+      onChange() {},
     }
   })
 

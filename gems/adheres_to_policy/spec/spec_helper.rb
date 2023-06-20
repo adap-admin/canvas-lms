@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -23,20 +25,20 @@
 # See http://rubydoc.info/gems/rspec-core/RSpec/Core/Configuration
 
 begin
-  require '../../spec/coverage_tool.rb'
+  require "../../spec/coverage_tool"
   CoverageTool.start("adheres-to-policy-gem")
 rescue LoadError => e
   puts "Error: #{e}"
 end
 
-require 'adheres_to_policy'
+require "adheres_to_policy"
 
 RSpec.configure do |config|
   config.run_all_when_everything_filtered = true
   config.filter_run :focus
-  config.order = 'random'
+  config.order = "random"
 
-  config.after(:each) do
+  config.after do
     Rails.cache.clear
     # Clean up after ourselves since its a class instance variable
     AdheresToPolicy::Cache.instance_variable_set(:@cache, nil)

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -18,11 +20,11 @@
 
 module DataFixup::DeleteEmptyAdhocAssignmentOverrides
   def self.run
-    AssignmentOverride.active.select(:id).where(set_type: 'ADHOC').
-      where("NOT EXISTS (SELECT NULL
+    AssignmentOverride.active.select(:id).where(set_type: "ADHOC")
+                      .where("NOT EXISTS (SELECT NULL
                          FROM #{AssignmentOverrideStudent.quoted_table_name} AS aos
                          WHERE assignment_overrides.id = aos.assignment_override_id)").find_in_batches do |batch|
-      AssignmentOverride.where(id: batch).update_all(workflow_state: 'deleted', updated_at: Time.zone.now)
+      AssignmentOverride.where(id: batch).update_all(workflow_state: "deleted", updated_at: Time.zone.now)
     end
   end
 end

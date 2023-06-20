@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import ContentMigrationIssueCollection from 'compiled/collections/ContentMigrationIssueCollection'
+import ContentMigrationIssueCollection from 'ui/features/content_migrations/backbone/collections/ContentMigrationIssueCollection'
 
 QUnit.module('ContentMigrationIssueCollection')
 
@@ -25,7 +25,7 @@ test('generates the correct fetch url', () => {
   const content_migration_id = 10
   const cmiCollection = new ContentMigrationIssueCollection([], {
     course_id,
-    content_migration_id
+    content_migration_id,
   })
   equal(
     cmiCollection.url(),

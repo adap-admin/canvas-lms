@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -16,10 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper.rb')
-
 describe ExternalToolCollaboration do
-
   let(:update_url) { "http://example.com/confirm/343" }
 
   let(:content_item) do
@@ -37,12 +36,12 @@ describe ExternalToolCollaboration do
         "chapter" => "12",
         "section" => "3"
       },
-      "confirmUrl" => 'https://www.server.com/path/animage.png',
+      "confirmUrl" => "https://www.server.com/path/animage.png",
       "updateUrl" => update_url
     }
   end
 
-  it 'returns the edit url' do
+  it "returns the edit url" do
     subject.data = content_item
     expect(subject.update_url).to eq update_url
   end

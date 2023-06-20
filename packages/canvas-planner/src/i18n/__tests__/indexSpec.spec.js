@@ -1,5 +1,3 @@
-/* global expect */
-
 /*
  * Copyright (C) 2017 - present Instructure, Inc.
  *
@@ -17,12 +15,12 @@
  * You should have received a copy of the GNU Affero General Public License along
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-import i18n from '../index';
-import formatMessage from '../../format-message';
+import i18n from '../index'
+import formatMessage from '../../format-message'
 
 describe('i18n', () => {
-  it('sets up locale for future formateMessages', () => {
-    i18n.init('enflip');
-    expect(formatMessage('Canvas Planner')).toEqual('(ﾉಥ益ಥ）ﾉɹǝuuɐlԀ sɐʌuɐƆ');
-  });
-});
+  it('sets up locale for future formateMessages', async () => {
+    await i18n.init('es')
+    expect(formatMessage('Canvas Planner')).toEqual('Planificador de Canvas')
+  })
+})

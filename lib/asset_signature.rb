@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -16,22 +18,25 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 module AssetSignature
-  DELIMITER = '-'
+  DELIMITER = "-"
 
-  def self.generate(asset)
-    "#{asset.id}#{DELIMITER}#{generate_hmac(asset.class, asset.id)}"
-  end
+  class << self
+    def generate(asset)
+      "#{asset.id}#{DELIMITER}#{generate_hmac(asset.class, asset.id)}"
+    end
 
-  def self.find_by_signature(klass, signature)
-    id, hmac = signature.split(DELIMITER, 2)
-    return nil unless Canvas::Security.verify_hmac_sha1(hmac, "#{klass}#{id}", truncate: 8)
-    klass.where(id: id.to_i).first
-  end
+    def find_by_signature(klass, signature)
+      id, hmac = signature.split(DELIMITER, 2)
+      return nil unless Canvas::Security.verify_hmac_sha1(hmac, "#{klass}#{id}", truncate: 8)
 
-  private
+      klass.where(id: id.to_i).first
+    end
 
-  def self.generate_hmac(klass, id)
-    data = "#{klass}#{id}"
-    Canvas::Security.hmac_sha1(data)[0,8]
+    private
+
+    def generate_hmac(klass, id)
+      data = "#{klass}#{id}"
+      Canvas::Security.hmac_sha1(data)[0, 8]
+    end
   end
 end

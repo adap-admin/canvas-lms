@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -16,20 +18,17 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper.rb')
-
 describe Canvas::Crocodoc do
-  describe '.enabled?' do
-    it 'returns true when there crocodoc is configured' do
+  describe ".enabled?" do
+    it "returns true when there crocodoc is configured" do
+      expect(Canvas::Crocodoc.enabled?).to be false
 
-      expect(Canvas::Crocodoc.enabled?).to eq false
-
-      PluginSetting.create! name: "crocodoc", settings: {api_key: "abc123"}
-      expect(Canvas::Crocodoc.enabled?).to eq true
+      PluginSetting.create! name: "crocodoc", settings: { api_key: "abc123" }
+      expect(Canvas::Crocodoc.enabled?).to be true
 
       ps = PluginSetting.where(name: "crocodoc").first
       ps.update_attribute :disabled, true
-      expect(Canvas::Crocodoc.enabled?).to eq false
+      expect(Canvas::Crocodoc.enabled?).to be false
     end
   end
 end

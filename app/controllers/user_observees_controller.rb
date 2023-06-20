@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -49,8 +51,38 @@ class UserObserveesController < ApplicationController
     observed_users = observer.linked_students.order_by_sortable_name
     observed_users = Api.paginate(observed_users, self, api_v1_user_observees_url)
 
-    UserPastLtiId.manual_preload_past_lti_ids(users, @domain_root_account) if ['uuid', 'lti_id'].any? { |id| includes.include? id }
+    UserPastLtiId.manual_preload_past_lti_ids(users, @domain_root_account) if ["uuid", "lti_id"].any? { |id| includes.include? id }
     data = users_json(observed_users, @current_user, session, includes, @domain_root_account)
+    add_linked_root_account_ids_to_user_json(data)
+    render json: data
+  end
+
+  # @API List observers
+  # A paginated list of the observers of a given user.
+  #
+  # *Note:* all users are allowed to list their own observers. Administrators can list
+  # other users' observers.
+  #
+  # The returned observers will include an attribute "observation_link_root_account_ids", a list
+  # of ids for the root accounts the observer and observee are linked on. The observer will only be able to
+  # observe in courses associated with these root accounts.
+  #
+  # @argument include[] [String, "avatar_url"]
+  #   - "avatar_url": Optionally include avatar_url.
+  #
+  # @example_request
+  #     curl https://<canvas>/api/v1/users/<user_id>/observers \
+  #          -X GET \
+  #          -H 'Authorization: Bearer <token>'
+  #
+  # @returns [User]
+  def observers
+    includes = params[:include] || []
+    users = student.linked_observers.order_by_sortable_name
+    users = Api.paginate(users, self, api_v1_user_observers_url)
+
+    UserPastLtiId.manual_preload_past_lti_ids(users, @domain_root_account) if ["uuid", "lti_id"].any? { |id| includes.include? id }
+    data = users_json(users, @current_user, session, includes, @domain_root_account)
     add_linked_root_account_ids_to_user_json(data)
     render json: data
   end
@@ -94,26 +126,26 @@ class UserObserveesController < ApplicationController
     if params[:access_token]
       verified_token = AccessToken.authenticate(params[:access_token])
       if verified_token.nil?
-        render json: {errors: [{'message' => 'Unknown observee.'}]}, status: 422
+        render json: { errors: [{ "message" => "Unknown observee." }] }, status: :unprocessable_entity
         return
       end
       @student = verified_token.user
       common_root_accounts = common_root_accounts_for(observer, student)
     elsif params[:pairing_code]
-      code = ObserverPairingCode.active.where(code: params[:pairing_code]).first
+      code = find_observer_pairing_code(params[:pairing_code])
       if code.nil?
-        render json: {errors: [{'message' => 'Invalid pairing code.'}]}, status: 422
+        render json: { errors: [{ "message" => "Invalid pairing code." }] }, status: :unprocessable_entity
         return
       end
       @student = code.user
       common_root_accounts = common_root_accounts_for(observer, student)
       code.destroy
     else
-      observee_pseudonym = @domain_root_account.pseudonyms.active.by_unique_id(params[:observee][:unique_id]).first
+      observee_pseudonym = @domain_root_account.pseudonyms.active_only.by_unique_id(params[:observee][:unique_id]).first
 
       common_root_accounts = common_root_accounts_for(observer, observee_pseudonym.user) if observee_pseudonym
       if observee_pseudonym.nil? || common_root_accounts.empty?
-        render json: {errors: [{'message' => 'Unknown observee.'}]}, status: 422
+        render json: { errors: [{ "message" => "Unknown observee." }] }, status: :unprocessable_entity
         return
       end
 
@@ -124,13 +156,13 @@ class UserObserveesController < ApplicationController
         session[:parent_registration][:user_id] = @current_user.id
         session[:parent_registration][:observee] = params[:observee]
         session[:parent_registration][:observee_only] = true
-        render(json: {redirect: saml_observee_path})
+        render(json: { redirect: saml_observee_path })
         return
       end
 
       # verify provided password
       unless Pseudonym.authenticate(params[:observee] || {}, [@domain_root_account.id] + @domain_root_account.trusted_account_ids)
-        render json: {errors: [{'message' => 'Invalid credentials provided.'}]}, status: :unauthorized
+        render json: { errors: [{ "message" => "Invalid credentials provided." }] }, status: :unauthorized
         return
       end
 
@@ -139,13 +171,17 @@ class UserObserveesController < ApplicationController
     end
 
     if observer != @current_user
-      common_root_accounts = common_root_accounts.select{|a| a.grants_right?(@current_user, :manage_user_observers)}
+      common_root_accounts = common_root_accounts.select { |a| a.grants_right?(@current_user, :manage_user_observers) }
       return render_unauthorized_action if common_root_accounts.empty?
     end
 
     create_observation_links(common_root_accounts)
 
     render_student_json
+  end
+
+  def find_observer_pairing_code(pairing_code)
+    ObserverPairingCode.active.where(code: pairing_code).first
   end
 
   # @API Show an observee
@@ -164,6 +200,27 @@ class UserObserveesController < ApplicationController
     raise ActiveRecord::RecordNotFound unless has_observation_link?
 
     render_student_json
+  end
+
+  # @API Show an observer
+  #
+  # Gets information about an observer.
+  #
+  # *Note:* all users are allowed to view their own observers.
+  #
+  # @example_request
+  #     curl https://<canvas>/api/v1/users/<user_id>/observers/<observer_id> \
+  #          -X GET \
+  #          -H 'Authorization: Bearer <token>'
+  #
+  # @returns User
+  def show_observer
+    scope = student.as_student_observation_links.where(observer:)
+    raise ActiveRecord::RecordNotFound unless scope.exists?
+
+    json = user_json(observer, @current_user, session)
+    add_linked_root_account_ids_to_user_json([json])
+    render json:
   end
 
   # @API Add an observee
@@ -204,9 +261,11 @@ class UserObserveesController < ApplicationController
   #
   # @returns User
   def destroy
-    scope = observer == @current_user ?
-      observer.as_observer_observation_links.where(student: student) :
-      observer.as_observer_observation_links.where(student: student).for_root_accounts(@accounts_with_observer_permissions)
+    scope = if observer == @current_user
+              observer.as_observer_observation_links.where(student:)
+            else
+              observer.as_observer_observation_links.where(student:).for_root_accounts(@accounts_with_observer_permissions)
+            end
     raise ActiveRecord::RecordNotFound unless scope.exists?
 
     scope.destroy_all
@@ -216,37 +275,48 @@ class UserObserveesController < ApplicationController
   private
 
   def observer
-    @observer ||= params[:user_id].nil? ? @current_user : api_find(User.active, params[:user_id])
+    param = params[:observer_id] || params[:user_id]
+    @observer ||= param.nil? ? @current_user : api_find(User.active, param)
   end
 
   def student
-    @student ||= api_find(User.active, params[:observee_id])
+    param = params[:observee_id] || params[:user_id]
+    @student ||= api_find(User.active, param)
+  end
+
+  def user
+    if ["observers", "show_observer"].include?(params[:action])
+      student
+    else
+      observer
+    end
   end
 
   def create_observation_links(root_accounts)
     updated = false
     root_accounts.each do |root_account|
       unless has_observation_link?(root_account)
-        UserObservationLink.create_or_restore(student: student, observer: observer, root_account: root_account)
+        UserObservationLink.create_or_restore(student:, observer:, root_account:)
         updated = true
       end
     end
     observer.touch if updated
   end
 
-  def has_observation_link?(root_account=nil)
-    scope = observer.as_observer_observation_links.where(student: student)
+  def has_observation_link?(root_account = nil)
+    scope = observer.as_observer_observation_links.where(student:)
     scope = scope.for_root_accounts(root_account) if root_account
     scope.exists?
   end
 
   def self_or_admin_permission_check
-    return true if observer == @current_user
+    return true if user == @current_user
+
     admin_permission_check
   end
 
   def admin_permission_check
-    @accounts_with_observer_permissions = common_root_accounts_with_permissions(observer)
+    @accounts_with_observer_permissions = common_root_accounts_with_permissions(user)
     root_accounts_valid?(@accounts_with_observer_permissions)
   end
 
@@ -266,20 +336,19 @@ class UserObserveesController < ApplicationController
     root_account = root_account_for_new_link
     Shard.with_each_shard(shards) do
       user_ids = users.map(&:id)
-      scope = Account.where(id: UserAccountAssociation.
-        joins(:account).where(accounts: {parent_account_id: nil}).
-        where(user_id: user_ids).
-        group(:account_id).
-        having("count(*) = #{user_ids.length}"). # user => account is unique for user_account_associations
-        select(:account_id)
-      )
-      scope = scope.where(:id => root_account) if root_account # scope down to a root_account if specified
+      scope = Account.where(id: UserAccountAssociation
+        .joins(:account).where(accounts: { parent_account_id: nil })
+        .where(user_id: user_ids)
+        .group(:account_id)
+        .having("count(*) = #{user_ids.length}") # user => account is unique for user_account_associations
+        .select(:account_id))
+      scope = scope.where(id: root_account) if root_account # scope down to a root_account if specified
       scope
     end
   end
 
   def root_account_for_new_link
-    if %w{create update}.include?(action_name)
+    if %w[create update].include?(action_name)
       case params[:root_account_id]
       when "all"
         nil
@@ -303,24 +372,30 @@ class UserObserveesController < ApplicationController
   def render_student_json
     json = user_json(student, @current_user, session)
     add_linked_root_account_ids_to_user_json([json])
-    render json: json
+    render json:
   end
 
   def add_linked_root_account_ids_to_user_json(user_rows)
     user_rows = Array(user_rows)
     ra_id_map = {}
-    scope = observer.as_observer_observation_links.where(:student => user_rows.map{|r| r['id']})
-    if observer != @current_user
-      scope = scope.where(:root_account_id => @accounts_with_observer_permissions || common_root_accounts_with_permissions(observer))
+    if ["observers", "show_observer"].include?(params[:action])
+      scope = student.as_student_observation_links.where(observer: user_rows.pluck("id"))
+      column = :observer_id
+    else
+      scope = observer.as_observer_observation_links.where(student: user_rows.pluck("id"))
+      column = :user_id
     end
-    scope.pluck(:user_id, :root_account_id).each do |student_id, ra_id|
-      ra_id_map[student_id] ||= []
-      ra_id_map[student_id] << ra_id
+
+    if user != @current_user
+      scope = scope.where(root_account_id: @accounts_with_observer_permissions || common_root_accounts_with_permissions(user))
     end
-    ra_id_map
+    scope.pluck(column, :root_account_id).each do |user_id, ra_id|
+      ra_id_map[user_id] ||= []
+      ra_id_map[user_id] << ra_id
+    end
 
     user_rows.each do |row|
-      row['observation_link_root_account_ids'] = ra_id_map[row['id']] || []
+      row["observation_link_root_account_ids"] = ra_id_map[row["id"]] || []
     end
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -17,7 +19,7 @@
 #
 
 module Login
-  class CleverController < Oauth2Controller
+  class CleverController < OAuth2Controller
     def create
       # Clever does an insecure half-flow OAuth2 for "Instant Login";
       # catch when they do this, and start the flow from the beginning.
@@ -25,9 +27,10 @@ module Login
       # http://www.twobotechnologies.com/blog/2014/02/importance-of-state-in-oauth2.html
       # (because an attacker would be trying to inject his own state param,
       # and starting the login process over will generate a new CSRF nonce)
-      if !params[:state]
+      unless params[:state]
         return redirect_to(clever_login_url)
       end
+
       super
     end
 

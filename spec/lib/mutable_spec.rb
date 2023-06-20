@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -16,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper.rb')
-
 describe Mutable do
   before do
     @klass = Class.new do
@@ -25,7 +25,9 @@ describe Mutable do
       # effects/return values from these methods for specific tests, we'll double
       # them
       def muted?; end
-      def update_attribute(*args); end
+
+      def update_attribute(*); end
+
       def save!; end
 
       include Mutable
@@ -43,7 +45,7 @@ describe Mutable do
 
     it "skips update if already muted" do
       expect(@mutable).to receive(:muted?).and_return(true)
-      expect(@mutable).to receive(:update_attribute).never
+      expect(@mutable).not_to receive(:update_attribute)
       @mutable.mute!
     end
   end
@@ -57,19 +59,7 @@ describe Mutable do
 
     it "skips update if not muted" do
       expect(@mutable).to receive(:muted?).and_return(false)
-      expect(@mutable).to receive(:update_attribute).never
-      @mutable.unmute!
-    end
-
-    it "broadcasts unmute event if currently muted" do
-      expect(@mutable).to receive(:muted?).and_return(true)
-      expect(@mutable).to receive(:broadcast_unmute_event).once
-      @mutable.unmute!
-    end
-
-    it "skips unmute event if not muted" do
-      expect(@mutable).to receive(:muted?).and_return(false)
-      expect(@mutable).to receive(:broadcast_unmute_event).never
+      expect(@mutable).not_to receive(:update_attribute)
       @mutable.unmute!
     end
   end

@@ -19,13 +19,12 @@
 import $ from 'jquery'
 import React from 'react'
 import {mount} from 'enzyme'
-import AssignmentExternalTools from 'jsx/assignments/AssignmentExternalTools'
-
+import AssignmentExternalTools from '@canvas/assignments/react/AssignmentExternalTools'
 
 QUnit.module('AssignmentExternalTools', hooks => {
-  let toolDefinitions;
-  let wrapper;
-  function setup () {
+  let toolDefinitions
+  let wrapper
+  function setup() {
     toolDefinitions = [
       {
         definition_type: 'ContextExternalTool',
@@ -37,16 +36,16 @@ QUnit.module('AssignmentExternalTools', hooks => {
           assignment_edit: {
             message_type: 'basic-lti-launch-request',
             url: 'https://lti-tool-provider-example.herokuapp.com/messages/blti',
-            title: 'assignment_edit Text'
+            title: 'assignment_edit Text',
           },
           assignment_view: {
             message_type: 'basic-lti-launch-request',
             url: 'https://lti-tool-provider-example.herokuapp.com/messages/blti',
             title: 'assignment_view Text',
             launch_width: 600,
-            launch_height: 500
-          }
-        }
+            launch_height: 500,
+          },
+        },
       },
       {
         definition_type: 'ContextExternalTool',
@@ -58,31 +57,33 @@ QUnit.module('AssignmentExternalTools', hooks => {
           assignment_edit: {
             message_type: 'basic-lti-launch-request',
             url: 'http://my-lti.docker/course-navigation',
-            title: 'My LTI'
+            title: 'My LTI',
           },
           assignment_view: {
             message_type: 'basic-lti-launch-request',
             url: 'http://my-lti.docker/assignment-view',
-            title: 'My LTI'
-          }
-        }
-      }
+            title: 'My LTI',
+          },
+        },
+      },
     ]
-    sandbox.stub($, 'ajax').returns({status: 200, data: toolDefinitions});
+    sandbox.stub($, 'ajax').returns({status: 200, data: toolDefinitions})
     ENV.LTI_LAUNCH_FRAME_ALLOWANCES = ['midi', 'media']
+
+    sandbox.fetch.mock('path:/api/v1/courses/1/lti_apps/launch_definitions', 200)
   }
 
-  function teardown () {
+  function teardown() {
     ENV.LTI_LAUNCH_FRAME_ALLOWANCES = undefined
   }
 
   hooks.beforeEach(() => {
-    setup();
+    setup()
   })
 
   hooks.afterEach(() => {
-    wrapper.unmount();
-    teardown();
+    wrapper.unmount()
+    teardown()
   })
 
   test('it renders', () => {
@@ -92,7 +93,7 @@ QUnit.module('AssignmentExternalTools', hooks => {
         courseId={1}
         assignmentId={1}
       />
-    );
+    )
     ok(wrapper.exists())
   })
 
@@ -105,7 +106,7 @@ QUnit.module('AssignmentExternalTools', hooks => {
         courseId={1}
         assignmentId={1}
       />
-    );
+    )
     equal(wrapper.instance().getDefinitionsUrl(), correctUrl)
   })
 
@@ -116,7 +117,7 @@ QUnit.module('AssignmentExternalTools', hooks => {
         courseId={1}
         assignmentId={1}
       />
-    );
+    )
     wrapper.setState({tools: toolDefinitions})
     equal(wrapper.find('.tool_launch').length, toolDefinitions.length)
   })
@@ -128,13 +129,15 @@ QUnit.module('AssignmentExternalTools', hooks => {
         courseId={1}
         assignmentId={1}
       />
-    );
+    )
     const tool = toolDefinitions[0]
-    const correctUrl = `${'/courses/1/external_tools/retrieve?borderless=true&' +
-                       'url=https%3A%2F%2Flti-tool-provider-example.herokuapp.com%2Fmessages%2Fblti&' +
-                       'placement=assignment_edit&assignment_id=1'}`
+    const correctUrl = `${
+      '/courses/1/external_tools/retrieve?borderless=true&' +
+      'url=https%3A%2F%2Flti-tool-provider-example.herokuapp.com%2Fmessages%2Fblti&' +
+      'placement=assignment_edit&assignment_id=1'
+    }`
     const computedUrl = wrapper.instance().getLaunch(tool)
-    equal(computedUrl, correctUrl);
+    equal(computedUrl, correctUrl)
   })
 
   test('shows beginning info alert and adds styles to iframe', () => {
@@ -148,7 +151,7 @@ QUnit.module('AssignmentExternalTools', hooks => {
     wrapper.setState({tools: toolDefinitions})
     wrapper.find('.before_external_content_info_alert').simulate('focus')
     equal(wrapper.state().beforeExternalContentAlertClass, '')
-    deepEqual(wrapper.state().iframeStyle, { border: '2px solid #008EE2', width: '-4px' })
+    deepEqual(wrapper.state().iframeStyle, {border: '2px solid #0374B5', width: '-4px'})
   })
 
   test('shows ending info alert and adds styles to iframe', () => {
@@ -162,7 +165,7 @@ QUnit.module('AssignmentExternalTools', hooks => {
     wrapper.setState({tools: toolDefinitions})
     wrapper.find('.after_external_content_info_alert').simulate('focus')
     equal(wrapper.state().afterExternalContentAlertClass, '')
-    deepEqual(wrapper.state().iframeStyle, { border: '2px solid #008EE2', width: '-4px' })
+    deepEqual(wrapper.state().iframeStyle, {border: '2px solid #0374B5', width: '-4px'})
   })
 
   test('hides beginning info alert and adds styles to iframe', () => {
@@ -177,7 +180,7 @@ QUnit.module('AssignmentExternalTools', hooks => {
     wrapper.find('.before_external_content_info_alert').simulate('focus')
     wrapper.find('.before_external_content_info_alert').simulate('blur')
     equal(wrapper.state().beforeExternalContentAlertClass, 'screenreader-only')
-    deepEqual(wrapper.state().iframeStyle, { border: 'none', width: '100%' })
+    deepEqual(wrapper.state().iframeStyle, {border: 'none', width: '100%'})
   })
 
   test('hides ending info alert and adds styles to iframe', () => {
@@ -192,7 +195,7 @@ QUnit.module('AssignmentExternalTools', hooks => {
     wrapper.find('.after_external_content_info_alert').simulate('focus')
     wrapper.find('.after_external_content_info_alert').simulate('blur')
     equal(wrapper.state().afterExternalContentAlertClass, 'screenreader-only')
-    deepEqual(wrapper.state().iframeStyle, { border: 'none', width: '100%' })
+    deepEqual(wrapper.state().iframeStyle, {border: 'none', width: '100%'})
   })
 
   test("doesn't show alerts or add border to iframe by default", () => {
@@ -209,7 +212,7 @@ QUnit.module('AssignmentExternalTools', hooks => {
     deepEqual(wrapper.state().iframeStyle, {})
   })
 
-  test("it renders multiple iframes", () => {
+  test('it renders multiple iframes', () => {
     wrapper = mount(
       <AssignmentExternalTools.configTools
         placement="assignment_view"
@@ -228,13 +231,28 @@ QUnit.module('AssignmentExternalTools', hooks => {
         courseId={1}
         assignmentId={1}
       />
-    );
+    )
     const tool = toolDefinitions[0]
-    const correctUrl = `${'/courses/1/external_tools/retrieve?borderless=true&' +
-                       'url=https%3A%2F%2Flti-tool-provider-example.herokuapp.com%2Fmessages%2Fblti&' +
-                       'placement=assignment_view&assignment_id=1'}`
+    const correctUrl = `${
+      '/courses/1/external_tools/retrieve?borderless=true&' +
+      'url=https%3A%2F%2Flti-tool-provider-example.herokuapp.com%2Fmessages%2Fblti&' +
+      'placement=assignment_view&assignment_id=1'
+    }`
     const computedUrl = wrapper.instance().getLaunch(tool)
-    equal(computedUrl, correctUrl);
+    equal(computedUrl, correctUrl)
   })
 
+  test('it sets the "data-lti-launch" attribute on each iframe', () => {
+    wrapper = mount(
+      <AssignmentExternalTools.configTools
+        placement="assignment_view"
+        courseId={1}
+        assignmentId={1}
+      />
+    )
+    wrapper.setState({tools: toolDefinitions})
+    wrapper.find('.tool_launch').forEach(iframe => {
+      equal(iframe.instance().getAttribute('data-lti-launch'), 'true')
+    })
+  })
 })

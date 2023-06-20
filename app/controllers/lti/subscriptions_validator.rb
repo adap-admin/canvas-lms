@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -19,14 +21,19 @@ module Lti
   class SubscriptionsValidator
     class InvalidContextType < StandardError
     end
+
     class MissingCapability < StandardError
     end
+
     class ToolNotInContext < StandardError
     end
 
+    class ContextNotFound < StandardError
+    end
+
     CONTEXT_WHITELIST = {
-      'root_account' => Account,
-      'assignment' => Assignment
+      "root_account" => Account,
+      "assignment" => Assignment
     }.freeze
 
     attr_reader :subscription, :tool_proxy
@@ -41,9 +48,9 @@ module Lti
       return if tool_proxy.enabled_capabilities.include?(ToolConsumerProfile.webhook_grant_all_capability)
 
       subscription[:EventTypes].each do |event_type|
-        raise MissingCapability, "EventType #{event_type} is invalid" unless capabilities_hash.keys.include?(event_type.to_sym)
-        if (tool_proxy.enabled_capabilities & capabilities_hash[event_type.to_sym]).blank?
-          raise MissingCapability, 'Missing required capability'
+        raise MissingCapability, "EventType #{event_type} is invalid" unless capabilities_hash.key?(event_type.to_sym)
+        unless tool_proxy.enabled_capabilities.intersect?(capabilities_hash[event_type.to_sym])
+          raise MissingCapability, "Missing required capability"
         end
       end
     end
@@ -59,20 +66,30 @@ module Lti
       check_tool_context!
     end
 
+    def self.validate_subscription_context!(subscription)
+      raise ContextNotFound unless retrieve_context(subscription).present?
+
+      true
+    end
+
+    def self.retrieve_context(subscription)
+      model = CONTEXT_WHITELIST[subscription[:ContextType]]
+      raise InvalidContextType unless model
+
+      case subscription[:ContextType]
+      when "root_account"
+        model.find_by(uuid: subscription[:ContextId])
+      else
+        model.find(subscription[:ContextId])
+      end
+    rescue ActiveRecord::RecordNotFound
+      raise ContextNotFound
+    end
+
     private
 
     def subscription_context
-      @_subscription_context ||= begin
-        model = CONTEXT_WHITELIST[subscription[:ContextType]]
-        raise InvalidContextType unless model
-
-        case subscription[:ContextType]
-        when "root_account"
-          model.find_by(uuid: subscription[:ContextId])
-        else
-          model.find(subscription[:ContextId])
-        end
-      end
+      @_subscription_context ||= SubscriptionsValidator.retrieve_context(subscription)
     end
   end
 end

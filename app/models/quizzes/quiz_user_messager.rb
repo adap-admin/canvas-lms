@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -23,9 +25,9 @@ module Quizzes
     attr_reader :root_account_id, :context_id
 
     def_delegators :@user_finder,
-      :submitted_students,
-      :all_students,
-      :unsubmitted_students
+                   :submitted_students,
+                   :all_students,
+                   :unsubmitted_students
 
     def initialize(options)
       @quiz = options.fetch(:quiz)
@@ -42,8 +44,8 @@ module Quizzes
         message,
         recipients,
         async,
-        subject: subject,
-        context_id: context_id,
+        subject:,
+        context_id:,
         group: false
       )
     end
@@ -51,13 +53,12 @@ module Quizzes
     private
 
     def message
-      @message ||= (
+      @message ||=
         Conversation.build_message(
           sender,
           body,
-          root_account_id: root_account_id
+          root_account_id:
         )
-      )
     end
 
     def body
@@ -69,10 +70,10 @@ module Quizzes
     end
 
     def recipients
-      list = conversation.fetch(:recipients, 'all')
+      list = conversation.fetch(:recipients, "all")
       recipients = case list.to_s
-                   when 'unsubmitted' then unsubmitted_students
-                   when 'submitted' then submitted_students
+                   when "unsubmitted" then unsubmitted_students
+                   when "submitted" then submitted_students
                    else all_students
                    end
       sender.address_book.known_users(recipients)

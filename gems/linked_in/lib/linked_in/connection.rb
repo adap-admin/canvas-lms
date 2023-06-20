@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -16,8 +18,8 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'nokogiri'
-require 'oauth'
+require "nokogiri"
+require "oauth"
 
 module LinkedIn
   class Connection
@@ -26,7 +28,7 @@ module LinkedIn
         consumer,
         request_token,
         request_secret
-      ).get_access_token(:oauth_verifier => oauth_verifier)
+      ).get_access_token(oauth_verifier:)
       new(access_token)
     end
 
@@ -51,25 +53,25 @@ module LinkedIn
     end
 
     def service_user
-      url = '/v1/people/~:(id,first-name,last-name,public-profile-url,picture-url)'
+      url = "/v1/people/~:(id,first-name,last-name,public-profile-url,picture-url)"
       @data ||= Nokogiri::XML(access_token.get(url).body)
     end
 
     def self.request_token(oauth_callback)
-      consumer.get_request_token(:oauth_callback => oauth_callback)
+      consumer.get_request_token(oauth_callback:)
     end
 
-    def self.consumer(key=nil, secret=nil)
+    def self.consumer(key = nil, secret = nil)
       config = self.config
-      key ||= config['api_key']
-      secret ||= config['secret_key']
+      key ||= config["api_key"]
+      secret ||= config["secret_key"]
       OAuth::Consumer.new(key, secret, {
-        :site => "https://api.linkedin.com",
-        :request_token_path => "/uas/oauth/requestToken",
-        :access_token_path => "/uas/oauth/accessToken",
-        :authorize_path => "/uas/oauth/authorize",
-        :signature_method => "HMAC-SHA1"
-      })
+                            site: "https://api.linkedin.com",
+                            request_token_path: "/uas/oauth/requestToken",
+                            access_token_path: "/uas/oauth/accessToken",
+                            authorize_path: "/uas/oauth/authorize",
+                            signature_method: "HMAC-SHA1"
+                          })
     end
     private_class_method :consumer
 
@@ -83,11 +85,12 @@ module LinkedIn
       unless config.respond_to?(:call)
         raise "Config must respond to #call"
       end
+
       @config = config
     end
 
     def self.config
-      @config.call()
+      @config.call
     end
   end
 end

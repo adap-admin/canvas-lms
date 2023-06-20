@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -16,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'spec_helper'
-
 describe DataFixup::BackfillDevKeyAccountBindings do
   describe "#run" do
     let(:key) { DeveloperKey.create! }
@@ -33,9 +33,7 @@ describe DataFixup::BackfillDevKeyAccountBindings do
       # Verify
       key.reload
       expect(key.developer_key_account_bindings.count).to eq(1)
-      expect(
-        key.developer_key_account_bindings.first.workflow_state
-      ).to eq(DeveloperKeyAccountBinding::ON_STATE)
+      expect(key.developer_key_account_bindings.first).to be_on
     end
 
     it "does not backfill when a binding is present" do

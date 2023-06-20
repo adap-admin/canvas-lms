@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -65,12 +67,10 @@ class TabsController < ApplicationController
   #
   # Returns a paginated list of navigation tabs available in the current context.
   #
-  # @argument include[] [String, "external"]
-  #   "external":: Optionally include external tool tabs in the returned list of tabs (Only has effect for courses, not groups)
-  #
-  # @example_request
-  #     curl -H 'Authorization: Bearer <token>' \
-  #          https://<canvas>/api/v1/courses/<course_id>/tabs\?include\="external"
+  # @argument include[] [String, "course_subject_tabs"]
+  #   - "course_subject_tabs": Optional flag to return the tabs associated with a canvas_for_elementary subject course's
+  #     home page instead of the typical sidebar navigation. Only takes effect if this request is for a course context
+  #     in a canvas_for_elementary-enabled account or sub-account.
   #
   # @example_request
   #     curl -H 'Authorization: Bearer <token>' \
@@ -106,8 +106,12 @@ class TabsController < ApplicationController
   #       }
   #     ]
   def index
-    if authorized_action(@context, @current_user, :read)
-      render :json => tabs_available_json(@context, @current_user, session, Array(params[:include]))
+    GuardRail.activate(:secondary) do
+      if @context.grants_right?(@current_user, session, :read)
+        render json: tabs_available_json(@context, @current_user, session)
+      else
+        raise ActiveRecord::RecordNotFound
+      end
     end
   end
 
@@ -130,35 +134,38 @@ class TabsController < ApplicationController
   #
   # @returns Tab
   def update
-    return unless authorized_action(@context, @current_user, :manage_content) && @context.is_a?(Course)
-    css_class = params['tab_id']
-    new_pos = params['position'].to_i if params['position']
+    return unless @context.is_a?(Course) && authorized_action(@context, @current_user, [:manage_content, :manage_course_content_edit])
+
+    css_class = params["tab_id"]
+    new_pos = params["position"].to_i if params["position"]
     tabs = context_tabs(@context, @current_user)
     tab = (tabs.find { |t| t.with_indifferent_access[:css_class] == css_class }).with_indifferent_access
     tab_config = @context.tab_configuration
-    tab_config = tabs.map do |t|
-      {
-        'id' => t.with_indifferent_access['id'],
-        'hidden' => t.with_indifferent_access['hidden'],
-        'position' => t.with_indifferent_access['position']
-      }
-    end if tab_config.blank?
+    if tab_config.blank? || tab_config.count != tabs.count
+      tab_config = tabs.map do |t|
+        {
+          "id" => t.with_indifferent_access["id"],
+          "hidden" => t.with_indifferent_access["hidden"],
+          "position" => t.with_indifferent_access["position"]
+        }
+      end
+    end
     if [@context.class::TAB_HOME, @context.class::TAB_SETTINGS].include?(tab[:id])
-      render json: {error: t(:tab_unmanagable_error, "%{css_class} is not manageable", css_class: css_class)}, status: :bad_request
+      render json: { error: t(:tab_unmanagable_error, "%{css_class} is not manageable", css_class:) }, status: :bad_request
     elsif new_pos && (new_pos <= 1 || new_pos >= tab_config.count + 1)
-      render json: {error: t(:tab_location_error, 'That tab location is invalid')}, status: :bad_request
+      render json: { error: t(:tab_location_error, "That tab location is invalid") }, status: :bad_request
     else
-      pos = tab_config.index { |t| t['id'] == tab['id'] }
+      pos = tab_config.index { |t| t["id"] == tab["id"] }
       if pos.nil?
-        pos = (tab['position'] || tab_config.size) - 1
-        tab_config.insert(pos, tab.with_indifferent_access.slice(*%w{id hidden position}))
+        pos = (tab["position"] || tab_config.size) - 1
+        tab_config.insert(pos, tab.with_indifferent_access.slice(*%w[id hidden position]))
       end
 
-      if value_to_boolean(params['hidden'])
+      if value_to_boolean(params["hidden"])
         tab[:hidden] = true
-        tab_config[pos]['hidden'] = true
-      elsif params.key?('hidden')
-        [tab_config[pos], tab].each { |t| t.delete('hidden') }
+        tab_config[pos]["hidden"] = true
+      elsif params.key?("hidden")
+        [tab_config[pos], tab].each { |t| t.delete("hidden") }
       end
 
       if new_pos

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -34,10 +36,11 @@ class Quizzes::QuizQuestion::MatchGroup
   end
 
   def to_a
-    matches.map { |match| match.to_hash }
+    matches.map(&:to_hash)
   end
 
   private
+
   def build_matches(matches)
     matches.each { |m| add(m) }
   end
@@ -62,7 +65,6 @@ class Quizzes::QuizQuestion::MatchGroup
     rand(10_000)
   end
 
-
   class Match
     include Comparable
 
@@ -77,7 +79,7 @@ class Quizzes::QuizQuestion::MatchGroup
     end
 
     def to_hash
-      {text: text, match_id: id}
+      { text:, match_id: id }
     end
   end
 end

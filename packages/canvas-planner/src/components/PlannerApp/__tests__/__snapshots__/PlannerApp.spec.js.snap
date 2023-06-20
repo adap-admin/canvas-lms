@@ -3,20 +3,21 @@
 exports[`PlannerApp always renders today and tomorrow when only items are in the future 1`] = `
 <div
   className="PlannerApp large"
+  data-testid="PlannerApp"
 >
   <View
     as="div"
-    borderColor="default"
-    debug={false}
+    borderColor="primary"
     display="auto"
     focusColor="info"
     focusPosition="offset"
-    focused={false}
+    margin="x-small 0 0 0"
     overflowX="visible"
     overflowY="visible"
     position="static"
     shouldAnimateFocus={true}
     textAlign="center"
+    withVisualDebug={false}
   >
     <ShowOnFocusButton
       buttonProps={
@@ -24,7 +25,7 @@ exports[`PlannerApp always renders today and tomorrow when only items are in the
           "onClick": undefined,
         }
       }
-      buttonRef={[Function]}
+      elementRef={[Function]}
     >
       Load prior dates
     </ShowOnFocusButton>
@@ -33,18 +34,28 @@ exports[`PlannerApp always renders today and tomorrow when only items are in the
     allPastItemsLoaded={false}
     loadingPast={false}
   />
-  <Animatable(Day)
+  <Animatable(undefined)
     animatableIndex={1}
     day="2017-04-24"
+    isObserving={false}
     itemsForDay={Array []}
     key="2017-04-24"
+    responsiveSize="large"
+    showMissingAssignments={false}
+    simplifiedControls={false}
+    singleCourseView={false}
     timeZone="Asia/Tokyo"
   />
-  <Animatable(Day)
+  <Animatable(undefined)
     animatableIndex={2}
     day="2017-04-25"
+    isObserving={false}
     itemsForDay={Array []}
     key="2017-04-25"
+    responsiveSize="large"
+    showMissingAssignments={false}
+    simplifiedControls={false}
+    singleCourseView={false}
     timeZone="Asia/Tokyo"
   />
   <EmptyDays
@@ -55,9 +66,10 @@ exports[`PlannerApp always renders today and tomorrow when only items are in the
     responsiveSize="large"
     timeZone="Asia/Tokyo"
   />
-  <Animatable(Day)
+  <Animatable(undefined)
     animatableIndex={4}
     day="2017-04-29"
+    isObserving={false}
     itemsForDay={
       Array [
         Object {
@@ -66,6 +78,10 @@ exports[`PlannerApp always renders today and tomorrow when only items are in the
       ]
     }
     key="2017-04-29"
+    responsiveSize="large"
+    showMissingAssignments={false}
+    simplifiedControls={false}
+    singleCourseView={false}
     timeZone="Asia/Tokyo"
   />
   <div
@@ -83,20 +99,21 @@ exports[`PlannerApp always renders today and tomorrow when only items are in the
 exports[`PlannerApp empty day calculation always renders yesterday, today and tomorrow 1`] = `
 <div
   className="PlannerApp large"
+  data-testid="PlannerApp"
 >
   <View
     as="div"
-    borderColor="default"
-    debug={false}
+    borderColor="primary"
     display="auto"
     focusColor="info"
     focusPosition="offset"
-    focused={false}
+    margin="x-small 0 0 0"
     overflowX="visible"
     overflowY="visible"
     position="static"
     shouldAnimateFocus={true}
     textAlign="center"
+    withVisualDebug={false}
   >
     <ShowOnFocusButton
       buttonProps={
@@ -104,7 +121,7 @@ exports[`PlannerApp empty day calculation always renders yesterday, today and to
           "onClick": undefined,
         }
       }
-      buttonRef={[Function]}
+      elementRef={[Function]}
     >
       Load prior dates
     </ShowOnFocusButton>
@@ -113,9 +130,10 @@ exports[`PlannerApp empty day calculation always renders yesterday, today and to
     allPastItemsLoaded={false}
     loadingPast={false}
   />
-  <Animatable(Day)
+  <Animatable(undefined)
     animatableIndex={1}
     day="2017-04-19"
+    isObserving={false}
     itemsForDay={
       Array [
         Object {
@@ -124,27 +142,46 @@ exports[`PlannerApp empty day calculation always renders yesterday, today and to
       ]
     }
     key="2017-04-19"
+    responsiveSize="large"
+    showMissingAssignments={false}
+    simplifiedControls={false}
+    singleCourseView={false}
     timeZone="Asia/Tokyo"
   />
-  <Animatable(Day)
+  <Animatable(undefined)
     animatableIndex={2}
     day="2017-04-23"
+    isObserving={false}
     itemsForDay={Array []}
     key="2017-04-23"
+    responsiveSize="large"
+    showMissingAssignments={false}
+    simplifiedControls={false}
+    singleCourseView={false}
     timeZone="Asia/Tokyo"
   />
-  <Animatable(Day)
+  <Animatable(undefined)
     animatableIndex={3}
     day="2017-04-24"
+    isObserving={false}
     itemsForDay={Array []}
     key="2017-04-24"
+    responsiveSize="large"
+    showMissingAssignments={false}
+    simplifiedControls={false}
+    singleCourseView={false}
     timeZone="Asia/Tokyo"
   />
-  <Animatable(Day)
+  <Animatable(undefined)
     animatableIndex={4}
     day="2017-04-25"
+    isObserving={false}
     itemsForDay={Array []}
     key="2017-04-25"
+    responsiveSize="large"
+    showMissingAssignments={false}
+    simplifiedControls={false}
+    singleCourseView={false}
     timeZone="Asia/Tokyo"
   />
   <EmptyDays
@@ -155,9 +192,10 @@ exports[`PlannerApp empty day calculation always renders yesterday, today and to
     responsiveSize="large"
     timeZone="Asia/Tokyo"
   />
-  <Animatable(Day)
+  <Animatable(undefined)
     animatableIndex={6}
     day="2017-04-29"
+    isObserving={false}
     itemsForDay={
       Array [
         Object {
@@ -166,6 +204,10 @@ exports[`PlannerApp empty day calculation always renders yesterday, today and to
       ]
     }
     key="2017-04-29"
+    responsiveSize="large"
+    showMissingAssignments={false}
+    simplifiedControls={false}
+    singleCourseView={false}
     timeZone="Asia/Tokyo"
   />
   <div
@@ -183,20 +225,21 @@ exports[`PlannerApp empty day calculation always renders yesterday, today and to
 exports[`PlannerApp empty day calculation does not render an empty tomorrow when tomorrow may only be partially loaded 1`] = `
 <div
   className="PlannerApp large"
+  data-testid="PlannerApp"
 >
   <View
     as="div"
-    borderColor="default"
-    debug={false}
+    borderColor="primary"
     display="auto"
     focusColor="info"
     focusPosition="offset"
-    focused={false}
+    margin="x-small 0 0 0"
     overflowX="visible"
     overflowY="visible"
     position="static"
     shouldAnimateFocus={true}
     textAlign="center"
+    withVisualDebug={false}
   >
     <ShowOnFocusButton
       buttonProps={
@@ -204,7 +247,7 @@ exports[`PlannerApp empty day calculation does not render an empty tomorrow when
           "onClick": undefined,
         }
       }
-      buttonRef={[Function]}
+      elementRef={[Function]}
     >
       Load prior dates
     </ShowOnFocusButton>
@@ -213,9 +256,10 @@ exports[`PlannerApp empty day calculation does not render an empty tomorrow when
     allPastItemsLoaded={false}
     loadingPast={false}
   />
-  <Animatable(Day)
+  <Animatable(undefined)
     animatableIndex={1}
     day="2017-04-24"
+    isObserving={false}
     itemsForDay={
       Array [
         Object {
@@ -224,6 +268,10 @@ exports[`PlannerApp empty day calculation does not render an empty tomorrow when
       ]
     }
     key="2017-04-24"
+    responsiveSize="large"
+    showMissingAssignments={false}
+    simplifiedControls={false}
+    singleCourseView={false}
     timeZone="Asia/Tokyo"
   />
   <div
@@ -241,20 +289,21 @@ exports[`PlannerApp empty day calculation does not render an empty tomorrow when
 exports[`PlannerApp empty day calculation merges 3 consecutive empty days in the future 1`] = `
 <div
   className="PlannerApp large"
+  data-testid="PlannerApp"
 >
   <View
     as="div"
-    borderColor="default"
-    debug={false}
+    borderColor="primary"
     display="auto"
     focusColor="info"
     focusPosition="offset"
-    focused={false}
+    margin="x-small 0 0 0"
     overflowX="visible"
     overflowY="visible"
     position="static"
     shouldAnimateFocus={true}
     textAlign="center"
+    withVisualDebug={false}
   >
     <ShowOnFocusButton
       buttonProps={
@@ -262,7 +311,7 @@ exports[`PlannerApp empty day calculation merges 3 consecutive empty days in the
           "onClick": undefined,
         }
       }
-      buttonRef={[Function]}
+      elementRef={[Function]}
     >
       Load prior dates
     </ShowOnFocusButton>
@@ -271,9 +320,10 @@ exports[`PlannerApp empty day calculation merges 3 consecutive empty days in the
     allPastItemsLoaded={false}
     loadingPast={false}
   />
-  <Animatable(Day)
+  <Animatable(undefined)
     animatableIndex={1}
     day="2017-04-24"
+    isObserving={false}
     itemsForDay={
       Array [
         Object {
@@ -282,11 +332,16 @@ exports[`PlannerApp empty day calculation merges 3 consecutive empty days in the
       ]
     }
     key="2017-04-24"
+    responsiveSize="large"
+    showMissingAssignments={false}
+    simplifiedControls={false}
+    singleCourseView={false}
     timeZone="Asia/Tokyo"
   />
-  <Animatable(Day)
+  <Animatable(undefined)
     animatableIndex={2}
     day="2017-04-25"
+    isObserving={false}
     itemsForDay={
       Array [
         Object {
@@ -295,6 +350,10 @@ exports[`PlannerApp empty day calculation merges 3 consecutive empty days in the
       ]
     }
     key="2017-04-25"
+    responsiveSize="large"
+    showMissingAssignments={false}
+    simplifiedControls={false}
+    singleCourseView={false}
     timeZone="Asia/Tokyo"
   />
   <EmptyDays
@@ -305,9 +364,10 @@ exports[`PlannerApp empty day calculation merges 3 consecutive empty days in the
     responsiveSize="large"
     timeZone="Asia/Tokyo"
   />
-  <Animatable(Day)
+  <Animatable(undefined)
     animatableIndex={4}
     day="2017-04-29"
+    isObserving={false}
     itemsForDay={
       Array [
         Object {
@@ -316,6 +376,10 @@ exports[`PlannerApp empty day calculation merges 3 consecutive empty days in the
       ]
     }
     key="2017-04-29"
+    responsiveSize="large"
+    showMissingAssignments={false}
+    simplifiedControls={false}
+    singleCourseView={false}
     timeZone="Asia/Tokyo"
   />
   <div
@@ -333,20 +397,21 @@ exports[`PlannerApp empty day calculation merges 3 consecutive empty days in the
 exports[`PlannerApp empty day calculation only renders days with items in the past 1`] = `
 <div
   className="PlannerApp large"
+  data-testid="PlannerApp"
 >
   <View
     as="div"
-    borderColor="default"
-    debug={false}
+    borderColor="primary"
     display="auto"
     focusColor="info"
     focusPosition="offset"
-    focused={false}
+    margin="x-small 0 0 0"
     overflowX="visible"
     overflowY="visible"
     position="static"
     shouldAnimateFocus={true}
     textAlign="center"
+    withVisualDebug={false}
   >
     <ShowOnFocusButton
       buttonProps={
@@ -354,7 +419,7 @@ exports[`PlannerApp empty day calculation only renders days with items in the pa
           "onClick": undefined,
         }
       }
-      buttonRef={[Function]}
+      elementRef={[Function]}
     >
       Load prior dates
     </ShowOnFocusButton>
@@ -363,9 +428,10 @@ exports[`PlannerApp empty day calculation only renders days with items in the pa
     allPastItemsLoaded={false}
     loadingPast={false}
   />
-  <Animatable(Day)
+  <Animatable(undefined)
     animatableIndex={1}
     day="2017-04-18"
+    isObserving={false}
     itemsForDay={
       Array [
         Object {
@@ -374,11 +440,16 @@ exports[`PlannerApp empty day calculation only renders days with items in the pa
       ]
     }
     key="2017-04-18"
+    responsiveSize="large"
+    showMissingAssignments={false}
+    simplifiedControls={false}
+    singleCourseView={false}
     timeZone="Asia/Tokyo"
   />
-  <Animatable(Day)
+  <Animatable(undefined)
     animatableIndex={2}
     day="2017-04-20"
+    isObserving={false}
     itemsForDay={
       Array [
         Object {
@@ -387,20 +458,34 @@ exports[`PlannerApp empty day calculation only renders days with items in the pa
       ]
     }
     key="2017-04-20"
+    responsiveSize="large"
+    showMissingAssignments={false}
+    simplifiedControls={false}
+    singleCourseView={false}
     timeZone="Asia/Tokyo"
   />
-  <Animatable(Day)
+  <Animatable(undefined)
     animatableIndex={3}
     day="2017-04-23"
+    isObserving={false}
     itemsForDay={Array []}
     key="2017-04-23"
+    responsiveSize="large"
+    showMissingAssignments={false}
+    simplifiedControls={false}
+    singleCourseView={false}
     timeZone="Asia/Tokyo"
   />
-  <Animatable(Day)
+  <Animatable(undefined)
     animatableIndex={4}
     day="2017-04-24"
+    isObserving={false}
     itemsForDay={Array []}
     key="2017-04-24"
+    responsiveSize="large"
+    showMissingAssignments={false}
+    simplifiedControls={false}
+    singleCourseView={false}
     timeZone="Asia/Tokyo"
   />
   <div
@@ -418,20 +503,21 @@ exports[`PlannerApp empty day calculation only renders days with items in the pa
 exports[`PlannerApp empty day calculation renders 2 consecutive empty days in the future as empty days 1`] = `
 <div
   className="PlannerApp large"
+  data-testid="PlannerApp"
 >
   <View
     as="div"
-    borderColor="default"
-    debug={false}
+    borderColor="primary"
     display="auto"
     focusColor="info"
     focusPosition="offset"
-    focused={false}
+    margin="x-small 0 0 0"
     overflowX="visible"
     overflowY="visible"
     position="static"
     shouldAnimateFocus={true}
     textAlign="center"
+    withVisualDebug={false}
   >
     <ShowOnFocusButton
       buttonProps={
@@ -439,7 +525,7 @@ exports[`PlannerApp empty day calculation renders 2 consecutive empty days in th
           "onClick": undefined,
         }
       }
-      buttonRef={[Function]}
+      elementRef={[Function]}
     >
       Load prior dates
     </ShowOnFocusButton>
@@ -448,9 +534,10 @@ exports[`PlannerApp empty day calculation renders 2 consecutive empty days in th
     allPastItemsLoaded={false}
     loadingPast={false}
   />
-  <Animatable(Day)
+  <Animatable(undefined)
     animatableIndex={1}
     day="2017-04-24"
+    isObserving={false}
     itemsForDay={
       Array [
         Object {
@@ -459,11 +546,16 @@ exports[`PlannerApp empty day calculation renders 2 consecutive empty days in th
       ]
     }
     key="2017-04-24"
+    responsiveSize="large"
+    showMissingAssignments={false}
+    simplifiedControls={false}
+    singleCourseView={false}
     timeZone="Asia/Tokyo"
   />
-  <Animatable(Day)
+  <Animatable(undefined)
     animatableIndex={2}
     day="2017-04-25"
+    isObserving={false}
     itemsForDay={
       Array [
         Object {
@@ -472,25 +564,40 @@ exports[`PlannerApp empty day calculation renders 2 consecutive empty days in th
       ]
     }
     key="2017-04-25"
+    responsiveSize="large"
+    showMissingAssignments={false}
+    simplifiedControls={false}
+    singleCourseView={false}
     timeZone="Asia/Tokyo"
   />
-  <Animatable(Day)
+  <Animatable(undefined)
     animatableIndex={3}
     day="2017-04-26"
+    isObserving={false}
     itemsForDay={Array []}
     key="2017-04-26"
+    responsiveSize="large"
+    showMissingAssignments={false}
+    simplifiedControls={false}
+    singleCourseView={false}
     timeZone="Asia/Tokyo"
   />
-  <Animatable(Day)
+  <Animatable(undefined)
     animatableIndex={4}
     day="2017-04-27"
+    isObserving={false}
     itemsForDay={Array []}
     key="2017-04-27"
+    responsiveSize="large"
+    showMissingAssignments={false}
+    simplifiedControls={false}
+    singleCourseView={false}
     timeZone="Asia/Tokyo"
   />
-  <Animatable(Day)
+  <Animatable(undefined)
     animatableIndex={5}
     day="2017-04-28"
+    isObserving={false}
     itemsForDay={
       Array [
         Object {
@@ -499,6 +606,10 @@ exports[`PlannerApp empty day calculation renders 2 consecutive empty days in th
       ]
     }
     key="2017-04-28"
+    responsiveSize="large"
+    showMissingAssignments={false}
+    simplifiedControls={false}
+    singleCourseView={false}
     timeZone="Asia/Tokyo"
   />
   <div
@@ -516,20 +627,21 @@ exports[`PlannerApp empty day calculation renders 2 consecutive empty days in th
 exports[`PlannerApp only renders today when the only item is today 1`] = `
 <div
   className="PlannerApp large"
+  data-testid="PlannerApp"
 >
   <View
     as="div"
-    borderColor="default"
-    debug={false}
+    borderColor="primary"
     display="auto"
     focusColor="info"
     focusPosition="offset"
-    focused={false}
+    margin="x-small 0 0 0"
     overflowX="visible"
     overflowY="visible"
     position="static"
     shouldAnimateFocus={true}
     textAlign="center"
+    withVisualDebug={false}
   >
     <ShowOnFocusButton
       buttonProps={
@@ -537,7 +649,7 @@ exports[`PlannerApp only renders today when the only item is today 1`] = `
           "onClick": undefined,
         }
       }
-      buttonRef={[Function]}
+      elementRef={[Function]}
     >
       Load prior dates
     </ShowOnFocusButton>
@@ -546,9 +658,10 @@ exports[`PlannerApp only renders today when the only item is today 1`] = `
     allPastItemsLoaded={false}
     loadingPast={false}
   />
-  <Animatable(Day)
+  <Animatable(undefined)
     animatableIndex={1}
     day="2017-04-24"
+    isObserving={false}
     itemsForDay={
       Array [
         Object {
@@ -557,6 +670,10 @@ exports[`PlannerApp only renders today when the only item is today 1`] = `
       ]
     }
     key="2017-04-24"
+    responsiveSize="large"
+    showMissingAssignments={false}
+    simplifiedControls={false}
+    singleCourseView={false}
     timeZone="Asia/Tokyo"
   />
   <div
@@ -574,20 +691,21 @@ exports[`PlannerApp only renders today when the only item is today 1`] = `
 exports[`PlannerApp renders base component 1`] = `
 <div
   className="PlannerApp large"
+  data-testid="PlannerApp"
 >
   <View
     as="div"
-    borderColor="default"
-    debug={false}
+    borderColor="primary"
     display="auto"
     focusColor="info"
     focusPosition="offset"
-    focused={false}
+    margin="x-small 0 0 0"
     overflowX="visible"
     overflowY="visible"
     position="static"
     shouldAnimateFocus={true}
     textAlign="center"
+    withVisualDebug={false}
   >
     <ShowOnFocusButton
       buttonProps={
@@ -595,7 +713,7 @@ exports[`PlannerApp renders base component 1`] = `
           "onClick": undefined,
         }
       }
-      buttonRef={[Function]}
+      elementRef={[Function]}
     >
       Load prior dates
     </ShowOnFocusButton>
@@ -604,9 +722,10 @@ exports[`PlannerApp renders base component 1`] = `
     allPastItemsLoaded={false}
     loadingPast={false}
   />
-  <Animatable(Day)
+  <Animatable(undefined)
     animatableIndex={1}
     day="2017-04-24"
+    isObserving={false}
     itemsForDay={
       Array [
         Object {
@@ -615,11 +734,16 @@ exports[`PlannerApp renders base component 1`] = `
       ]
     }
     key="2017-04-24"
+    responsiveSize="large"
+    showMissingAssignments={false}
+    simplifiedControls={false}
+    singleCourseView={false}
     timeZone="Asia/Tokyo"
   />
-  <Animatable(Day)
+  <Animatable(undefined)
     animatableIndex={2}
     day="2017-04-25"
+    isObserving={false}
     itemsForDay={
       Array [
         Object {
@@ -628,11 +752,16 @@ exports[`PlannerApp renders base component 1`] = `
       ]
     }
     key="2017-04-25"
+    responsiveSize="large"
+    showMissingAssignments={false}
+    simplifiedControls={false}
+    singleCourseView={false}
     timeZone="Asia/Tokyo"
   />
-  <Animatable(Day)
+  <Animatable(undefined)
     animatableIndex={3}
     day="2017-04-26"
+    isObserving={false}
     itemsForDay={
       Array [
         Object {
@@ -641,6 +770,10 @@ exports[`PlannerApp renders base component 1`] = `
       ]
     }
     key="2017-04-26"
+    responsiveSize="large"
+    showMissingAssignments={false}
+    simplifiedControls={false}
+    singleCourseView={false}
     timeZone="Asia/Tokyo"
   />
   <div
@@ -658,20 +791,21 @@ exports[`PlannerApp renders base component 1`] = `
 exports[`PlannerApp renders empty component with no assignments 1`] = `
 <div
   className="PlannerApp large"
+  data-testid="PlannerApp"
 >
   <View
     as="div"
-    borderColor="default"
-    debug={false}
+    borderColor="primary"
     display="auto"
     focusColor="info"
     focusPosition="offset"
-    focused={false}
+    margin="x-small 0 0 0"
     overflowX="visible"
     overflowY="visible"
     position="static"
     shouldAnimateFocus={true}
     textAlign="center"
+    withVisualDebug={false}
   >
     <ShowOnFocusButton
       buttonProps={
@@ -679,7 +813,7 @@ exports[`PlannerApp renders empty component with no assignments 1`] = `
           "onClick": undefined,
         }
       }
-      buttonRef={[Function]}
+      elementRef={[Function]}
     >
       Load prior dates
     </ShowOnFocusButton>
@@ -696,20 +830,21 @@ exports[`PlannerApp renders empty component with no assignments 1`] = `
 exports[`PlannerApp renders loading past spinner when loading past and there are no future items 1`] = `
 <div
   className="PlannerApp large"
+  data-testid="PlannerApp"
 >
   <View
     as="div"
-    borderColor="default"
-    debug={false}
+    borderColor="primary"
     display="auto"
     focusColor="info"
     focusPosition="offset"
-    focused={false}
+    margin="x-small 0 0 0"
     overflowX="visible"
     overflowY="visible"
     position="static"
     shouldAnimateFocus={true}
     textAlign="center"
+    withVisualDebug={false}
   >
     <ShowOnFocusButton
       buttonProps={
@@ -717,7 +852,7 @@ exports[`PlannerApp renders loading past spinner when loading past and there are
           "onClick": undefined,
         }
       }
-      buttonRef={[Function]}
+      elementRef={[Function]}
     >
       Load prior dates
     </ShowOnFocusButton>
@@ -735,20 +870,21 @@ exports[`PlannerApp renders loading past spinner when loading past and there are
 exports[`PlannerApp shows only the loading component when the isLoading prop is true 1`] = `
 <div
   className="PlannerApp large"
+  data-testid="PlannerApp"
 >
   <View
     as="div"
-    borderColor="default"
-    debug={false}
+    borderColor="primary"
     display="auto"
     focusColor="info"
     focusPosition="offset"
-    focused={false}
+    margin="x-small 0 0 0"
     overflowX="visible"
     overflowY="visible"
     position="static"
     shouldAnimateFocus={true}
     textAlign="center"
+    withVisualDebug={false}
   >
     <ShowOnFocusButton
       buttonProps={
@@ -756,24 +892,24 @@ exports[`PlannerApp shows only the loading component when the isLoading prop is 
           "onClick": undefined,
         }
       }
-      buttonRef={[Function]}
+      elementRef={[Function]}
     >
       Load prior dates
     </ShowOnFocusButton>
   </View>
   <View
-    borderColor="default"
-    debug={false}
+    borderColor="primary"
     display="block"
     focusColor="info"
     focusPosition="offset"
-    focused={false}
+    key="spinner"
     overflowX="visible"
     overflowY="visible"
     padding="xx-large medium"
     position="static"
     shouldAnimateFocus={true}
     textAlign="center"
+    withVisualDebug={false}
   >
     <Spinner
       as="div"
@@ -791,20 +927,21 @@ exports[`PlannerApp shows only the loading component when the isLoading prop is 
 exports[`PlannerApp shows the loading past indicator when loadingPast prop is true 1`] = `
 <div
   className="PlannerApp large"
+  data-testid="PlannerApp"
 >
   <View
     as="div"
-    borderColor="default"
-    debug={false}
+    borderColor="primary"
     display="auto"
     focusColor="info"
     focusPosition="offset"
-    focused={false}
+    margin="x-small 0 0 0"
     overflowX="visible"
     overflowY="visible"
     position="static"
     shouldAnimateFocus={true}
     textAlign="center"
+    withVisualDebug={false}
   >
     <ShowOnFocusButton
       buttonProps={
@@ -812,7 +949,7 @@ exports[`PlannerApp shows the loading past indicator when loadingPast prop is tr
           "onClick": undefined,
         }
       }
-      buttonRef={[Function]}
+      elementRef={[Function]}
     >
       Load prior dates
     </ShowOnFocusButton>
@@ -821,9 +958,10 @@ exports[`PlannerApp shows the loading past indicator when loadingPast prop is tr
     allPastItemsLoaded={false}
     loadingPast={true}
   />
-  <Animatable(Day)
+  <Animatable(undefined)
     animatableIndex={1}
     day="2017-04-24"
+    isObserving={false}
     itemsForDay={
       Array [
         Object {
@@ -832,11 +970,16 @@ exports[`PlannerApp shows the loading past indicator when loadingPast prop is tr
       ]
     }
     key="2017-04-24"
+    responsiveSize="large"
+    showMissingAssignments={false}
+    simplifiedControls={false}
+    singleCourseView={false}
     timeZone="Asia/Tokyo"
   />
-  <Animatable(Day)
+  <Animatable(undefined)
     animatableIndex={2}
     day="2017-04-25"
+    isObserving={false}
     itemsForDay={
       Array [
         Object {
@@ -845,11 +988,16 @@ exports[`PlannerApp shows the loading past indicator when loadingPast prop is tr
       ]
     }
     key="2017-04-25"
+    responsiveSize="large"
+    showMissingAssignments={false}
+    simplifiedControls={false}
+    singleCourseView={false}
     timeZone="Asia/Tokyo"
   />
-  <Animatable(Day)
+  <Animatable(undefined)
     animatableIndex={3}
     day="2017-04-26"
+    isObserving={false}
     itemsForDay={
       Array [
         Object {
@@ -858,6 +1006,10 @@ exports[`PlannerApp shows the loading past indicator when loadingPast prop is tr
       ]
     }
     key="2017-04-26"
+    responsiveSize="large"
+    showMissingAssignments={false}
+    simplifiedControls={false}
+    singleCourseView={false}
     timeZone="Asia/Tokyo"
   />
   <div

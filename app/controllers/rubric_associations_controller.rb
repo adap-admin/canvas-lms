@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -33,11 +35,17 @@ class RubricAssociationsController < ApplicationController
   # @argument rubric_association[association_type] ["Assignment"|"Course"|"Account"]
   #   The type of object this rubric is associated with
   # @argument rubric_association[title] [String]
+  #   The name of the object this rubric is associated with
   # @argument rubric_association[use_for_grading] [Boolean]
+  #   Whether or not the associated rubric is used for grade calculation
   # @argument rubric_association[hide_score_total] [Boolean]
-  # @argument rubric_association[purpose] [String]
-  # @argument rubric_association[url] [String]
+  #   Whether or not the score total is displayed within the rubric.
+  #   This option is only available if the rubric is not used for grading.
+  # @argument rubric_association[purpose] ["grading"|"bookmark"]
+  #   Whether or not the association is for grading (and thus linked to an assignment)
+  #   or if it's to indicate the rubric should appear in its context
   # @argument rubric_association[bookmarked] [Boolean]
+  #   Whether or not the associated rubric appears in its context
   #
   # @returns RubricAssociation
   def create
@@ -57,16 +65,25 @@ class RubricAssociationsController < ApplicationController
   # @argument rubric_association[association_type] ["Assignment"|"Course"|"Account"]
   #   The type of object this rubric is associated with
   # @argument rubric_association[title] [String]
+  #   The name of the object this rubric is associated with
   # @argument rubric_association[use_for_grading] [Boolean]
+  #   Whether or not the associated rubric is used for grade calculation
   # @argument rubric_association[hide_score_total] [Boolean]
-  # @argument rubric_association[purpose] [String]
-  # @argument rubric_association[url] [String]
+  #   Whether or not the score total is displayed within the rubric.
+  #   This option is only available if the rubric is not used for grading.
+  # @argument rubric_association[purpose] ["grading"|"bookmark"]
+  #   Whether or not the association is for grading (and thus linked to an assignment)
+  #   or if it's to indicate the rubric should appear in its context
   # @argument rubric_association[bookmarked] [Boolean]
+  #   Whether or not the associated rubric appears in its context
   #
   # @returns RubricAssociation
   def update
-    association_params = params[:rubric_association] ?
-      params[:rubric_association].permit(:use_for_grading, :title, :purpose, :url, :hide_score_total, :bookmarked, :rubric_id) : {}
+    association_params = if params[:rubric_association]
+                           params[:rubric_association].permit(:use_for_grading, :title, :purpose, :url, :hide_score_total, :bookmarked, :rubric_id)
+                         else
+                           {}
+                         end
 
     @association = @context.rubric_associations.find(params[:id]) rescue nil
     @association_object = RubricAssociation.get_association_object(params[:rubric_association])
@@ -76,21 +93,33 @@ class RubricAssociationsController < ApplicationController
     # raise "User doesn't have access to this rubric" unless @rubric.grants_right?(@current_user, session, :read)
     return unless can_manage_rubrics_or_association_object?(@assocation, @association_object)
     return unless can_update_association?(@association)
-    if params[:rubric] && @rubric.grants_right?(@current_user, session, :update)
+
+    # create a new rubric if associating in a different course
+    rubric_context = @rubric.context
+    if rubric_context != @context && rubric_context.is_a?(Course)
+      @rubric = @rubric.dup
+      @rubric.rubric_id = rubric_id
+      @rubric.update_criteria(params[:rubric]) if params[:rubric]
+      @rubric.user = @current_user
+      @rubric.context = @context
+      @rubric.update_mastery_scales(false)
+      @rubric.save!
+    elsif params[:rubric] && @rubric.grants_right?(@current_user, session, :update)
       @rubric.update_criteria(params[:rubric])
     end
+
     association_params[:association_object] = @association.association_object if @association
     association_params[:association_object] ||= @association_object
     association_params[:id] = @association.id if @association
     @association = RubricAssociation.generate(@current_user, @rubric, @context, association_params)
     json_res = {
-      :rubric => @rubric.as_json(:methods => :criteria, :include_root => false, :permissions => {:user => @current_user,
-                                                                                                 :session => session}),
-      :rubric_association => @association.as_json(:include_root => false,
-                                                  :include => %i{rubric_assessments assessment_requests},
-                                                  :permissions => {:user => @current_user, :session => session})
+      rubric: @rubric.as_json(methods: :criteria, include_root: false, permissions: { user: @current_user,
+                                                                                      session: }),
+      rubric_association: @association.as_json(include_root: false,
+                                               include: %i[rubric_assessments assessment_requests],
+                                               permissions: { user: @current_user, session: })
     }
-    render :json => json_res
+    render json: json_res
   end
 
   # @API Delete a RubricAssociation
@@ -107,11 +136,11 @@ class RubricAssociationsController < ApplicationController
       # If the rubric wasn't created as a general course rubric,
       # and this was the last place it was being used in the course,
       # go ahead and delete the rubric from the course.
-      association_count = RubricAssociation.where(:context_id => @context, :context_type => @context.class.to_s, :rubric_id => @rubric).for_grading.count
-      if !RubricAssociation.for_purpose('bookmark').where(rubric_id: @rubric).first && association_count == 0
+      association_count = RubricAssociation.active.where(context_id: @context, context_type: @context.class.to_s, rubric_id: @rubric).for_grading.count
+      if !RubricAssociation.active.for_purpose("bookmark").where(rubric_id: @rubric).first && association_count == 0
         @rubric.destroy_for(@context, current_user: @current_user)
       end
-      render :json => @association
+      render json: @association
     end
   end
 
@@ -120,7 +149,8 @@ class RubricAssociationsController < ApplicationController
   def can_manage_rubrics_or_association_object?(association, association_object)
     return true if association ||
                    @context.grants_right?(@current_user, session, :manage_rubrics) ||
-                   association_object && association_object.grants_right?(@current_user, session, :update)
+                   association_object&.grants_right?(@current_user, session, :update)
+
     render_unauthorized_action
     false
   end
@@ -128,5 +158,4 @@ class RubricAssociationsController < ApplicationController
   def can_update_association?(association)
     !association || authorized_action(association, @current_user, :update)
   end
-
 end

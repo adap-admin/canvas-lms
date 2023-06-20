@@ -119,7 +119,7 @@ select.grading_box.pass_fail {
   width: inherit;
 }
 
-span.late-pill, span.missing-pill {
+span.late-pill, span.missing-pill, span.extended-pill {
   padding-#{direction(left)}: 12px;
   text-transform: uppercase;
 }
@@ -151,4 +151,14 @@ span.late-pill, span.missing-pill {
   .deduction-box-values {
     flex: 1
   }
+}
+
+.row-fluid {
+  .ml-0 {
+    margin-#{direction(left)}: 0;
+  }
+}
+
+.mr-add {
+  margin-#{direction(right)}: $fluidGridGutterWidth;
 }

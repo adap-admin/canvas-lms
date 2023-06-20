@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -16,7 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'atom'
+require "atom"
 
 class ObserverAlertsApiController < ApplicationController
   include Api::V1::ObserverAlert
@@ -24,12 +26,15 @@ class ObserverAlertsApiController < ApplicationController
   before_action :require_user
 
   def alerts_by_student
-    all_alerts = @current_user.
-      as_observer_observer_alerts.
-      active.
-      where(student: params[:student_id]).
-      order(id: :desc).
-      select(&:users_are_still_linked?)
+    all_alerts = @current_user
+                 .as_observer_observer_alerts
+                 .active
+                 .where(student: params[:student_id])
+                 .order(id: :desc)
+                 .preload(:context)
+
+    # avoid n+1, all alerts are for the same student, we don't need to check each one.
+    all_alerts = [] unless all_alerts.first&.users_are_still_linked?
 
     alerts = Api.paginate(all_alerts, self, api_v1_observer_alerts_by_student_url)
 
@@ -53,10 +58,10 @@ class ObserverAlertsApiController < ApplicationController
     return render_unauthorized_action unless alert.observer_id == @current_user.id && alert.users_are_still_linked?
 
     case params[:workflow_state]
-    when 'read'
-      alert.workflow_state = 'read'
-    when 'dismissed'
-      alert.workflow_state = 'dismissed'
+    when "read"
+      alert.workflow_state = "read"
+    when "dismissed"
+      alert.workflow_state = "dismissed"
     end
 
     if alert.save

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -16,14 +18,12 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper.rb')
-
 describe DelayedMessageScrubber do
-
   # Helpers
   def delayed_message(send_at)
-    message = DelayedMessage.new(notification: @notification, context: @context,
-            communication_channel: @recipient.communication_channel)
+    message = DelayedMessage.new(notification: @notification,
+                                 context: @context,
+                                 communication_channel: @recipient.communication_channel)
     message.send_at = send_at
     message.save!
     message
@@ -41,24 +41,23 @@ describe DelayedMessageScrubber do
     end
   end
 
-  describe '#scrub' do
-
-    before(:each) do
+  describe "#scrub" do
+    before do
       @context      = course_factory
-      @notification = Notification.create!(name: 'Test Notification', category: 'Test')
+      @notification = Notification.create!(name: "Test Notification", category: "Test")
       @recipient    = user_factory
 
-      @recipient.communication_channels.create!(path_type: 'email', path: 'user@example.com')
+      communication_channel(@recipient, { username: "user@example.com" })
     end
 
-    it 'should delete delayed messages older than 90 days' do
+    it "deletes delayed messages older than 90 days" do
       messages = old_messages(2)
       scrubber = DelayedMessageScrubber.new
       scrubber.scrub
       expect(DelayedMessage.where(id: messages.map(&:id)).count).to eq 0
     end
 
-    it 'should not delete messages younger than 90 days' do
+    it "does not delete messages younger than 90 days" do
       messages = old_messages(1) + new_messages(1)
 
       scrubber = DelayedMessageScrubber.new
@@ -66,10 +65,10 @@ describe DelayedMessageScrubber do
       expect(DelayedMessage.where(id: messages.map(&:id)).count).to eq 1
     end
 
-    it 'should log predicted results if passed dry_run=true' do
-      logger   = double
-      messages = old_messages(2)
-      scrubber = DelayedMessageScrubber.new(logger: logger)
+    it "logs predicted results if passed dry_run=true" do
+      logger = double
+      old_messages(2)
+      scrubber = DelayedMessageScrubber.new(logger:)
 
       expect(logger).to receive(:info).with("DelayedMessageScrubber: 2 records would be deleted (older than #{scrubber.limit})")
       scrubber.scrub(dry_run: true)

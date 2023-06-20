@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -16,14 +18,20 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 group :development do
-  gem 'letter_opener', '1.7.0'
-  gem 'spring', '2.1.0'
-  gem 'spring-commands-rspec', '1.0.4'
+  gem "letter_opener", "1.7.0"
+  gem "spring", "4.0.0"
+  gem "spring-commands-parallel-rspec", "1.1.0"
+  gem "spring-commands-rspec", "1.0.4"
+  gem "spring-commands-rubocop", "0.3.0", github: "rda1902/spring-commands-rubocop", ref: "818acb74130ac95adf9e8733986d45c168e4a5f3"
+  gem "active_record_query_trace", "1.8", require: false
 
-  # Option to DISABLE_RUBY_DEBUGGING is helpful IDE-based debugging.
-  # The ruby debug gems conflict with the IDE-based debugger gem.
-  # Set this option in your dev environment to disable.
-  unless ENV['DISABLE_RUBY_DEBUGGING']
-    gem 'byebug', '11.0.1', platform: :mri
+  gem "byebug", "11.1.3", platform: :mri
+  gem "pry-byebug", "3.10.1", platform: :mri
+  # These gems aren't compatible with newer rubies; just use the built-in debug gem instead
+  # Only try to install them if the env var is set so we don't have conditional gems in the
+  # production build
+  if ENV["REMOTE_DEBUGGING_ENABLED"]
+    gem "debase", "0.2.5.beta2", require: false
+    gem "ruby-debug-ide", "0.7.3", require: false
   end
 end

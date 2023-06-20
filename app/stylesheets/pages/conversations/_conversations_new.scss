@@ -16,9 +16,13 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+@use "sass:math";
+
 @import "deprecated/bootstrap/mixins";
 @import "vendor/bootstrap/button-groups";
 @import "components/autocomplete";
+
+$conversations-headerHeightPhone: 210px;
 
 #not_right_side,
 .ic-Layout-contentWrapper,
@@ -58,12 +62,11 @@
 
 .conversations .panel {
   box-sizing: border-box;
-  height: 58px;
-
   background: $lightBackground;
   border-bottom: 1px solid $ic-border-light;
   height: 112px;
   padding: $ic-sp;
+
   // TODO: revisit when breakpoint fixed
   // until we have a better breakpoint for desktop
   // need to put in direct amount for better ux
@@ -74,7 +77,9 @@
     padding-bottom: 0;
     padding-top: 0;
   }
-  @media only screen and (max-width: 576px) { height: 163px; }
+
+  @media only screen and (max-width: 576px) { height: $conversations-headerHeightPhone; }
+
   .panel__primary {
     // TODO: revisit when breakpoint fixed
     // until we have a better breakpoint for desktop
@@ -94,11 +99,16 @@
     // until we have a better breakpoint for desktop
     // need to put in direct amount for better ux
     @media only screen and (min-width: 1200px) { white-space: nowrap; }
+
     > div {
       display: inline-block;
       vertical-align: middle;
       white-space: nowrap;
       margin-top: $ic-sp;
+
+      @media only screen and (min-width: 1200px) {
+        margin-top: 0;
+      }
     }
   }
 
@@ -109,6 +119,16 @@
 
   .actions {
     margin-#{direction(right)}: $ic-sp;
+  }
+}
+
+.conversations__filter {
+  margin-top: $ic-sp;
+
+  @media only screen and (min-width: 577px) {
+    margin-top: 0;
+    display: inline-block;
+    vertical-align: middle;
   }
 }
 
@@ -202,15 +222,32 @@
   position: absolute;
   bottom: 0;
   top: 112px;
+  width: 100%;
   @media only screen and (min-width: 1200px) { top: 62px; }
-  @media only screen and (max-width: 576px) { top: 163px; }
+  @media only screen and (max-width: 576px) {
+    top: $conversations-headerHeightPhone;
+    flex-direction: column;
+  }
+  @media only screen and (min-width: 577px) {
+    flex-direction: row;
+  }
 }
 
 .message-list-scroller {
-  border-#{direction(right)}: 1px solid #bfbfbf;
-  height: 100%;
   overflow: auto;
-  max-width: 400px;
+  min-width: 1px;
+  flex: 0 0 34%;
+  border-bottom: 1px solid #bfbfbf;
+
+  @media only screen and (min-width: 577px) {
+    border-bottom: none;
+    border-#{direction(right)}: 1px solid #bfbfbf;
+    height: 100%;
+  }
+
+  @include breakpoint(desktop) {
+    flex: 0 0 400px;
+  }
 }
 
 .message-list {
@@ -418,23 +455,22 @@
   }
 }
 
-.message-detail.span8 {
-  margin-#{direction(left)}: 0;
-  width: 68.08511%;
-  height: 100%;
+.message-detail.span8,
+.message-detail.conversations__message-detail {
   overflow: auto;
-  flex-grow: 1;
+  min-width: 1px;
+  flex: 1;
+
+  .subject {
+    line-height: $ic-label-line-height;
+  }
 
   &:focus {
     outline: none;
   }
 
-  .subject {
-    float: direction(left);
-  }
-
   .no-messages {
-    color: #bbbbbb;
+    color: $ic-color-medium-lighter;
     display: block;
     @include fontSize(20px);
     font-weight: bold;
@@ -444,7 +480,7 @@
     i {
       display: block;
       line-height: 120px;
-      margin-bottom: 120px;
+      margin-bottom: $ic-sp;
       text-align: center;
       width: 100%;
 
@@ -467,9 +503,8 @@
   }
 
   .message-detail-actions {
-    li {
-      display: inline;
-    }
+    display: flex;
+    align-items: center;
   }
 
   .message-content > li {
@@ -496,9 +531,19 @@
 
   .message-info {
     margin-bottom: $ic-sp;
+
+    @include breakpoint(desktop) {
+      display: flex;
+      flex-wrap: wrap;
+    }
   }
 
   .user-info {
+    @include breakpoint(desktop) {
+      flex: 1;
+      padding-#{direction(right)}: $ic-sp;
+    }
+
     .avatar {
       float: direction(left);
       margin-#{direction(right)}: 8px;
@@ -516,26 +561,19 @@
 
   .message-metadata {
     position: relative;
+    @include breakpoint(desktop) {
+      text-align: direction(right);
+    }
   }
 
   .date {
     color: darken($ic-color-neutral, 50);
-    position: absolute;
-    #{direction(right)}: 10px;
-    top: 0;
-  }
-
-  .actions {
-    #{direction(right)}: 9999em;
-    position: relative;
-    top: 0;
-    margin: direction-sides(20px 10px 0 8px);
   }
 
   .actions li {
     border: none;
-    float: direction(left);
-    margin:0 0 0 8px;
+    display: inline-block;
+    margin: 0 0 0 math.div($ic-sp, 3);
     padding: 0;
   }
 
@@ -551,19 +589,20 @@
   }
 }
 
-.touch .message-detail .actions {
-  #{direction(right)}: -7px;
-  top: 24px;
-}
+.touch {
+  .message-detail .actions {
+    #{direction(right)}: -7px;
+    top: 24px;
+  }
 
-.touch .message-item-view:hover, .touch .message-metadata.hover {
-  .date {
-    #{direction(right)}: 0;
+  .message-item-view:hover, .touch .message-metadata.hover {
+    .date {
+      #{direction(right)}: 0;
+    }
   }
 }
 
-.message-item-view:hover, .message-metadata.hover {
-
+.message-metadata.hover {
   .actions {
     display: block;
     #{direction(right)}: -7px;

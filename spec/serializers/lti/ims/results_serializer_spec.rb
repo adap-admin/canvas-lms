@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -15,13 +17,11 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'spec_helper'
-
-describe Lti::Ims::ResultsSerializer do
+describe Lti::IMS::ResultsSerializer do
   subject { described_class.new(result, url).as_json }
 
   let(:result) { lti_result_model result_score: 10, result_maximum: 10 }
-  let(:url) { 'http://test.test' }
+  let(:url) { "http://test.test" }
   let(:expected) do
     {
       id: "#{url}/results/#{result.id}",
@@ -32,14 +32,14 @@ describe Lti::Ims::ResultsSerializer do
     }.compact
   end
 
-  describe '#as_json' do
+  describe "#as_json" do
     it { is_expected.to eq expected }
 
-    context 'with comment' do
-      let(:comment) { 'This is a comment' }
-      let(:result) { lti_result_model comment: comment }
+    context "with comment" do
+      let(:comment) { "This is a comment" }
+      let(:result) { lti_result_model comment: }
 
-      it { is_expected.to eq expected.merge(comment: comment) }
+      it { is_expected.to eq expected.merge(comment:) }
     end
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -16,25 +18,24 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'saml2'
+require "saml2"
 
 class AuthenticationProvider::SAML::MetadataRefresher
   class << self
     def refresh_providers(shard_scope: Shard.current, providers: nil)
       federations = AuthenticationProvider::SAML::Federation.descendants.map { |federation| federation::URN }
-      providers ||= AuthenticationProvider::SAML.active.
-        where.not(metadata_uri: [nil, ""] + federations).
-        shard(shard_scope)
+      providers ||= AuthenticationProvider::SAML.active
+                                                .where.not(metadata_uri: [nil, ""] + federations)
+                                                .shard(shard_scope)
 
       providers.each do |provider|
-        begin
-          new_data = refresh_if_necessary(provider.global_id, provider.metadata_uri)
-          next unless new_data
-          provider.populate_from_metadata_xml(new_data)
-          provider.save! if provider.changed?
-        rescue => e
-          ::Canvas::Errors.capture_exception(:saml_metadata_refresh, e)
-        end
+        new_data = refresh_if_necessary(provider.global_id, provider.metadata_uri)
+        next unless new_data
+
+        provider.populate_from_metadata_xml(new_data)
+        provider.save! if provider.changed?
+      rescue => e
+        ::Canvas::Errors.capture_exception(:saml_metadata_refresh, e)
       end
     end
 
@@ -47,16 +48,17 @@ class AuthenticationProvider::SAML::MetadataRefresher
       end
 
       headers = {}
-      headers['If-None-Match'] = etag if etag
+      headers["If-None-Match"] = etag if etag
       CanvasHttp.get(endpoint, headers) do |response|
         if response.is_a?(Net::HTTPNotModified)
           return false
         end
+
         # raise on non-success
         response.value
         # store new data
-        if Canvas.redis_enabled? && response['ETag']
-          Canvas.redis.set("saml_#{provider_key}_etag", response['ETag'])
+        if Canvas.redis_enabled? && response["ETag"]
+          Canvas.redis.set("saml_#{provider_key}_etag", response["ETag"])
         end
         return response.body
       end

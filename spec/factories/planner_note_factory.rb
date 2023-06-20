@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -17,7 +19,7 @@
 #
 
 module Factories
-  def planner_note_model(opts={})
+  def planner_note_model(opts = {})
     user = opts[:user] || @user || user_model
     attrs = { user_id: user.id }.merge(opts)
     @planner_note = PlannerNote.create!(valid_planner_note_attributes.merge(attrs))
@@ -25,11 +27,11 @@ module Factories
 
   def valid_planner_note_attributes
     {
-      :title => 'note title',
-      :details => 'note details',
-      :workflow_state => 'active',
-      :todo_date => Time.zone.today,
-      :course => nil
+      title: "note title",
+      details: "note details",
+      workflow_state: "active",
+      todo_date: Time.zone.today,
+      course: nil
     }
   end
 end

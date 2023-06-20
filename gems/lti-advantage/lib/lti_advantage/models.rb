@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -17,6 +19,6 @@
 
 module LtiAdvantage
   module Models
-    require_relative 'models/deep_linking_setting'
+    require_relative "models/deep_linking_setting"
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -19,29 +21,29 @@
 module ContextModuleProgressions
   class Finder
     def self.find_or_create_for_context_and_user(context, user)
-      modules = context.context_modules.where(workflow_state: 'active').to_a
+      modules = context.context_modules.where(workflow_state: "active").to_a
 
       existing_progressions = ContextModuleProgression
-        .where(user_id: user)
-        .where(context_module_id: modules)
-        .index_by(&:context_module_id)
+                              .where(user_id: user)
+                              .where(context_module_id: modules)
+                              .index_by(&:context_module_id)
 
       modules.map do |mod|
-        if existing_progressions.include?(mod.id)
-          progression = existing_progressions[mod.id]
-        else
-          progression = create_module_progression(mod, user)
-        end
+        progression = if existing_progressions.include?(mod.id)
+                        existing_progressions[mod.id]
+                      else
+                        create_module_progression(mod, user)
+                      end
         progression.context_module = mod
         progression
       end
     end
 
     def self.create_module_progression(mod, user)
-      Shackles.activate(:master) do
+      GuardRail.activate(:primary) do
         ContextModuleProgression.unique_constraint_retry do |retry_count|
           progression = mod.context_module_progressions.where(user_id: user).first if retry_count > 0
-          progression ||= mod.context_module_progressions.create!(user: user)
+          progression || mod.context_module_progressions.create!(user:)
         end
       end
     end

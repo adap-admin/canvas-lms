@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -16,18 +18,15 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../../spec_helper')
-require_dependency "lti/membership_service/course_lis_person_collator"
-
 module Lti::MembershipService
   describe CourseLisPersonCollator do
-    context 'course with teacher' do
-      before(:each) do
+    context "course with teacher" do
+      before do
         course_with_teacher
       end
 
-      describe '#initialize' do
-        it 'sets sane defaults when no options are set' do
+      describe "#initialize" do
+        it "sets sane defaults when no options are set" do
           collator = CourseLisPersonCollator.new(@course, @teacher)
 
           expect(collator.role).to be_nil
@@ -35,7 +34,7 @@ module Lti::MembershipService
           expect(collator.page).to eq(1)
         end
 
-        it 'handles negative values for :page option' do
+        it "handles negative values for :page option" do
           opts = {
             page: -1
           }
@@ -44,7 +43,7 @@ module Lti::MembershipService
           expect(collator.page).to eq(1)
         end
 
-        it 'handles negative values for :per_page option' do
+        it "handles negative values for :per_page option" do
           opts = {
             per_page: -1
           }
@@ -53,7 +52,7 @@ module Lti::MembershipService
           expect(collator.per_page).to eq(Api.per_page)
         end
 
-        it 'handles values for :per_page option that exceed per page max' do
+        it "handles values for :per_page option that exceed per page max" do
           opts = {
             per_page: Api.max_per_page + 1
           }
@@ -62,15 +61,15 @@ module Lti::MembershipService
           expect(collator.per_page).to eq(Api.max_per_page)
         end
 
-        it 'generates a list of IMS::LTI::Models::Membership objects' do
+        it "generates a list of ::IMS::LTI::Models::Membership objects" do
           collator = CourseLisPersonCollator.new(@course, @teacher)
-          memberships = collator.memberships(context: @course)
+          memberships = collator.memberships
           @teacher.reload
           membership = memberships[0]
 
           expect(memberships.size).to eq(1)
-          expect(membership.status).to eq(IMS::LIS::Statuses::SimpleNames::Active)
-          expect(membership.role).to match_array([IMS::LIS::Roles::Context::URNs::Instructor])
+          expect(membership.status).to eq(::IMS::LIS::Statuses::SimpleNames::Active)
+          expect(membership.role).to match_array([::IMS::LIS::Roles::Context::URNs::Instructor])
           expect(membership.member.name).to eq(@teacher.name)
           expect(membership.member.given_name).to eq(@teacher.first_name)
           expect(membership.member.family_name).to eq(@teacher.last_name)
@@ -81,17 +80,17 @@ module Lti::MembershipService
           expect(membership.member.user_id).to eq(@teacher.lti_context_id)
         end
 
-        it 'sends old_id when present' do
+        it "sends old_id when present" do
           Lti::Asset.opaque_identifier_for(@teacher)
           collator = CourseLisPersonCollator.new(@course, @teacher)
-          UserPastLtiId.create!(user: @teacher, context: @course, user_lti_id: @teacher.lti_id, user_lti_context_id: 'old_lti_id', user_uuid: 'old')
-          memberships = collator.memberships(context: @course)
-          expect(memberships[0].member.user_id).to eq('old_lti_id')
+          UserPastLtiId.create!(user: @teacher, context: @course, user_lti_id: @teacher.lti_id, user_lti_context_id: "old_lti_id", user_uuid: "old")
+          memberships = collator.memberships
+          expect(memberships[0].member.user_id).to eq("old_lti_id")
         end
       end
 
-      describe '#context' do
-        it 'returns a course for the context' do
+      describe "#context" do
+        it "returns a course for the context" do
           collator = CourseLisPersonCollator.new(@course, @teacher)
 
           expect(collator.context).to eq(@course)
@@ -100,34 +99,58 @@ module Lti::MembershipService
     end
   end
 
-  context 'course with user that has many enrollments' do
-    before(:each) do
+  describe "#memberships" do
+    before do
       course_with_teacher
-      @course.enroll_user(@teacher, 'TaEnrollment', enrollment_state: 'active')
-      @course.enroll_user(@teacher, 'DesignerEnrollment', enrollment_state: 'active')
-      @course.enroll_user(@teacher, 'StudentEnrollment', enrollment_state: 'active')
-      @course.enroll_user(@teacher, 'TeacherEnrollment', enrollment_state: 'active')
-      @course.enroll_user(@teacher, 'ObserverEnrollment', enrollment_state: 'active')
     end
 
-    describe '#membership' do
-      it 'properly outputs multiple membership roles for membership' do
+    it "does not show enrollment roles from other courses" do
+      collator = CourseLisPersonCollator.new(@course, @teacher)
+      Lti::Asset.opaque_identifier_for(@teacher, context: @course)
+      course_with_student(user: @teacher)
+      memberships = collator.memberships
+      expect(memberships.map(&:role)).to eq([[::IMS::LIS::Roles::Context::URNs::Instructor]])
+    end
+
+    it "does not show past_lti_ids from other contexts" do
+      collator = CourseLisPersonCollator.new(@course, @teacher)
+      course_with_teacher(user: @teacher)
+      Lti::Asset.opaque_identifier_for(@teacher, context: @course)
+      UserPastLtiId.create!(user_id: @teacher,
+                            context: @course,
+                            user_uuid: "old_uuid",
+                            user_lti_id: "old_lti_id",
+                            user_lti_context_id: "old_lti_context_id")
+      memberships = collator.memberships
+      expect(memberships.map(&:member).map(&:user_id)).to eq([@teacher.reload.lti_context_id])
+    end
+
+    context "course with user that has many enrollments" do
+      before do
+        @course.enroll_user(@teacher, "TaEnrollment", enrollment_state: "active")
+        @course.enroll_user(@teacher, "DesignerEnrollment", enrollment_state: "active")
+        @course.enroll_user(@teacher, "StudentEnrollment", enrollment_state: "active")
+        @course.enroll_user(@teacher, "TeacherEnrollment", enrollment_state: "active")
+        @course.enroll_user(@teacher, "ObserverEnrollment", enrollment_state: "active")
+      end
+
+      it "properly outputs multiple membership roles for membership" do
         collator = CourseLisPersonCollator.new(@course, @teacher)
         memberships = collator.memberships
         membership = memberships[0]
 
         expect(memberships.size).to eq(1)
         expect(membership.role).to match_array([
-          IMS::LIS::Roles::Context::URNs::Instructor,
-          IMS::LIS::Roles::Context::URNs::TeachingAssistant,
-          IMS::LIS::Roles::Context::URNs::ContentDeveloper,
-          IMS::LIS::Roles::Context::URNs::Learner,
-          IMS::LIS::Roles::Context::URNs::Learner_NonCreditLearner
-        ])
+                                                 ::IMS::LIS::Roles::Context::URNs::Instructor,
+                                                 ::IMS::LIS::Roles::Context::URNs::TeachingAssistant,
+                                                 ::IMS::LIS::Roles::Context::URNs::ContentDeveloper,
+                                                 ::IMS::LIS::Roles::Context::URNs::Learner,
+                                                 ::IMS::LIS::Roles::Context::URNs::Learner_NonCreditLearner
+                                               ])
       end
 
-      it 'excludes membership roles for non-active enrollments' do
-        enrollment = @teacher.enrollments.where(type: 'TeacherEnrollment').first
+      it "excludes membership roles for non-active enrollments" do
+        enrollment = @teacher.enrollments.where(type: "TeacherEnrollment").first
         enrollment.deactivate
         collator = CourseLisPersonCollator.new(@course, @teacher)
         memberships = collator.memberships
@@ -135,31 +158,36 @@ module Lti::MembershipService
 
         expect(memberships.size).to eq(1)
         expect(membership.role).to match_array([
-          IMS::LIS::Roles::Context::URNs::TeachingAssistant,
-          IMS::LIS::Roles::Context::URNs::ContentDeveloper,
-          IMS::LIS::Roles::Context::URNs::Learner,
-          IMS::LIS::Roles::Context::URNs::Learner_NonCreditLearner
-        ])
+                                                 ::IMS::LIS::Roles::Context::URNs::TeachingAssistant,
+                                                 ::IMS::LIS::Roles::Context::URNs::ContentDeveloper,
+                                                 ::IMS::LIS::Roles::Context::URNs::Learner,
+                                                 ::IMS::LIS::Roles::Context::URNs::Learner_NonCreditLearner
+                                               ])
       end
     end
-  end
 
-  context 'course with multiple users' do
-    before(:each) do
-      course_with_teacher
-      @course.enroll_user(@teacher, 'TeacherEnrollment', enrollment_state: 'active')
-      @ta = user_model
-      @course.enroll_user(@ta, 'TaEnrollment', enrollment_state: 'active')
-      @designer = user_model
-      @course.enroll_user(@designer, 'DesignerEnrollment', enrollment_state: 'active')
-      @student = user_model
-      @course.enroll_user(@student, 'StudentEnrollment', enrollment_state: 'active')
-      @observer = user_model
-      @course.enroll_user(@observer, 'ObserverEnrollment', enrollment_state: 'active')
-    end
+    context "course with multiple users" do
+      let(:user_sis_id) { "user_sis_id_01" }
 
-    describe '#membership' do
-      it 'outputs the users in a course with their respective roles' do
+      before do
+        @course.enroll_user(@teacher, "TeacherEnrollment", enrollment_state: "active")
+        @ta = user_model
+        @course.enroll_user(@ta, "TaEnrollment", enrollment_state: "active")
+        @designer = user_model
+        @course.enroll_user(@designer, "DesignerEnrollment", enrollment_state: "active")
+        @student = user_with_managed_pseudonym(active_all: true,
+                                               account: @account,
+                                               name: "John St. Clair",
+                                               sortable_name: "St. Clair, John",
+                                               username: "john@stclair.com",
+                                               sis_user_id: user_sis_id,
+                                               integration_id: "int1")
+        @course.enroll_user(@student, "StudentEnrollment", enrollment_state: "active")
+        @observer = user_model
+        @course.enroll_user(@observer, "ObserverEnrollment", enrollment_state: "active")
+      end
+
+      it "outputs the users in a course with their respective roles" do
         collator = CourseLisPersonCollator.new(@course, @teacher)
         memberships = collator.memberships
 
@@ -177,52 +205,64 @@ module Lti::MembershipService
         student = memberships.find { |m| m.member.user_id == @student.lti_context_id }
         observer = memberships.find { |m| m.member.user_id == @observer.lti_context_id }
 
-        expect(teacher.role).to match_array([IMS::LIS::Roles::Context::URNs::Instructor])
-        expect(ta.role).to match_array([IMS::LIS::Roles::Context::URNs::TeachingAssistant])
-        expect(designer.role).to match_array([IMS::LIS::Roles::Context::URNs::ContentDeveloper])
-        expect(student.role).to match_array([IMS::LIS::Roles::Context::URNs::Learner])
-        expect(observer.role).to match_array([IMS::LIS::Roles::Context::URNs::Learner_NonCreditLearner])
+        expect(teacher.role).to match_array([::IMS::LIS::Roles::Context::URNs::Instructor])
+        expect(ta.role).to match_array([::IMS::LIS::Roles::Context::URNs::TeachingAssistant])
+        expect(designer.role).to match_array([::IMS::LIS::Roles::Context::URNs::ContentDeveloper])
+        expect(student.role).to match_array([::IMS::LIS::Roles::Context::URNs::Learner])
+        expect(observer.role).to match_array([::IMS::LIS::Roles::Context::URNs::Learner_NonCreditLearner])
+      end
+
+      it "adds the sis_id to the payload if present" do
+        collator = CourseLisPersonCollator.new(@course, @teacher)
+        memberships = collator.memberships
+
+        @teacher.reload
+        @student.reload
+
+        student = memberships.find { |m| m.member.user_id == @student.lti_context_id }
+
+        expect(student.member.sourced_id).to eq user_sis_id
       end
     end
   end
 
-  context 'pagination' do
-    before(:each) do
+  context "pagination" do
+    before do
       course_with_teacher
-      @course.enroll_user(@teacher, 'TeacherEnrollment', enrollment_state: 'active')
+      @course.enroll_user(@teacher, "TeacherEnrollment", enrollment_state: "active")
       @ta = user_model
-      @course.enroll_user(@ta, 'TaEnrollment', enrollment_state: 'active')
+      @course.enroll_user(@ta, "TaEnrollment", enrollment_state: "active")
       @designer = user_model
-      @course.enroll_user(@designer, 'DesignerEnrollment', enrollment_state: 'active')
+      @course.enroll_user(@designer, "DesignerEnrollment", enrollment_state: "active")
       @student = user_model
-      @course.enroll_user(@student, 'StudentEnrollment', enrollment_state: 'active')
+      @course.enroll_user(@student, "StudentEnrollment", enrollment_state: "active")
       @observer = user_model
-      @course.enroll_user(@observer, 'ObserverEnrollment', enrollment_state: 'active')
+      @course.enroll_user(@observer, "ObserverEnrollment", enrollment_state: "active")
       allow(Api).to receive(:per_page).and_return(1)
     end
 
-    context 'OAuth 1' do
+    context "OAuth 1" do
       subject do
         collator_one.memberships.map(&:member).map(&:user_id) +
-        collator_two.memberships.map(&:member).map(&:user_id) +
-        collator_three.memberships.map(&:member).map(&:user_id)
+          collator_two.memberships.map(&:member).map(&:user_id) +
+          collator_three.memberships.map(&:member).map(&:user_id)
       end
 
       let(:collator_one) { CourseLisPersonCollator.new(@course, @teacher, per_page: 2, page: 1) }
       let(:collator_two) { CourseLisPersonCollator.new(@course, @teacher, per_page: 2, page: 2) }
       let(:collator_three) { CourseLisPersonCollator.new(@course, @teacher, per_page: 2, page: 3) }
 
-      it 'does not render duplicate items when paginating' do
+      it "does not render duplicate items when paginating" do
         expect(subject.length).to eq subject.uniq.length
       end
 
-      it 'paginates the entire collection' do
+      it "paginates the entire collection" do
         expect(subject.length).to eq @course.current_users.length
       end
     end
 
-    describe '#memberships' do
-      it 'returns the number of memberships specified by the per_page params' do
+    describe "#memberships" do
+      it "returns the number of memberships specified by the per_page params" do
         collator = CourseLisPersonCollator.new(@course, @teacher, per_page: 1, page: 1)
 
         expect(collator.memberships.size).to eq(1)
@@ -232,7 +272,7 @@ module Lti::MembershipService
         expect(collator.memberships.size).to eq(3)
       end
 
-      it 'returns the right page of memberships based on the page param' do
+      it "returns the right page of memberships based on the page param" do
         collator1 = CourseLisPersonCollator.new(@course, @teacher, per_page: 1, page: 1)
         collator2 = CourseLisPersonCollator.new(@course, @teacher, per_page: 1, page: 2)
         collator3 = CourseLisPersonCollator.new(@course, @teacher, per_page: 1, page: 3)
@@ -250,16 +290,16 @@ module Lti::MembershipService
       end
     end
 
-    describe '#next_page?' do
-      it 'returns true when there is an additional page of results' do
+    describe "#next_page?" do
+      it "returns true when there is an additional page of results" do
         collator = CourseLisPersonCollator.new(@course, @teacher, per_page: 1, page: 1)
-        expect(collator.next_page?).to eq(true)
+        expect(collator.next_page?).to be(true)
       end
 
-      it 'returns false when there are no more pages' do
+      it "returns false when there are no more pages" do
         collator = CourseLisPersonCollator.new(@course, @teacher, per_page: 1, page: 5)
         collator.memberships
-        expect(collator.next_page?).to eq(false)
+        expect(collator.next_page?).to be(false)
       end
     end
   end

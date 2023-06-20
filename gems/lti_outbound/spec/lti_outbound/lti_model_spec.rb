@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -16,34 +18,36 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'spec_helper'
+require "spec_helper"
 
 describe LtiOutbound::LTIModel do
-  class Dummy < LtiOutbound::LTIModel
-    proc_accessor :attribute
+  let(:dummy) do
+    Class.new(LtiOutbound::LTIModel) do
+      proc_accessor :attribute
+    end
   end
 
-    describe '#proc_accessor' do
-    it 'acts as a regular attr_accessor for assigned values' do
-      model = Dummy.new
-      model.attribute = 'test_value'
-      expect(model.attribute).to eq 'test_value'
+  describe "#proc_accessor" do
+    it "acts as a regular attr_accessor for assigned values" do
+      model = dummy.new
+      model.attribute = "test_value"
+      expect(model.attribute).to eq "test_value"
     end
 
-    it 'handles multiple attributes at once' do
-      Dummy.proc_accessor(:test1, :test2)
+    it "handles multiple attributes at once" do
+      dummy.send(:proc_accessor, :test1, :test2)
     end
 
-    it 'evaluates a proc when assigned a proc' do
-      model = Dummy.new
-      model.attribute = -> { 'test_value' }
-      expect(model.attribute).to eq 'test_value'
+    it "evaluates a proc when assigned a proc" do
+      model = dummy.new
+      model.attribute = -> { "test_value" }
+      expect(model.attribute).to eq "test_value"
     end
 
-    it 'caches the result of the executed proc' do
-      model = Dummy.new
-      obj = double(:message => 'message')
-      model.attribute = -> { obj.message() }
+    it "caches the result of the executed proc" do
+      model = dummy.new
+      obj = double(message: "message")
+      model.attribute = -> { obj.message }
       2.times { model.attribute }
 
       expect(obj).to have_received(:message).once

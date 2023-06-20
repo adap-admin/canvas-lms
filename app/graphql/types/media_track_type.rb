@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -18,7 +20,9 @@
 
 module Types
   class MediaTrackType < ApplicationObjectType
-    graphql_name 'MediaTrack'
+    implements Interfaces::LegacyIDInterface
+
+    graphql_name "MediaTrack"
 
     field :kind, String, null: true
 

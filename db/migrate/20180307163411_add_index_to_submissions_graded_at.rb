@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -21,11 +23,6 @@ class AddIndexToSubmissionsGradedAt < ActiveRecord::Migration[5.0]
   disable_ddl_transaction!
 
   def change
-    # brin indexes are only available on Postgres versions 9.5+
-    if connection.send(:postgresql_version) >= 90500
-      add_index :submissions, :graded_at, algorithm: :concurrently, using: :brin
-    else
-      add_index :submissions, :graded_at, algorithm: :concurrently
-    end
+    add_index :submissions, :graded_at, algorithm: :concurrently, using: :brin
   end
 end

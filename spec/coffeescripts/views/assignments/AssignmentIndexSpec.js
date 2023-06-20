@@ -16,12 +16,15 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import AssignmentGroup from 'compiled/models/AssignmentGroup'
-import Course from 'compiled/models/Course'
-import AssignmentGroupCollection from 'compiled/collections/AssignmentGroupCollection'
-import AssignmentGroupListView from 'compiled/views/assignments/AssignmentGroupListView'
-import IndexView from 'compiled/views/assignments/IndexView'
-import ToggleShowByView from 'compiled/views/assignments/ToggleShowByView'
+import AssignmentGroup from '@canvas/assignments/backbone/models/AssignmentGroup'
+import Course from '@canvas/courses/backbone/models/Course'
+import AssignmentGroupCollection from '@canvas/assignments/backbone/collections/AssignmentGroupCollection'
+import AssignmentGroupListView from 'ui/features/assignment_index/backbone/views/AssignmentGroupListView'
+import AssignmentSettingsView from 'ui/features/assignment_index/backbone/views/AssignmentSettingsView'
+import AssignmentSyncSettingsView from 'ui/features/assignment_index/backbone/views/AssignmentSyncSettingsView'
+import AssignmentGroupWeightsView from 'ui/features/assignment_index/backbone/views/AssignmentGroupWeightsView'
+import IndexView from 'ui/features/assignment_index/backbone/views/IndexView'
+import ToggleShowByView from 'ui/features/assignment_index/backbone/views/ToggleShowByView'
 import $ from 'jquery'
 import fakeENV from 'helpers/fakeENV'
 import assertions from 'helpers/assertions'
@@ -31,31 +34,52 @@ const fixtures = $('#fixtures')
 
 let assignmentGroups = null
 
-function assignmentIndex() {
+function assignmentIndex(opts = {withAssignmentSettings: false}) {
   $('<div id="content"></div>').appendTo(fixtures)
 
   const course = new Course({id: 1})
 
   const group1 = new AssignmentGroup({
     name: 'Group 1',
-    assignments: [{id: 1, name: 'Foo Name'}, {id: 2, name: 'Bar Title'}]
+    assignments: [
+      {id: 1, name: 'Foo Name'},
+      {id: 2, name: 'Bar Title'},
+    ],
   })
   const group2 = new AssignmentGroup({
     name: 'Group 2',
-    assignments: [{id: 1, name: 'Baz Title'}, {id: 2, name: 'Qux Name'}]
+    assignments: [
+      {id: 1, name: 'Baz Title'},
+      {id: 2, name: 'Qux Name'},
+    ],
   })
   assignmentGroups = new AssignmentGroupCollection([group1, group2], {course})
 
+  let assignmentSettingsView = false
+  let assignmentSyncSettingsView = false
+  if (opts.withAssignmentSettings)
+    assignmentSettingsView = new AssignmentSettingsView({
+      model: course,
+      assignmentGroups,
+      weightsView: AssignmentGroupWeightsView,
+      userIsAdmin: true,
+    })
+  assignmentSyncSettingsView = new AssignmentSyncSettingsView({
+    collection: assignmentGroups,
+    model: course,
+    sisName: 'ENV.SIS_NAME',
+  })
+
   const assignmentGroupsView = new AssignmentGroupListView({
     collection: assignmentGroups,
-    course
+    course,
   })
 
   let showByView = false
   if (!ENV.PERMISSIONS.manage) {
     showByView = new ToggleShowByView({
       course,
-      assignmentGroups
+      assignmentGroups,
     })
   }
 
@@ -63,20 +87,22 @@ function assignmentIndex() {
     assignmentGroupsView,
     collection: assignmentGroups,
     createGroupView: false,
-    assignmentSettingsView: false,
-    showByView
+    assignmentSettingsView,
+    assignmentSyncSettingsView,
+    showByView,
+    ...opts,
   })
 
   return app.render()
 }
 
-QUnit.module('assignmentIndex', {
+QUnit.module('AssignmentIndex', {
   setup() {
     fakeENV.setup({
       PERMISSIONS: {manage: true},
       URLS: {
-        assignment_sort_base_url: 'test'
-      }
+        assignment_sort_base_url: 'test',
+      },
     })
     this.enable_spy = sandbox.spy(IndexView.prototype, 'enableSearch')
   },
@@ -85,9 +111,10 @@ QUnit.module('assignmentIndex', {
     fakeENV.teardown()
     assignmentGroups = null
     fixtures.empty()
-  }
+  },
 })
 
+// eslint-disable-next-line qunit/resolve-async
 test('should be accessible', assert => {
   const view = assignmentIndex()
   const done = assert.async()
@@ -120,8 +147,8 @@ test('should enable search on assignmentGroup reset', () => {
   ok(!view.$('#search_term').is(':disabled'))
 })
 
-test('enable search handler should only fire on the first reset', function() {
-  const view = assignmentIndex()
+test('enable search handler should only fire on the first reset', function () {
+  assignmentIndex()
   assignmentGroups.reset()
   ok(this.enable_spy.calledOnce)
   // reset a second time and make sure it was still only called once
@@ -157,7 +184,7 @@ test('should show modules column', () => {
 })
 
 test("should show 'Add Quiz/Test' button if quiz lti is enabled", () => {
-  ENV.PERMISSIONS.manage_assignments = true
+  ENV.PERMISSIONS.manage_assignments_add = true
   ENV.QUIZ_LTI_ENABLED = true
   const view = assignmentIndex()
   const $button = view.$('.new_quiz_lti')
@@ -166,10 +193,15 @@ test("should show 'Add Quiz/Test' button if quiz lti is enabled", () => {
 })
 
 test("should not show 'Add Quiz/Test' button if quiz lti is not enabled", () => {
-  ENV.PERMISSIONS.manage_assignments = true
+  ENV.PERMISSIONS.manage_assignments_add = true
   ENV.QUIZ_LTI_ENABLED = false
   const view = assignmentIndex()
-  equal($('.new_quiz_lti').length, 0)
+  equal(view.$('.new_quiz_lti').length, 0)
+})
+
+test('should contain a drag and drop warning for screen readers', () => {
+  const view = assignmentIndex()
+  equal(view.$('.drag_and_drop_warning').length, 1)
 })
 
 QUnit.module('student index view', {
@@ -177,8 +209,8 @@ QUnit.module('student index view', {
     fakeENV.setup({
       PERMISSIONS: {manage: false},
       URLS: {
-        assignment_sort_base_url: 'test'
-      }
+        assignment_sort_base_url: 'test',
+      },
     })
   },
 
@@ -186,10 +218,15 @@ QUnit.module('student index view', {
     fakeENV.teardown()
     assignmentGroups = null
     fixtures.empty()
-  }
+  },
 })
 
-test('should clear search on toggle', function() {
+test('should not contain a drag and drop warning for screen readers', () => {
+  const view = assignmentIndex()
+  equal(view.$('.drag_and_drop_warning').length, 0)
+})
+
+test('should clear search on toggle', () => {
   const clear_spy = sandbox.spy(IndexView.prototype, 'clearSearch')
   const view = assignmentIndex()
   view.$('#search_term').val('something')
@@ -198,3 +235,34 @@ test('should clear search on toggle', function() {
   equal(view.$('#search_term').val(), '')
   ok(clear_spy.called)
 })
+
+QUnit.module('AssignmentIndex - bulk edit', {
+  setup() {
+    fakeENV.setup({
+      PERMISSIONS: {manage_assignments: true},
+    })
+  },
+
+  teardown() {
+    fakeENV.teardown()
+    fixtures.empty()
+  },
+})
+
+test('it should show bulk edit menu', () => {
+  const view = assignmentIndex({withAssignmentSettings: true})
+  equal(view.$('#requestBulkEditMenuItem').length, 1)
+})
+
+// If we actually try to render the bulk edit interface, we have to wait for the
+// interface to load and then mock the fetch and wait for that. Not worth it for
+// now.
+QUnit.skip(
+  'it should show only the bulk edit interface when the bulk edit menu item is clicked',
+  () => {
+    const view = assignmentIndex({withAssignmentSettings: true})
+    view.$('#requestBulkEditMenuItem')[0].click()
+    equal(view.$('#bulkEditRoot').length, 1)
+    equal(view.$('.header-bar').length, 0)
+  }
+)

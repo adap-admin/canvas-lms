@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -26,6 +28,7 @@ require "active_support/core_ext/module/aliasing"
 
 module I18nliner
   class HtmlTagsInDefaultTranslationError < ExtractionError; end
+
   class AmbiguousTranslationKeyError < ExtractionError; end
 end
 
@@ -34,27 +37,27 @@ module I18nExtraction; end
 module I18nExtraction::Extensions
   module TranslateCall
     def validate_default
-      if @default.is_a?(String)
-        if @default =~ /<[a-z][a-z0-9]*[> \/]/i
-          raise I18nliner::HtmlTagsInDefaultTranslationError.new(@line, @default)
-        end
+      if @default.is_a?(String) && %r{<[a-z][a-z0-9]*[> /]}i.match?(@default)
+        raise I18nliner::HtmlTagsInDefaultTranslationError.new(@line, @default)
       end
+
       super
     end
 
     def validate_key
       if @scope.root? &&
-        !@meta[:explicit_receiver] &&
-        !@options[:i18nliner_inferred_key] &&
-        key !~ I18nliner::Scope::ABSOLUTE_KEY
+         !@meta[:explicit_receiver] &&
+         !@options[:i18nliner_inferred_key] &&
+         key !~ I18nliner::Scope::ABSOLUTE_KEY
         raise I18nliner::AmbiguousTranslationKeyError.new(@line, @key)
       end
+
       super
     end
   end
 
   module RubyExtractor
-    LABEL_CALLS = [:label, :blabel, :label_tag, :_label_symbol_translation, :before_label].freeze
+    LABEL_CALLS = %i[label blabel label_tag _label_symbol_translation before_label].freeze
     CANVAS_TRANSLATE_CALLS = [:mt, :ot].freeze
     ALL_CALLS = (I18nliner::Extractors::RubyExtractor::TRANSLATE_CALLS +
       LABEL_CALLS + CANVAS_TRANSLATE_CALLS +
@@ -66,7 +69,7 @@ module I18nExtraction::Extensions
       # needs to run RubyParser on the source
       def pattern
         @pattern ||= begin
-          calls = (I18nliner::Extractors::RubyExtractor::TRANSLATE_CALLS + LABEL_CALLS).map{ |c| Regexp.escape(c.to_s) }
+          calls = (I18nliner::Extractors::RubyExtractor::TRANSLATE_CALLS + LABEL_CALLS).map { |c| Regexp.escape(c.to_s) }
           /(^|\W)(#{calls.join('|')})(\W|$)/
         end
       end
@@ -81,7 +84,7 @@ module I18nExtraction::Extensions
       # automagically scope our plugin `-> { t ... }` stuff
       call_scope = @scope
       if exp[1] && exp[1].last == :Plugin && exp[2] == :register &&
-        exp[3] && [:lit, :str].include?(exp[3].sexp_type)
+         exp[3] && [:lit, :str].include?(exp[3].sexp_type)
         call_scope = I18nliner::Scope.new("plugins.#{exp[3].last}")
       end
 
@@ -104,6 +107,7 @@ module I18nExtraction::Extensions
     def extractable_call?(receiver, method)
       return false unless ALL_CALLS.include?(method)
       return false if ALL_CALLS.include?(current_defn)
+
       (receiver.nil? || receiver == :I18n || LABEL_CALLS.include?(method))
     end
 
@@ -140,18 +144,18 @@ module I18nExtraction::Extensions
       default = nil
       key = args.shift
       # these can have an optional explicit key arg
-      if [:label, :blabel, :label_tag].include?(method) && (args[0].is_a?(Symbol) || args[0].is_a?(String))
+      if %i[label blabel label_tag].include?(method) && (args[0].is_a?(Symbol) || args[0].is_a?(String))
         key = args.shift
       end
 
       if method == :before_label
         default = args.first
       elsif args.first.is_a?(Hash)
-        default = args.first['en'] || args.first[:en]
+        default = args.first["en"] || args.first[:en]
       end
 
       if key && default
-        key = "labels.#{key}" unless key =~ I18nliner::Scope::ABSOLUTE_KEY
+        key = "labels.#{key}" unless I18nliner::Scope::ABSOLUTE_KEY.match?(key)
         process_translate_call(nil, :t, [key, default])
       end
     end
@@ -163,18 +167,18 @@ module I18nExtraction::Extensions
   # config/initializers/i18n.rb for runtime counterparts
 
   module RubyProcessor
-    STI_SUPERCLASSES = (`grep '^class.*<' ./app/models/*rb|grep -v '::'|sed 's~.*< ~~'|sort|uniq`.
-      split("\n") - ['OpenStruct', 'Tableless']).
-      map(&:underscore).freeze
+    STI_SUPERCLASSES = (`grep '^class.*<' ./app/models/*rb|grep -v '::'|sed 's~.*< ~~'|sort|uniq`
+      .split("\n") - ["OpenStruct"])
+                       .map(&:underscore).freeze
 
     def scope_for(filename)
       scope = case filename
-              when /app\/controllers\//
-                scope = filename.gsub(/.*app\/controllers\/|_controller\.rb/, '').gsub(/\/_?/, '.')
-                scope == 'application.' ? '' : scope
-              when /app\/models\//
-                scope = filename.gsub(/.*app\/models\/|\.rb/, '')
-                STI_SUPERCLASSES.include?(scope) ? '' : scope
+              when %r{app/controllers/}
+                scope = filename.gsub(%r{.*app/controllers/|_controller\.rb}, "").gsub(%r{/_?}, ".")
+                (scope == "application.") ? "" : scope
+              when %r{app/models/}
+                scope = filename.gsub(%r{.*app/models/|\.rb}, "")
+                STI_SUPERCLASSES.include?(scope) ? "" : scope
               end
       I18nliner::Scope.new scope
     end
@@ -184,13 +188,13 @@ module I18nExtraction::Extensions
     def scope_for(filename)
       remove_whitespace = true
       scope = case filename
-              when /app\/messages\//
-                remove_whitespace = false unless filename =~ /html/
-                filename.gsub(/.*app\/|\.erb/, '').gsub(/\/_?/, '.')
-              when /app\/views\//
-                filename.gsub(/.*app\/views\/|\.(html\.|fbml\.)?erb\z/, '').gsub(/\/_?/, '.')
+              when %r{app/messages/}
+                remove_whitespace = false unless filename.include?("html")
+                filename.gsub(%r{.*app/|\.erb}, "").gsub(%r{/_?}, ".")
+              when %r{app/views/}
+                filename.gsub(%r{.*app/views/|\.(html\.|fbml\.)?erb\z}, "").gsub(%r{/_?}, ".")
               end
-      I18nliner::Scope.new scope, remove_whitespace: remove_whitespace
+      I18nliner::Scope.new scope, remove_whitespace:
     end
   end
 end

@@ -17,7 +17,8 @@
  */
 
 import $ from 'jquery'
-import ValidatedMixin from 'compiled/views/ValidatedMixin'
+import ValidatedMixin from '@canvas/forms/backbone/views/ValidatedMixin'
+import RichContentEditor from '@canvas/rce/RichContentEditor'
 
 let textarea = null
 
@@ -30,18 +31,23 @@ QUnit.module('ValidatedMixin', {
   teardown() {
     textarea.remove()
     $('#fixtures').empty()
-  }
+  },
 })
 
-test('it can find tinymce instances as fields', (assert) => {
-
+test('it can find tinymce instances as fields', assert => {
   const done = assert.async()
-  tinymce.init({
-    selector: '#fixtures textarea#a42',
-    }).then(() => {
-      const element = ValidatedMixin.findField('message')
-      equal(element.length, 1)
-      done()
-    })
 
+  RichContentEditor.loadNewEditor($('#a42'), {}, () => {
+    // eslint-disable-next-line promise/catch-or-return
+    tinymce
+      .init({
+        selector: '#fixtures textarea#a42',
+      })
+      .then(() => {
+        const element = ValidatedMixin.findField('message')
+        equal(element.length, 1)
+        // eslint-disable-next-line promise/no-callback-in-promise
+        done()
+      })
+  })
 })

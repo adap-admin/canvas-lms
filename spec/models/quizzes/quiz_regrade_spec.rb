@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -15,10 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'spec_helper'
-
 describe Quizzes::QuizRegrade do
-
   around do |example|
     Timecop.freeze(Time.zone.local(2013), &example)
   end
@@ -28,7 +27,6 @@ describe Quizzes::QuizRegrade do
   end
 
   describe "relationships" do
-
     it "belongs to a quiz" do
       expect(Quizzes::QuizRegrade.new).to respond_to :quiz
     end
@@ -36,7 +34,6 @@ describe Quizzes::QuizRegrade do
     it "belongs to a user" do
       expect(Quizzes::QuizRegrade.new).to respond_to :user
     end
-
   end
 
   describe "validations" do
@@ -45,18 +42,17 @@ describe Quizzes::QuizRegrade do
     end
 
     it "validates presence of user id" do
-      expect(Quizzes::QuizRegrade.new(quiz_id: 1,user_id: nil)).not_to be_valid
+      expect(Quizzes::QuizRegrade.new(quiz_id: 1, user_id: nil)).not_to be_valid
     end
 
     it "validates presence of quiz_version" do
-      expect(Quizzes::QuizRegrade.new(quiz_id: 1, user_id: 1, quiz_version: nil)).
-        not_to be_valid
+      expect(Quizzes::QuizRegrade.new(quiz_id: 1, user_id: 1, quiz_version: nil))
+        .not_to be_valid
     end
 
     it "is valid when all required attributes are present" do
-      expect(Quizzes::QuizRegrade.new(quiz_id: 1, user_id: 1, quiz_version: 1)).
-        to be_valid
+      expect(Quizzes::QuizRegrade.new(quiz_id: 1, user_id: 1, quiz_version: 1))
+        .to be_valid
     end
   end
 end
-

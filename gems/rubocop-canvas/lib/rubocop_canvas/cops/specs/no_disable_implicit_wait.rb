@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -20,14 +22,15 @@ module RuboCop
     module Specs
       class NoDisableImplicitWait < Cop
         MSG = "Avoid using disable_implicit_wait.\n" \
-              "Look through custom_selenium_rspec_matchers.rb" \
-              " and custom_wait_methods.rb.".freeze
+              "Look through custom_selenium_rspec_matchers.rb " \
+              "and custom_wait_methods.rb."
 
         METHOD = :disable_implicit_wait
 
         def on_send(node)
           _receiver, method_name, *_args = *node
           return unless method_name == METHOD
+
           add_offense node, message: MSG, severity: :warning
         end
       end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -17,14 +19,14 @@
 #
 
 module Factories
-  def folder_model(opts={})
+  def folder_model(opts = {})
     @folder = factory_with_protected_attributes(Folder, valid_folder_attributes.merge(opts))
   end
 
   def valid_folder_attributes
     {
-      :name => 'vale for name',
-      :context => @course
+      name: "vale for name",
+      context: @course
     }
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -18,6 +20,8 @@
 
 class PageView
   class Pv4Client
+    class Pv4Timeout < StandardError; end
+
     def initialize(uri, access_token)
       uri = URI.parse(uri) if uri.is_a?(String)
       @uri, @access_token = uri, access_token
@@ -25,39 +29,43 @@ class PageView
 
     PRECISION = 3
 
-    def fetch(user_id, start_time: nil,
+    def fetch(user_id,
+              start_time: nil,
               end_time: Time.now.utc,
               last_page_view_id: nil,
               limit: nil)
       end_time ||= Time.now.utc
       start_time ||= Time.at(0).utc
 
-      params = "start_time=#{start_time.utc.iso8601(PRECISION)}"
+      params = +"start_time=#{start_time.utc.iso8601(PRECISION)}"
       params << "&end_time=#{end_time.utc.iso8601(PRECISION)}"
       params << "&last_page_view_id=#{last_page_view_id}" if last_page_view_id
       params << "&limit=#{limit}" if limit
       response = CanvasHttp.get(
         @uri.merge("users/#{user_id}/page_views?#{params}").to_s,
-        "Authorization" => "Bearer #{@access_token}"
+        { "Authorization" => "Bearer #{@access_token}" }
       )
 
       json = JSON.parse(response.body)
-      raise response.body unless json['page_views']
-      json['page_views'].map! do |pv|
-        pv['session_id'] = pv.delete('sessionid')
-        pv['url'] = "#{HostUrl.protocol}://#{pv.delete('vhost')}#{pv.delete('http_request')}"
-        pv['context_id'] = pv.delete('canvas_context_id')
-        pv['context_type'] = pv.delete('canvas_context_type')
-        pv['updated_at'] = pv['created_at'] = pv.delete('timestamp')
-        pv['user_agent'] = pv.delete('agent')
-        pv['account_id'] = pv.delete('root_account_id')
-        pv['remote_ip'] = pv.delete('client_ip')
-        pv['render_time'] = pv.delete('microseconds').to_f / 1_000_000
-        pv['http_method'].try(:downcase!)
-        pv['developer_key_id'] = pv.delete('developer_key_id')
+      raise response.body unless json["page_views"]
+
+      json["page_views"].map! do |pv|
+        pv["session_id"] = pv.delete("sessionid")
+        pv["url"] = "#{HostUrl.protocol}://#{pv.delete("vhost")}#{pv.delete("http_request")}"
+        pv["context_id"] = pv.delete("canvas_context_id")
+        pv["context_type"] = pv.delete("canvas_context_type")
+        pv["updated_at"] = pv["created_at"] = pv.delete("timestamp")
+        pv["user_agent"] = pv.delete("agent")
+        pv["account_id"] = pv.delete("root_account_id")
+        pv["remote_ip"] = pv.delete("client_ip")
+        pv["render_time"] = pv.delete("microseconds").to_f / 1_000_000
+        pv["http_method"].try(:downcase!)
+        pv["developer_key_id"] = pv.delete("developer_key_id")
 
         PageView.from_attributes(pv)
       end
+    rescue Net::ReadTimeout
+      raise Pv4Timeout, "failed to load page view history due to service timeout"
     end
 
     def for_user(user_id, oldest: nil, newest: nil)
@@ -69,10 +77,10 @@ class PageView
           newest = Time.zone.parse(end_time)
         end
         pager.replace(fetch(user_id,
-              start_time: oldest,
-              end_time: newest,
-              last_page_view_id: last_page_view_id,
-              limit: pager.per_page))
+                            start_time: oldest,
+                            end_time: newest,
+                            last_page_view_id:,
+                            limit: pager.per_page))
         pager.has_more! unless pager.empty?
         pager
       end

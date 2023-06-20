@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -16,37 +18,34 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../api_spec_helper')
-require_dependency "lti/ims/authorization_controller"
-require 'json/jwt'
+require_relative "../../api_spec_helper"
 
 module Lti
-  module Ims
+  module IMS
     describe AuthorizationController, type: :request do
-
       let(:account) { Account.create! }
 
-      let(:developer_key) { DeveloperKey.create!(redirect_uri: 'http://example.com/redirect') }
+      let(:developer_key) { DeveloperKey.create!(redirect_uri: "http://example.com/redirect") }
 
       let(:product_family) do
         ProductFamily.create(
-          vendor_code: '123',
-          product_code: 'abc',
-          vendor_name: 'acme',
+          vendor_code: "123",
+          product_code: "abc",
+          vendor_name: "acme",
           root_account: account,
-          developer_key: developer_key
+          developer_key:
         )
       end
       let(:tool_proxy) do
         ToolProxy.create!(
           context: account,
           guid: SecureRandom.uuid,
-          shared_secret: 'abc',
-          product_family: product_family,
-          product_version: '1',
-          workflow_state: 'active',
-          raw_data: {'enabled_capability' => ['Security.splitSecret']},
-          lti_version: '1'
+          shared_secret: "abc",
+          product_family:,
+          product_version: "1",
+          workflow_state: "active",
+          raw_data: { "enabled_capability" => ["Security.splitSecret"] },
+          lti_version: "1"
         )
       end
 
@@ -69,104 +68,102 @@ module Lti
       end
       let(:params) do
         {
-          grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+          grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
           assertion: jwt_string
         }
       end
 
       describe "POST 'authorize'" do
-
-        it 'responds with 200' do
-          post auth_endpoint, params: params
-          expect(response.code).to eq '200'
+        it "responds with 200" do
+          post(auth_endpoint, params:)
+          expect(response).to have_http_status :ok
         end
 
-        it 'includes an expiration' do
-          Setting.set('lti.oauth2.access_token.expiration', 1.hour.to_s)
-          post auth_endpoint, params: params
-          expect(JSON.parse(response.body)['expires_in']).to eq 1.hour.to_s
+        it "includes an expiration" do
+          Setting.set("lti.oauth2.access_token.expiration", 1.hour.to_s)
+          post(auth_endpoint, params:)
+          expect(JSON.parse(response.body)["expires_in"]).to eq 1.hour.to_s
         end
 
-        it 'has a token_type of bearer' do
-          post auth_endpoint, params: params
-          expect(JSON.parse(response.body)['token_type']).to eq 'bearer'
+        it "has a token_type of bearer" do
+          post(auth_endpoint, params:)
+          expect(JSON.parse(response.body)["token_type"]).to eq "bearer"
         end
 
-        it 'returns an access_token' do
-          post auth_endpoint, params: params
-          access_token = Lti::Oauth2::AccessToken.create_jwt(aud: @request.host, sub: tool_proxy.guid)
+        it "returns an access_token" do
+          post(auth_endpoint, params:)
+          access_token = Lti::OAuth2::AccessToken.create_jwt(aud: @request.host, sub: tool_proxy.guid)
           expect { access_token.validate! }.not_to raise_error
         end
 
         it "allows the use of the 'OAuth.splitSecret'" do
-          tool_proxy.raw_data['enabled_capability'].delete('Security.splitSecret')
-          tool_proxy.raw_data['enabled_capability'] << 'OAuth.splitSecret'
+          tool_proxy.raw_data["enabled_capability"].delete("Security.splitSecret")
+          tool_proxy.raw_data["enabled_capability"] << "OAuth.splitSecret"
           tool_proxy.save!
-          post auth_endpoint, params: params
-          expect(response.code).to eq '200'
+          post(auth_endpoint, params:)
+          expect(response).to have_http_status :ok
         end
 
         it "renders a 400 if the JWT format is invalid" do
-          params[:assertion] = '12ad3.4fgs56'
-          post auth_endpoint, params: params
-          expect(response.code).to eq '400'
+          params[:assertion] = "12ad3.4fgs56"
+          post(auth_endpoint, params:)
+          expect(response).to have_http_status :bad_request
         end
 
         it "renders a the correct json if the grant_type is invalid" do
-          params[:assertion] = '12ad3.4fgs56'
-          post auth_endpoint, params: params
-          expect(response.body).to eq({error: 'invalid_grant'}.to_json)
+          params[:assertion] = "12ad3.4fgs56"
+          post(auth_endpoint, params:)
+          expect(response.body).to eq({ error: "invalid_grant" }.to_json)
         end
 
         it "adds the file_host and the request host to the aud" do
-          post auth_endpoint, params: params
+          post(auth_endpoint, params:)
           file_host, _ = HostUrl.file_host_with_shard(@domain_root_account || Account.default, request.host_with_port)
           jwt = JSON::JWT.decode(JSON.parse(response.body)["access_token"], :skip_verification)
           expect(jwt["aud"]).to match_array [request.host, file_host]
         end
 
-        context 'when the account has a vanity domain' do
+        context "when the account has a vanity domain" do
           subject do
-            post auth_endpoint, params: params
+            post(auth_endpoint, params:)
             JSON::JWT.decode(JSON.parse(response.body)["access_token"], :skip_verification)
           end
 
-          let(:vanity_domain) { 'canvas.school.com' }
+          let(:vanity_domain) { "canvas.school.com" }
 
           before do
             allow(HostUrl).to receive(:context_hosts).and_return([vanity_domain])
           end
 
-          it 'includes both domains in the aud' do
-            expect(subject['aud']).to match_array [
-              'www.example.com',
-              'localhost',
-              'canvas.school.com'
+          it "includes both domains in the aud" do
+            expect(subject["aud"]).to match_array [
+              "www.example.com",
+              "localhost",
+              "canvas.school.com"
             ]
           end
         end
 
-        context 'error reports' do
-          it 'creates an error report with error as the message' do
-            params[:assertion] = '12ad3.4fgs56'
-            post auth_endpoint, params: params
-            expect(ErrorReport.last.message).to eq 'Invalid JWT Format. JWT should include 3 or 5 segments.'
+        context "error reports" do
+          it "creates an error report with error as the message" do
+            params[:assertion] = "12ad3.4fgs56"
+            post(auth_endpoint, params:)
+            expect(ErrorReport.last.message).to eq "Invalid JWT Format. JWT should include 3 or 5 segments."
           end
 
-          it 'sets the error report category' do
-            params[:assertion] = '12ad3.4fgs56'
-            post auth_endpoint, params: params
-            expect(ErrorReport.last.category).to eq 'JSON::JWT::InvalidFormat'
+          it "sets the error report category" do
+            params[:assertion] = "12ad3.4fgs56"
+            post(auth_endpoint, params:)
+            expect(ErrorReport.last.category).to eq "JSON::JWT::InvalidFormat"
           end
         end
 
         context "reg_key" do
-
           let(:reg_key) { SecureRandom.uuid }
 
           let(:reg_password) { SecureRandom.uuid }
 
-          let(:registration_url) { 'http://example.com/register' }
+          let(:registration_url) { "http://example.com/register" }
 
           let(:raw_jwt) do
             RegistrationRequestService.cache_registration(account, reg_key, reg_password, registration_url)
@@ -188,21 +185,20 @@ module Lti
 
           let(:params) do
             {
-              grant_type: 'authorization_code',
+              grant_type: "authorization_code",
               assertion: jwt_string,
             }
           end
 
-          it 'accepts a valid reg_key' do
+          it "accepts a valid reg_key" do
             enable_cache do
-              post auth_endpoint, params: params
-              expect(response.code).to eq '200'
+              post(auth_endpoint, params:)
+              expect(response).to have_http_status :ok
             end
           end
         end
 
         context "developer credentials" do
-
           let(:raw_jwt) do
             raw_jwt = JSON::JWT.new(
               {
@@ -222,25 +218,22 @@ module Lti
 
           let(:params) do
             {
-              grant_type: 'authorization_code',
+              grant_type: "authorization_code",
               assertion: jwt_string,
-              code: 'reg_key'
+              code: "reg_key"
             }
           end
 
           it "rejects the request if a valid reg_key isn't provided and grant_type is auth code" do
             post auth_endpoint, params: params.delete(:code)
-            expect(response.code).to eq '400'
+            expect(response).to have_http_status :bad_request
           end
 
           it "accepts a developer key with a reg key" do
-            post auth_endpoint, params: params
-            expect(response.code).to eq '200'
+            post(auth_endpoint, params:)
+            expect(response).to have_http_status :ok
           end
-
-
         end
-
       end
     end
   end

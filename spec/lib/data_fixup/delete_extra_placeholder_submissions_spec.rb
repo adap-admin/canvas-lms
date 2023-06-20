@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -16,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'spec_helper'
-
 describe DataFixup::DeleteExtraPlaceholderSubmissions do
   before(:once) do
     course_with_student
@@ -26,14 +26,14 @@ describe DataFixup::DeleteExtraPlaceholderSubmissions do
 
   it "soft-deletes a submission that no longer has visibility" do
     @assignment.update_column(:only_visible_to_overrides, true)
-    expect {
+    expect do
       DataFixup::DeleteExtraPlaceholderSubmissions.run
-    }.to change { Submission.active.count }.from(1).to(0)
+    end.to change { Submission.active.count }.from(1).to(0)
   end
 
   it "does not soft-delete a submission that is still visible" do
-    expect {
+    expect do
       DataFixup::DeleteExtraPlaceholderSubmissions.run
-    }.not_to change { Submission.active.count }
+    end.not_to change { Submission.active.count }
   end
 end

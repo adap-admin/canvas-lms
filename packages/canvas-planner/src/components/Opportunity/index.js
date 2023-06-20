@@ -15,19 +15,18 @@
  * You should have received a copy of the GNU Affero General Public License along
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-import React, { Component } from 'react';
-import {themeable} from '@instructure/ui-themeable'
-import {animatable} from '../../dynamic-ui';
-import formatMessage from '../../format-message';
-import moment from 'moment-timezone';
-import { getFullDateAndTime } from '../../utilities/dateUtils';
-import {Button} from '@instructure/ui-buttons'
-import {Pill} from '@instructure/ui-elements'
-import {PresentationContent, ScreenReaderContent} from '@instructure/ui-a11y'
+import React, {Component} from 'react'
+import moment from 'moment-timezone'
+import {IconButton} from '@instructure/ui-buttons'
+import {Pill} from '@instructure/ui-pill'
+import {Link} from '@instructure/ui-link'
+import {PresentationContent, ScreenReaderContent} from '@instructure/ui-a11y-content'
 import {IconXLine} from '@instructure/ui-icons'
-import { bool, string, number, func, object } from 'prop-types';
-import styles from './styles.css';
-import theme from './theme.js';
+import {string, bool, number, func, object} from 'prop-types'
+import {getFullDateAndTime} from '../../utilities/dateUtils'
+import formatMessage from '../../format-message'
+import {animatable} from '../../dynamic-ui'
+import buildStyle from './style'
 
 export class Opportunity extends Component {
   static propTypes = {
@@ -43,13 +42,15 @@ export class Opportunity extends Component {
     registerAnimatable: func,
     deregisterAnimatable: func,
     animatableIndex: number,
+    isObserving: bool,
   }
 
-  constructor (props) {
-    super(props);
+  constructor(props) {
+    super(props)
 
-    const tzMomentizedDate = moment.tz(props.dueAt, props.timeZone);
-    this.fullDate = getFullDateAndTime(tzMomentizedDate);
+    const tzMomentizedDate = moment.tz(props.dueAt, props.timeZone)
+    this.fullDate = getFullDateAndTime(tzMomentizedDate)
+    this.style = buildStyle()
   }
 
   static defaultProps = {
@@ -58,26 +59,25 @@ export class Opportunity extends Component {
     dismiss: () => {},
   }
 
-  componentDidMount () {
-    this.props.registerAnimatable('opportunity', this, this.props.animatableIndex, [this.props.id]);
+  componentDidMount() {
+    this.props.registerAnimatable('opportunity', this, this.props.animatableIndex, [this.props.id])
   }
 
-  componentWillReceiveProps (newProps) {
-    this.props.deregisterAnimatable('opportunity', this, [this.props.id]);
-    this.props.registerAnimatable('opportunity', this, newProps.animatableIndex, [newProps.id]);
+  UNSAFE_componentWillReceiveProps(newProps) {
+    this.props.deregisterAnimatable('opportunity', this, [this.props.id])
+    this.props.registerAnimatable('opportunity', this, newProps.animatableIndex, [newProps.id])
   }
 
-  componentWillUnmount () {
-    this.props.deregisterAnimatable('opportunity', this, [this.props.id]);
+  componentWillUnmount() {
+    this.props.deregisterAnimatable('opportunity', this, [this.props.id])
   }
 
-
-  linkRef = (ref) => {
-    this.link = ref;
+  linkRef = ref => {
+    this.link = ref
   }
 
-  getFocusable () {
-    return this.link;
+  getFocusable() {
+    return this.link
   }
 
   dismiss = () => {
@@ -86,82 +86,80 @@ export class Opportunity extends Component {
     }
   }
 
-  renderButton () {
-    const isDismissed = this.props.plannerOverride && this.props.plannerOverride.dismissed;
+  renderButton() {
+    const isDismissed = this.props.plannerOverride && this.props.plannerOverride.dismissed
     return (
-      <div className={styles.close}>
-        {isDismissed ? null : (
-          <Button
+      <div className={this.style.classNames.close}>
+        {isDismissed || this.props.isObserving ? null : (
+          <IconButton
             onClick={this.dismiss}
-            variant="icon"
-            icon={IconXLine}
+            renderIcon={IconXLine}
+            withBorder={false}
+            withBackground={false}
             size="small"
-            title={formatMessage("Dismiss {opportunityName}", {opportunityName: this.props.opportunityTitle})}
-          >
-            <ScreenReaderContent>
-              {formatMessage("Dismiss {opportunityName}", {opportunityName: this.props.opportunityTitle})}
-            </ScreenReaderContent>
-          </Button>
+            screenReaderLabel={formatMessage('Dismiss {opportunityName}', {
+              opportunityName: this.props.opportunityTitle,
+            })}
+          />
         )}
       </div>
-    );
+    )
   }
 
-  renderPoints () {
+  renderPoints() {
     if (typeof this.props.points !== 'number') {
       return (
         <ScreenReaderContent>
           {formatMessage('There are no points associated with this item')}
         </ScreenReaderContent>
-      );
+      )
     }
     return (
-      <div className={styles.points}>
+      <div className={this.style.classNames.points}>
         <ScreenReaderContent>
-            {formatMessage("{points} points", {points: this.props.points})}
+          {formatMessage('{points} points', {points: this.props.points})}
         </ScreenReaderContent>
         <PresentationContent>
-          <span className={styles.pointsNumber}>
-            {this.props.points}
-          </span>
-          {formatMessage("points")}
+          <span className={this.style.classNames.pointsNumber}>{this.props.points}</span>
+          {formatMessage('points')}
         </PresentationContent>
       </div>
-    );
+    )
   }
 
-  render () {
+  render = () => {
     return (
-      <div className={styles.root}>
-        <div className={styles.oppNameAndTitle}>
-          <div className={styles.oppName}>
-            {this.props.courseName}
-          </div>
-          <div className={styles.title}>
-            <Button
-              variant="link"
-              theme={{mediumPadding: '0', mediumHeight: 'normal'}}
-              href={this.props.url}
-              buttonRef={this.linkRef}
+      <>
+        <style>{this.style.css}</style>
+        <div className={this.style.classNames.root}>
+          <div className={this.style.classNames.oppNameAndTitle}>
+            <div className={this.style.classNames.oppName}>{this.props.courseName}</div>
+            <div className={this.style.classNames.title}>
+              <Link
+                isWithinText={false}
+                theme={{mediumPaddingHorizontal: '0', mediumHeight: 'normal'}}
+                href={this.props.url}
+                elementRef={this.linkRef}
               >
                 {this.props.opportunityTitle}
-              </Button>
-          </div>
-        </div>
-        <div className={styles.footer}>
-          <div className={styles.status}>
-            <Pill text={formatMessage('Missing')} variant="danger"/>
-            <div className={styles.due}>
-              <span className={styles.dueText}>
-                {formatMessage('Due:')}</span> {this.fullDate}
+              </Link>
             </div>
           </div>
-          {this.renderPoints()}
+          <div className={this.style.classNames.footer}>
+            <div className={this.style.classNames.status}>
+              <Pill color="danger">{formatMessage('Missing')}</Pill>
+              <div className={this.style.classNames.due}>
+                <span className={this.style.classNames.dueText}>{formatMessage('Due:')}</span>{' '}
+                {this.fullDate}
+              </div>
+            </div>
+            {this.renderPoints()}
+          </div>
+          {this.renderButton()}
         </div>
-        {this.renderButton()}
-      </div>
-    );
+      </>
+    )
   }
 }
 
-export default animatable(themeable(theme, styles)(Opportunity));
+export default animatable(Opportunity)

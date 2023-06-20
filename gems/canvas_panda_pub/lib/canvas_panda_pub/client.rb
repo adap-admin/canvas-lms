@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -16,31 +18,34 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'uri'
-require 'jwt'
-require 'json'
+require "uri"
+require "json"
+require "time"
+# the only reason we need 'time' here is because 'json/jwt' requires 'active_support/core_ext',
+# https://github.com/nov/json-jwt/blob/master/lib/json/jwt.rb#L4, which is unsafe until we're
+# on a version of active_support that includes https://github.com/rails/rails/pull/40859
+require "json/jwt"
 
 module CanvasPandaPub
-
   # Public: Used for sending pushes to PandaPub channels and generating PandaPub
   # tokens to send to clients.
 
   class Client
     def self.config
       res = CanvasPandaPub.plugin_settings.try(:settings)
-      return nil unless res && res['base_url'] && res['application_id'] &&
-                               res['key_id'] && res['key_secret']
+      return nil unless res && res["base_url"] && res["application_id"] &&
+                        res["key_id"] && res["key_secret"]
 
-      res['push_url'] = res['base_url'].chomp("/") + "/push"
+      res["push_url"] = res["base_url"].chomp("/") + "/push"
       res.dup
     end
 
     def initialize
       config = CanvasPandaPub::Client.config
-      @base_url = config['base_url']
-      @application_id = config['application_id']
-      @key_id = config['key_id']
-      @key_secret = config['key_secret']
+      @base_url = config["base_url"]
+      @application_id = config["application_id"]
+      @key_id = config["key_id"]
+      @key_secret = config["key_secret"]
       @logger = CanvasPandaPub.logger
       @worker = CanvasPandaPub.worker
       @uri = URI.parse(@base_url)
@@ -68,8 +73,8 @@ module CanvasPandaPub
     def post_update(channel, payload)
       path = "/channel/#{@application_id}#{channel}"
       request = Net::HTTP::Post.new(path, {
-        "Content-Type" => "application/json"
-      })
+                                      "Content-Type" => "application/json"
+                                    })
       request.basic_auth @key_id, @key_secret
 
       body = JSON.dump(payload)
@@ -77,7 +82,7 @@ module CanvasPandaPub
       http = Net::HTTP.new(@uri.host, @uri.port)
       http.use_ssl = (@uri.scheme == "https")
 
-      unless @worker.push(channel, Proc.new { http.request(request, body) })
+      unless @worker.push(channel, proc { http.request(request, body) })
         @logger.warn("dropped pandapub notification for #{channel}")
       end
     end
@@ -93,13 +98,13 @@ module CanvasPandaPub
     # Returns a String token.
 
     def generate_token(channel, read = false, write = false, expires = 1.hour.from_now)
-      JWT.encode({
-        keyId: @key_id,
-        channel: "/#{@application_id}#{channel}",
-        pub: write,
-        sub: read,
-        exp: expires.to_i
-      }, @key_secret)
+      JSON::JWT.new({
+                      keyId: @key_id,
+                      channel: "/#{@application_id}#{channel}",
+                      pub: write,
+                      sub: read,
+                      exp: expires.to_i
+                    }).sign(@key_secret, "HS256").to_s
     end
   end
 end

@@ -17,20 +17,14 @@
  */
 
 import React from 'react'
-import {arrayOf, func, instanceOf, shape} from 'prop-types'
-import {Flex} from '@instructure/ui-layout'
+import {arrayOf, func, instanceOf, shape, bool, string} from 'prop-types'
+import {Flex} from '@instructure/ui-flex'
 
 import Image from './Image'
 
-export default function ImageList({images, lastItemRef, onImageClick}) {
+export default function ImageList({images, lastItemRef, onImageClick, isIconMaker, canvasOrigin}) {
   return (
-    <Flex
-      justifyItems="start"
-      height="100%"
-      margin="xx-small"
-      padding="small"
-      wrapItems
-    >
+    <Flex justifyItems="start" height="100%" margin="xx-small" padding="small" wrap="wrap">
       {images.map((image, index) => {
         let focusRef = null
         if (index === images.length - 1) {
@@ -44,7 +38,13 @@ export default function ImageList({images, lastItemRef, onImageClick}) {
             margin="xx-small xx-small small xx-small"
             size="6rem"
           >
-            <Image focusRef={focusRef} image={image} onClick={onImageClick} />
+            <Image
+              focusRef={focusRef}
+              image={image}
+              onClick={onImageClick}
+              isIconMaker={isIconMaker}
+              canvasOrigin={canvasOrigin}
+            />
           </Flex.Item>
         )
       })}
@@ -55,11 +55,14 @@ export default function ImageList({images, lastItemRef, onImageClick}) {
 ImageList.propTypes = {
   images: arrayOf(Image.propTypes.image),
   lastItemRef: shape({
-    current: instanceOf(Element)
+    current: instanceOf(Element),
   }).isRequired,
-  onImageClick: func.isRequired
+  onImageClick: func.isRequired,
+  isIconMaker: bool,
+  canvasOrigin: string.isRequired,
 }
 
 ImageList.defaultProps = {
-  images: []
+  images: [],
+  isIconMaker: false,
 }

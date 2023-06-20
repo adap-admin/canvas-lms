@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -19,31 +21,30 @@ module CC::Importer::Canvas
   module AssignmentConverter
     include CC::Importer
     include CC::Importer::Standard::AssignmentConverter
-    
+
     def convert_canvas_assignments
       assignments = convert_cc_assignments
 
-      @manifest.css('resource[type$=learning-application-resource]').each do |res|
-        if meta_path = res.at_css('file[href$="assignment_settings.xml"]')
-          meta_path = @package_root.item_path meta_path['href']
-          html_path = @package_root.item_path res.at_css('file[href$="html"]')['href']
-          
-          meta_node = open_file_xml(meta_path)
-          html_node = open_file(html_path)
+      @manifest.css("resource[type$=learning-application-resource]").each do |res|
+        next unless (meta_path = res.at_css('file[href$="assignment_settings.xml"]'))
 
-          mig_id = get_node_att(meta_node, 'assignment', 'identifier') || meta_node['identifier']
-          assignment = assignments.detect{|a| a['migration_id'] && a['migration_id'] == mig_id}
-          unless assignment
-            assignment = {'migration_id' => mig_id}.with_indifferent_access
-            assignments << assignment
-          end
+        meta_path = @package_root.item_path meta_path["href"]
+        html_path = @package_root.item_path res.at_css('file[href$="html"]')["href"]
 
-          parse_canvas_assignment_data(meta_node, html_node, assignment)
+        meta_node = open_file_xml(meta_path)
+        html_node = open_file(html_path)
+
+        mig_id = get_node_att(meta_node, "assignment", "identifier") || meta_node["identifier"]
+        assignment = assignments.detect { |a| a["migration_id"] && a["migration_id"] == mig_id }
+        unless assignment
+          assignment = { "migration_id" => mig_id }.with_indifferent_access
+          assignments << assignment
         end
+
+        parse_canvas_assignment_data(meta_node, html_node, assignment)
       end
 
       assignments
     end
-
   end
 end

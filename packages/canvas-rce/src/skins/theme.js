@@ -16,10 +16,10 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import { darken, lighten, alpha } from '@instructure/ui-color-utils'
+import {darken, lighten, alpha} from '@instructure/ui-color-utils'
 
- // pull canvas theme values we need for the rce skin
-export default function generator ({ borders, colors, forms, shadows, spacing, typography }) {
+// pull canvas theme values we need for the rce skin
+export default function generator({borders, colors, forms, shadows, spacing, typography}) {
   const vars = {
     canvasBackgroundColor: colors.white,
     canvasTextColor: colors.textDarkest,
@@ -57,7 +57,6 @@ export default function generator ({ borders, colors, forms, shadows, spacing, t
     canvasPrimaryButtonHoverBackground: darken(colors.backgroundBrand, 10),
     canvasPrimaryButtonHoverColor: colors.textLightest,
 
-
     // the instui secondary button
     canvasSecondaryButtonBackground: colors.backgroundLight,
     canvasSecondaryButtonColor: colors.textDarkest,
@@ -87,13 +86,16 @@ export default function generator ({ borders, colors, forms, shadows, spacing, t
     canvasFormElementLabelColor: colors.textDarkest,
     canvasFormElementLabelMargin: `0 0 ${spacing.small} 0`,
     canvasFormElementLabelFontSize: typography.fontSizeMedium,
-    canvasFormElementLabelFontWeight: typography.fontWeightBold
+    canvasFormElementLabelFontWeight: typography.fontWeightBold,
+
+    // a11y button badge
+    canvasBadgeBackgroundColor: colors.textInfo,
   }
   vars.tinySplitButtonChevronHoverBackground = darken(vars.toolbarButtonHoverBackground, 10)
   return vars
 }
 
-generator.canvas = function(variables) {
+generator.canvas = function (variables) {
   return {
     canvasLinkColor: variables['ic-link-color'],
     canvasLinkDecoration: variables['ic-link-decoration'],
@@ -110,7 +112,7 @@ generator.canvas = function(variables) {
 
     activeMenuItemBackground: variables['ic-brand-button--primary-bgd'],
     activeMenuItemLabelColor: variables['ic-brand-button--primary-text'],
-    tableSelectorHighlightColor: alpha(lighten(variables['ic-brand-primary'], 10), 50)
+    tableSelectorHighlightColor: alpha(lighten(variables['ic-brand-primary'], 10), 50),
   }
 }
 
@@ -119,7 +121,8 @@ generator['canvas-a11y'] = generator['canvas-high-contrast'] = function ({colors
     canvasButtonBackground: colors.backgroundLight,
     canvasSecondaryButtonBorderColor: colors.borderMedium,
     canvasLinkDecoration: 'underline',
+    canvasFocusBorderColor: colors.borderBrand,
     canvasFocusBoxShadow: `0 0 0 2px ${colors.brand}`,
-    canvasBrandColor: colors.brand
+    canvasBrandColor: colors.brand,
   }
 }

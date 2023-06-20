@@ -60,6 +60,12 @@ have vendor_guid fields with these prefixes.
 indicates this is a learning outcome group</td>
 </tr>
 <tr>
+<td>course_id</td>
+<td>number</td>
+<td></td>
+<td>May only be given for rows where object_type="group". If given, the generated learning outcome group will belong to the course with the given ID instead of to the account from which the import was initiated. Referenced course must belong to the initiating account or one of its sub-accounts. Can not be used in course-level imports.</td>
+</tr>
+<tr>
 <td>title</td>
 <td>text</td>
 <td>✓</td>
@@ -72,6 +78,12 @@ indicates this is a learning outcome group</td>
 <td>The description of the learning outcome or learning outcome group (optional, defaults to blank).</td>
 </tr>
 <tr>
+<td>friendly_description</td>
+<td>text</td>
+<td></td>
+<td>Learning outcome display description in "friendly" language for students and parents (optional, defaults to blank).</td>
+</tr>
+<tr>
 <td>display_name</td>
 <td>text</td>
 <td></td>
@@ -82,7 +94,7 @@ This value does not apply to learning outcome groups.</td>
 <td>calculation_method</td>
 <td>text</td>
 <td></td>
-<td>Must be one of "decaying_average", "n_mastery", "highest", "latest" or blank.
+<td>Must be one of "decaying_average", "n_mastery", "highest", "latest", "average" or blank.
 This field must be blank for learning outcome groups. If not provided and this
 is a learning outcome, then the calculation method defaults to "decaying_average".</td>
 </tr>
@@ -91,8 +103,8 @@ is a learning outcome, then the calculation method defaults to "decaying_average
 <td>integer</td>
 <td></td>
 <td>Valid values depend on the "calculation_method". For "decaying_average", the value must
-be between 1 and 99, inclusive. For "n_mastery", the value must be between 1 and 5, inclusive.
-For "highest" and "latest", this field must be blank.</td>
+be between 1 and 99, inclusive. For "n_mastery", the value must be between 1 and 10, inclusive.
+For "highest", "latest" and "average", this field must be blank.</td>
 </tr>
 <tr>
 <td>parent_guids</td>

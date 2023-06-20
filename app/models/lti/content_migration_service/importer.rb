@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -17,10 +19,20 @@
 
 module Lti
   module ContentMigrationService
+    # Imports any external content specified by a ContextExternalTool, as detailed
+    # in doc/api/tools_xml.md#Content Migration support. Import is done by POSTing
+    # to the tool's content_migration.import_start_url, sending along the external
+    # content that was defined during export in `./exporter.rb`. The default format
+    # for the POST body is a nested query string, but is sent as JSON if the tool
+    # specifies so in content_migration.import_format.
+    # This code is referenced by `lib/canvas/migration/external_content/migrator.rb`
+    # and eventually by `app/models/importers/course_content_importer.rb`, which
+    # is called during a course copy or import.
     class Importer < Lti::ContentMigrationService::Migrator
       attr_reader :original_tool_id
 
       def initialize(original_tool_id)
+        super()
         @original_tool_id = original_tool_id
       end
 
@@ -30,13 +42,18 @@ module Lti
         load_tool!
         post_body = start_import_post_body(content)
         response = Canvas.retriable(on: Timeout::Error) do
-          CanvasHttp.post(import_start_url, base_request_headers, form_data: post_body)
+          case import_format
+          when JSON_FORMAT
+            CanvasHttp.post(import_start_url, base_request_headers, body: post_body.to_json, content_type: "application/json")
+          else
+            CanvasHttp.post(import_start_url, base_request_headers, form_data: Rack::Utils.build_nested_query(post_body))
+          end
         end
         case response.code.to_i
         when (200..201)
           parsed_response = JSON.parse(response.body)
           unless parsed_response.empty?
-            @status_url = parsed_response['status_url']
+            @status_url = parsed_response["status_url"]
           end
         else
           raise "Unable to start import for external tool #{@tool.name} (#{response.code})"
@@ -47,15 +64,15 @@ module Lti
       end
 
       def import_completed?
-        response = Canvas.retriable(on: Timeout::Error) {CanvasHttp.get(@status_url, base_request_headers)} if @status_url
+        response = Canvas.retriable(on: Timeout::Error) { CanvasHttp.get(@status_url, base_request_headers) } if @status_url
         if response&.code.to_i == 200
           parsed_response = JSON.parse(response.body)
-          @export_status = parsed_response['status']
+          @export_status = parsed_response["status"]
           case @export_status
           when SUCCESSFUL_STATUS
             true
           when FAILED_STATUS
-            raise parsed_response['message']
+            raise parsed_response["message"]
           else
             false
           end
@@ -67,25 +84,30 @@ module Lti
       private
 
       def start_import_post_body(content)
-        Rack::Utils.build_nested_query({
+        {
           context_id: Lti::Asset.opaque_identifier_for(@course),
           data: content,
           tool_consumer_instance_guid: @root_account.lti_guid,
-        }.merge(expanded_variables))
+        }.merge(expanded_variables)
       end
 
       def load_tool!
         return @tool if @tool
+
         original_tool = ContextExternalTool.find(@original_tool_id)
         @tool = ContextExternalTool.find_external_tool(original_tool.domain, @course, @original_tool_id).tap do |t|
-          unless t && t.content_migration_configured?
+          unless t&.content_migration_configured?
             raise "Unable to find external tool to import content."
           end
         end
       end
 
       def import_start_url
-        @import_url ||= @tool.settings['content_migration']['import_start_url']
+        @import_url ||= @tool.settings.dig(:content_migration, :import_start_url)
+      end
+
+      def import_format
+        @tool.settings.dig(:content_migration, :import_format)
       end
     end
   end

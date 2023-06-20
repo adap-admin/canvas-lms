@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -34,11 +36,12 @@ module Api::V1
     end
 
     private
+
     def pagination_options
       if @per_page
-        { :page => @page , :per_page => @per_page}
+        { page: @page, per_page: @per_page }
       else
-        { :page => @page }
+        { page: @page }
       end
     end
   end

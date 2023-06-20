@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -24,6 +26,7 @@ module Submissions
 
     def show
       render_unauthorized_action and return unless @submission.grants_right?(@current_user, :read)
+
       @attachment = Submissions::AttachmentForSubmissionDownload.new(
         @submission, params.slice(:comment_id, :download)
       ).attachment
@@ -50,4 +53,3 @@ module Submissions
     end
   end
 end
-

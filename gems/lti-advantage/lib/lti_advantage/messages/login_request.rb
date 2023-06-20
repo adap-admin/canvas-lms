@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -28,10 +30,14 @@ module LtiAdvantage::Messages
     OPTIONAL_PARAMETERS = %i[
       lti_message_hint
       canvas_region
+      canvas_environment
       client_id
+      lti_storage_target
+      deployment_id
     ].freeze
 
     attr_accessor(*(REQUIRED_PARAMETERS + OPTIONAL_PARAMETERS))
+
     validates_presence_of(*REQUIRED_PARAMETERS)
   end
 end

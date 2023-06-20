@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -21,15 +23,17 @@ module Services
       env_hash = service_settings.dup
       if user && domain
         begin
-          env_hash[:JWT] = Canvas::Security::ServicesJwt.for_user(
+          env_hash[:JWT] = CanvasSecurity::ServicesJwt.for_user(
             domain,
             user,
-            context: context,
-            real_user: real_user,
-            workflows: [:rich_content, :ui]
+            context:,
+            real_user:,
+            workflows: [:rich_content, :ui],
+            # TODO: remove this once we teach the rcs to consume the asymmetric ones
+            symmetric: true
           )
-        rescue Canvas::Security::InvalidJwtKey => exception
-          Canvas::Errors.capture_exception(:jwt, exception)
+        rescue Canvas::Security::InvalidJwtKey => e
+          Canvas::Errors.capture_exception(:jwt, e)
           env_hash[:JWT] = "InvalidJwtKey"
         end
       end
@@ -38,25 +42,25 @@ module Services
       env_hash[:RICH_CONTENT_CAN_UPLOAD_FILES] = (
         user &&
         context &&
-        context.grants_any_right?(user, :manage_files)
+        context.grants_right?(user, :manage_files_add)
       ) || false
+
+      env_hash[:RICH_CONTENT_CAN_EDIT_FILES] = (
+        user &&
+        context &&
+        context.grants_right?(user, :manage_files_edit)
+      ) || false
+
       env_hash
     end
 
     class << self
       private
+
       def service_settings
-        settings = Canvas::DynamicSettings.find("rich-content-service", default_ttl: 5.minutes)
+        settings = DynamicSettings.find("rich-content-service", default_ttl: 5.minutes)
         {
-          RICH_CONTENT_APP_HOST: settings['app-host'],
-          RICH_CONTENT_SKIP_SIDEBAR: settings['skip-sidebar']
-        }
-      rescue Imperium::TimeoutError,
-        Imperium::UnableToConnectError,
-        Canvas::DynamicSettings::ConsulError => e
-        Canvas::Errors.capture_exception(:rce_flag, e)
-        {
-          RICH_CONTENT_APP_HOST: "error",
+          RICH_CONTENT_APP_HOST: settings["app-host", failsafe: "error"]
         }
       end
     end

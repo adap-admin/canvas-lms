@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -15,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'active_support/callbacks'
+require "active_support/callbacks"
 
 # Used to maintain a registry of which callbacks have been suspended for which
 # kinds (e.g. :save) and types (e.g. :before) in a specific scope.
@@ -26,10 +28,26 @@ module ActiveSupport::Callbacks
         @callbacks = {}
       end
 
+      def any_registered?(kind)
+        return true if !kind.nil? && any_registered?(nil)
+
+        types = @callbacks[kind]
+        return false if types.nil?
+        return false if types.empty?
+
+        types.each_value do |cbs|
+          return true unless cbs.empty?
+        end
+
+        false
+      end
+
       def [](kind, type)
-        @callbacks.has_key?(kind) && @callbacks[kind].has_key?(type) ?
-          @callbacks[kind][type] :
+        if @callbacks.key?(kind) && @callbacks[kind].key?(type)
+          @callbacks[kind][type]
+        else
           []
+        end
       end
 
       def []=(kind, type, value)
@@ -78,13 +96,13 @@ module ActiveSupport::Callbacks
       #  * a blanket for that kind and all types (e.g. update([], [:save], [])),
       #  * a blanket for all kinds and all types (e.g. update([], [], []))
       def include?(callback, kind, type)
-        [ self[kind, type],
-          self[kind, nil],
-          self[nil, type],
-          self[nil, nil] ].any? do |cbs|
-            cbs.include?(nil) ||
+        [self[kind, type],
+         self[kind, nil],
+         self[nil, type],
+         self[nil, nil]].any? do |cbs|
+          cbs.include?(nil) ||
             cbs.include?(callback)
-          end
+        end
       end
 
       def each

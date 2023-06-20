@@ -18,9 +18,9 @@
 
 import $ from 'jquery'
 
-import {setup, teardown} from 'submissions'
+import {setup, teardown} from 'ui/features/submissions/jquery/index'
 import fakeENV from 'helpers/fakeENV'
-import 'jquery.ajaxJSON'
+import '@canvas/jquery/jquery.ajaxJSON'
 
 QUnit.module('submissions', {
   setup() {
@@ -29,7 +29,7 @@ QUnit.module('submissions', {
     ENV.SUBMISSION = {
       user_id: 1,
       assignment_id: 27,
-      submission: {}
+      submission: {},
     }
     $('#fixtures').html(`
       <div id='preview_frame'>
@@ -70,7 +70,7 @@ QUnit.module('submissions', {
     teardown()
     fakeENV.teardown()
     $('#fixtures').html('')
-  }
+  },
 })
 
 test('comment_change posts to update_submission_url', () => {
@@ -94,7 +94,7 @@ test('comment_change submits the user_id of the submission if present', () => {
   $('.grading_comment').val('Hello again.')
   $('.save_comment_button').click()
 
-  const [,,callParams] = $.ajaxJSON.getCall(0).args
+  const [, , callParams] = $.ajaxJSON.getCall(0).args
   strictEqual(callParams['submission[user_id]'], 1)
 })
 
@@ -105,7 +105,7 @@ test('comment_change submits the anonymous_id of the submission if the user_id i
   $('.grading_comment').val('Hello again.')
   $('.save_comment_button').click()
 
-  const [,,callParams] = $.ajaxJSON.getCall(0).args
+  const [, , callParams] = $.ajaxJSON.getCall(0).args
   strictEqual(callParams['submission[anonymous_id]'], 'zxcvb')
 })
 
@@ -113,6 +113,26 @@ test('comment_change does not submit if no comment', () => {
   $('.grading_comment').val('')
   $('.save_comment_button').click()
   ok($.ajaxJSON.notCalled)
+})
+
+test('comment_change submits an empty comment if submitting a media comment', () => {
+  const mediaFixtures = `
+    <div id="media_fixtures">
+      <div id="media_media_recording" data-comment_id="asdf" data-comment_type="video">
+        <div class="media_recording">
+        </div>
+      </div>
+      <button class="media_comment_link"></button>
+    </div>
+  `
+
+  $(mediaFixtures).appendTo('#fixtures')
+  $(document).triggerHandler('comment_change')
+
+  const [, , callParams] = $.ajaxJSON.getCall(0).args
+  strictEqual(callParams['submission[comment]'], '')
+
+  $('#media_fixtures').remove()
 })
 
 test('grading_change posts to update_submission_url', () => {
@@ -134,7 +154,7 @@ test('clicking a media comment passes the opening element to the window', () => 
   sinon.stub($.fn, 'mediaComment')
 
   commentLink.click()
-  const [,,,openingElement] = $.fn.mediaComment.firstCall.args
+  const [, , , openingElement] = $.fn.mediaComment.firstCall.args
   strictEqual(openingElement, commentLink.get(0))
 
   $.fn.mediaComment.restore()

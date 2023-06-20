@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Copyright (C) 2014 Instructure, Inc.
 #
 # This file is part of Canvas.
@@ -14,23 +16,22 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-require File.expand_path(File.dirname(__FILE__) + '/../../api_spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/../../../models/quizzes/quiz_user_messager_spec_helper')
+require_relative "../../api_spec_helper"
+require_relative "../../../models/quizzes/quiz_user_messager_spec_helper"
 
 describe Quizzes::QuizSubmissionUsersController, type: :request do
-
   before :once do
     course_with_teacher(active_all: true)
   end
 
   def controller_options(options)
     options.reverse_merge!({
-       controller: "quizzes/quiz_submission_users",
-       action: "message",
-       format: "json",
-       course_id: @course.id,
-       id: @quiz.id
-    })
+                             controller: "quizzes/quiz_submission_users",
+                             action: "message",
+                             format: "json",
+                             course_id: @course.id,
+                             id: @quiz.id
+                           })
   end
 
   describe "POST message" do
@@ -48,9 +49,9 @@ describe Quizzes::QuizSubmissionUsersController, type: :request do
         :post,
         "/api/v1/courses/#{@course.id}/quizzes/#{@quiz.id}/submission_users/message",
         controller_options(
-          action: 'message',
+          action: "message",
           conversations: [
-            { body: 'Ohi!', recipients: target_group.to_s }
+            { body: "Ohi!", recipients: target_group.to_s }
           ]
         )
       )
@@ -79,13 +80,13 @@ describe Quizzes::QuizSubmissionUsersController, type: :request do
       @user = @teacher
     end
 
-    def get_submitted_users(options={})
-      options = controller_options(options.reverse_merge!(action: 'index'))
+    def get_submitted_users(options = {})
+      options = controller_options(options.reverse_merge!(action: "index"))
       raw_api_call(
         :get,
         "/api/v1/courses/#{@course.id}/quizzes/#{@quiz.id}/submission_users",
         options,
-        { 'Accept' => 'application/json'}
+        { "Accept" => "application/json" }
       )
       JSON.parse(response.body) if response.successful?
     end
@@ -93,19 +94,19 @@ describe Quizzes::QuizSubmissionUsersController, type: :request do
     it "does not allow students to view information at the endpoint" do
       @user = @student1
       get_submitted_users
-      expect(response).not_to be_success
+      expect(response).not_to be_successful
     end
 
     it "allows teachers to see submitted students with ?submitted=true" do
       json = get_submitted_users(submitted: true)
       expect(response).to be_successful
-      expect(json['users'].first['id']).to eq @student1.id.to_s
+      expect(json["users"].first["id"]).to eq @student1.id.to_s
     end
 
     it "allows teachers to see unsubmitted students with ?submitted=false" do
       json = get_submitted_users(submitted: false)
       expect(response).to be_successful
-      user_ids = json['users'].map { |h| h['id'] }
+      user_ids = json["users"].pluck("id")
       expect(user_ids).not_to include @student1.id.to_s
       expect(user_ids).to include @student2.id.to_s
     end
@@ -113,16 +114,16 @@ describe Quizzes::QuizSubmissionUsersController, type: :request do
     it "allows teachers to see all students for quiz when submitted parameter not passed" do
       json = get_submitted_users
       expect(response).to be_successful
-      user_ids = json['users'].map { |h| h['id'] }
+      user_ids = json["users"].pluck("id")
       expect(user_ids).to include @student1.id.to_s
       expect(user_ids).to include @student2.id.to_s
     end
 
     it "will sideload quiz_submissions" do
-      json = get_submitted_users(include: ['quiz_submissions'])
+      json = get_submitted_users(include: ["quiz_submissions"])
       expect(response).to be_successful
-      expect(json['quiz_submissions'].first.with_indifferent_access[:id]).to eq @quiz_submission.id.to_s
-      expect(json['quiz_submissions'].length).to eq 1
+      expect(json["quiz_submissions"].first.with_indifferent_access[:id]).to eq @quiz_submission.id.to_s
+      expect(json["quiz_submissions"].length).to eq 1
     end
 
     context "differentiated_assignments" do
@@ -132,14 +133,14 @@ describe Quizzes::QuizSubmissionUsersController, type: :request do
 
         json = get_submitted_users(submitted: false)
         expect(response).to be_successful
-        user_ids = json['users'].map { |h| h['id'] }
+        user_ids = json["users"].pluck("id")
         expect(user_ids).not_to include @student2.id.to_s
 
-        create_section_override_for_quiz(@quiz, {course_section: @student2.enrollments.current.first.course_section})
+        create_section_override_for_quiz(@quiz, { course_section: @student2.enrollments.current.first.course_section })
 
         json = get_submitted_users(submitted: false)
         expect(response).to be_successful
-        user_ids = json['users'].map { |h| h['id'] }
+        user_ids = json["users"].pluck("id")
         expect(user_ids).to include @student2.id.to_s
       end
     end

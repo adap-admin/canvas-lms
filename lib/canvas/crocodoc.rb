@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -24,9 +26,9 @@ class Canvas::Crocodoc
     Canvas::Plugin.find(:crocodoc).enabled?
   end
 
-  class TimeoutError < Exception
+  class TimeoutError < RuntimeError
   end
 
-  class CutoffError < Exception
+  class CutoffError < RuntimeError
   end
 end

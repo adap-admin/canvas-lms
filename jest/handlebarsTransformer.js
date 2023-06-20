@@ -16,11 +16,17 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-const {transform} = require('babel-core')
-const {compile} = require('../frontend_build/i18nLinerHandlebars')
+const {compile} = require('../ui-build/webpack/i18nLinerHandlebars')
+const {transform} = require('@babel/core')
 
 exports.process = (source, path) => {
-  const amd = compile(source, path)
-  const cjs = transform(amd, {plugins: ['transform-amd-to-commonjs']}).code
-  return cjs
+  const amd = compile(source, path, {
+    // brandable_css assets are not available in test
+    injectBrandableStylesheet: false,
+  })
+
+  return transform(amd, {
+    filename: path,
+    plugins: ['@babel/plugin-transform-modules-commonjs'],
+  })
 }

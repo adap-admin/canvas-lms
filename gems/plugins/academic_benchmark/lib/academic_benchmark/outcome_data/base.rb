@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -17,7 +19,7 @@
 
 module AcademicBenchmark::OutcomeData
   class Base
-    def initialize(options={})
+    def initialize(options = {})
       @options = OpenStruct.new(options)
     end
   end

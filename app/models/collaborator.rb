@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -23,27 +25,36 @@ class Collaborator < ActiveRecord::Base
 
   has_a_broadcast_policy
 
+  def course_broadcast_data
+    group&.broadcast_data
+  end
+
   set_broadcast_policy do |p|
     p.dispatch :collaboration_invitation
-    p.to {
-      users = self.group_id.nil? ? [self.user] : self.group.users - [self.user]
-      if self.context.is_a?(Course)
-        enrolled_user_ids = self.context.enrollments.active_or_pending_by_date.where(:user_id => users).pluck(:user_id).to_set
-        users = users.select{|u| enrolled_user_ids.include?(u.id)}
+    p.to do
+      users = group_id.nil? ? [user] : group.users - [user]
+      if context.is_a?(Course)
+        if context.workflow_state.in?(["available", "completed"])
+          enrolled_user_ids = context.enrollments.active_by_date.where(user_id: users).pluck(:user_id).to_set
+          users = users.select { |u| enrolled_user_ids.include?(u.id) }
+        else
+          users = [] # do not send notifications to any users if the course is unpublished
+        end
       end
-      if self.collaboration.collaboration_type == 'google_docs'
+      if collaboration.collaboration_type == "google_docs"
         users.map(&:gmail_channel)
       else
         users
       end
-    }
-    p.whenever { |record|
+    end
+    p.whenever do |record|
       if record.group_id.nil?
         record.just_created && record.collaboration && record.user != record.collaboration.user
       else
         record.just_created && record.collaboration
       end
-    }
+    end
+    p.data { course_broadcast_data }
   end
 
   def context

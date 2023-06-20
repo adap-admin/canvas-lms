@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -15,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_relative '../../common'
+require_relative "../../common"
 
 class StudentGradesPage
   class << self
@@ -23,12 +25,12 @@ class StudentGradesPage
 
     # Period components
     def period_options_css
-      '#grading_period_select_menu > option'
+      "#grading_period_select_menu > option"
     end
 
     # Assignment components
     def assignment_titles_css
-      '.student_assignment > th > a'
+      ".student_assignment > th > a"
     end
 
     def visit_as_teacher(course, student)
@@ -40,19 +42,19 @@ class StudentGradesPage
     end
 
     def final_grade
-      f('#submission_final-grade .grade')
+      f("#submission_final-grade .grade")
     end
 
     def final_points_possible
-      f('#submission_final-grade .points_possible')
+      f("#submission_final-grade .points_possible")
     end
 
     def grading_period_dropdown
-      f('#grading_period_select_menu')
+      f("#grading_period_select_menu")
     end
 
     def hidden_eye_icon(scope:)
-      fxpath("//*[@title='Instructor is working on grades']", scope)
+      fxpath("//*[@title='Instructor has not posted this grade']", scope)
     end
 
     def select_period_by_name(name)
@@ -60,7 +62,7 @@ class StudentGradesPage
     end
 
     def click_apply_button
-      f('#apply_select_menus').click
+      f("#apply_select_menus").click
     end
 
     def assignment_titles
@@ -72,7 +74,7 @@ class StudentGradesPage
     end
 
     def toggle_comment_module
-      fj('.toggle_comments_link .icon-discussion:first').click
+      fj(".toggle_comments_link .icon-discussion:first").click
     end
 
     def status_pill(assignment_id, status)
@@ -101,9 +103,9 @@ class StudentGradesPage
 
     def fetch_assignment_score(assignment)
       if assignment.grading_type == "letter_grade"
-        assignment_row(assignment).find_element(css: '.assignment_score .score_value').text
+        assignment_row(assignment).find_element(css: ".assignment_score .score_value").text
       else
-        assignment_row(assignment).find_element(css: '.assignment_score .grade').text[/\d+/]
+        assignment_row(assignment).find_element(css: ".assignment_score .grade").text[/\d+/]
       end
     end
   end

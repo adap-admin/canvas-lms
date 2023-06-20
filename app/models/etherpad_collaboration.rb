@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -17,13 +19,12 @@
 #
 
 class EtherpadCollaboration < Collaboration
-
   def service_name
     "EtherPad"
   end
 
   def style_class
-    'etherpad'
+    "etherpad"
   end
 
   # Etherpad embed query parameters
@@ -35,14 +36,10 @@ class EtherpadCollaboration < Collaboration
   # /ep/pad/view/PAD_ID/latest  read-only view (still reveals pad id)
 
   def initialize_document
-    self.url ||= "http://#{EtherpadCollaboration.config[:domain]}/i-#{self.uuid}"
-  end
-
-  def user_can_access_document_type?(user)
-    true
+    self.url ||= "http://#{EtherpadCollaboration.config[:domain]}/i-#{uuid}"
   end
 
   def self.config
-    Canvas::Plugin.find(:etherpad).try(:settings) || (YAML.load_file(Rails.root+"config/etherpad.yml")[Rails.env] rescue nil)
+    Canvas::Plugin.find(:etherpad).try(:settings) || (YAML.load_file(Rails.root.join("config/etherpad.yml"))[Rails.env] rescue nil)
   end
 end

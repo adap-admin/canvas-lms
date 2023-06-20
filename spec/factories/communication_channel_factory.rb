@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -17,7 +19,7 @@
 #
 
 module Factories
-  def communication_channel_model(opts={})
+  def communication_channel_model(opts = {})
     @cc = factory_with_protected_attributes(CommunicationChannel, communication_channel_valid_attributes.merge(opts))
     @communication_channel = @cc
   end
@@ -26,16 +28,20 @@ module Factories
     user = @user || User.create!
     {
       path: "valid@example.com",
-      user: user,
+      user:,
       pseudonym_id: "1"
     }
   end
 
-  def communication_channel(user, opts={})
+  def communication_channel(user, opts = {})
     username = opts[:username] || "nobody-#{user.id}@example.com"
-    @cc = user.communication_channels.create!(path_type: 'email', path: username) do |cc|
-      cc.workflow_state = 'active' if opts[:active_cc] || opts[:active_all]
+    @cc = user.communication_channels.create!(path_type: opts[:path_type] || "email", path: username) do |cc|
+      cc.workflow_state = "active" if opts[:active_cc] || opts[:active_all]
       cc.workflow_state = opts[:cc_state] if opts[:cc_state]
+      cc.pseudonym = opts[:pseudonym] if opts[:pseudonym]
+      cc.bounce_count = opts[:bounce_count] if opts[:bounce_count]
+      cc.last_bounce_details = opts[:last_bounce_details] if opts[:last_bounce_details]
+      cc.last_transient_bounce_details = opts[:last_transient_bounce_details] if opts[:last_transient_bounce_details]
     end
     @cc
   end

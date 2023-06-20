@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -19,26 +21,26 @@
 module SIS
   module CSV
     class AbstractCourseImporter < CSVBaseImporter
-
       def self.abstract_course_csv?(row)
-        row.include?('abstract_course_id') && !row.include?('course_id') && row.include?('short_name')
+        row.include?("abstract_course_id") && !row.include?("course_id") && row.include?("short_name")
       end
 
       # expected columns
       # abstract_course_id,short_name,long_name,account_id,term_id,status
-      def process(csv, index=nil, count=nil)
-        count = SIS::AbstractCourseImporter.new(@root_account, importer_opts).process do |importer|
+      def process(csv, index = nil, count = nil)
+        SIS::AbstractCourseImporter.new(@root_account, importer_opts).process do |importer|
           csv_rows(csv, index, count) do |row|
-            begin
-              importer.add_abstract_course(row['abstract_course_id'], row['short_name'],
-                                           row['long_name'], row['status'], row['term_id'],
-                                           row['account_id'], row['fallback_account_id'])
-            rescue ImportError => e
-              SisBatch.add_error(csv, e.to_s, sis_batch: @batch, row: row['lineno'], row_info: row)
-            end
+            importer.add_abstract_course(row["abstract_course_id"],
+                                         row["short_name"],
+                                         row["long_name"],
+                                         row["status"],
+                                         row["term_id"],
+                                         row["account_id"],
+                                         row["fallback_account_id"])
+          rescue ImportError => e
+            SisBatch.add_error(csv, e.to_s, sis_batch: @batch, row: row["lineno"], row_info: row)
           end
         end
-        count
       end
     end
   end

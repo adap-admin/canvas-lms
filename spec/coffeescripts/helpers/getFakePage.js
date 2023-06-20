@@ -24,7 +24,7 @@ export default function getFakePage(thisPage = 1) {
   const urls = {
     current: url(thisPage),
     first: url(1),
-    last: url(10)
+    last: url(10),
   }
   const links = [`<${urls.current}>; rel="current"`]
   if (thisPage < 10) {
@@ -42,7 +42,7 @@ export default function getFakePage(thisPage = 1) {
     header: links.join(','),
     data: [
       {id: lastID - 1, foo: 'bar', baz: 'qux'},
-      {id: lastID, foo: 'bar', baz: 'qux'}
-    ]
+      {id: lastID, foo: 'bar', baz: 'qux'},
+    ],
   }
 }

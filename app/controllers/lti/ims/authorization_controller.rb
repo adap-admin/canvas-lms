@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -15,10 +17,8 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'json/jwt'
-
 module Lti
-  module Ims
+  module IMS
     # @API LTI 2 Authorization
     # @internal
     # The LTI 2 authorization server is used to retrieve an access token that can be used to access
@@ -58,33 +58,32 @@ module Lti
     #     }
     #
     class AuthorizationController < ApplicationController
-
       skip_before_action :load_user
       before_action :require_context
 
       SERVICE_DEFINITIONS = [
         {
-          id: 'vnd.Canvas.authorization',
-          endpoint: -> (context) {"api/lti/#{context.class.name.downcase}s/#{context.id}/authorize"},
-          format: ['application/json'].freeze,
-          action: ['POST'].freeze
+          id: "vnd.Canvas.authorization",
+          endpoint: ->(context) { "api/lti/#{context.class.name.downcase}s/#{context.id}/authorize" },
+          format: ["application/json"].freeze,
+          action: ["POST"].freeze
         }.freeze
       ].freeze
 
       class InvalidGrant < RuntimeError; end
-      JWT_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:jwt-bearer'.freeze
-      AUTHORIZATION_CODE_GRANT_TYPE = 'authorization_code'.freeze
+      JWT_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:jwt-bearer"
+      AUTHORIZATION_CODE_GRANT_TYPE = "authorization_code"
       GRANT_TYPES = [JWT_GRANT_TYPE, AUTHORIZATION_CODE_GRANT_TYPE].freeze
 
       rescue_from JSON::JWS::VerificationFailed,
                   JSON::JWT::InvalidFormat,
                   JSON::JWS::UnexpectedAlgorithm,
-                  Lti::Oauth2::AuthorizationValidator::InvalidAuthJwt,
-                  Lti::Oauth2::AuthorizationValidator::SecretNotFound,
-                  Lti::Oauth2::AuthorizationValidator::MissingAuthorizationCode,
+                  Lti::OAuth2::AuthorizationValidator::InvalidAuthJwt,
+                  Lti::OAuth2::AuthorizationValidator::SecretNotFound,
+                  Lti::OAuth2::AuthorizationValidator::MissingAuthorizationCode,
                   InvalidGrant do |e|
         Lti::Errors::ErrorLogger.log_error(e)
-        render json: {error: 'invalid_grant'}, status: :bad_request
+        render json: { error: "invalid_grant" }, status: :bad_request
       end
       # @API authorize
       #
@@ -112,19 +111,20 @@ module Lti
       def authorize
         raise InvalidGrant unless GRANT_TYPES.include?(params[:grant_type])
         raise InvalidGrant if params[:assertion].blank?
+
         code = params[:code]
-        jwt_validator = Lti::Oauth2::AuthorizationValidator.new(
+        jwt_validator = Lti::OAuth2::AuthorizationValidator.new(
           jwt: params[:assertion],
           authorization_url: polymorphic_url([@context, :lti_oauth2_authorize]),
-          code: code,
+          code:,
           context: @context
         )
         jwt_validator.validate!
         reg_key = code || jwt_validator.sub
         render json: {
-          access_token: Lti::Oauth2::AccessToken.create_jwt(aud: aud, sub: jwt_validator.sub, reg_key: reg_key).to_s,
-          token_type: 'bearer',
-          expires_in: Setting.get('lti.oauth2.access_token.expiration', 1.hour.to_s)
+          access_token: Lti::OAuth2::AccessToken.create_jwt(aud:, sub: jwt_validator.sub, reg_key:).to_s,
+          token_type: "bearer",
+          expires_in: Setting.get("lti.oauth2.access_token.expiration", 1.hour.to_s)
         }
       end
 

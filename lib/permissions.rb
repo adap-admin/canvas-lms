@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -39,13 +41,15 @@ module Permissions
   #   },
   #   ...
   #
-  def self.register(name_or_hash, data={})
+  def self.register(name_or_hash, data = {})
     @permissions ||= {}
     if name_or_hash.is_a?(Hash)
       raise ArgumentError unless data.empty?
+
       @permissions.merge!(name_or_hash)
     else
       raise ArgumentError if data.empty?
+
       @permissions.merge!(name_or_hash => data)
     end
   end

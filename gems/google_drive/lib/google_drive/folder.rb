@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -19,7 +21,7 @@ module GoogleDrive
   class Folder
     attr_reader :name, :folders, :files
 
-    def initialize(name, folders=[], files=[])
+    def initialize(name, folders = [], files = [])
       @name = name
       @folders, @files = folders, files
     end
@@ -32,15 +34,15 @@ module GoogleDrive
       @folders << folder
     end
 
-    def select(&block)
+    def select(&)
       Folder.new(@name,
-                 @folders.map { |f| f.select(&block) }.select { |f| !f.files.empty? },
-                 @files.select(&block))
+                 @folders.map { |f| f.select(&) }.reject { |f| f.files.empty? },
+                 @files.select(&))
     end
 
-    def map(&block)
-      @folders.map { |f| f.map(&block) }.flatten +
-        @files.map(&block)
+    def map(&)
+      @folders.map { |f| f.map(&) }.flatten +
+        @files.map(&)
     end
 
     def flatten
@@ -49,9 +51,9 @@ module GoogleDrive
 
     def to_hash
       {
-        :name => @name,
-        :folders => @folders.map(&:to_hash),
-        :files => @files.map(&:to_hash)
+        name: @name,
+        folders: @folders.map(&:to_hash),
+        files: @files.map(&:to_hash)
       }
     end
   end

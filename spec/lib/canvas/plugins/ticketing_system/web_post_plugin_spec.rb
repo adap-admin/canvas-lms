@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -15,18 +17,15 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'spec_helper'
-require_dependency "canvas/plugins/ticketing_system/web_post_plugin"
-
 module Canvas::Plugins::TicketingSystem
   describe WebPostPlugin do
     describe "#export_error" do
       it "posts the error_report document to the configured endpoint" do
-        ticketing = double()
-        document = {key: "value", info: "data"}
+        ticketing = double
+        document = { key: "value", info: "data" }
         report = double(to_document: document)
         endpoint = "http://someserver.com/some/endpoint"
-        config = {endpoint_uri: endpoint}
+        config = { endpoint_uri: endpoint }
         plugin = WebPostPlugin.new(ticketing)
         expect(HTTParty).to receive(:post).with(endpoint, include(body: document.to_json))
         plugin.export_error(report, config)

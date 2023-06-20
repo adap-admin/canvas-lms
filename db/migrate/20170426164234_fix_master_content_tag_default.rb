@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -20,8 +22,8 @@ class FixMasterContentTagDefault < ActiveRecord::Migration[4.2]
 
   def up
     change_column_default(:master_courses_master_content_tags, :use_default_restrictions, false)
-    MasterCourses::MasterContentTag.where("restrictions IS NULL OR restrictions = ?", {}.to_yaml).
-      where(:use_default_restrictions => true).update_all(:use_default_restrictions => false)
+    MasterCourses::MasterContentTag.where("restrictions IS NULL OR restrictions = ?", {}.to_yaml)
+                                   .where(use_default_restrictions: true).update_all(use_default_restrictions: false)
   end
 
   def down

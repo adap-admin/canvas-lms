@@ -18,19 +18,25 @@
 
 import React from 'react'
 import TestUtils from 'react-dom/test-utils'
-import PeopleSearch from 'jsx/add_people/components/people_search'
+import PeopleSearch from '@canvas/add-people/react/components/people_search'
 
 QUnit.module('PeopleSearch')
 
 const searchProps = {
-  roles: [{id: '1', label: 'Student'}, {id: '2', label: 'TA'}],
-  sections: [{id: '1', name: 'Section 2'}, {id: '2', name: 'Section 10'}],
+  roles: [
+    {id: '1', label: 'Student'},
+    {id: '2', label: 'TA'},
+  ],
+  sections: [
+    {id: '1', name: 'Section 2'},
+    {id: '2', name: 'Section 10'},
+  ],
   section: '1',
   role: '2',
   limitPrivilege: true,
   searchType: 'unique_id',
   nameList: 'foo, bar, baz',
-  canReadSIS: true
+  canReadSIS: true,
 }
 
 test('renders the component', () => {
@@ -59,7 +65,7 @@ test('sets the correct values', () => {
   equal(limitPrivilegeCheckbox.checked, true, 'limit privileges checkbox is checked')
 })
 test('removes search by SIS ID', () => {
-  const newProps = Object.assign({}, searchProps, {canReadSIS: false})
+  const newProps = {...searchProps, canReadSIS: false}
   const component = TestUtils.renderIntoDocument(<PeopleSearch {...newProps} />)
   const peopleSearch = TestUtils.findRenderedDOMComponentWithClass(
     component,
@@ -70,7 +76,7 @@ test('removes search by SIS ID', () => {
 })
 test('shows hint with bad email address', () => {
   const badEmail = 'foobar@'
-  const newProps = Object.assign({}, searchProps, {searchType: 'cc_path', nameList: badEmail})
+  const newProps = {...searchProps, searchType: 'cc_path', nameList: badEmail}
   const component = TestUtils.renderIntoDocument(<PeopleSearch {...newProps} />)
   const peopleSearch = TestUtils.findRenderedDOMComponentWithClass(
     component,

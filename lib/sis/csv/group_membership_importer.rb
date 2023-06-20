@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -20,7 +22,7 @@ module SIS
   module CSV
     class GroupMembershipImporter < CSVBaseImporter
       def self.group_membership_csv?(row)
-        row.include?('group_id') && row.include?('user_id')
+        row.include?("group_id") && row.include?("user_id")
       end
 
       def self.identifying_fields
@@ -29,17 +31,14 @@ module SIS
 
       # expected columns
       # group_id,user_id,status
-      def process(csv, index=nil, count=nil)
-        count = SIS::GroupMembershipImporter.new(@root_account, importer_opts).process do |importer|
+      def process(csv, index = nil, count = nil)
+        SIS::GroupMembershipImporter.new(@root_account, importer_opts).process do |importer|
           csv_rows(csv, index, count) do |row|
-            begin
-              importer.add_group_membership(row['user_id'], row['group_id'], row['status'])
-            rescue ImportError => e
-              SisBatch.add_error(csv, e.to_s, sis_batch: @batch, row: row['lineno'], row_info: row)
-            end
+            importer.add_group_membership(row["user_id"], row["group_id"], row["status"])
+          rescue ImportError => e
+            SisBatch.add_error(csv, e.to_s, sis_batch: @batch, row: row["lineno"], row_info: row)
           end
         end
-        count
       end
     end
   end

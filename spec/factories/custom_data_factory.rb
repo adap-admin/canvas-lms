@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -17,14 +19,14 @@
 #
 
 module Factories
-  def custom_data_model(opts={})
+  def custom_data_model(opts = {})
     @custom_data = factory_with_protected_attributes(CustomData, valid_custom_data_attributes.merge(opts))
   end
 
   def valid_custom_data_attributes
     {
-        user: user_model,
-        namespace: 'value for namespace'
+      user: user_model,
+      namespace: "value for namespace"
     }
   end
 end

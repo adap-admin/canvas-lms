@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -19,8 +21,8 @@
 module Api::V1::ExternalFeeds
   include Api::V1::Json
 
-  API_ALLOWED_EXTERNAL_FEED_PARAMS = %w{url header_match verbosity}
-  API_EXPOSED_EXTERNAL_FEED_PARAMS = %w(id url header_match created_at verbosity)
+  API_ALLOWED_EXTERNAL_FEED_PARAMS = %w[url header_match verbosity].freeze
+  API_EXPOSED_EXTERNAL_FEED_PARAMS = %w[id url header_match created_at verbosity].freeze
 
   def external_feeds_api_json(external_feeds, context, user, session)
     external_feeds.map do |external_feed|
@@ -28,14 +30,13 @@ module Api::V1::ExternalFeeds
     end
   end
 
-  def external_feed_api_json(external_feed, context, user, session)
-    options = { :only => API_EXPOSED_EXTERNAL_FEED_PARAMS,
-                :methods => [:display_name]}
+  def external_feed_api_json(external_feed, _context, user, session)
+    options = { only: API_EXPOSED_EXTERNAL_FEED_PARAMS,
+                methods: [:display_name] }
 
     api_json(external_feed, user, session, options).tap do |json|
-      json.merge! :external_feed_entries_count => external_feed.external_feed_entries.size
+      json.merge! external_feed_entries_count: external_feed.external_feed_entries.size
     end
-
   end
 
   def create_api_external_feed(context, feed_params, user)
@@ -43,5 +44,4 @@ module Api::V1::ExternalFeeds
     feed.user = user
     feed
   end
-
 end

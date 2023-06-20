@@ -16,9 +16,9 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import collaborations from 'collaborations'
+import collaborations from 'ui/features/collaborations/jquery/index'
 import $ from 'jquery'
-import 'jquery.ajaxJSON'
+import '@canvas/jquery/jquery.ajaxJSON'
 
 let oldAjaxJSON = null
 
@@ -32,7 +32,7 @@ QUnit.module('Collaborations', {
     dialog.dialog({
       width: 550,
       height: 500,
-      resizable: false
+      resizable: false,
     })
     const dom = $('<div></div>')
     dom.append(dialog)
@@ -42,57 +42,21 @@ QUnit.module('Collaborations', {
     $('#delete_collaboration_dialog').remove()
     $('#fixtures').empty()
     $.ajaxJSON = oldAjaxJSON
-  }
+  },
 })
 
-test('shows a flash message when deletion is complete', function() {
+test('shows a flash message when deletion is complete', () => {
   sandbox.spy($, 'screenReaderFlashMessage')
   const e = {
     originalEvent: MouseEvent,
     type: 'click',
     timeStamp: 1433863761376,
-    jQuery17209791898143012077: true
+    jQuery17209791898143012077: true,
   }
-  $.ajaxJSON = function(url, method, data, callback) {
+  $.ajaxJSON = function (url, method, data, callback) {
     const responseData = {}
     return callback.call(responseData)
   }
   collaborations.Events.onDelete(e)
   equal($.screenReaderFlashMessage.callCount, 1)
-})
-
-test('returns a collaboration url', () => {
-  const url = collaborations.Util.collaborationUrl(1)
-  equal(url, `${window.location.toString()}/1`)
-})
-
-test('it calls updateCollaboration when a service id is in the data parameter', function() {
-  sandbox.stub(collaborations.Events, 'updateCollaboration')
-  collaborations.Events.onExternalContentReady(
-    {},
-    {
-      service_id: 1,
-      contentItems: {}
-    }
-  )
-  equal(collaborations.Events.updateCollaboration.callCount, 1)
-})
-
-test('it calls createCollaboration', function() {
-  sandbox.stub(collaborations.Events, 'createCollaboration')
-  collaborations.Events.onExternalContentReady({}, {contentItems: {}})
-  equal(collaborations.Events.createCollaboration.callCount, 1)
-})
-
-test('it makes an ajax request to the correct update endpoint', () => {
-  const dom = $('<div class="collaboration_1"><a class="title" href="http://url/"></a></div>')
-  $('#fixtures').append(dom)
-  $.ajaxJSON = (url, method, data, callback) => equal(url, 'http://url/')
-  collaborations.Events.onExternalContentReady(
-    {},
-    {
-      service_id: 1,
-      contentItems: {}
-    }
-  )
 })

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -18,14 +20,14 @@
 
 module DataFixup::UpdateAnonymousGradingSettings
   def self.run_for_courses_in_range(start_at, end_at)
-    courses_to_disable = Course.joins(:feature_flags).
-      where("courses.id >= ? AND courses.id <= ?", start_at, end_at).
-      where(feature_flags: {feature: 'anonymous_grading', state: 'on'})
+    courses_to_disable = Course.joins(:feature_flags)
+                               .where("courses.id >= ? AND courses.id <= ?", start_at, end_at)
+                               .where(feature_flags: { feature: "anonymous_grading", state: "on" })
 
-    courses_to_disable.find_each(start: 0) do |course|
-      course.assignments.except(:order).
-        where.not(anonymous_grading: true).
-        in_batches.update_all(anonymous_grading: true)
+    courses_to_disable.find_each(strategy: :id) do |course|
+      course.assignments.except(:order)
+            .where.not(anonymous_grading: true)
+            .in_batches.update_all(anonymous_grading: true)
       course.enable_feature!(:anonymous_marking)
 
       # Remove these flags one by one (as opposed to en masse at the end of the
@@ -36,11 +38,11 @@ module DataFixup::UpdateAnonymousGradingSettings
   end
 
   def self.run_for_accounts_in_range(start_at, end_at)
-    accounts_to_disable = Account.joins(:feature_flags).
-      where("accounts.id >= ? AND accounts.id <= ?", start_at, end_at).
-      where(feature_flags: {feature: 'anonymous_grading', state: 'on'})
+    accounts_to_disable = Account.joins(:feature_flags)
+                                 .where("accounts.id >= ? AND accounts.id <= ?", start_at, end_at)
+                                 .where(feature_flags: { feature: "anonymous_grading", state: "on" })
 
-    accounts_to_disable.find_each(start: 0) do |account|
+    accounts_to_disable.find_each(strategy: :id) do |account|
       # If an account has the feature flag forced to ON, we need to get all
       # the courses belonging to that account and every account below it.
       # That said, we don't actually need do any work on said courses (since
@@ -50,9 +52,9 @@ module DataFixup::UpdateAnonymousGradingSettings
 
       courses_to_process = Course.published.where(account_id: descendant_account_ids)
       courses_to_process.find_ids_in_batches do |course_ids|
-        assignments = Assignment.published.
-          where(context_id: course_ids, context_type: 'Course').
-          where.not(anonymous_grading: true)
+        assignments = Assignment.published
+                                .where(context_id: course_ids, context_type: "Course")
+                                .where.not(anonymous_grading: true)
         assignments.find_ids_in_batches do |assignment_ids|
           Assignment.where(id: assignment_ids).update_all(anonymous_grading: true)
         end
@@ -67,6 +69,6 @@ module DataFixup::UpdateAnonymousGradingSettings
 
   def self.destroy_allowed_and_off_flags
     # Note that only accounts can have an 'allowed' state
-    FeatureFlag.where(feature: 'anonymous_grading').where.not(state: 'on').in_batches.destroy_all
+    FeatureFlag.where(feature: "anonymous_grading").where.not(state: "on").in_batches.destroy_all
   end
 end

@@ -17,16 +17,18 @@
  */
 
 import $ from 'jquery'
-import MissingDateDialogView from 'compiled/views/calendar/MissingDateDialogView'
+import MissingDateDialogView from '@canvas/due-dates/backbone/views/MissingDateDialogView'
 
 QUnit.module('MissingDateDialogView', {
   setup() {
-    $('#fixtures').append('<label for="date">Section one</label><input type="text" id="date" name="date" />')
+    $('#fixtures').append(
+      '<label for="date">Section one</label><input type="text" id="date" name="date" />'
+    )
 
     this.dialog = new MissingDateDialogView({
       validationFn() {
         const invalidFields = []
-        $('input[name=date]').each(function() {
+        $('input[name=date]').each(function () {
           if ($(this).val() === '') {
             invalidFields.push($(this))
           }
@@ -37,7 +39,7 @@ QUnit.module('MissingDateDialogView', {
           return true
         }
       },
-      success: sinon.spy()
+      success: sinon.spy(),
     })
   },
   teardown() {
@@ -46,15 +48,15 @@ QUnit.module('MissingDateDialogView', {
     $('label[for=date]').remove()
     $('.ui-dialog').remove()
     $('#fixtures').empty()
-  }
+  },
 })
 
-test('should display a dialog if the given fields are invalid', function() {
+test('should display a dialog if the given fields are invalid', function () {
   ok(this.dialog.render())
   ok($('.ui-dialog:visible').length > 0)
 })
 
-test('it should list the names of the sections w/o dates', function() {
+test('it should list the names of the sections w/o dates', function () {
   this.dialog.render()
   ok(
     $('.ui-dialog')
@@ -63,19 +65,19 @@ test('it should list the names of the sections w/o dates', function() {
   )
 })
 
-test('should not display a dialog if the given fields are valid', function() {
+test('should not display a dialog if the given fields are valid', function () {
   $('input[name=date]').val('2013-01-01')
   equal(this.dialog.render(), false)
   equal($('.ui-dialog').length, 0)
 })
 
-test('should close the dialog on secondary button press', function() {
+test('should close the dialog on secondary button press', function () {
   this.dialog.render()
   this.dialog.$dialog.find('.btn:not(.btn-primary)').click()
   equal($('.ui-dialog').length, 0)
 })
 
-test('should run the success callback on on primary button press', function() {
+test('should run the success callback on on primary button press', function () {
   this.dialog.render()
   this.dialog.$dialog.find('.btn-primary').click()
   ok(this.dialog.options.success.calledOnce)

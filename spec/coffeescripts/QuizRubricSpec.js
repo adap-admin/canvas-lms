@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import QuizRubric from 'quiz_rubric'
+import QuizRubric from '@canvas/quizzes/jquery/quiz_rubric'
 import $ from 'jquery'
 
 const assignmentRubricHtml = `
@@ -48,14 +48,12 @@ QUnit.module('QuizRubric', {
     $('#test-rubrics-wrapper').remove()
     $('#fixtures').html('')
     $('.ui-dialog').remove()
-  }
+  },
 })
 
-test('rubric editing event loads the rubric form', () => {
-  QuizRubric.createRubricDialog('#', assignmentRubricHtml)
+test('rubric editing event loads the rubric form', async () => {
+  await QuizRubric.createRubricDialog('#', assignmentRubricHtml)
   $('.add_rubric_link').click()
-  const contentIndex = $('#rubrics')
-    .html()
-    .indexOf('DUMMY CONTENT FOR RUBRIC FORM')
+  const contentIndex = $('#rubrics').html().indexOf('DUMMY CONTENT FOR RUBRIC FORM')
   ok(contentIndex > 0)
 })

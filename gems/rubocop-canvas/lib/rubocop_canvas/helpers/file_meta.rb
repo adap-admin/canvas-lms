@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -22,7 +24,7 @@ module RuboCop
       CONTROLLER_FILE_NAME_REGEX = /controller\.rb$/
 
       def file_name
-        file_path.split('/').last
+        file_path.split("/").last
       end
 
       def file_path

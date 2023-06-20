@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -28,14 +30,13 @@ class SubmissionSearch
     # use all_submissions so state: deleted can be found
     submission_search_scope = @assignment.all_submissions
     submission_search_scope = add_filters(submission_search_scope)
-    submission_search_scope = add_order_bys(submission_search_scope)
-    submission_search_scope
+    add_order_bys(submission_search_scope)
   end
 
   def user_search_scope
-    UserSearch.
-      for_user_in_context(@options[:user_search], @assignment.context, @searcher, @session, @options).
-      except(:order)
+    UserSearch
+      .for_user_in_context(@options[:user_search], @assignment.context, @searcher, @session, @options)
+      .except(:order)
   end
 
   def add_filters(search_scope)
@@ -50,22 +51,25 @@ class SubmissionSearch
     end
 
     if @options[:user_search]
-      search_scope = search_scope.
-        where("submissions.user_id IN (SELECT id FROM (#{user_search_scope.to_sql}) AS user_search_ids)")
+      search_scope = search_scope
+                     .where("submissions.user_id IN (SELECT id FROM (#{user_search_scope.to_sql}) AS user_search_ids)")
     end
 
     if @options[:enrollment_types].present?
       search_scope = search_scope.where(user_id:
-        @course.enrollments.select(:user_id).where(type: @options[:enrollment_types])
-      )
+        @course.enrollments.select(:user_id).where(type: @options[:enrollment_types]))
     end
 
     search_scope = if @course.grants_any_right?(@searcher, @session, :manage_grades, :view_all_grades)
-      search_scope
-    elsif @course.grants_right?(@searcher, @session, :read_grades)
-      # a user can see their own submission
-      search_scope.where(user_id: @searcher.id)
-    end
+                     # TODO: may want to add a preloader for this
+                     allowed_user_ids = @course.users_visible_to(@searcher)
+                     search_scope.where(user_id: allowed_user_ids)
+                   elsif @course.grants_right?(@searcher, @session, :read_grades)
+                     # a user can see their own submission
+                     search_scope.where(user_id: @searcher.id)
+                   else
+                     Submission.none # return nothing
+                   end
 
     if @options[:scored_less_than]
       search_scope = search_scope.where("submissions.score < ?", @options[:scored_less_than])
@@ -86,9 +90,9 @@ class SubmissionSearch
       when "excused"
         search_scope = search_scope.where(excused: true)
       when "needs_review"
-        search_scope = search_scope.where(workflow_state: 'pending_review')
+        search_scope = search_scope.where(workflow_state: "pending_review")
       when "graded"
-        search_scope = search_scope.where(workflow_state: 'graded')
+        search_scope = search_scope.where(workflow_state: "graded")
       end
     end
 
@@ -99,15 +103,15 @@ class SubmissionSearch
     order_bys = Array(@options[:order_by])
     order_bys.each do |order_field_direction|
       field = order_field_direction[:field]
-      direction = order_field_direction[:direction] == "descending" ? "DESC NULLS LAST" : "ASC"
+      direction = (order_field_direction[:direction] == "descending") ? "DESC NULLS LAST" : "ASC"
       search_scope =
         case field
-        when 'username'
-          order_clause = User.sortable_name_order_by_clause('users')
+        when "username"
+          order_clause = User.sortable_name_order_by_clause("users")
           search_scope.joins(:user).order(Arel.sql("#{order_clause} #{direction}"))
-        when 'score'
+        when "score"
           search_scope.order(Arel.sql("submissions.score #{direction}"))
-        when 'submitted_at'
+        when "submitted_at"
           search_scope.order(Arel.sql("submissions.submitted_at #{direction}"))
         else
           raise "submission search field '#{field}' is not supported"

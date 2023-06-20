@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,35 +18,28 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper.rb')
-require_dependency "lti/tool_proxy_binding"
-
 module Lti
-describe ToolProxyBinding do
+  describe ToolProxyBinding do
+    let(:account) { Account.new }
+    let(:tool_proxy) { ToolProxy.new }
 
-  let(:account) {Account.new}
-  let(:tool_proxy) {ToolProxy.new}
+    describe "validations" do
+      before do
+        subject.context = account
+        subject.tool_proxy = tool_proxy
+      end
 
-  describe 'validations' do
+      it "requires a context" do
+        subject.context = nil
+        subject.save
+        expect(subject.errors.first).to eq [:context, "can't be blank"]
+      end
 
-    before(:each) do
-      subject.context = account
-      subject.tool_proxy = tool_proxy
+      it "requires a tool_proxy" do
+        subject.tool_proxy = nil
+        subject.save
+        expect(subject.errors.first).to eq [:tool_proxy, "can't be blank"]
+      end
     end
-
-    it 'requires a context' do
-      subject.context = nil
-      subject.save
-      expect(subject.errors.first).to eq [:context, "can't be blank"]
-    end
-
-    it 'requires a tool_proxy' do
-      subject.tool_proxy = nil
-      subject.save
-      expect(subject.errors.first).to eq [:tool_proxy, "can't be blank"]
-    end
-
-  end
-
   end
 end

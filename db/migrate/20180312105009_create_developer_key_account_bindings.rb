@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -21,6 +23,7 @@ class CreateDeveloperKeyAccountBindings < ActiveRecord::Migration[5.0]
 
   def up
     return if table_exists? :developer_key_account_bindings
+
     create_table :developer_key_account_bindings do |t|
       t.integer :account_id, limit: 8, null: false
       t.integer :developer_key_id, limit: 8, null: false
@@ -32,7 +35,7 @@ class CreateDeveloperKeyAccountBindings < ActiveRecord::Migration[5.0]
     add_foreign_key :developer_key_account_bindings, :developer_keys
 
     add_index :developer_key_account_bindings, :developer_key_id
-    add_index :developer_key_account_bindings, %i(account_id developer_key_id), name: :index_dev_key_bindings_on_account_id_and_developer_key_id, unique: true
+    add_index :developer_key_account_bindings, %i[account_id developer_key_id], name: :index_dev_key_bindings_on_account_id_and_developer_key_id, unique: true
   end
 
   def down

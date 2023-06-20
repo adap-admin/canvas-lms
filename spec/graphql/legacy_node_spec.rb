@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 Instructure, Inc.
 #
@@ -16,7 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper.rb')
 require_relative "./graphql_spec_helper"
 
 describe "legacyNode" do
@@ -26,21 +27,86 @@ describe "legacyNode" do
   end
 
   def run_query(query, user)
-    CanvasSchema.execute(query, context: {current_user: user})
+    CanvasSchema.execute(query, context: { current_user: user })
+  end
+
+  context "OutcomeCalculationMethod" do
+    before(:once) do
+      @calc_method = outcome_calculation_method_model(@course)
+
+      @query = <<~GQL
+        query {
+          outcomeCalculationMethod: legacyNode(type: OutcomeCalculationMethod, _id: "#{@calc_method.id}") {
+            ... on OutcomeCalculationMethod {
+              _id
+            }
+          }
+        }
+      GQL
+    end
+
+    it "works" do
+      expect(
+        run_query(@query, @teacher)["data"]["outcomeCalculationMethod"]["_id"]
+      ).to eq @calc_method.id.to_s
+    end
+
+    it "requires read permission on the course" do
+      original_student = @student
+      student_in_course(course: course_factory)
+      @other_class_student = @student
+      @student = original_student
+      expect(
+        run_query(@query, @other_class_student)["data"]["outcomeCalculationMethod"]
+      ).to be_nil
+    end
+  end
+
+  context "OutcomeProficiency" do
+    before(:once) do
+      @proficiency = outcome_proficiency_model(@course.account)
+
+      @query = <<~GQL
+        query {
+          outcomeProficiency: legacyNode(type: OutcomeProficiency, _id: "#{@proficiency.id}") {
+            ... on OutcomeProficiency {
+              _id
+            }
+          }
+        }
+      GQL
+    end
+
+    it "works" do
+      @admin = account_admin_user(account: @course.account)
+      expect(
+        run_query(@query, @admin)["data"]["outcomeProficiency"]["_id"]
+      ).to eq @proficiency.id.to_s
+    end
+
+    it "requires read permission on the account" do
+      original_account = @account
+      @other_account = account_model
+      @admin = account_admin_user(account: @other_account)
+      @account = original_account
+      expect(
+        run_query(@query, @admin)["data"]["outcomeProficiency"]
+      ).to be_nil
+    end
   end
 
   context "enrollments" do
     before(:once) do
       @enrollment = @student.enrollments.first
 
-      @query = <<-GQL
-      query {
-        enrollment: legacyNode(type: Enrollment, _id: "#{@enrollment.id}") {
-          ... on Enrollment {
-            _id
+      @query = <<~GQL
+        query {
+          enrollment: legacyNode(type: Enrollment, _id: "#{@enrollment.id}") {
+            ... on Enrollment {
+              _id
+            }
           }
         }
-      }
       GQL
     end
 
@@ -54,6 +120,7 @@ describe "legacyNode" do
       original_student = @student
       student_in_course(course: course_factory)
       @other_class_student = @student
+      @student = original_student
       expect(
         run_query(@query, @other_class_student)["data"]["enrollment"]
       ).to be_nil
@@ -64,13 +131,13 @@ describe "legacyNode" do
     before(:once) do
       @module = @course.context_modules.create! name: "asdf"
       @query = <<~GQL
-      query {
-        module: legacyNode(type: Module, _id: "#{@module.id}") {
-          ... on Module {
-            _id
+        query {
+          module: legacyNode(type: Module, _id: "#{@module.id}") {
+            ... on Module {
+              _id
+            }
           }
         }
-      }
       GQL
     end
 
@@ -94,13 +161,13 @@ describe "legacyNode" do
       @page = @course.wiki.front_page
       @page.save!
       @query = <<~GQL
-      query {
-        page: legacyNode(type: Page, _id: "#{@page.id}") {
-          ... on Page {
-            _id
+        query {
+          page: legacyNode(type: Page, _id: "#{@page.id}") {
+            ... on Page {
+              _id
+            }
           }
         }
-      }
       GQL
     end
 

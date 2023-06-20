@@ -26,12 +26,13 @@
 
 <ul class="recent_activity unstyled_list">
 <% categorized_items =
-    Rails.cache.fetch(['categorized_stream_items', @current_user, collection_cache_key(@stream_items)].cache_key, :expires_in => 15.minutes) do
+    Rails.cache.fetch(['categorized_stream_items', @user || @current_user, collection_cache_key(@stream_items)].cache_key, :expires_in => 15.minutes) do
       categorize_stream_items(@stream_items)
     end
 %>
 <% %w(Announcement Conversation Assignment DiscussionTopic AssessmentRequest).each do |category| %>
   <% items = categorized_items[category] %>
+  <% items = items.to_a + categorized_items['DiscussionEntry'].to_a if category == 'DiscussionTopic'%>
   <% category_class = category.underscore %>
   <% if items.present? %>
     <li class="stream-category stream-<%= category_class %>" data-category="<%= category %>">
@@ -64,7 +65,7 @@
           </div>
         </div>
         <div class=header-right-side>
-          <a href="#" class="toggle-details" aria-controls="details_container"></a>
+          <a href="#" role="button" class="toggle-details" aria-controls="details_container"></a>
         </div>
       </div>
 

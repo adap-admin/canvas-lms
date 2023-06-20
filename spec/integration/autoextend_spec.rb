@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -16,7 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require_relative '../spec_helper'
+require_relative "../spec_helper"
 
 describe Autoextend do
   it "all extensions get used" do
@@ -27,10 +29,11 @@ describe Autoextend do
       begin
         extension.const_name.to_s.constantize
       rescue NameError
+        nil
       end
 
       # not found via autoloading? maybe it's a migration
-      if !extension.used
+      unless extension.used
         ActiveRecord::Base.connection.migration_context.migrations.map(&:disable_ddl_transaction)
       end
 
@@ -41,7 +44,7 @@ describe Autoextend do
                        else
                          extension.block
                        end
-      expect(extension.used).to(eq(true), "expected extension #{extension_name} to hook into #{extension.const_name}")
+      expect(extension.used).to(be(true), "expected extension #{extension_name} to hook into #{extension.const_name}")
     end
   end
 end

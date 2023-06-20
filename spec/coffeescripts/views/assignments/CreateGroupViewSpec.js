@@ -17,12 +17,11 @@
  */
 
 import {isEmpty, keys} from 'lodash'
-import Backbone from 'Backbone'
-import AssignmentGroupCollection from 'compiled/collections/AssignmentGroupCollection'
-import AssignmentGroup from 'compiled/models/AssignmentGroup'
-import Assignment from 'compiled/models/Assignment'
-import Course from 'compiled/models/Course'
-import CreateGroupView from 'compiled/views/assignments/CreateGroupView'
+import AssignmentGroupCollection from '@canvas/assignments/backbone/collections/AssignmentGroupCollection'
+import AssignmentGroup from '@canvas/assignments/backbone/models/AssignmentGroup'
+import Assignment from '@canvas/assignments/backbone/models/Assignment'
+import Course from '@canvas/courses/backbone/models/Course'
+import CreateGroupView from 'ui/features/assignment_index/backbone/views/CreateGroupView'
 import $ from 'jquery'
 import fakeENV from 'helpers/fakeENV'
 import assertions from 'helpers/assertions'
@@ -32,16 +31,16 @@ const group = (opts = {}) =>
   new AssignmentGroup({
     name: 'something cool',
     assignments: [new Assignment(), new Assignment()],
-    ...opts
+    ...opts,
   })
 const assignmentGroups = () => new AssignmentGroupCollection([group(), group()])
-const createView = function(opts = {}) {
+const createView = function (opts = {}) {
   const groups = opts.assignmentGroups || assignmentGroups()
   const args = {
     course: opts.course || new Course({apply_assignment_group_weights: true}),
     assignmentGroups: groups,
     assignmentGroup: opts.group || (opts.newGroup == null ? groups.first() : undefined),
-    userIsAdmin: opts.userIsAdmin
+    userIsAdmin: opts.userIsAdmin,
   }
   return new CreateGroupView(args)
 }
@@ -53,7 +52,7 @@ QUnit.module('CreateGroupView', {
   teardown() {
     fakeENV.teardown()
     return $('form[id^=ui-id-]').remove()
-  }
+  },
 })
 
 test('should be accessible', assert => {
@@ -78,14 +77,14 @@ test('it should not add errors when never_drop rules are added', () => {
   const data = {
     name: 'Assignments',
     rules: {
-      never_drop: ['1854', '352', '234563']
-    }
+      never_drop: ['1854', '352', '234563'],
+    },
   }
   const errors = view.validateFormData(data)
   ok(isEmpty(errors))
 })
 
-test('it should create a new assignment group', function() {
+test('it should create a new assignment group', () => {
   sandbox.stub(CreateGroupView.prototype, 'close')
   const view = createView({newGroup: true})
   view.render()
@@ -93,7 +92,7 @@ test('it should create a new assignment group', function() {
   equal(view.assignmentGroups.size(), 3)
 })
 
-test('it should edit an existing assignment group', function() {
+test('it should edit an existing assignment group', () => {
   const view = createView()
   const save_spy = sandbox.stub(view.model, 'save').returns($.Deferred().resolve())
   view.render()
@@ -109,7 +108,7 @@ test('it should edit an existing assignment group', function() {
   ok(save_spy.called)
 })
 
-test('it should not save drop rules when none are given', function() {
+test('it should not save drop rules when none are given', () => {
   const view = createView()
   const save_spy = sandbox.stub(view.model, 'save').returns($.Deferred().resolve())
   view.render()
@@ -131,8 +130,8 @@ test('it should only allow positive numbers for drop rules', () => {
     rules: {
       drop_lowest: 'tree',
       drop_highest: -1,
-      never_drop: ['1', '2', '3']
-    }
+      never_drop: ['1', '2', '3'],
+    },
   }
   const errors = view.validateFormData(data)
   ok(errors)
@@ -141,10 +140,20 @@ test('it should only allow positive numbers for drop rules', () => {
 
 test('it should only allow less than the number of assignments for drop rules', () => {
   const view = createView()
-  const assignments = view.assignmentGroup.get('assignments')
   const data = {
     name: 'Assignments',
-    rules: {drop_highest: 5}
+    rules: {drop_highest: 5},
+  }
+  const errors = view.validateFormData(data)
+  ok(errors)
+  equal(keys(errors).length, 1)
+})
+
+test('it should only allow integer values for rules', () => {
+  const view = createView()
+  const data = {
+    name: 'Assignments',
+    rules: {drop_highest: 2.5},
   }
   const errors = view.validateFormData(data)
   ok(errors)
@@ -153,7 +162,6 @@ test('it should only allow less than the number of assignments for drop rules', 
 
 test('it should not allow assignment groups with no name', () => {
   const view = createView()
-  const assignments = view.assignmentGroup.get('assignments')
   const data = {name: ''}
   const errors = view.validateFormData(data)
   ok(errors)
@@ -162,33 +170,32 @@ test('it should not allow assignment groups with no name', () => {
 
 test('it should not allow NaN values for group weight', () => {
   const view = createView()
-  const assignments = view.assignmentGroup.get('assignments')
   const data = {
     name: 'Assignments',
     drop_highest: '0',
     drop_lowest: '0',
-    group_weight: 'the weighting is the hardest part'
+    group_weight: 'the weighting is the hardest part',
   }
   const errors = view.validateFormData(data)
   ok(errors)
   equal(keys(errors).length, 1)
 })
 
-test('it should trigger a render event on save success when editing', function() {
+test('it should trigger a render event on save success when editing', () => {
   const triggerSpy = sandbox.spy(AssignmentGroupCollection.prototype, 'trigger')
   const view = createView()
   view.onSaveSuccess()
   ok(triggerSpy.calledWith('render'))
 })
 
-test('it should call render on save success if adding an assignmentGroup', function() {
+test('it should call render on save success if adding an assignmentGroup', () => {
   const view = createView({newGroup: true})
   sandbox.stub(view, 'render')
   view.onSaveSuccess()
   equal(view.render.callCount, 1)
 })
 
-test('it shows a success message', function() {
+test('it shows a success message', () => {
   sandbox.stub(CreateGroupView.prototype, 'close')
   sandbox.spy($, 'flashMessage')
   const clock = sinon.useFakeTimers()
@@ -205,7 +212,7 @@ test('does not render group weight input when the course is not using weights', 
   const course = new Course({apply_assignment_group_weights: false})
   const view = createView({
     assignmentGroups: groups,
-    course
+    course,
   })
   view.render()
   notOk(view.showWeight())
@@ -217,7 +224,7 @@ test('disables group weight input when an assignment is due in a closed grading 
   const groups = new AssignmentGroupCollection([group(), closed_group])
   const view = createView({
     group: closed_group,
-    assignmentGroups: groups
+    assignmentGroups: groups,
   })
   view.render()
   notOk(view.canChangeWeighting())
@@ -230,7 +237,7 @@ test('does not disable group weight input when userIsAdmin is true', () => {
   const view = createView({
     group: closed_group,
     assignmentGroups: groups,
-    userIsAdmin: true
+    userIsAdmin: true,
   })
   view.render()
   ok(view.canChangeWeighting())
@@ -242,7 +249,7 @@ test('disables drop rule inputs when an assignment is due in a closed grading pe
   const groups = new AssignmentGroupCollection([group(), closed_group])
   const view = createView({
     group: closed_group,
-    assignmentGroups: groups
+    assignmentGroups: groups,
   })
   view.render()
   ok(view.$('[name="rules[drop_lowest]"]').attr('readonly'))
@@ -255,7 +262,7 @@ test('does not disable drop rule inputs when userIsAdmin is true', () => {
   const view = createView({
     group: closed_group,
     assignmentGroups: groups,
-    userIsAdmin: true
+    userIsAdmin: true,
   })
   view.render()
   notOk(view.$('[name="rules[drop_lowest]"]').attr('readonly'))

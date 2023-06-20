@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -15,52 +17,102 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-# loading all the locales has a significant (>30%) impact on the speed of initializing canvas
-# so we skip it in situations where we don't need the locales, such as in development mode and in rails console
-skip_locale_loading = (Rails.env.development? ||
-  Rails.env.test? ||
-  $0 == 'irb' ||
-  $PROGRAM_NAME == 'rails_console' ||
-  $0 =~ /rake$/)
-if ENV['RAILS_LOAD_ALL_LOCALES']
-  skip_locale_loading = ENV['RAILS_LOAD_ALL_LOCALES'] == '0'
-end
-# always load locales for rake tasks that we know need them
-if $0 =~ /rake$/ && !($ARGV & ["i18n:generate_js",
-                               "canvas:compile_assets",
-                               "canvas:compile_assets_dev",
-                               "js:test"]).empty?
-  skip_locale_loading = false
-end
+module CanvasI18nFallbacks
+  # see BCP-47 "Tags for Identifying Languages" for the grammar
+  # definition that led to this pattern match. It is not 100%
+  # strictly implemented but this will be more than sufficient
+  # for Canvas
+  LANG_PAT = /
+    ^
+    ([a-z]{2,3})                               # language
+    (-[a-z]{4})?                               # optional script
+    (-(?:[a-z]{2}|[0-9]{3}))?                  # optional region
+    ((?:-(?:[a-z0-9]{5,8}|[0-9][a-z0-9]{3}))*) # optional variants
+    ((?:-[a-wy-z](?:-[a-z0-9]{2,8})*)*)        # optional extensions
+    (-x(?:-[a-z0-9]{1,8})+)*                   # optional private use
+    $
+  /ix
 
-load_path = Rails.application.config.i18n.railties_load_path
-if skip_locale_loading
-  load_path = load_path.map(&:existent).flatten
-  load_path.replace(load_path.grep(%r{/(locales|en)\.yml\z}))
-else
-  # add the definition file at the end, to trump any weird/invalid stuff in locale-specific files
-  yml = "config/locales/locales.yml"
-  load_path << Rails::Paths::Path.new(CanvasRails::Application.instance.paths, yml, [yml])
-end
+  # This fallback order is more intelligent than simply lopping off
+  # elements from the end. For instance, in Canvas we use the private
+  # tag x-k12 in several locales, and we would want to keep that as long
+  # as possible, for instance we would like sv-FI-x-k12 to fall back to
+  # sv-x-k12 first, and then sv.
+  FALLBACK_ORDER = [
+    [0, 1, 2, 3, 4, 5].freeze,   # everything
+    [0, 1, 2, 3, 5].freeze,      # remove extensions
+    [0, 1, 2, 5].freeze,         # remove variants
+    [0, 1, 5].freeze,            # remove region
+    [0, 1, 2].freeze,            # remove private tags
+    [0, 2, 5].freeze,            # remove script
+    [0, 2].freeze,               # only language and region
+    [0, 5].freeze,               # only language and private tags
+    [0, 1].freeze,               # only language and script
+    [0].freeze                   # only language code
+  ].freeze
 
-Rails.application.config.i18n.enforce_available_locales = true
-Rails.application.config.i18n.fallbacks = true
+  def self.fallbacks(locale)
+    result = locale.match LANG_PAT
 
-module DontTrustI18nPluralizations
-  def pluralize(locale, entry, count)
-    super
-  rescue I18n::InvalidPluralizationData => e
-    Rails.logger.error("#{e.message} in locale #{locale.inspect}")
-    ""
+    return [] unless result
+
+    existing_elements = result.captures.map(&:present?)
+
+    order = []
+    FALLBACK_ORDER.each do |a|
+      order.push(a.dup.select { |e| existing_elements[e] })
+    end
+
+    order.uniq.map do |ordering|
+      ordering.map { |idx| result.captures[idx] }.join.to_sym
+    end
   end
 end
-I18n::Backend::Simple.include(DontTrustI18nPluralizations)
+
+# Now monkey-patch the i18n gem's Fallbacks::compute method to call our
+# fallback generator rather than its own.
+# rubocop:disable Style/OptionalBooleanParameter
+module I18n
+  module Locale
+    class Fallbacks < Hash
+      def compute(tags, include_defaults = true, exclude = [])
+        result = Array(tags).flat_map do |tag|
+          tags = CanvasI18nFallbacks.fallbacks(tag).map(&:to_sym) - exclude
+          tags.each { |t| tags += compute(@map[t], false, exclude + tags) if @map[t] }
+          tags
+        end
+        result.push(*defaults) if include_defaults
+        result.uniq!
+        result.compact!
+        result
+      end
+    end
+  end
+end
+# rubocop:enable Style/OptionalBooleanParameter
+
+Rails.configuration.to_prepare do
+  Rails.application.config.i18n.enforce_available_locales = true
+  Rails.application.config.i18n.fallbacks = true
+
+  # create a unique backend class with the behaviors we want
+  backend_class = Class.new(I18n::Backend::MetaLazyLoadable)
+  backend_class.prepend(I18n::Backend::DontTrustPluralizations)
+  backend_class.include(I18n::Backend::CSV)
+  backend_class.include(I18n::Backend::Fallbacks)
+
+  I18n.backend = backend_class.new(
+    meta_keys: %w[aliases community crowdsourced custom locales],
+    lazy_load: !Rails.application.config.eager_load
+  )
+end
 
 module FormatInterpolatedNumbers
   def interpolate_hash(string, values)
     values = values.dup
     values.each do |key, value|
       next unless value.is_a?(Numeric)
+
       values[key] = ActiveSupport::NumberHelper.number_to_delimited(value)
     end
     super(string, values)
@@ -68,45 +120,34 @@ module FormatInterpolatedNumbers
 end
 I18n.singleton_class.prepend(FormatInterpolatedNumbers)
 
-module CalculateDeprecatedFallbacks
-  def reload!
-    super
-    I18n.available_locales.each do |locale|
-      if (deprecated_for = I18n.backend.send(:lookup, locale.to_s, 'deprecated_for'))
-        I18n.fallbacks[locale] = I18n.fallbacks[deprecated_for.to_sym]
-      end
-    end
-  end
-end
-I18n.singleton_class.prepend CalculateDeprecatedFallbacks
-
 I18nliner.infer_interpolation_values = false
 
 module I18nliner
   module RehashArrays
     def infer_pluralization_hash(default, *args)
-      if default.is_a?(Array) && default.all?{|a| a.is_a?(Array) && a.size == 2 && a.first.is_a?(Symbol)}
+      if default.is_a?(Array) && default.all? { |a| a.is_a?(Array) && a.size == 2 && a.first.is_a?(Symbol) }
         # this was a pluralization hash but rails 4 made it an array in the view helpers
-        return Hash[default]
+        return default.to_h
       end
+
       super
     end
   end
   CallHelpers.extend(RehashArrays)
 end
 
-if ENV['LOLCALIZE']
-  require 'i18n_tasks'
-  I18n.send :extend, I18nTasks::Lolcalize
+if ENV["LOLCALIZE"]
+  require "i18n_tasks"
+  I18n.extend I18nTasks::Lolcalize
 end
 
 module I18nUtilities
   def before_label(text_or_key, default_value = nil, *args)
     if default_value
-      text_or_key = "labels.#{text_or_key}" unless text_or_key.to_s =~ /\A#/
+      text_or_key = "labels.#{text_or_key}" unless text_or_key.to_s.start_with?("#")
       text_or_key = respond_to?(:t) ? t(text_or_key, default_value, *args) : I18n.t(text_or_key, default_value, *args)
     end
-    I18n.t("#before_label_wrapper", "%{text}:", :text => text_or_key)
+    I18n.t("#before_label_wrapper", "%{text}:", text: text_or_key)
   end
 
   def _label_symbol_translation(method, text, options)
@@ -116,21 +157,21 @@ module I18nUtilities
     end
     text = method if text.nil? && method.is_a?(Symbol)
     if text.is_a?(Symbol)
-      text = "labels.#{text}" unless text.to_s =~ /\A#/
+      text = "labels.#{text}" unless text.to_s.start_with?("#")
       text = t(text, options.delete(:en))
     end
     text = before_label(text) if options.delete(:before)
-    return text, options
+    [text, options]
   end
 
-  def n(*args)
-    I18n.n(*args)
+  def n(...)
+    I18n.n(...)
   end
 end
 
-ActionView::Base.send(:include, I18nUtilities)
-ActionView::Helpers::FormHelper.send(:include, I18nUtilities)
-ActionView::Helpers::FormTagHelper.send(:include, I18nUtilities)
+ActionView::Base.include I18nUtilities
+ActionView::Helpers::FormHelper.include I18nUtilities
+ActionView::Helpers::FormTagHelper.include I18nUtilities
 
 module I18nFormHelper
   # a convenience method to put the ":" after the label text (or do whatever
@@ -185,20 +226,28 @@ module NumberLocalizer
         strip_insignificant_zeros = true
       end
       return ActiveSupport::NumberHelper.number_to_percentage(number,
-                                                              precision: precision,
-                                                              strip_insignificant_zeros: strip_insignificant_zeros)
+                                                              precision:,
+                                                              strip_insignificant_zeros:)
     end
 
     if precision.nil?
       return ActiveSupport::NumberHelper.number_to_delimited(number)
     end
 
-    ActiveSupport::NumberHelper.number_to_rounded(number, precision: precision)
+    ActiveSupport::NumberHelper.number_to_rounded(number, precision:)
+  end
+
+  def form_proper_noun_singular_genitive(noun)
+    if I18n.locale.to_s.start_with?("de") && %(s ß x z).include?(noun.last)
+      "#{noun}'"
+    else
+      I18n.t("#proper_noun_singular_genitive", "%{noun}'s", noun:)
+    end
   end
 end
 I18n.singleton_class.include(NumberLocalizer)
 
-I18n.send(:extend, Module.new {
+I18n.extend(Module.new do
   attr_accessor :localizer
 
   # Public: If a localizer has been set, use it to set the locale and then
@@ -225,13 +274,19 @@ I18n.send(:extend, Module.new {
       # english, rather than asploding
       key, options = I18nliner::CallHelpers.infer_arguments(args)
       raise if (options[:locale] || locale) == default_locale
+
       super(key, options.merge(locale: default_locale))
     end
   end
-  alias :t :translate
+  alias_method :t, :translate
+
+  def locale
+    set_locale_with_localizer
+    super
+  end
 
   def bigeasy_locale
-    backend.send(:lookup, locale.to_s, "bigeasy_locale") || locale.to_s.tr('-', '_')
+    backend.send(:lookup, locale.to_s, "bigeasy_locale") || locale.to_s.tr("-", "_")
   end
 
   def fullcalendar_locale
@@ -249,17 +304,17 @@ I18n.send(:extend, Module.new {
   def dow_offset
     backend.send(:lookup, locale.to_s, "dow_offset") || 0
   end
-})
+end)
 
 # see also corresponding extractor logic in
 # i18n_extraction/i18nliner_extensions
 require "i18n_extraction/i18nliner_scope_extensions"
 
 module I18nTemplate
-  def render(view, *args)
+  def render(view, *, **)
     old_i18nliner_scope = view.i18nliner_scope
     if @virtual_path
-      view.i18nliner_scope = I18nliner::Scope.new(@virtual_path.gsub(/\/_?/, '.'))
+      view.i18nliner_scope = I18nliner::Scope.new(@virtual_path.gsub(%r{/_?}, "."))
     end
     super
   ensure
@@ -274,7 +329,7 @@ end
 
 ActionController::Base.class_eval do
   def i18nliner_scope
-    @i18nliner_scope ||= I18nliner::Scope.new(controller_path.tr('/', '.'))
+    @i18nliner_scope ||= I18nliner::Scope.new(controller_path.tr("/", "."))
   end
 end
 
@@ -292,10 +347,12 @@ ActiveRecord::Base.class_eval do
 
   class << self
     # so that we don't load up the locales until we need them
-    LOCALE_LIST = []
-    def LOCALE_LIST.include?(item)
-      I18n.available_locales.map(&:to_s).include?(item)
+    class LocalesProxy
+      def include?(item)
+        I18n.available_locales.map(&:to_s).include?(item)
+      end
     end
+    LOCALE_LIST = LocalesProxy.new
 
     def validates_locale(*args)
       options = args.last.is_a?(Hash) ? args.pop : {}
@@ -303,38 +360,22 @@ ActiveRecord::Base.class_eval do
       if options[:allow_nil] && !options[:allow_empty]
         before_validation do |record|
           args.each do |field|
-            record.write_attribute(field, nil) if record.read_attribute(field) == ''
+            record.write_attribute(field, nil) if record.read_attribute(field) == ""
           end
         end
       end
       args.each do |field|
-        validates_inclusion_of field, options.merge(:in => LOCALE_LIST, :if => :"#{field}_changed?")
+        validates_inclusion_of field, options.merge(in: LOCALE_LIST, if: :"#{field}_changed?")
       end
     end
   end
 end
 
-ActionMailer::Base.class_eval do
-  def i18nliner_scope
-    @i18nliner_scope ||= I18nliner::Scope.new("#{mailer_name}.#{action_name}")
-  end
-
-  def translate(key, default, options = {})
-    key, options = I18nliner::CallHelpers.infer_arguments(args)
-    options = inferpolate(options) if I18nliner.infer_interpolation_values
-    options[:i18nliner_scope] = i18nliner_scope
-    I18n.translate(key, options)
-  end
-  alias :t :translate
-end
-
-require 'active_support/core_ext/array/conversions'
-
 module ToSentenceWithSimpleOr
   def to_sentence(options = {})
     if options == :or
-      super(:two_words_connector => I18n.t('support.array.or.two_words_connector'),
-            :last_word_connector => I18n.t('support.array.or.last_word_connector'))
+      super(two_words_connector: I18n.t("support.array.or.two_words_connector"),
+            last_word_connector: I18n.t("support.array.or.last_word_connector"))
     else
       super
     end

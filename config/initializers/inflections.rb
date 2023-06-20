@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -18,7 +20,12 @@
 # Be sure to restart your server when you modify this file.
 
 ActiveSupport::Inflector.inflections do |inflect|
-    inflect.singular /(criteri)a$/i, '\1on'
-    inflect.plural /(criteri)on$/i, '\1a'
-    inflect.acronym "GraphQL"
+  inflect.singular(/(criteri)a$/i, '\1on')
+  inflect.plural(/(criteri)on$/i, '\1a')
+  inflect.acronym "GraphQL"
+  inflect.acronym "IMS"
+  inflect.acronym "BLTI"
+  inflect.acronym "CSV"
+  inflect.acronym "OAuth"
+  inflect.acronym "OAuth2"
 end

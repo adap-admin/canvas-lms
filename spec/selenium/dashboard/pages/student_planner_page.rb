@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -15,10 +17,9 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_relative '../../common'
+require_relative "../../common"
 
 module PlannerPageObject
-
   #------------------------- Selectors --------------------------
 
   def todo_sidebar_modal_selector(title = nil)
@@ -42,7 +43,7 @@ module PlannerPageObject
   end
 
   def dismiss_opportunity_button_selector(item_name)
-    "button[title='Dismiss #{item_name}']"
+    "button:contains('Dismiss #{item_name}')"
   end
 
   def no_new_opportunity_msg_selector
@@ -72,7 +73,7 @@ module PlannerPageObject
   end
 
   def planner_app_div
-    f('.PlannerApp')
+    f(".PlannerApp")
   end
 
   def planner_header_container
@@ -92,7 +93,7 @@ module PlannerPageObject
   end
 
   def todo_sidebar_container
-    f('.Sidebar__TodoListContainer')
+    f(".Sidebar__TodoListContainer")
   end
 
   def todo_info_holder
@@ -100,17 +101,17 @@ module PlannerPageObject
   end
 
   def items_displayed
-    ff('li .planner-item', planner_app_div)
+    ff("li .planner-item", planner_app_div)
   end
 
   def title_input(title = nil)
     modal = todo_sidebar_modal(title)
-    ff('input', modal)[0]
+    ff("input", modal)[0]
   end
 
   def time_input
     modal = todo_sidebar_modal
-    ff('input', modal)[2]
+    ff("input", modal)[2]
   end
 
   def todo_save_button
@@ -119,7 +120,7 @@ module PlannerPageObject
 
   def todo_details
     modal = todo_sidebar_modal
-    f('textarea', modal)
+    f("textarea", modal)
   end
 
   def todo_sidebar_modal(title = nil)
@@ -128,12 +129,12 @@ module PlannerPageObject
 
   def discussion_index_page_detail
     # might need to change when implementing
-    f('.todo-date')
+    f(".todo-date")
   end
 
   def discussion_show_page_detail
     # might need to change when implementing
-    f('.discussion-tododate')
+    f(".discussion-tododate")
   end
 
   def pages_detail
@@ -157,14 +158,14 @@ module PlannerPageObject
   end
 
   def dashboard_options_menu_container
-    f('#DashboardOptionsMenu_Container')
+    f("#DashboardOptionsMenu_Container")
   end
 
   def course_assignment_link(course_name, scope)
     fxpath("//span[contains(text(),'#{course_name}')]", scope)
   end
 
-  def course_assignment_by_due_at(time=nil)
+  def course_assignment_by_due_at(time = nil)
     fxpath("//div[contains(@class, 'PlannerApp')]//span[contains(text(),'Due: #{time}')]")
   end
 
@@ -173,7 +174,7 @@ module PlannerPageObject
   end
 
   def dashboard_card
-    f('.ic-DashboardCard')
+    f(".ic-DashboardCard")
   end
 
   def dashboard_card_header_content
@@ -185,7 +186,7 @@ module PlannerPageObject
   end
 
   def todosidebar_item_list
-    f('#planner-todosidebar-item-list')
+    f("#planner-todosidebar-item-list")
   end
 
   def todo_item(todo_title)
@@ -205,23 +206,24 @@ module PlannerPageObject
   end
 
   def opportunities_parent
-    f('#opportunities_parent')
+    f("#opportunities_parent")
   end
 
   def dismiss_opportunity_button(item_name)
-    f(dismiss_opportunity_button_selector(item_name))
+    fj(dismiss_opportunity_button_selector(item_name))
   end
 
-  def list_view_planner_items
-    ff('div.planner-item')
+  # finds planner item by any unique text within it (header is usually good)
+  def list_view_planner_item(text)
+    fj("div.planner-item:contains('#{text}')")
   end
 
   def planner_item_status_checkbox(object_type, object_name)
-    fj("div label:contains('#{object_type} #{object_name} is not marked as done.')")
+    fj("input + label:contains('#{object_type} #{object_name} is not marked as done.')")
   end
 
   def course_page_recent_activity
-    f('ul.recent_activity')
+    f("ul.recent_activity")
   end
 
   def recent_activity_show_more_link
@@ -233,11 +235,11 @@ module PlannerPageObject
   end
 
   def recent_activity_dashboard_activity
-    f('#dashboard-activity')
+    f("#dashboard-activity")
   end
 
   def course_recent_activity_main_content
-    f('#course_home_content')
+    f("#course_home_content")
   end
 
   #----------------------- Actions & Methods -------------------------
@@ -274,6 +276,7 @@ module PlannerPageObject
 
   def open_opportunities_dropdown
     fj("button:contains('opportunit')").click
+    wait_for(method: nil, timeout: 1) { f("#Opportunities-styles__tabs_container").displayed? }
   end
 
   def close_opportunities_dropdown
@@ -295,22 +298,22 @@ module PlannerPageObject
 
   def validate_url(object_type, object)
     url = driver.current_url
-    domain = url.split('courses')[0]
+    domain = url.split("courses")[0]
     expected_url = domain + "courses/#{@course.id}/#{object_type}/#{object.id}"
-    expected_url = domain + "courses/#{@course.id}/#{object_type}/#{object.title.downcase}" if object_type == 'pages'
+    expected_url = domain + "courses/#{@course.id}/#{object_type}/#{object.title.downcase}" if object_type == "pages"
     expect(url).to eq(expected_url)
   end
 
   def validate_submissions_url(object_type, object, user)
     url = driver.current_url
-    domain = url.split('courses')[0]
+    domain = url.split("courses")[0]
     expected_url = domain + "courses/#{@course.id}/#{object_type}/#{object.id}/submissions/#{user.id}"
     expect(url).to eq(expected_url)
   end
 
   def validate_calendar_url(object)
     url = driver.current_url
-    domain = url.split('calendar')[0]
+    domain = url.split("calendar")[0]
     expected_url = domain + "calendar?event_id=#{object.id}&include_contexts=#{object.context_code}"
     expected_url += "#view_start=#{object.start_at.to_date}&view_name=month"
     expect(url).to eq(expected_url)
@@ -351,14 +354,14 @@ module PlannerPageObject
   def go_to_list_view
     @student1.dashboard_view = "planner"
     @student1.save!
-    get '/'
+    get "/"
     wait_for_planner_load
   end
 
   def go_to_dashcard_view
     @student1.dashboard_view = "cards"
     @student1.save!
-    get '/'
+    get "/"
     wait_for_dashboard_load
   end
 
@@ -385,30 +388,32 @@ module PlannerPageObject
 
   def view_todo_item
     @student_to_do = @student1.planner_notes.create!(todo_date: Time.zone.now,
-                                                     title: "Student to do", course_id: @course.id)
+                                                     title: "Student to do",
+                                                     course_id: @course.id)
     go_to_list_view
     click_item_button(@student_to_do.title)
     @modal = todo_sidebar_modal(@student_to_do.title)
+    wait_for(method: nil, timeout: 1) { todo_tray_course_selector.displayed? }
   end
 
-  def graded_discussion_in_the_past(due = Time.zone.now - 2.days, title = 'Graded discussion past')
-    assignment = @course.assignments.create!(name: 'assignment 1',
+  def graded_discussion_in_the_past(due = 2.days.ago, title = "Graded discussion past")
+    assignment = @course.assignments.create!(name: "assignment 1",
                                              due_at: due)
     discussion = @course.discussion_topics.create!(user: @teacher,
-                                                   title: title,
-                                                   message: 'Discussion topic message',
-                                                   assignment: assignment)
+                                                   title:,
+                                                   message: "Discussion topic message",
+                                                   assignment:)
     discussion.discussion_entries.create!(user: @teacher,
                                           message: "new reply from teacher")
   end
 
   def graded_discussion_in_the_future
-    assignment = @course.assignments.create!(name: 'assignment 2',
-                                             due_at: Time.zone.now + 2.days)
+    assignment = @course.assignments.create!(name: "assignment 2",
+                                             due_at: 2.days.from_now)
     discussion = @course.discussion_topics.create!(user: @teacher,
-                                                   title: 'Graded discussion future',
-                                                   message: 'Discussion topic message',
-                                                   assignment: assignment)
+                                                   title: "Graded discussion future",
+                                                   message: "Discussion topic message",
+                                                   assignment:)
     discussion.discussion_entries.create!(user: @teacher,
                                           message: "new reply from teacher")
   end
@@ -417,33 +422,13 @@ module PlannerPageObject
     wait_for_dom_ready
     wait_for_ajaximations
     todo_modal_button
-    f('.planner-day, .planner-empty-state') # one or the other will be rendered
+    f(".planner-day, .planner-empty-state") # one or the other will be rendered
   end
 
   def wait_for_dashboard_load
     wait_for_dom_ready
     wait_for_ajaximations
-    f('.ic-dashboard-app')
-  end
-
-  def wait_for_todo_load
-    begin
-      f("[id*=Spinner]", todo_sidebar_container)
-    rescue Selenium::WebDriver::Error::NoSuchElementError
-    rescue SpecTimeLimit::Error
-    end
-    expect(todo_sidebar_container).not_to contain_jqcss("title:contains('To Do Items Loading')")
-  end
-
-  def wait_for_spinner
-    begin
-      f("[id*=Spinner]", planner_app_div) # the loading spinner appears
-    rescue Selenium::WebDriver::Error::NoSuchElementError
-      # ignore - sometimes spinner is too quick
-    rescue SpecTimeLimit::Error
-      # ignore - sometimes spinner doesn't appear in Chrome
-    end
-    expect(planner_app_div).not_to contain_jqcss("title:contains('Loading')")
+    f(".ic-dashboard-app")
   end
 
   def first_item_on_page
@@ -452,14 +437,15 @@ module PlannerPageObject
 
   def new_activities_in_the_past
     old = graded_discussion_in_the_past
-    older = graded_discussion_in_the_past(Time.zone.now-4.days, 'older')
-    oldest = graded_discussion_in_the_past(Time.zone.now-6.days, 'oldest')
-    [old, older, oldest]
+    older = graded_discussion_in_the_past(4.days.ago, "older")
+    oldest = graded_discussion_in_the_past(6.days.ago, "oldest")
+    ancient = graded_discussion_in_the_past(8.days.ago, "ancient")
+    [old, older, oldest, ancient]
   end
 
   def create_new_todo
     modal = todo_sidebar_modal
-    element = f('input', modal)
+    element = f("input", modal)
     element.send_keys("Title Text")
     todo_save_button.click
   end
@@ -469,7 +455,12 @@ module PlannerPageObject
     dashboard_options_menu_container.click
   end
 
-  def scroll_height
-    driver.execute_script("return window.pageYOffset")
+  def item_top_position(index)
+    items_displayed[index].location.y
+  end
+
+  def header_bottom_position
+    header = planner_header_container
+    header.location.y + header.size.height
   end
 end

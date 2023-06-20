@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -15,16 +17,14 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'spec_helper'
-
 describe DataFixup::BackfillPostedAtOnSubmissions do
   let(:course) { Course.create! }
-  let(:assignment) { course.assignments.create!(title: 'fred') }
+  let(:assignment) { course.assignments.create!(title: "fred") }
   let(:student) { course.enroll_student(User.create!).user }
   let(:submission) { assignment.submission_for_student(student) }
 
   def do_backfill
-    DataFixup::BackfillPostedAtOnSubmissions.run(submission.id, submission.id+1)
+    DataFixup::BackfillPostedAtOnSubmissions.run(submission.id, submission.id + 1)
     submission.reload
   end
   private :do_backfill
@@ -39,12 +39,12 @@ describe DataFixup::BackfillPostedAtOnSubmissions do
   it "does not set the posted_at date if graded_at is nil" do
     do_backfill
 
-    expect(submission.posted_at).to be nil
+    expect(submission.posted_at).to be_nil
   end
 
   it "does not change the posted_at date if it is already non-nil" do
     posted_at = 1.day.ago
-    submission.update!(graded_at: 2.days.ago, posted_at: posted_at)
+    submission.update!(graded_at: 2.days.ago, posted_at:)
     submission.reload
 
     expect { do_backfill }.not_to change { submission.posted_at }

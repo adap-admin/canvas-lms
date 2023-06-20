@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -18,14 +20,15 @@
 module Importers
   class LinkReplacer
     LINK_TYPE_TO_CLASS = {
-      :announcement => Announcement,
-      :assessment_question => AssessmentQuestion,
-      :assignment => Assignment,
-      :calendar_event => CalendarEvent,
-      :discussion_topic => DiscussionTopic,
-      :quiz => Quizzes::Quiz,
-      :wiki_page => WikiPage
-    }
+      announcement: Announcement,
+      assessment_question: AssessmentQuestion,
+      assignment: Assignment,
+      calendar_event: CalendarEvent,
+      discussion_topic: DiscussionTopic,
+      quiz: Quizzes::Quiz,
+      learning_outcome: LearningOutcome,
+      wiki_page: WikiPage
+    }.freeze
 
     include LinkParser::Helpers
 
@@ -37,31 +40,29 @@ module Importers
       load_questions!(link_map)
 
       link_map.each do |item_key, field_links|
-        begin
-          item_key[:item] ||= retrieve_item(item_key)
+        item_key[:item] ||= retrieve_item(item_key)
 
-          replace_item_placeholders!(item_key, field_links)
+        replace_item_placeholders!(item_key, field_links)
 
-          add_missing_link_warnings!(item_key, field_links)
-        rescue
-          @migration.add_warning("An error occurred while translating content links", $!)
-        end
+        add_missing_link_warnings!(item_key, field_links)
+      rescue
+        @migration.add_warning("An error occurred while translating content links", $!)
       end
     end
 
     # these don't get added to the list of imported migration items
     def load_questions!(link_map)
-      aq_item_keys = link_map.keys.select{|item_key| item_key[:type] == :assessment_question}
+      aq_item_keys = link_map.keys.select { |item_key| item_key[:type] == :assessment_question }
       aq_item_keys.each_slice(100) do |item_keys|
-        context.assessment_questions.where(:migration_id => item_keys.map{|ikey| ikey[:migration_id]}).preload(:assessment_question_bank).each do |aq|
-          item_keys.detect{|ikey| ikey[:migration_id] == aq.migration_id}[:item] = aq
+        context.assessment_questions.where(migration_id: item_keys.pluck(:migration_id)).preload(:assessment_question_bank).each do |aq|
+          item_keys.detect { |ikey| ikey[:migration_id] == aq.migration_id }[:item] = aq
         end
       end
 
-      qq_item_keys = link_map.keys.select{|item_key| item_key[:type] == :quiz_question}
+      qq_item_keys = link_map.keys.select { |item_key| item_key[:type] == :quiz_question }
       qq_item_keys.each_slice(100) do |item_keys|
-        context.quiz_questions.where(:migration_id => item_keys.map{|ikey| ikey[:migration_id]}).each do |qq|
-          item_keys.detect{|ikey| ikey[:migration_id] == qq.migration_id}[:item] = qq
+        context.quiz_questions.where(migration_id: item_keys.pluck(:migration_id)).each do |qq|
+          item_keys.detect { |ikey| ikey[:migration_id] == qq.migration_id }[:item] = qq
         end
       end
     end
@@ -69,20 +70,22 @@ module Importers
     def retrieve_item(item_key)
       klass = LINK_TYPE_TO_CLASS[item_key[:type]]
       return unless klass
+
       item = @migration.find_imported_migration_item(klass, item_key[:migration_id])
       raise "item not found" unless item
+
       item
     end
 
     def add_missing_link_warnings!(item_key, field_links)
       fix_issue_url = nil
       field_links.each do |field, links|
-        missing_links = links.select{|link| link[:replaced] && (link[:missing_url] || !link[:new_value])}
-        if missing_links.any?
-          fix_issue_url ||= fix_issue_url(item_key)
-          type = item_key[:type].to_s.humanize.titleize
-          @migration.add_warning_for_missing_content_links(type, field, missing_links, fix_issue_url)
-        end
+        missing_links = links.select { |link| link[:replaced] && (link[:missing_url] || !link[:new_value]) }
+        next unless missing_links.any?
+
+        fix_issue_url ||= fix_issue_url(item_key)
+        type = item_key[:type].to_s.humanize.titleize
+        @migration.add_warning_for_missing_content_links(type, field, missing_links, fix_issue_url)
       end
     end
 
@@ -103,12 +106,12 @@ module Importers
       end
     end
 
-    def replace_item_placeholders!(item_key, field_links, skip_associations=false)
+    def replace_item_placeholders!(item_key, field_links, skip_associations = false)
       case item_key[:type]
       when :syllabus
         syllabus = context.syllabus_body
         if sub_placeholders!(syllabus, field_links.values.flatten)
-          context.class.where(:id => context.id).update_all(:syllabus_body => syllabus)
+          context.class.where(id: context.id).update_all(syllabus_body: syllabus)
         end
       when :assessment_question
         process_assessment_question!(item_key[:item], field_links.values.flatten)
@@ -124,15 +127,26 @@ module Importers
           end
         end
         if item_updates.present?
-          item.class.where(:id => item.id).update_all(item_updates)
-            if version = (item.current_version rescue nil)
-              replace_item_placeholders!({:type => :version, :item => version}, {:yaml => field_links.values.flatten})
-            end
+          item.class.where(id: item.id).update_all(item_updates)
+          # we don't want the placeholders sticking around in any
+          # version we've created.
+          rewrite_item_version!(item)
         end
 
         unless skip_associations
           process_assignment_types!(item, field_links.values.flatten)
         end
+      end
+    end
+
+    def rewrite_item_version!(item)
+      if (version = (item.current_version rescue nil))
+        # if there's a current version of this thing, it has placeholders
+        # in it.  rather than replace them in the yaml, which is finnicky, let's just
+        # make sure the current version is represented by the current model state
+        # by overwritting it
+        version.model = item.reload
+        version.save
       end
     end
 
@@ -153,7 +167,7 @@ module Importers
       subbed = false
       case object
       when Hash
-        object.values.each { |o| subbed = true if recursively_sub_placeholders!(o, links) }
+        object.each_value { |o| subbed = true if recursively_sub_placeholders!(o, links) }
       when Array
         object.each { |o| subbed = true if recursively_sub_placeholders!(o, links) }
       when String
@@ -166,18 +180,14 @@ module Importers
       case item
       when Assignment
         if item.discussion_topic
-          replace_item_placeholders!({:item => item.discussion_topic}, {:message => links}, true)
+          replace_item_placeholders!({ item: item.discussion_topic }, { message: links }, true)
         end
         if item.quiz
-          replace_item_placeholders!({:item => item.quiz}, {:description => links}, true)
+          replace_item_placeholders!({ item: item.quiz }, { description: links }, true)
         end
-      when DiscussionTopic
+      when DiscussionTopic, Quizzes::Quiz
         if item.assignment
-          replace_item_placeholders!({:item => item.assignment}, {:description => links}, true)
-        end
-      when Quizzes::Quiz
-        if item.assignment
-          replace_item_placeholders!({:item => item.assignment}, {:description => links}, true)
+          replace_item_placeholders!({ item: item.assignment }, { description: links }, true)
         end
       end
     end
@@ -185,17 +195,17 @@ module Importers
     def process_assessment_question!(aq, links)
       # we have to do a little bit more here because the question_data can get copied all over
       quiz_ids = []
-      Quizzes::QuizQuestion.where(:assessment_question_id => aq.id).find_each do |qq|
-        if recursively_sub_placeholders!(qq['question_data'], links)
-          Quizzes::QuizQuestion.where(:id => qq.id).update_all(:question_data => qq['question_data'])
+      Quizzes::QuizQuestion.where(assessment_question_id: aq.id).find_each do |qq|
+        if recursively_sub_placeholders!(qq["question_data"], links)
+          Quizzes::QuizQuestion.where(id: qq.id).update_all(question_data: qq["question_data"])
           quiz_ids << qq.quiz_id
         end
       end
 
       if quiz_ids.any?
-        Quizzes::Quiz.where(:id => quiz_ids.uniq).where("quiz_data IS NOT NULL").find_each do |quiz|
-          if recursively_sub_placeholders!(quiz['quiz_data'], links)
-            Quizzes::Quiz.where(:id => quiz.id).update_all(:quiz_data => quiz['quiz_data'])
+        Quizzes::Quiz.where(id: quiz_ids.uniq).where.not(quiz_data: nil).find_each do |quiz|
+          if recursively_sub_placeholders!(quiz["quiz_data"], links)
+            Quizzes::Quiz.where(id: quiz.id).update_all(quiz_data: quiz["quiz_data"])
           end
         end
       end
@@ -205,24 +215,23 @@ module Importers
       # basically just moving them to the question context
       links.each do |link|
         next unless link[:new_value]
+
         link[:new_value] = aq.translate_file_link(link[:new_value])
       end
 
-      if recursively_sub_placeholders!(aq['question_data'], links)
-        AssessmentQuestion.where(:id => aq.id).update_all(:question_data => aq['question_data'])
+      if recursively_sub_placeholders!(aq["question_data"], links)
+        AssessmentQuestion.where(id: aq.id).update_all(question_data: aq["question_data"])
       end
     end
 
     def process_quiz_question!(qq, links)
-      if recursively_sub_placeholders!(qq['question_data'], links)
-        Quizzes::QuizQuestion.where(:id => qq.id).update_all(:question_data => qq['question_data'])
+      if recursively_sub_placeholders!(qq["question_data"], links)
+        Quizzes::QuizQuestion.where(id: qq.id).update_all(question_data: qq["question_data"])
       end
 
-      quiz = Quizzes::Quiz.where(:id => qq.quiz_id).where("quiz_data IS NOT NULL").first
-      if quiz
-        if recursively_sub_placeholders!(quiz['quiz_data'], links)
-          Quizzes::Quiz.where(:id => quiz.id).update_all(:quiz_data => quiz['quiz_data'])
-        end
+      quiz = Quizzes::Quiz.where(id: qq.quiz_id).where.not(quiz_data: nil).first
+      if quiz && recursively_sub_placeholders!(quiz["quiz_data"], links)
+        Quizzes::Quiz.where(id: quiz.id).update_all(quiz_data: quiz["quiz_data"])
       end
     end
   end

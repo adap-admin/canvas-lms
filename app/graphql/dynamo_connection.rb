@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -16,26 +18,30 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-class DynamoConnection < GraphQL::Relay::BaseConnection
-  def cursor_from_node(item)
-    encode(item[nodes.sort_key])
+class DynamoConnection < GraphQL::Pagination::Connection
+  def cursor_for(item)
+    encode(item[items.sort_key])
   end
 
   def has_next_page
-    !!nodes.query.last_evaluated_key
+    !!items.query.last_evaluated_key
   end
 
   def has_previous_page
     false
   end
 
-  def paged_nodes
-    first ?
-      sliced_nodes.limit(first) :
+  def nodes
+    if first
+      sliced_nodes.limit(first)
+    else
       sliced_nodes
+    end
   end
 
+  private
+
   def sliced_nodes
-    nodes.after(after ? decode(after) : nil)
+    items.after(after ? decode(after) : nil)
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -17,7 +19,7 @@
 
 module DataFixup::FixupGroupOriginalityReports
   def self.run
-    originality_reports = OriginalityReport.joins(:submission).where.not(submissions: {group_id: nil})
+    originality_reports = OriginalityReport.joins(:submission).where.not(submissions: { group_id: nil })
     originality_reports.find_each(&:copy_to_group_submissions!)
   end
 end

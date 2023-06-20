@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -16,10 +18,9 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'spec_helper'
-require_relative './messages_helper'
+require_relative "./messages_helper"
 
-describe 'content_link_error' do
+describe "content_link_error" do
   before :once do
     @course = course_model
     @course2 = course_model
@@ -33,14 +34,22 @@ describe 'content_link_error' do
 
   let(:asset) { @assignment }
   let(:notification_name) { :content_link_error }
-  include_examples "a message"
 
-  let(:asset) { @quiz }
-  include_examples "a message"
+  context "with a quiz" do
+    let(:asset) { @quiz }
 
-  let(:asset) { @dt }
-  include_examples "a message"
+    include_examples "a message"
+  end
 
-  let(:asset) { @page }
-  include_examples "a message"
+  context "with a discussion topic" do
+    let(:asset) { @dt }
+
+    include_examples "a message"
+  end
+
+  context "with a wiki page" do
+    let(:asset) { @page }
+
+    include_examples "a message"
+  end
 end

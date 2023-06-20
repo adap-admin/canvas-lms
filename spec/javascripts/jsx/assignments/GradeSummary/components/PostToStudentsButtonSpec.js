@@ -19,8 +19,11 @@
 import React from 'react'
 import {mount} from 'enzyme'
 
-import {FAILURE, STARTED} from 'jsx/assignments/GradeSummary/assignment/AssignmentActions'
-import PostToStudentsButton from 'jsx/assignments/GradeSummary/components/PostToStudentsButton'
+import {
+  FAILURE,
+  STARTED,
+} from 'ui/features/assignment_grade_summary/react/assignment/AssignmentActions'
+import PostToStudentsButton from 'ui/features/assignment_grade_summary/react/components/PostToStudentsButton'
 
 QUnit.module('GradeSummary PostToStudentsButton', suiteHooks => {
   let props
@@ -30,10 +33,10 @@ QUnit.module('GradeSummary PostToStudentsButton', suiteHooks => {
     props = {
       assignment: {
         gradesPublished: true,
-        muted: true
+        muted: true,
       },
       onClick: sinon.spy(),
-      unmuteAssignmentStatus: null
+      unmuteAssignmentStatus: null,
     }
   })
 

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -20,16 +22,14 @@ module Canvas::Plugins::Validators::EtherpadValidator
   def self.validate(settings, plugin_setting)
     if settings.map(&:last).all?(&:blank?)
       {}
+    elsif settings.map(&:last).any?(&:blank?)
+      plugin_setting.errors.add(:base, I18n.t("canvas.plugins.errors.all_fields_required", "All fields are required"))
+      false
     else
-      if settings.map(&:last).any?(&:blank?)
-        plugin_setting.errors.add(:base, I18n.t('canvas.plugins.errors.all_fields_required', 'All fields are required'))
-        false
-      else
-        settings = settings.slice(:domain, :name).to_h.with_indifferent_access
-        settings[:domain] = settings[:domain]&.sub(/https?:/, '')&.gsub(/(^\/+)|(\/)+$/,'')
-        settings[:name] ||= "EtherPad"
-        settings
-      end
+      settings = settings.slice(:domain, :name).to_h.with_indifferent_access
+      settings[:domain] = settings[:domain]&.sub(/https?:/, "")&.gsub(%r{(^/+)|(/)+$}, "")
+      settings[:name] ||= "EtherPad"
+      settings
     end
   end
 end

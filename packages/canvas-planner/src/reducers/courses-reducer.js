@@ -15,18 +15,35 @@
  * You should have received a copy of the GNU Affero General Public License along
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-import { handleActions } from 'redux-actions';
+import {handleActions} from 'redux-actions'
 
-function mergeGradesIntoCourses (courses, action) {
-  const grades = action.payload;
+const defaultState = []
+
+function mergeGradesIntoCourses(courses, action) {
+  const grades = action.payload
   return courses.map(course => {
-    const newCourse = {...course, ...grades[course.id]};
-    delete newCourse.courseId; // remove confusing duplicate field
-    return newCourse;
-  });
+    const newCourse = {...course, ...grades[course.id]}
+    delete newCourse.courseId // remove confusing duplicate field
+    return newCourse
+  })
 }
 
-export default handleActions({
-  INITIAL_OPTIONS: (state, action) => action.payload.env.STUDENT_PLANNER_COURSES,
-  GOT_GRADES_SUCCESS: mergeGradesIntoCourses,
-}, []);
+export default handleActions(
+  {
+    INITIAL_OPTIONS: (state, action) => {
+      if (action.payload.singleCourse) {
+        return [action.payload.env.COURSE]
+      }
+      return []
+    },
+    GOT_COURSE_LIST: (state, action) => {
+      return action.payload
+    },
+    GOT_GRADES_SUCCESS: mergeGradesIntoCourses,
+    CLEAR_COURSES: (state, action) => {
+      if (action.payload) return state
+      return defaultState
+    }
+  },
+  defaultState
+)

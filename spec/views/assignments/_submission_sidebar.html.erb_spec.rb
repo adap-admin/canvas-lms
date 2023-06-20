@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -17,18 +19,16 @@
 #
 
 require "spec_helper"
-require_relative "../views_helper.rb"
+require_relative "../views_helper"
 
-describe "assignments/_submission_sidebar.html.erb" do
+describe "assignments/_submission_sidebar" do
   let(:course) { Course.create! }
   let(:student) { User.create! }
   let(:teacher) { User.create! }
   let(:assignment) { course.assignments.create! }
   let(:submission) { assignment.submissions.find_by(user: student) }
 
-  before(:each) do
-    course.enable_feature!(:new_gradebook)
-    PostPolicy.enable_feature!
+  before do
     course.enroll_student(student)
     course.enroll_teacher(teacher)
     view_context(course, student)
@@ -36,17 +36,25 @@ describe "assignments/_submission_sidebar.html.erb" do
     assign(:assignment, assignment)
   end
 
-  context "when assignment posts manually" do
-    before(:each) do
-      assignment.ensure_post_policy(post_manually: true)
+  context "when submission was proxy" do
+    it "renders the proxy submitter's name" do
+      submission.update!(proxy_submitter: teacher)
+      assign(:current_user_submission, submission)
+      render
+      html = Nokogiri::HTML5.fragment(response.body)
+      expect(html.css("div.content").text).to include teacher.short_name
     end
+  end
+
+  context "when assignment posts manually" do
+    before { assignment.ensure_post_policy(post_manually: true) }
 
     it "renders a grade when a grade exists and the submission is posted" do
       assignment.grade_student(student, grader: teacher, score: 23)
       submission.update!(posted_at: Time.zone.now)
       assign(:current_user_submission, submission)
       render
-      html = Nokogiri::HTML.fragment(response.body)
+      html = Nokogiri::HTML5.fragment(response.body)
       expect(html.css("div.module div").text).to include "Grade: 23"
     end
 
@@ -54,7 +62,7 @@ describe "assignments/_submission_sidebar.html.erb" do
       assignment.grade_student(student, grader: teacher, score: 23)
       assign(:current_user_submission, submission)
       render
-      html = Nokogiri::HTML.fragment(response.body)
+      html = Nokogiri::HTML5.fragment(response.body)
       expect(html.css("div.module div").text).not_to include "Grade: 23"
     end
 
@@ -63,7 +71,7 @@ describe "assignments/_submission_sidebar.html.erb" do
       submission.update!(posted_at: Time.zone.now)
       assign(:current_user_submission, submission)
       render
-      html = Nokogiri::HTML.fragment(response.body)
+      html = Nokogiri::HTML5.fragment(response.body)
       expect(html.css("div#comment-#{comment.id}").text).to include "a comment!"
     end
 
@@ -71,21 +79,26 @@ describe "assignments/_submission_sidebar.html.erb" do
       comment = submission.add_comment(author: teacher, comment: "a comment!")
       assign(:current_user_submission, submission)
       render
-      html = Nokogiri::HTML.fragment(response.body)
+      html = Nokogiri::HTML5.fragment(response.body)
       expect(html.css("div#comment-#{comment.id}").text).not_to include "a comment!"
+    end
+
+    it "must render when the submission type is online_quiz but assignment lacks of quiz.id" do
+      submission[:submission_type] = "online_quiz"
+      assign(:current_user_submission, submission)
+      render
+      expect(response).not_to be_nil
     end
   end
 
   context "when assignment posts automatically" do
-    before(:each) do
-      assignment.ensure_post_policy(post_manually: false)
-    end
+    before { assignment.ensure_post_policy(post_manually: false) }
 
     it "renders a grade" do
       assignment.grade_student(student, grader: teacher, score: 23)
       assign(:current_user_submission, submission)
       render
-      html = Nokogiri::HTML.fragment(response.body)
+      html = Nokogiri::HTML5.fragment(response.body)
       expect(html.css("div.module div").text).to include "Grade: 23"
     end
 
@@ -93,7 +106,7 @@ describe "assignments/_submission_sidebar.html.erb" do
       comment = submission.add_comment(author: teacher, comment: "a comment!")
       assign(:current_user_submission, submission)
       render
-      html = Nokogiri::HTML.fragment(response.body)
+      html = Nokogiri::HTML5.fragment(response.body)
       expect(html.css("div#comment-#{comment.id}").text).to include "a comment!"
     end
   end

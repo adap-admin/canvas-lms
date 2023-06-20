@@ -45,7 +45,17 @@
       </div>
     </div>
   <% end %>
-  <h2><%= @user.short_name %></h2>
+  <% if @user.workflow_state == 'deleted' %>
+    <div class="alert alert-danger">
+      <i class="icon-warning" aria-hidden="true"></i> <%= t("This user has been deleted.") %>
+      <% if @user.merged_into_user %>
+        <%= t("They were merged into *%{other_user}*.",
+          other_user: @user.merged_into_user.name,
+          wrapper: { '*' => link_to('\1', user_path(@user.merged_into_user)) }) %>
+      <% end %>
+    </div>
+  <% end %>
+  <h2><%= @user.short_name %> <% if @user.pronouns %><i>(<%= @user.pronouns %>)</i><% end %></h2>
 
 <style type="text/css" media="screen">
   #user-info-fieldsets{
@@ -61,6 +71,11 @@
 </style>
 
 <% css_bundle :roster_user, :context_list, :pairing_code %>
+<% js_env user_suspend_status: {
+  pseudonyms: @user.all_active_pseudonyms.reject do |p|
+      p.sis_user_id.present? && !can_do(p, @current_user, :manage_sis)
+  end.map { |p| { id: p.id, workflow_state: p.workflow_state, unique_id: p.unique_id } }
+} %>
 
 <div id="user-info-fieldsets">
   <%= render :partial => 'users/name' %>
@@ -88,8 +103,15 @@
             <% num_enrollments += 1 %>
             <li>
               <a href="<%= url_for(account) %>">
-                <span class="name ellipsis"><%= account.name %></span>
-                <span class="subtitle ellipsis"></span>
+                <span
+                  class="name"
+                  style="word-break: break-word">
+                  <%= account.name %>
+                </span>
+                <span
+                  class="subtitle"
+                  style="word-break: break-word">
+                </span>
               </a>
             </li>
           <% end %>
@@ -104,8 +126,16 @@
             <% num_enrollments += 1 %>
             <li>
               <a href="<%= group_path(membership.group) %>">
-                <span class="name ellipsis"><%= membership.group.name %></span>
-                <span class="subtitle ellipsis"><%= membership.group.context.name rescue "" %></span>
+                <span
+                  class="name"
+                  style="word-break: break-word">
+                  <%= membership.group.name %>
+                </span>
+                <span
+                  class="subtitle"
+                  style="word-break: break-word">
+                  <%= membership.group.context.name rescue "" %>
+                </span>
               </a>
             </li>
           <% end %>
@@ -121,7 +151,7 @@
   </fieldset>
   </div>
 
-  <% if can_do(@user, @current_user, :view_statistics) && page_views_enabled? %>
+  <% if @show_page_views %>
     <h3>
       <%= t('page_views', 'Page Views') %>
     </h3>

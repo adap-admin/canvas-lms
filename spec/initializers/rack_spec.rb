@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -17,16 +19,16 @@
 
 require_relative "../spec_helper"
 
-describe 'Rack::Utils' do
+describe "Rack::Utils" do
   it "raises an exception if the params are too deep" do
     len = Rack::Utils.param_depth_limit
 
-    expect(-> {
+    expect do
       Rack::Utils.parse_nested_query("foo#{"[a]" * len}=bar")
-    }).to raise_error(RangeError)
+    end.to raise_error(RangeError)
 
-    expect(-> {
+    expect do
       Rack::Utils.parse_nested_query("foo#{"[a]" * (len - 1)}=bar")
-    }).to_not raise_error
+    end.to_not raise_error
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -18,9 +20,8 @@
 
 module Canvas::Plugins::Validators::AccountReportsValidator
   def self.validate(settings, _plugin_setting)
-    settings.inject({}) do |result, (report_type, enabled)|
-      result[report_type] = Canvas::Plugin::value_to_boolean(enabled)
-      result
+    settings.transform_values do |enabled|
+      Canvas::Plugin.value_to_boolean(enabled)
     end
   end
 end

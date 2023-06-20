@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -25,6 +27,7 @@
 #     dispatch(:name)
 #     to { some_list }
 #     whenever { |obj| obj.something == condition }
+#     data { root_account_id: account.id}
 #   end
 # end
 #
@@ -34,6 +37,7 @@
 #   dispatch :new_assignment
 #   to { self.students }
 #   whenever { |record| record.just_created }
+#   data { course_id: self.context.id, root_account_id: self.context.root_account_id }
 # end
 #
 # set_broadcast_policy do
@@ -43,14 +47,14 @@
 #     record.workflow_state_changed?
 #     # ... some field-wise comparison
 #   }
+#   data { course_id: self.context.id, root_account_id: self.context.root_account_id }
 # end
 #
 # u = User.first
 # a = Account.first
 # a.check_policy(u)
 
-module BroadcastPolicy #:nodoc:
- 
+module BroadcastPolicy # :nodoc:
   def self.notifier
     @notifier ||= @notifier_proc.call if @notifier_proc
     @notifier
@@ -84,11 +88,11 @@ module BroadcastPolicy #:nodoc:
     @notification_finder = nil if @notification_finder_proc
   end
 
-  require 'active_support/core_ext/class/attribute'
-  require 'active_support/core_ext/string/inflections'
-  require 'broadcast_policy/policy_list'
-  require 'broadcast_policy/notification_policy'
-  require 'broadcast_policy/class_methods'
-  require 'broadcast_policy/singleton_methods'
-  require 'broadcast_policy/instance_methods'
+  require "active_support/core_ext/class/attribute"
+  require "active_support/core_ext/string/inflections"
+  require "broadcast_policy/policy_list"
+  require "broadcast_policy/notification_policy"
+  require "broadcast_policy/class_methods"
+  require "broadcast_policy/singleton_methods"
+  require "broadcast_policy/instance_methods"
 end

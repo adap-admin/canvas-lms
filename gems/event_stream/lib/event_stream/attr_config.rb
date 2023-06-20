@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -19,13 +21,14 @@
 module EventStream::AttrConfig
   module ClassMethods
     CASTS = {
-        String => lambda { |name, value| value.to_s },
-        Integer => lambda { |name, value| value.to_i },
-        Proc => lambda { |name, value|
-          return value if value.nil? || value.respond_to?(:call)
-          raise(ArgumentError, "Expected attribute #{name} to be a Proc: #{value.class}")
-        }
-    }
+      String => ->(_name, value) { value.to_s },
+      Integer => ->(_name, value) { value.to_i },
+      Proc => lambda do |name, value|
+                return value if value.nil? || value.respond_to?(:call)
+
+                raise(ArgumentError, "Expected attribute #{name} to be a Proc: #{value.class}")
+              end
+    }.freeze
 
     def attr_config_defaults
       @attr_config_defaults ||= {}
@@ -35,13 +38,13 @@ module EventStream::AttrConfig
       @attr_config_known ||= Set.new
     end
 
-    def attr_config(name, options={})
+    def attr_config(name, options = {})
       attr_config_known << name
-      if options.has_key?(:type)
+      if options.key?(:type)
         type = options[:type]
         typecast = CASTS[type]
       end
-      required = !options.has_key?(:default)
+      required = !options.key?(:default)
       unless required
         default = options[:default]
         default = typecast.call(name, default) if default && typecast
@@ -60,6 +63,7 @@ module EventStream::AttrConfig
             end
 
             return typecast.call(name, value) if typecast
+
             return value
           end
           return value
@@ -80,7 +84,7 @@ module EventStream::AttrConfig
 
   def attr_config_validate
     self.class.attr_config_defaults.each do |key, value|
-      unless attr_config_values.has_key?(key)
+      unless attr_config_values.key?(key)
         attr_config_values[key] = value
       end
     end

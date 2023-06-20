@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -15,12 +17,8 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper.rb')
-
 describe Quizzes::QuizQuestionRegrade do
-
   describe "relationships" do
-
     it "belongs to a quiz_question" do
       expect(Quizzes::QuizQuestionRegrade.new).to respond_to :quiz_question
     end
@@ -31,7 +29,6 @@ describe Quizzes::QuizQuestionRegrade do
   end
 
   describe "validations" do
-
     it "validates the presence of quiz_question_id & quiz_regrade_id" do
       expect(Quizzes::QuizQuestionRegrade.new).not_to be_valid
       expect(Quizzes::QuizQuestionRegrade.new(quiz_question_id: 1, quiz_regrade_id: 1)).to be_valid
@@ -39,9 +36,9 @@ describe Quizzes::QuizQuestionRegrade do
   end
 
   describe "#question_data" do
-    it "should delegate to quiz question" do
+    it "delegates to quiz question" do
       question = Quizzes::QuizQuestion.new
-      allow(question).to receive_messages(:question_data => "foo")
+      allow(question).to receive_messages(question_data: "foo")
 
       qq_regrade = Quizzes::QuizQuestionRegrade.new
       qq_regrade.quiz_question = question

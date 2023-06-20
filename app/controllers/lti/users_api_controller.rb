@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -15,12 +17,11 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-
 module Lti
-# @API Plagiarism Detection Platform Users
-# **Plagiarism Detection Platform API for Users (Must use <a href="jwt_access_tokens.html">JWT access tokens</a> with this API).**
+  # @API Plagiarism Detection Platform Users
+  # **Plagiarism Detection Platform API for Users (Must use <a href="jwt_access_tokens.html">JWT access tokens</a> with this API).**
   class UsersApiController < ApplicationController
-    include Lti::Ims::AccessTokenHelper
+    include Lti::IMS::AccessTokenHelper
     include Api::V1::User
 
     skip_before_action :load_user
@@ -28,24 +29,24 @@ module Lti
     before_action :user_in_context, only: :show
     before_action :tool_in_context, only: :group_index
 
-    USER_SERVICE = 'vnd.Canvas.User'.freeze
-    GROUP_INDEX_SERVICE = 'vnd.Canvas.GroupIndex'.freeze
+    USER_SERVICE = "vnd.Canvas.User"
+    GROUP_INDEX_SERVICE = "vnd.Canvas.GroupIndex"
     SERVICE_DEFINITIONS = [
       {
         id: USER_SERVICE,
-        endpoint: 'api/lti/users/{user_id}',
-        format: ['application/json'].freeze,
-        action: ['GET'].freeze
+        endpoint: "api/lti/users/{user_id}",
+        format: ["application/json"].freeze,
+        action: ["GET"].freeze
       }.freeze,
       {
         id: GROUP_INDEX_SERVICE,
-        endpoint: 'api/lti/group/{group_id}/users',
-        format: ['application/json'].freeze,
-        action: ['GET'].freeze
+        endpoint: "api/lti/groups/{group_id}/users",
+        format: ["application/json"].freeze,
+        action: ["GET"].freeze
       }.freeze
     ].freeze
 
-    USER_INCLUDES = %w(email lti_id).freeze
+    USER_INCLUDES = %w[email lti_id].freeze
 
     def lti2_service_name
       USER_SERVICE
@@ -58,7 +59,7 @@ module Lti
     #
     # @returns User
     def show
-      render json: user_json(user, user, nil, USER_INCLUDES, tool_proxy.context)
+      render json: user_json(user, user, nil, [], tool_proxy.context, tool_includes: USER_INCLUDES)
     end
 
     # @API Get all users in a group (lti)
@@ -71,15 +72,15 @@ module Lti
       users = Api.paginate(group.participating_users, self, lti_user_group_index_url)
       user_json_preloads(users)
       UserPastLtiId.manual_preload_past_lti_ids(users, group.context)
-      render json: users.map { |user| user_json(user, user, nil, USER_INCLUDES, group.context) }
+      render json: users.map { |user| user_json(user, user, nil, [], group.context, tool_includes: USER_INCLUDES) }
     end
 
     private
 
     def user
-      @_user ||= User.joins(:past_lti_ids).where(user_past_lti_ids: {user_lti_context_id: params[:id]}).take ||
-        User.active.find_by(lti_context_id: params[:id]) ||
-        User.active.find(params[:id])
+      @_user ||= User.joins(:past_lti_ids).where(user_past_lti_ids: { user_lti_context_id: params[:id] }).take ||
+                 User.active.find_by(lti_context_id: params[:id]) ||
+                 User.active.find(params[:id])
     end
 
     def group
@@ -94,11 +95,12 @@ module Lti
     end
 
     def user_in_context
-      user_assignments = user.enrollments.active.preload(:course).map(&:course).map do |c|
-        Assignments::ScopedToUser.new(c, user).scope
-      end.flatten
-      tool_assignments = AssignmentConfigurationToolLookup.by_tool_proxy(tool_proxy)
-      render_unauthorized_action if (tool_assignments & user_assignments).blank?
+      tool_proxy_assignments = AssignmentConfigurationToolLookup.by_tool_proxy_scope(tool_proxy).select(:assignment_id)
+      user_visible_to_proxy = Enrollment.joins(course: :assignments)
+                                        .where(user:, assignments: { id: tool_proxy_assignments })
+                                        .merge(Course.active).merge(Assignment.active)
+                                        .exists?
+      render_unauthorized_action unless user_visible_to_proxy
     end
   end
 end

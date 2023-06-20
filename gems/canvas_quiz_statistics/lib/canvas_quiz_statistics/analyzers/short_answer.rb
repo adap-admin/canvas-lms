@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -16,8 +18,8 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 module CanvasQuizStatistics::Analyzers
-  require 'canvas_quiz_statistics/analyzers/multiple_choice'
-  require 'canvas_quiz_statistics/analyzers/fill_in_multiple_blanks'
+  require "canvas_quiz_statistics/analyzers/multiple_choice"
+  require "canvas_quiz_statistics/analyzers/fill_in_multiple_blanks"
 
   # Generates statistics for a set of student responses to a short answer,
   # aka Fill in the Blank, question.
@@ -57,7 +59,7 @@ module CanvasQuizStatistics::Analyzers
     # true if any text was written, or a known answer_id is provided
     def answer_present?(response)
       response[:text].present? ||
-      locate_answer(response, question_data[:answers]).present?
+        locate_answer(response, question_data[:answers]).present?
     end
   end
 end

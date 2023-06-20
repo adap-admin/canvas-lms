@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -23,9 +25,9 @@ describe Mutations::PostAssignmentGrades do
   include GraphQLSpecHelper
 
   let(:assignment) { course.assignments.create! }
-  let(:course) { Course.create!(workflow_state: "available") }
-  let(:student) { course.enroll_user(User.create!, "StudentEnrollment", enrollment_state: "active").user }
-  let(:teacher) { course.enroll_user(User.create!, "TeacherEnrollment", enrollment_state: "active").user }
+  let(:course) { Course.create!(workflow_state: :available) }
+  let(:student) { course.enroll_user(User.create!, "StudentEnrollment", enrollment_state: :active).user }
+  let(:teacher) { course.enroll_user(User.create!, "TeacherEnrollment", enrollment_state: :active).user }
 
   def mutation_str(assignment_id: nil, **options)
     input_string = assignment_id ? "assignmentId: #{assignment_id}" : ""
@@ -51,22 +53,11 @@ describe Mutations::PostAssignmentGrades do
   end
 
   def execute_query(mutation_str, context)
-    CanvasSchema.execute(mutation_str, context: context)
-  end
-
-  before(:each) do
-    course.enable_feature!(:new_gradebook)
-    PostPolicy.enable_feature!
+    CanvasSchema.execute(mutation_str, context:)
   end
 
   context "when user has grade permission" do
     let(:context) { { current_user: teacher } }
-
-    it "requires that the PostPolicy feature be enabled" do
-      PostPolicy.disable_feature!
-      result = execute_query(mutation_str(assignment_id: assignment.id), context)
-      expect(result.dig("errors", 0, "message")).to eql "Post Policies feature not enabled"
-    end
 
     it "requires that assignmentId be passed in the query" do
       result = execute_query(mutation_str, context)
@@ -91,13 +82,13 @@ describe Mutations::PostAssignmentGrades do
       now = Time.zone.now
       assignment.update!(moderated_grading: true, grader_count: 2, final_grader: teacher, grades_published_at: now)
       result = execute_query(mutation_str(assignment_id: assignment.id), context)
-      expect(result.dig("errors")).to be nil
+      expect(result["errors"]).to be_nil
     end
 
     describe "posting the grades" do
-      let(:post_submissions_job) { Delayed::Job.where(tag:"Assignment#post_submissions").order(:id).last }
+      let(:post_submissions_job) { Delayed::Job.where(tag: "Assignment#post_submissions").order(:id).last }
 
-      before(:each) do
+      before do
         @student_submission = assignment.submissions.find_by(user: student)
       end
 
@@ -144,7 +135,7 @@ describe Mutations::PostAssignmentGrades do
         let(:section1) { course.course_sections.create! }
         let(:section2) { course.course_sections.create! }
 
-        before(:each) do
+        before do
           @section1_student = section1.enroll_user(User.create!, "StudentEnrollment", "active").user
           @section2_student = section2.enroll_user(User.create!, "StudentEnrollment", "active").user
           @student1_submission = assignment.submissions.find_by(user: @section1_student)
@@ -173,7 +164,7 @@ describe Mutations::PostAssignmentGrades do
       describe "only_student_ids" do
         let(:student2) { course.enroll_user(User.create!, "StudentEnrollment", enrollment_state: "active").user }
 
-        before(:each) do
+        before do
           @student1_submission = assignment.submissions.find_by(user: student)
           @student2_submission = assignment.submissions.find_by(user: student2)
         end
@@ -200,7 +191,7 @@ describe Mutations::PostAssignmentGrades do
       describe "skip_student_ids" do
         let(:student2) { course.enroll_user(User.create!, "StudentEnrollment", enrollment_state: "active").user }
 
-        before(:each) do
+        before do
           @student1_submission = assignment.submissions.find_by(user: student)
           @student2_submission = assignment.submissions.find_by(user: student2)
         end
@@ -234,7 +225,7 @@ describe Mutations::PostAssignmentGrades do
         let(:secret_student) { User.create! }
         let(:secret_section) { course.course_sections.create! }
 
-        before(:each) do
+        before do
           Enrollment.limit_privileges_to_course_section!(course, teacher, true)
           course.enroll_student(secret_student, enrollment_state: "active", section: secret_section)
         end
@@ -242,7 +233,7 @@ describe Mutations::PostAssignmentGrades do
         it "only posts grades for students that the user can see" do
           execute_query(mutation_str(assignment_id: assignment.id), context)
           post_submissions_job.invoke_job
-          expect(assignment.submission_for_student(secret_student).posted_at).to be nil
+          expect(assignment.submission_for_student(secret_student).posted_at).to be_nil
         end
 
         it "stores only the user ids of affected students on the Progress object" do
@@ -265,7 +256,7 @@ describe Mutations::PostAssignmentGrades do
 
     it "does not return data for the related submissions" do
       result = execute_query(mutation_str(assignment_id: assignment.id), context)
-      expect(result.dig("data", "postAssignmentGrades")).to be nil
+      expect(result.dig("data", "postAssignmentGrades")).to be_nil
     end
   end
 
@@ -274,9 +265,10 @@ describe Mutations::PostAssignmentGrades do
     let(:post_submissions_job) { Delayed::Job.where(tag: "Assignment#post_submissions").order(:id).last }
     let(:student2) { course.enroll_user(User.create!, "StudentEnrollment", enrollment_state: "active").user }
 
-    before(:each) do
+    before do
       @student1_submission = assignment.submissions.find_by(user: student)
       @student2_submission = assignment.submissions.find_by(user: student2)
+      assignment.ensure_post_policy(post_manually: true)
       assignment.grade_student(student, grader: teacher, score: 100)
     end
 
@@ -291,6 +283,20 @@ describe Mutations::PostAssignmentGrades do
       execute_query(mutation_str(assignment_id: assignment.id, graded_only: true), context)
       post_submissions_job.invoke_job
       expect(@student1_submission.reload).to be_posted
+    end
+
+    it "posts submissions with hidden comments if graded_only is true" do
+      @student2_submission.add_comment(author: teacher, comment: "good work!", hidden: true)
+      execute_query(mutation_str(assignment_id: assignment.id, graded_only: true), context)
+      post_submissions_job.invoke_job
+      expect(@student2_submission.reload).to be_posted
+    end
+
+    it "does not post submissions with no hidden comments if graded_only is true" do
+      @student2_submission.add_comment(author: student, comment: "good work!", hidden: false)
+      execute_query(mutation_str(assignment_id: assignment.id, graded_only: true), context)
+      post_submissions_job.invoke_job
+      expect(@student2_submission.reload).not_to be_posted
     end
 
     it "does not post the ungraded submissions if graded_only is true" do
@@ -312,4 +318,62 @@ describe Mutations::PostAssignmentGrades do
     end
   end
 
+  describe "Submissions Posted notification" do
+    let_once(:notification) { Notification.find_or_create_by!(category: "Grading", name: "Submissions Posted") }
+    let(:context) { { current_user: teacher } }
+    let(:post_submissions_job) { Delayed::Job.where(tag: "Assignment#post_submissions").order(:id).last }
+    let(:teacher_enrollment) { course.teacher_enrollments.find_by!(user: teacher) }
+    let(:section) { course.course_sections.create! }
+    let(:student_in_section) { User.create! }
+    let(:submissions_posted_messages) do
+      Message.where(
+        communication_channel: teacher.email_channel,
+        notification:
+      )
+    end
+
+    before do
+      section.enroll_user(student_in_section, "StudentEnrollment", "active")
+      teacher.update!(email: "fakeemail@example.com", workflow_state: :registered)
+      teacher.email_channel.update!(workflow_state: :active)
+    end
+
+    it "broadcasts a notification when posting to everyone" do
+      execute_query(mutation_str(assignment_id: assignment.id), context)
+      expect do
+        post_submissions_job.invoke_job
+      end.to change {
+        submissions_posted_messages.count
+      }.by(1)
+    end
+
+    it "broadcasts a notification when posting to everyone graded" do
+      assignment.grade_student(student, grader: teacher, score: 1)
+      execute_query(mutation_str(assignment_id: assignment.id, graded_only: true), context)
+      expect do
+        post_submissions_job.invoke_job
+      end.to change {
+        submissions_posted_messages.count
+      }.by(1)
+    end
+
+    it "broadcasts a notification when posting to everyone by sections" do
+      execute_query(mutation_str(assignment_id: assignment.id, section_ids: [section.id]), context)
+      expect do
+        post_submissions_job.invoke_job
+      end.to change {
+        submissions_posted_messages.count
+      }.by(1)
+    end
+
+    it "broadcasts a notification when posting to everyone graded by sections" do
+      assignment.grade_student(student_in_section, grader: teacher, score: 1)
+      execute_query(mutation_str(assignment_id: assignment.id, section_ids: [section.id], graded_only: true), context)
+      expect do
+        post_submissions_job.invoke_job
+      end.to change {
+        submissions_posted_messages.count
+      }.by(1)
+    end
+  end
 end

@@ -20,29 +20,29 @@ import React from 'react'
 import {render} from '@testing-library/react'
 import LinksPanel from '../LinksPanel'
 
-function makeCollection(overrides={}) {
+function makeCollection(overrides = {}) {
   return {
     hasMore: false,
     isLoading: false,
     links: [],
-    ...overrides
+    ...overrides,
   }
 }
 
 function renderComponent(renderer, props) {
   return renderer(
     <LinksPanel
-      selectedAccordionIndex=''
+      selectedAccordionIndex=""
       onChangeAccordion={() => {}}
-      contextType='course'
+      contextType="course"
       contextId="1"
       collections={{
         wikiPages: makeCollection(),
         assignments: makeCollection({
           links: [
             {href: 'url1', title: 'link1'},
-            {href: 'url2', title: 'link2'}
-          ]
+            {href: 'url2', title: 'link2'},
+          ],
         }),
         quizzes: makeCollection(),
         announcements: makeCollection(),
@@ -52,9 +52,9 @@ function renderComponent(renderer, props) {
           isLoading: false,
           links: [
             {href: 'url3', title: 'link3'},
-            {href: 'url4', title: 'link4'}
-          ]
-        }
+            {href: 'url4', title: 'link4'},
+          ],
+        },
       }}
       fetchInitialPage={() => {}}
       fetchNextPage={() => {}}
@@ -84,14 +84,14 @@ describe('RCE "Links" Plugin > LinksPanel', () => {
 
   it('expands one panel at a time', () => {
     const {queryAllByText, rerender} = renderComponent(render, {
-      selectedAccordionIndex: 'modules'
+      selectedAccordionIndex: 'modules',
     })
 
     expect(queryAllByText('Expand to see', {exact: false})).toHaveLength(6)
     expect(queryAllByText('Collapse to hide Modules')).toHaveLength(1)
 
     renderComponent(rerender, {
-      selectedAccordionIndex: 'assignments'
+      selectedAccordionIndex: 'assignments',
     })
 
     expect(queryAllByText('Expand to see', {exact: false})).toHaveLength(6)

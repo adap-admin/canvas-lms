@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -87,14 +89,14 @@
 #
 class SectionsController < ApplicationController
   before_action :require_context
-  before_action :require_section, :except => [:index, :create]
+  before_action :require_section, except: [:index, :create]
 
   include Api::V1::Section
 
   # @API List course sections
   # A paginated list of the list of sections for this course.
   #
-  # @argument include[] [String, "students"|"avatar_url"|"enrollments"|"total_students"|"passback_status"]
+  # @argument include[] [String, "students"|"avatar_url"|"enrollments"|"total_students"|"passback_status"|"permissions"]
   #   - "students": Associations to include with the group. Note: this is only
   #     available if you have permission to view users or grades in the course
   #   - "avatar_url": Include the avatar URLs for students returned.
@@ -103,23 +105,25 @@ class SectionsController < ApplicationController
   #   - "total_students": Returns the total amount of active and invited students
   #     for the course section
   #   - "passback_status": Include the grade passback status.
+  #   - "permissions": Include whether section grants :manage_calendar permission
+  #     to the caller
   #
   # @returns [Section]
   def index
-    if authorized_action(@context, @current_user, [:read, :read_roster, :view_all_grades, :manage_grades])
+    if authorized_action(@context, @current_user, %i[read read_roster view_all_grades manage_grades])
       if params[:include].present? && !@context.grants_any_right?(@current_user, session, :read_roster, :view_all_grades, :manage_grades)
         params[:include] = nil
       end
 
       includes = Array(params[:include])
 
-      sections = @context.active_course_sections.order(CourseSection.best_unicode_collation_key('name'))
+      sections = @context.active_course_sections.order(CourseSection.best_unicode_collation_key("name"), :id)
 
       unless params[:all].present?
         sections = Api.paginate(sections, self, api_v1_course_sections_url)
       end
 
-      render :json => sections_json(sections, @current_user, session, includes)
+      render json: sections_json(sections, @current_user, session, includes)
     end
   end
 
@@ -155,8 +159,8 @@ class SectionsController < ApplicationController
       can_manage_sis = api_request? && @context.root_account.grants_right?(@current_user, session, :manage_sis)
 
       if can_manage_sis && sis_section_id.present? && value_to_boolean(params[:enable_sis_reactivation])
-        @section = @context.course_sections.where(:sis_source_id => sis_section_id, :workflow_state => 'deleted').first
-        @section.workflow_state = 'active' if @section
+        @section = @context.course_sections.where(sis_source_id: sis_section_id, workflow_state: "deleted").first
+        @section.workflow_state = "active" if @section
       end
       @section ||= @context.course_sections.build(course_section_params)
       if can_manage_sis
@@ -167,13 +171,13 @@ class SectionsController < ApplicationController
       respond_to do |format|
         if @section.save
           @context.touch
-          flash[:notice] = t('section_created', "Section successfully created!")
+          flash[:notice] = t("section_created", "Section successfully created!")
           format.html { redirect_to course_settings_url(@context) }
-          format.json { render :json => (api_request? ? section_json(@section, @current_user, session, []) : @section) }
+          format.json { render json: (api_request? ? section_json(@section, @current_user, session, []) : @section) }
         else
-          flash[:error] = t('section_creation_failed', "Section creation failed")
+          flash[:error] = t("section_creation_failed", "Section creation failed")
           format.html { redirect_to course_settings_url(@context) }
-          format.json { render :json => @section.errors, :status => :bad_request }
+          format.json { render json: @section.errors, status: :bad_request }
         end
       end
     end
@@ -181,46 +185,55 @@ class SectionsController < ApplicationController
 
   def require_section
     case @context
-      when Course
-        section_id = params[:section_id] || params[:id]
-        @section = api_find(@context.active_course_sections, section_id)
-      when CourseSection
-        @section = @context
-        raise ActiveRecord::RecordNotFound if @section.deleted? || @section.course.try(:deleted?)
-      else
-        raise ActiveRecord::RecordNotFound
+    when Course
+      section_id = params[:section_id] || params[:id]
+      @section = api_find(@context.active_course_sections, section_id)
+    when CourseSection
+      @section = @context
+      raise ActiveRecord::RecordNotFound if @section.deleted? || @section.course.try(:deleted?)
+    else
+      raise ActiveRecord::RecordNotFound
     end
   end
 
   def crosslist_check
     course_id = params[:new_course_id]
     # cross-listing should only be allowed within the same root account
-    @new_course = @section.root_account.all_courses.not_deleted.where(id: course_id).first if course_id =~ Api::ID_REGEX
+    @new_course = @section.root_account.all_courses.not_deleted.where(id: course_id).first if Api::ID_REGEX.match?(course_id)
     @new_course ||= @section.root_account.all_courses.not_deleted.where(sis_source_id: course_id).first if course_id.present?
     allowed = @new_course && @section.grants_right?(@current_user, session, :update) && @new_course.grants_right?(@current_user, session, :manage)
-    res = {:allowed => !!allowed}
+    res = { allowed: !!allowed }
     if allowed
       @account = @new_course.account
       res[:section] = @section.as_json(include_root: false)
       res[:course] = @new_course.as_json(include_root: false)
       res[:account] = @account.as_json(include_root: false)
     end
-    render :json => res
+    render json: res
   end
 
   # @API Cross-list a Section
   # Move the Section to another course.  The new course may be in a different account (department),
   # but must belong to the same root account (institution).
   #
+  # @argument override_sis_stickiness [boolean]
+  #   Default is true. If false, any fields containing “sticky” changes will not be updated.
+  #   See SIS CSV Format documentation for information on which fields can have SIS stickiness
+  #
   # @returns Section
   def crosslist
     @new_course = api_find(@section.root_account.all_courses.not_deleted, params[:new_course_id])
+
+    if params[:override_sis_stickiness] && !value_to_boolean(params[:override_sis_stickiness])
+      return render json: (api_request? ? section_json(@section, @current_user, session, []) : @section)
+    end
+
     if authorized_action(@section, @current_user, :update) && authorized_action(@new_course, @current_user, :manage)
       @section.crosslist_to_course(@new_course, updating_user: @current_user)
       respond_to do |format|
-        flash[:notice] = t('section_crosslisted', "Section successfully cross-listed!")
+        flash[:notice] = t("section_crosslisted", "Section successfully cross-listed!")
         format.html { redirect_to named_context_url(@new_course, :context_section_url, @section.id) }
-        format.json { render :json => (api_request? ? section_json(@section, @current_user, session, []) : @section) }
+        format.json { render json: (api_request? ? section_json(@section, @current_user, session, []) : @section) }
       end
     end
   end
@@ -228,16 +241,21 @@ class SectionsController < ApplicationController
   # @API De-cross-list a Section
   # Undo cross-listing of a Section, returning it to its original course.
   #
+  # @argument override_sis_stickiness [boolean]
+  #   Default is true. If false, any fields containing “sticky” changes will not be updated.
+  #   See SIS CSV Format documentation for information on which fields can have SIS stickiness
+  #
   # @returns Section
   def uncrosslist
     @new_course = @section.nonxlist_course
-    return render(:json => {:message => "section is not cross-listed"}, :status => :bad_request) if @new_course.nil?
+    return render(json: { message: "section is not cross-listed" }, status: :bad_request) if @new_course.nil?
+
     if authorized_action(@section, @current_user, :update) && authorized_action(@new_course, @current_user, :manage)
-      @section.uncrosslist(updating_user: @current_user)
+      @section.uncrosslist(updating_user: @current_user) if !params[:override_sis_stickiness] || value_to_boolean(params[:override_sis_stickiness])
       respond_to do |format|
-        flash[:notice] = t('section_decrosslisted', "Section successfully de-cross-listed!")
+        flash[:notice] = t("section_decrosslisted", "Section successfully de-cross-listed!")
         format.html { redirect_to named_context_url(@new_course, :context_section_url, @section.id) }
-        format.json { render :json => (api_request? ? section_json(@section, @current_user, session, []) : @section) }
+        format.json { render json: (api_request? ? section_json(@section, @current_user, session, []) : @section) }
       end
     end
   end
@@ -263,6 +281,10 @@ class SectionsController < ApplicationController
   # @argument course_section[restrict_enrollments_to_section_dates] [Boolean]
   #   Set to true to restrict user enrollments to the start and end dates of the section.
   #
+  # @argument override_sis_stickiness [boolean]
+  #   Default is true. If false, any fields containing “sticky” changes will not be updated.
+  #   See SIS CSV Format documentation for information on which fields can have SIS stickiness
+  #
   # @returns Section
   def update
     params[:course_section] ||= {}
@@ -272,23 +294,23 @@ class SectionsController < ApplicationController
       integration_id = params[:course_section].delete(:integration_id)
       if sis_id || integration_id
         if @section.root_account.grants_right?(@current_user, :manage_sis)
-          @section.sis_source_id = (sis_id == '') ?  nil : sis_id if sis_id
-          @section.integration_id = (integration_id == '') ?  nil : integration_id if integration_id
-        else
-          return render json: { message: "You must have manage_sis permission to update sis attributes" }, status: :unauthorized if api_request?
+          @section.sis_source_id = (sis_id == "") ?  nil : sis_id if sis_id
+          @section.integration_id = (integration_id == "") ? nil : integration_id if integration_id
+        elsif api_request?
+          return render json: { message: "You must have manage_sis permission to update sis attributes" }, status: :unauthorized
         end
       end
 
       respond_to do |format|
-        if @section.update_attributes(course_section_params)
+        if @section.update(course_section_params)
           @context.touch
-          flash[:notice] = t('section_updated', "Section successfully updated!")
+          flash[:notice] = t("section_updated", "Section successfully updated!")
           format.html { redirect_to course_section_url(@context, @section) }
-          format.json { render :json => (api_request? ? section_json(@section, @current_user, session, []) : @section) }
+          format.json { render json: (api_request? ? section_json(@section, @current_user, session, []) : @section) }
         else
-          flash[:error] = t('section_update_error', "Section update failed")
+          flash[:error] = t("section_update_error", "Section update failed")
           format.html { redirect_to course_section_url(@context, @section) }
-          format.json { render :json => @section.errors, :status => :bad_request }
+          format.json { render json: @section.errors, status: :bad_request }
         end
       end
     end
@@ -297,7 +319,7 @@ class SectionsController < ApplicationController
   # @API Get section information
   # Gets details about a specific section
   #
-  # @argument include[] [String, "students"|"avatar_url"|"enrollments"|"total_students"|"passback_status"]
+  # @argument include[] [String, "students"|"avatar_url"|"enrollments"|"total_students"|"passback_status"|"permissions"]
   #   - "students": Associations to include with the group. Note: this is only
   #     available if you have permission to view users or grades in the course
   #   - "avatar_url": Include the avatar URLs for students returned.
@@ -306,6 +328,8 @@ class SectionsController < ApplicationController
   #   - "total_students": Returns the total amount of active and invited students
   #     for the course section
   #   - "passback_status": Include the grade passback status.
+  #   - "permissions": Include whether section grants :manage_calendar permission
+  #     to the caller
   #
   # @returns Section
   def show
@@ -313,21 +337,16 @@ class SectionsController < ApplicationController
       respond_to do |format|
         format.html do
           add_crumb(@section.name, named_context_url(@context, :context_section_url, @section))
-          @enrollments_count = @section.enrollments.not_fake.where(:workflow_state => 'active').count
-          @completed_enrollments_count = @section.enrollments.not_fake.where(:workflow_state => 'completed').count
-          @pending_enrollments_count = @section.enrollments.not_fake.where(:workflow_state => %w{invited pending}).count
-          @student_enrollments_count = @section.enrollments.not_fake.where(:type => 'StudentEnrollment').count
-          can_manage_students = @context.grants_right?(@current_user, session, :manage_students) || @context.grants_right?(@current_user, session, :manage_admin_users)
-          js_env(
-            :PERMISSIONS => {
-              :manage_students => can_manage_students,
-              :manage_account_settings => @context.account.grants_right?(@current_user, session, :manage_account_settings)
-            })
+          @enrollments_count = @section.enrollments.not_fake.where(workflow_state: "active").count
+          @completed_enrollments_count = @section.enrollments.not_fake.where(workflow_state: "completed").count
+          @pending_enrollments_count = @section.enrollments.not_fake.where(workflow_state: %w[invited pending]).count
+          @student_enrollments_count = @section.enrollments.not_fake.where(type: "StudentEnrollment").count
+          js_env
           if @context.grants_right?(@current_user, session, :manage)
             set_student_context_cards_js_env
           end
         end
-        format.json { render :json => section_json(@section, @current_user, session, Array(params[:include])) }
+        format.json { render json: section_json(@section, @current_user, session, Array(params[:include])) }
       end
     end
   end
@@ -342,20 +361,29 @@ class SectionsController < ApplicationController
         if @section.deletable?
           @section.destroy
           @context.touch
-          flash[:notice] = t('section_deleted', "Course section successfully deleted!")
+          flash[:notice] = t("section_deleted", "Course section successfully deleted!")
           format.html { redirect_to course_settings_url(@context) }
-          format.json { render :json => (api_request? ? section_json(@section, @current_user, session, []) : @section) }
+          format.json { render json: (api_request? ? section_json(@section, @current_user, session, []) : @section) }
         else
-          flash[:error] = t('section_delete_not_allowed', "You can't delete a section that has enrollments")
+          flash[:error] = t("section_delete_not_allowed", "You can't delete a section that has enrollments")
           format.html { redirect_to course_section_url(@context, @section) }
-          format.json { render :json => (api_request? ? { :message => "You can't delete a section that has enrollments" } : @section), :status => :bad_request }
+          format.json { render json: (api_request? ? { message: "You can't delete a section that has enrollments" } : @section), status: :bad_request }
         end
       end
     end
   end
 
   protected
+
   def course_section_params
-    params[:course_section] ? params[:course_section].permit(:name, :start_at, :end_at, :restrict_enrollments_to_section_dates) : {}
+    if params[:course_section]
+      if params[:override_sis_stickiness] && !value_to_boolean(params[:override_sis_stickiness])
+        params[:course_section].permit(:restrict_enrollments_to_section_dates)
+      else
+        params[:course_section].permit(:name, :start_at, :end_at, :restrict_enrollments_to_section_dates)
+      end
+    else
+      {}
+    end
   end
 end

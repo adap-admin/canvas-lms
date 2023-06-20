@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -30,31 +32,45 @@ class Lti::LineItem < ApplicationRecord
   belongs_to :resource_link,
              inverse_of: :line_items,
              foreign_key: :lti_resource_link_id,
-             class_name: 'Lti::ResourceLink'
+             class_name: "Lti::ResourceLink"
   belongs_to :assignment,
              inverse_of: :line_items
+  belongs_to :root_account,
+             class_name: "Account"
   has_many :results,
            inverse_of: :line_item,
-           class_name: 'Lti::Result',
+           class_name: "Lti::Result",
            foreign_key: :lti_line_item_id,
            dependent: :destroy
 
+  before_create :set_root_account_id
   before_destroy :destroy_resource_link, if: :assignment_line_item? # assignment will destroy all the other line_items of a resourceLink
+  before_destroy :destroy_assignment
 
-  AGS_EXT_SUBMISSION_TYPE = 'https://canvas.instructure.com/lti/submission_type'.freeze
+  AGS_EXT_PREFIX = "https://canvas.instructure.com/lti/"
+  AGS_EXT_SUBMISSION_TYPE = "#{AGS_EXT_PREFIX}submission_type".freeze
+  AGS_EXT_LAUNCH_URL = "#{AGS_EXT_PREFIX}launch_url".freeze
+
+  include MasterCourses::CollectionRestrictor
+  self.collection_owner_association = :assignment
+  restrict_columns :content, [:resource_id]
 
   def assignment_line_item?
-    return true if resource_link.blank?
-    resource_link.line_items.order(:created_at).first.id == self.id
+    assignment.line_items.order(:created_at).first.id == id
+  end
+
+  def launch_url_extension
+    { AGS_EXT_LAUNCH_URL => assignment.external_tool_tag&.url }
   end
 
   def self.create_line_item!(assignment, context, tool, params)
-    self.transaction do
+    transaction do
       assignment_attr = {
-        context: context,
+        context:,
         name: params[:label],
         points_possible: params[:score_maximum],
-        submission_types: 'none'
+        submission_types: "none",
+        due_at: params[:end_date_time]
       }
 
       submission_type = params[AGS_EXT_SUBMISSION_TYPE]
@@ -71,10 +87,19 @@ class Lti::LineItem < ApplicationRecord
         end
       end
 
-      a = assignment.presence || Assignment.create!(assignment_attr)
-      opts = {assignment: a}.merge(params)
-      opts[:client_id] = tool.developer_key.global_id
-      self.create!(opts)
+      line_item = nil
+      if assignment.blank?
+        # Creating a new assignment of submission type external_tool creates a "default"
+        # LineItem (and associated ResourceLink) which we can just modify & use
+        assignment = Assignment.create!(assignment_attr)
+        line_item = assignment.line_items.first
+      end
+
+      line_item ||= new(assignment:, root_account_id: assignment.root_account_id)
+      attrs = params.to_h.merge(coupled: false).compact
+      attrs[:client_id] = tool.global_developer_key_id if tool
+      line_item.update!(attrs)
+      line_item
     end
   end
 
@@ -89,14 +114,17 @@ class Lti::LineItem < ApplicationRecord
 
   def resource_link_id_has_one_assignment
     return if resource_link.blank?
+
     ids = resource_link.line_items.pluck(:assignment_id)
-    return if ids.size.zero?
+    return if ids.empty?
     return if ids.uniq.size == 1 && ids.first == assignment_id
-    errors.add(:assignment, 'does not match ltiLink')
+
+    errors.add(:assignment, "does not match ltiLink")
   end
 
   def set_client_id_if_possible
     return if client_id.present?
+
     self.client_id = resource_link.current_external_tool(assignment.context)&.developer_key&.global_id unless lti_resource_link_id.blank?
     self.client_id ||= assignment&.external_tool_tag&.content&.developer_key&.global_id
   end
@@ -107,6 +135,18 @@ class Lti::LineItem < ApplicationRecord
 
   # this is to prevent orphaned (ie undeleted state) line_items when an assignment is destroyed
   def destroy_resource_link
-    self.resource_link&.destroy
+    resource_link&.destroy
+  end
+
+  # This is to delete assignments that were created with the line items API
+  # the API
+  def destroy_assignment
+    return unless assignment_line_item? && !coupled
+
+    assignment.destroy
+  end
+
+  def set_root_account_id
+    self.root_account_id = assignment&.root_account_id unless root_account_id
   end
 end

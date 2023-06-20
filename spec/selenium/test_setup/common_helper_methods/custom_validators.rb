@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -18,8 +20,8 @@
 module CustomValidators
   def validate_breadcrumb_link(link_element, breadcrumb_text)
     expect_new_page_load { link_element.click }
-    if breadcrumb_text != nil
-      breadcrumb = f('#breadcrumbs')
+    unless breadcrumb_text.nil?
+      breadcrumb = f("#breadcrumbs")
       expect(breadcrumb).to include_text(breadcrumb_text)
     end
     expect(driver.execute_script("return INST.errorCount;")).to eq 0
@@ -32,24 +34,24 @@ module CustomValidators
   end
 
   def check_image(element)
-    require 'open-uri'
+    require "open-uri"
     expect(element).to be_displayed
-    expect(element.tag_name).to eq 'img'
-    temp_file = open(element.attribute('src'))
+    expect(element.tag_name).to eq "img"
+    temp_file = URI.parse(element.attribute("src")).open
     expect(temp_file.size).to be > 0
   end
 
   def check_file(element)
-    require 'open-uri'
+    require "open-uri"
     expect(element).to be_displayed
-    expect(element.tag_name).to eq 'a'
-    temp_file = open(element.attribute('href'))
+    expect(element.tag_name).to eq "a"
+    temp_file = URI.parse(element.attribute("href")).open
     expect(temp_file.size).to be > 0
     temp_file
   end
 
   def check_element_has_focus(element)
-    active_element = driver.execute_script('return document.activeElement')
+    active_element = driver.execute_script("return document.activeElement")
     expect(active_element).to eq(element)
   end
 
@@ -65,9 +67,15 @@ module CustomValidators
   end
 
   def expect_flash_message(type = :warning, message = nil)
-    selector = ".ic-flash-#{type}"
-    selector << ":contains(#{message.inspect})" if message
-    expect(f("#flash_message_holder")).to contain_jqcss(selector)
+    if message
+      keep_trying_until(5) do
+        disable_implicit_wait do
+          expect(ff("#flash_message_holder .ic-flash-#{type}").any? { |el| el.text.include?(message.to_s) }).to be true
+        end
+      end
+    else
+      expect(f("#flash_message_holder .ic-flash-#{type}")).to be_displayed
+    end
   end
 
   def expect_instui_flash_message(message = nil)
@@ -82,7 +90,7 @@ module CustomValidators
   end
 
   def expect_no_instui_flash_message
-    expect(f('body')).not_to contain_css('#flashalert_message_holder')
+    expect(f("body")).not_to contain_css("#flashalert_message_holder")
   end
 
   def assert_flash_notice_message(okay_message)
@@ -98,7 +106,7 @@ module CustomValidators
   end
 
   def assert_error_box(selector)
-    box = driver.execute_script <<-JS, selector
+    box = driver.execute_script <<~JS, selector
       var $result = $(arguments[0]).data('associated_error_box');
       return $result ? $result.toArray() : []
     JS
@@ -110,22 +118,19 @@ module CustomValidators
     driver.execute_script("window.INST = window.INST || {}; INST.still_on_old_page = true;")
     yield if block_given?
     wait_for(method: :wait_for_new_page_load) do
-      begin
-        driver.execute_script("return window.INST && INST.still_on_old_page !== true;")
-      rescue Selenium::WebDriver::Error::UnexpectedAlertOpenError, Selenium::WebDriver::Error::UnknownError
-        raise unless accept_alert
-        driver.switch_to.alert.accept
-      end
+      raise if !accept_alert && alert_present?
+
+      driver.switch_to.alert.accept rescue Selenium::WebDriver::Error::NoSuchAlertError
+      driver.execute_script("return window.INST && INST.still_on_old_page !== true;")
     end or return false
+    wait_for_initializers
     wait_for_dom_ready
     wait_for_ajaximations
     true
   end
 
-  def expect_new_page_load(accept_alert = false)
-    success = wait_for_new_page_load(accept_alert) do
-      yield
-    end
+  def expect_new_page_load(accept_alert = false, &)
+    success = wait_for_new_page_load(accept_alert, &)
     expect(success).to be, "expected new page load, none happened"
   end
 end

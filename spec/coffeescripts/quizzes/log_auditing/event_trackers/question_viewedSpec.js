@@ -16,8 +16,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Subject from 'compiled/quizzes/log_auditing/event_trackers/question_viewed'
-import K from 'compiled/quizzes/log_auditing/constants'
+import Subject from '@canvas/quiz-log-auditing/jquery/event_trackers/question_viewed'
+import K from '@canvas/quiz-log-auditing/jquery/constants'
 import $ from 'jquery'
 
 const scrollSelector = 'html, body'
@@ -27,12 +27,12 @@ QUnit.module('Quizzes::LogAuditing::EventTrackers::QuestionViewed', {
   setup() {},
   teardown() {
     document.getElementById('fixtures').innerHTML = ''
-  }
+  },
 })
-const createQuestion = function(id) {
+const createQuestion = function (id) {
   const $question = $('<div />', {
     class: 'question',
-    id: `question_${id}`
+    id: `question_${id}`,
   }).appendTo(document.getElementById('fixtures'))
   QUnit.done(() => $question.remove())
   return $question
@@ -53,7 +53,7 @@ test('#identifyVisibleQuestions', () => {
   )
 })
 
-test('capturing: it works', function() {
+test('capturing: it works', () => {
   const tracker = new Subject({frequency: 0})
   const capture = sinon.stub()
   tracker.install(capture, scrollSelector)
@@ -61,7 +61,7 @@ test('capturing: it works', function() {
   const $fakeQuestion = createQuestion('123')
   $fakeQuestion.css({
     height: '1px', // needs some height to be considered visible
-    'margin-top': offsetTop
+    'margin-top': offsetTop,
   })
   $scrollContainer.scrollTop(10).scroll()
   ok(!capture.called, 'question should not be marked as viewed just yet')

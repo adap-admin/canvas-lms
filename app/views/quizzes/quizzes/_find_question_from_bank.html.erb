@@ -62,7 +62,7 @@
               <label for="quiz_group_select"><%= before_label(:add_questions_to_group, "Add questions to the question group") %></label>
               <select class="quiz_group_select" id="quiz_group_select">
                 <option value="none"><%= t('options.no_group', "[ No Group ]") %></option>
-                <option class="bottom" value="new"><%= t('options.new_group', "[ New Group ]") %></option>
+                <option class="bottom" value="new"><%= t('options.create_group', "[ Create Group ]") %></option>
               </select>
             </div>
             <div class="button-container" style="margin-bottom: 5px;">
@@ -85,7 +85,7 @@
   <div class="find_banks">
     <%= t(:select_a_question_bank, "Select a question bank from the list below to link it to the this quiz as a question group.") %>
     <ul class="side_tabs bank_list unstyled_list">
-      <li class="bank blank" style="display: none;">
+      <li class="bank blank" style="display: none;" tabIndex="0" role="button">
         <div class="title"><%= t('headers.bank_name', "Bank Name") %></div>
         <span class="id" style="display: none;">&nbsp;</span>
         <div class="sub_content">

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -16,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper.rb')
-
 describe ConversationMessageParticipant do
   before :once do
     teacher_in_course
@@ -34,24 +34,24 @@ describe ConversationMessageParticipant do
     end
 
     describe "#active" do
-      it "should ignore soft deletes" do
+      it "ignores soft deletes" do
         @teacher.conversations.first.remove_messages(@msg)
-        expect(ConversationMessageParticipant.all.count).to eql 3
-        expect(ConversationMessageParticipant.all.map(&:workflow_state).sort).to eql ['active', 'active', 'deleted']
-        expect(ConversationMessageParticipant.active.map(&:workflow_state)).to eql ['active', 'active']
+        expect(ConversationMessageParticipant.all.count).to be 3
+        expect(ConversationMessageParticipant.all.map(&:workflow_state).sort).to eql %w[active active deleted]
+        expect(ConversationMessageParticipant.active.map(&:workflow_state)).to eql ["active", "active"]
       end
 
-      it "should include nil workflow_state" do
-        ConversationMessageParticipant.update_all(:workflow_state => nil)
+      it "includes nil workflow_state" do
+        ConversationMessageParticipant.update_all(workflow_state: nil)
         expect(ConversationMessageParticipant.active.map(&:workflow_state).sort).to eql [nil, nil, nil]
       end
     end
 
     describe "#deleted" do
-      it "should only include soft deletes" do
+      it "only includes soft deletes" do
         @teacher.conversations.first.remove_messages(@msg)
-        expect(ConversationMessageParticipant.all.count).to eql 3
-        expect(ConversationMessageParticipant.deleted.map(&:workflow_state)).to eql ['deleted']
+        expect(ConversationMessageParticipant.all.count).to be 3
+        expect(ConversationMessageParticipant.deleted.map(&:workflow_state)).to eql ["deleted"]
       end
     end
   end

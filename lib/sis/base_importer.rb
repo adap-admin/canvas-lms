@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require_dependency 'sis/common'
-
 module SIS
   class BaseImporter
     def initialize(root_account, opts)
@@ -26,10 +26,10 @@ module SIS
       @batch_user = opts[:batch_user]
       @logger = opts[:logger] || Rails.logger
       @sis_options = {
-          :override_sis_stickiness => opts[:override_sis_stickiness],
-          :add_sis_stickiness => opts[:add_sis_stickiness],
-          :clear_sis_stickiness => opts[:clear_sis_stickiness]
-        }
+        override_sis_stickiness: opts[:override_sis_stickiness],
+        add_sis_stickiness: opts[:add_sis_stickiness],
+        clear_sis_stickiness: opts[:clear_sis_stickiness]
+      }
     end
   end
 end

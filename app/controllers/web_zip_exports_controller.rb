@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -23,7 +25,7 @@
 #
 # @model WebZipExport
 #     {
-#       "id": "WebZip",
+#       "id": "WebZipExport",
 #       "description": "",
 #       "properties": {
 #         "id": {
@@ -99,7 +101,7 @@ class WebZipExportsController < ApplicationController
 
   def check_feature_enabled
     unless course_allow_web_export_download?
-      render status: 404, template: 'shared/errors/404_message'
+      render status: :not_found, template: "shared/errors/404_message"
       false
     end
   end
@@ -139,6 +141,7 @@ class WebZipExportsController < ApplicationController
   def show
     web_zip = @context.web_zip_exports.where(id: params[:id]).first
     return unless authorized_action(web_zip, @current_user, :read)
+
     render json: web_zip_export_json(web_zip)
   end
 end

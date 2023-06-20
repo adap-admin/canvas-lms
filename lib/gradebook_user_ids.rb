@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -17,7 +19,7 @@
 
 class GradebookUserIds
   def initialize(course, user)
-    settings = (user.preferences.dig(:gradebook_settings, course.id) || {}).with_indifferent_access
+    settings = (user.get_preference(:gradebook_settings, course.global_id) || {}).with_indifferent_access
     @course = course
     @user = user
     @include_inactive = settings[:show_inactive_enrollments] == "true"
@@ -31,16 +33,30 @@ class GradebookUserIds
   end
 
   def user_ids
-    if @column == "student"
-      sort_by_student_name
-    elsif @column =~ /assignment_\d+$/
+    case @column
+    when "student"
+      sort_by_student_field
+    when /assignment_\d+$/
       assignment_id = @column[/\d+$/]
-      send("sort_by_assignment_#{@sort_by}", assignment_id)
-    elsif @column =~ /^assignment_group_\d+$/
+      case @sort_by
+      when "grade"
+        sort_by_assignment_grade(assignment_id)
+      when "missing"
+        sort_by_assignment_missing(assignment_id)
+      when "late"
+        sort_by_assignment_late(assignment_id)
+      when "excused"
+        sort_by_assignment_excused(assignment_id)
+      when "unposted"
+        sort_by_assignment_unposted(assignment_id)
+      end
+    when /^assignment_group_\d+$/
       assignment_id = @column[/\d+$/]
       sort_by_assignment_group(assignment_id)
-    elsif @column == "total_grade"
+    when "total_grade"
       sort_by_total_grade
+    when "student_firstname"
+      sort_by_student_first_name
     else
       sort_by_student_name
     end
@@ -48,33 +64,79 @@ class GradebookUserIds
 
   private
 
+  def sort_by_student_field
+    if ["name", "sortable_name"].include?(@sort_by) || !pseudonym_sort_field
+      sort_by_student_name
+    else
+      sort_by_pseudonym_field
+    end
+  end
+
   def sort_by_student_name
-    students.
-      order(Arel.sql("enrollments.type = 'StudentViewEnrollment'")).
-      order_by_sortable_name(direction: @direction.to_sym).
-      pluck(:id).
-      uniq
+    students
+      .order(Arel.sql("enrollments.type = 'StudentViewEnrollment'"))
+      .order_by_sortable_name(direction: @direction.to_sym)
+      .pluck(:id)
+      .uniq
+  end
+
+  def sort_by_student_first_name
+    students
+      .order(Arel.sql("enrollments.type = 'StudentViewEnrollment'"))
+      .order_by_name(direction: @direction.to_sym, table: "users")
+      .pluck(:id)
+      .uniq
+  end
+
+  def sort_by_pseudonym_field
+    sort_column = Pseudonym.best_unicode_collation_key("pseudonyms.#{pseudonym_sort_field}")
+
+    students.joins("LEFT JOIN #{Pseudonym.quoted_table_name} ON pseudonyms.user_id=users.id AND
+                    pseudonyms.workflow_state <> 'deleted'")
+            .order(Arel.sql("#{sort_column} #{sort_direction} NULLS LAST"))
+            .order(Arel.sql("pseudonyms.id IS NULL"))
+            .order(Arel.sql("users.id #{sort_direction}"))
+            .pluck(:id)
+            .uniq
+  end
+
+  def pseudonym_sort_field
+    # The sort keys integration_id and sis_user_id map to columns in Pseudonym,
+    # while login_id needs to be changed to unique_id
+    {
+      "login_id" => "unique_id",
+      "sis_user_id" => "sis_user_id",
+      "integration_id" => "integration_id"
+    }.with_indifferent_access[@sort_by]
   end
 
   def sort_by_assignment_grade(assignment_id)
-    students.
-      joins("LEFT JOIN #{Submission.quoted_table_name} ON submissions.user_id=users.id AND
+    students
+      .joins("LEFT JOIN #{Submission.quoted_table_name} ON submissions.user_id=users.id AND
              submissions.workflow_state<>'deleted' AND
-             submissions.assignment_id=#{Submission.connection.quote(assignment_id)}").
-      order(Arel.sql("enrollments.type = 'StudentViewEnrollment'")).
-      order(Arel.sql("submissions.score #{sort_direction} NULLS LAST")).
-      order(Arel.sql("submissions.id IS NULL")).
-      order_by_sortable_name(direction: @direction.to_sym).
-      pluck(:id).
-      uniq
+             submissions.assignment_id=#{Submission.connection.quote(assignment_id)}")
+      .order(Arel.sql("enrollments.type = 'StudentViewEnrollment'"))
+      .order(Arel.sql("submissions.score #{sort_direction} NULLS LAST"))
+      .order(Arel.sql("submissions.id IS NULL"))
+      .order_by_sortable_name(direction: @direction.to_sym)
+      .pluck(:id)
+      .uniq
   end
 
   def sort_by_assignment_missing(assignment_id)
-    sort_user_ids(Submission.missing.where(assignment_id: assignment_id))
+    sort_user_ids(Submission.missing.where(assignment_id:))
+  end
+
+  def sort_by_assignment_excused(assignment_id)
+    sort_user_ids(Submission.excused.where(assignment_id:))
+  end
+
+  def sort_by_assignment_unposted(assignment_id)
+    sort_user_ids(Submission.graded.unposted.where(assignment_id:))
   end
 
   def sort_by_assignment_late(assignment_id)
-    sort_user_ids(Submission.late.where(assignment_id: assignment_id))
+    sort_user_ids(Submission.late.where(assignment_id:))
   end
 
   def sort_by_total_grade
@@ -145,39 +207,40 @@ class GradebookUserIds
     # Because of AR internals (https://github.com/rails/rails/issues/32598),
     # we avoid using Arel left_joins here so that sort_by_scores will have
     # Enrollment defined.
-    students = User.
-      joins("LEFT JOIN #{Enrollment.quoted_table_name} ON enrollments.user_id=users.id").
-      merge(student_enrollments_scope)
+    students = User
+               .joins("LEFT JOIN #{Enrollment.quoted_table_name} ON enrollments.user_id=users.id")
+               .merge(student_enrollments_scope)
 
     if student_group_id.present?
-      students.joins(group_memberships: :group).
-        where(group_memberships: {group: student_group_id, workflow_state: :accepted})
+      students.joins(group_memberships: :group)
+              .where(group_memberships: { group: student_group_id, workflow_state: :accepted })
     else
       students
     end
   end
 
   def sort_by_scores(type = :total_grade, id = nil)
-    score_scope = if type == :assignment_group
-      "scores.assignment_group_id=#{Score.connection.quote(id)}"
-    elsif type == :grading_period
-      "scores.grading_period_id=#{Score.connection.quote(id)}"
-    else
-      "scores.course_score IS TRUE"
-    end
+    score_scope = case type
+                  when :assignment_group
+                    "scores.assignment_group_id=#{Score.connection.quote(id)}"
+                  when :grading_period
+                    "scores.grading_period_id=#{Score.connection.quote(id)}"
+                  else
+                    "scores.course_score IS TRUE"
+                  end
 
     # Without doing the score conditions in the join, we lose data. For
     # example, we might lose concluded enrollments who don't have a Score.
     students.joins("LEFT JOIN #{Score.quoted_table_name} ON scores.enrollment_id=enrollments.id AND
-                scores.workflow_state='active' AND #{score_scope}").
-      order(Arel.sql("enrollments.type = 'StudentViewEnrollment'")).
-      order(Arel.sql("scores.unposted_current_score #{sort_direction} NULLS LAST")).
-      order_by_sortable_name(direction: @direction.to_sym).
-      pluck(:id).uniq
+                scores.workflow_state='active' AND #{score_scope}")
+            .order(Arel.sql("enrollments.type = 'StudentViewEnrollment'"))
+            .order(Arel.sql("scores.unposted_current_score #{sort_direction} NULLS LAST"))
+            .order_by_sortable_name(direction: @direction.to_sym)
+            .pluck(:id).uniq
   end
 
   def sort_direction
-    @direction == "ascending" ? :asc : :desc
+    (@direction == "ascending") ? :asc : :desc
   end
 
   def grading_period_id
@@ -193,11 +256,13 @@ class GradebookUserIds
 
   def section_id
     return nil if @selected_section_id.nil? || @selected_section_id == "null" || @selected_section_id == "0"
+
     @selected_section_id
   end
 
   def student_group_id
     return nil if @selected_student_group_id.nil? || ["0", "null"].include?(@selected_student_group_id)
-    Group.active.exists?(id: @selected_student_group_id) ? @selected_student_group_id : nil
+
+    Group.active.where(id: @selected_student_group_id).exists? ? @selected_student_group_id : nil
   end
 end

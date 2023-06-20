@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -16,26 +18,26 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-class Login::OauthController < Login::OauthBaseController
+class Login::OAuthController < Login::OAuthBaseController
   def new
     super
 
     timeout_protection do
       request_token = @aac.consumer.get_request_token(oauth_callback: callback_uri)
       session[:oauth] = {
-          callback_confirmed: request_token.callback_confirmed?,
-          request_token: request_token.token,
-          request_secret: request_token.secret
+        callback_confirmed: request_token.callback_confirmed?,
+        request_token: request_token.token,
+        request_secret: request_token.secret
       }
       opts = {}
       opts[oauth_callback: callback_uri] unless request_token.callback_confirmed?
-      redirect_to delegated_auth_redirect_uri(request_token.authorize_url(opts))
+      redirect_to request_token.authorize_url(opts)
     end
   end
 
   def create
     @aac = @domain_root_account.authentication_providers.active.find(params[:id])
-    raise ActiveRecord::RecordNotFound unless @aac.is_a?(AuthenticationProvider::Oauth)
+    raise ActiveRecord::RecordNotFound unless @aac.is_a?(AuthenticationProvider::OAuth)
 
     oauth_state = session.delete(:oauth)
     request_token = OAuth::RequestToken.new(@aac.consumer,

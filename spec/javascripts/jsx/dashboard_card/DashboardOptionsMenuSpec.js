@@ -21,12 +21,12 @@ import PropTypes from 'prop-types'
 import ReactDOM from 'react-dom'
 import TestUtils from 'react-dom/test-utils'
 import {shallow, mount} from 'enzyme'
-import DashboardOptionsMenu from 'jsx/dashboard_card/DashboardOptionsMenu'
+import DashboardOptionsMenu from 'ui/features/dashboard/react/DashboardOptionsMenu'
 import sinon from 'sinon'
 
 const container = document.getElementById('fixtures')
 
-const FakeDashboard = function(props) {
+const FakeDashboard = function (props) {
   return (
     <div>
       <DashboardOptionsMenu
@@ -60,29 +60,29 @@ FakeDashboard.propTypes = {
   menuRef: PropTypes.func.isRequired,
   view: PropTypes.string,
   planner_enabled: PropTypes.bool,
-  onDashboardChange: PropTypes.func
+  onDashboardChange: PropTypes.func,
 }
 
 FakeDashboard.defaultProps = {
   view: 'cards',
   planner_enabled: false,
-  onDashboardChange: () => {}
+  onDashboardChange: () => {},
 }
 
 QUnit.module('Dashboard Options Menu', {
   afterEach() {
     ReactDOM.unmountComponentAtNode(container)
-  }
+  },
 })
 
-test('it renders', function() {
+test('it renders', () => {
   const dashboardMenu = TestUtils.renderIntoDocument(
     <DashboardOptionsMenu onDashboardChange={() => {}} />
   )
   ok(dashboardMenu)
 })
 
-test('it should call onDashboardChange when new view is selected', function() {
+test('it should call onDashboardChange when new view is selected', () => {
   const onDashboardChangeSpy = sinon.spy()
 
   const wrapper = shallow(
@@ -94,7 +94,7 @@ test('it should call onDashboardChange when new view is selected', function() {
   ok(onDashboardChangeSpy.calledWith('cards'))
 })
 
-test('it should not call onDashboardChange when correct view is already set', function() {
+test('it should not call onDashboardChange when correct view is already set', () => {
   const onDashboardChangeSpy = sinon.spy()
 
   const wrapper = mount(
@@ -112,7 +112,7 @@ test('it should not call onDashboardChange when correct view is already set', fu
   wrapper.unmount()
 })
 
-test('it should include a List View menu item when Student Planner is enabled', function() {
+test('it should include a List View menu item when Student Planner is enabled', () => {
   const wrapper = mount(<DashboardOptionsMenu planner_enabled onDashboardChange={() => {}} />)
   wrapper.find('button').simulate('click')
   const menuItems = Array.from(document.querySelectorAll('[role="menuitemradio"]'))
@@ -120,7 +120,17 @@ test('it should include a List View menu item when Student Planner is enabled', 
   wrapper.unmount()
 })
 
-test('it should display toggle color overlay option if card view is set', function() {
+test('it should include an Homeroom View option when the Elementary dashboard is disabled', () => {
+  const wrapper = mount(
+    <DashboardOptionsMenu canEnableElementaryDashboard onDashboardChange={() => {}} />
+  )
+  wrapper.find('button').simulate('click')
+  const menuItems = Array.from(document.querySelectorAll('[role="menuitemradio"]'))
+  ok(menuItems.some(menuItem => menuItem.textContent.trim() === 'Homeroom View'))
+  wrapper.unmount()
+})
+
+test('it should display toggle color overlay option if card view is set', () => {
   const wrapper = mount(<DashboardOptionsMenu onDashboardChange={() => {}} />)
   wrapper.find('button').simulate('click')
 
@@ -133,7 +143,7 @@ test('it should display toggle color overlay option if card view is set', functi
   wrapper.unmount()
 })
 
-test('it should not display toggle color overlay option if recent activity view is set', function() {
+test('it should not display toggle color overlay option if recent activity view is set', () => {
   const wrapper = mount(<DashboardOptionsMenu view="activity" onDashboardChange={() => {}} />)
   wrapper.find('button').simulate('click')
 
@@ -146,7 +156,7 @@ test('it should not display toggle color overlay option if recent activity view 
   wrapper.unmount()
 })
 
-test('it should toggle color overlays', function() {
+test('it should toggle color overlays', () => {
   sandbox.stub(DashboardOptionsMenu.prototype, 'postToggleColorOverlays')
   let dashboardMenu = null
   ReactDOM.render(

@@ -20,36 +20,36 @@ import {
   START_FLICKR_SEARCH,
   RECEIVE_FLICKR_RESULTS,
   FAIL_FLICKR_SEARCH,
-  TOGGLE_FLICKR_FORM
-} from "../actions/flickr";
+  TOGGLE_FLICKR_FORM,
+} from '../actions/flickr'
 
-export default function(state = {}, action) {
+export default function (state = {}, action) {
   switch (action.type) {
     case START_FLICKR_SEARCH:
       return {
         ...state,
         searching: true,
-        searchTerm: action.term
-      };
+        searchTerm: action.term,
+      }
     case RECEIVE_FLICKR_RESULTS:
       return {
         ...state,
         searching: false,
-        searchResults: action.results
-      };
+        searchResults: action.results,
+      }
     case FAIL_FLICKR_SEARCH:
       return {
         ...state,
         searching: false,
-        searchTerm: "",
-        searchResults: []
-      };
+        searchTerm: '',
+        searchResults: [],
+      }
     case TOGGLE_FLICKR_FORM:
       return {
         ...state,
-        formExpanded: !state.formExpanded
-      };
+        formExpanded: !state.formExpanded,
+      }
     default:
-      return state;
+      return state
   }
 }

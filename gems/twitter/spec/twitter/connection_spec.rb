@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -15,20 +17,19 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'spec_helper'
+require "spec_helper"
 
 describe Twitter::Connection do
-
   describe ".config=" do
     it "accepts any object with a call interface" do
       conf_class = Class.new do
         def call
-          { 'monkey' => 'banana' }
+          { "monkey" => "banana" }
         end
       end
 
-      described_class.config =  conf_class.new
-      expect(described_class.config['monkey']).to eq('banana')
+      described_class.config = conf_class.new
+      expect(described_class.config["monkey"]).to eq("banana")
     end
 
     it "rejects configs that are not callable" do
@@ -47,11 +48,10 @@ describe Twitter::Connection do
       config = double(call: {})
       Twitter::Connection.config = config
       consumer = double(get_request_token: "token")
-      expect(OAuth::Consumer).to receive(:new).
-        with("key", "secret", anything).and_return(consumer)
+      expect(OAuth::Consumer).to receive(:new)
+        .with("key", "secret", anything).and_return(consumer)
 
       expect(Twitter::Connection.config_check(settings)).to be_nil
     end
   end
-
 end

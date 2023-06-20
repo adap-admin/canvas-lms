@@ -15,21 +15,26 @@
  * You should have received a copy of the GNU Affero General Public License along
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-
-/* eslint-disable mocha/no-global-tests, mocha/handle-done-callback */
-
-import axeCheck from 'axe-testcafe'
-
+import {axeCheck, createReport} from 'axe-testcafe'
+// eslint-disable-next-line babel/no-unused-expressions
 fixture`aXe a11y checking`.page`./testcafe.html`
 
+async function runAxeCheck(t, context, options) {
+  const {violations} = await axeCheck(t, context, options)
+  if (violations) {
+    await t.expect(violations.length === 0).ok(createReport(violations))
+  }
+}
+
 test('automated a11y testing', async t => {
-  const axeContext = undefined // test the whole page
+  const axeContext = {
+    include: 'body'
+  }
   const axeOptions = {
-    rules: {
-      // This is just to get the initial aXe commit passing.
-      // These need to be fixed and this rule restored.
-      'button-name': {enabled: false}
+    runOnly: {
+      type: 'tag',
+      values: ['wcag21a', 'wcag21aa', 'best-practice', 'section508']
     }
   }
-  await axeCheck(t, axeContext, axeOptions)
+  await runAxeCheck(t, axeContext, axeOptions)
 })

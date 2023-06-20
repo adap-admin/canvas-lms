@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,8 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/messages_helper')
+require_relative "messages_helper"
 
 describe "submission_graded" do
   before :once do
@@ -29,7 +30,7 @@ describe "submission_graded" do
 
   include_examples "a message"
 
-  it "should include the submission's submitter name if receiver is not the submitter and has the setting turned on" do
+  it "includes the submission's submitter name if receiver is not the submitter and has the setting turned on" do
     observer = user_model
     message = generate_message(:submission_graded, :summary, asset, user: observer)
     expect(message.body).not_to match("For #{@submission.user.name}")
@@ -38,5 +39,56 @@ describe "submission_graded" do
     observer.save!
     message = generate_message(:submission_graded, :summary, asset, user: observer)
     expect(message.body).to match("For #{@submission.user.name}")
+  end
+
+  it "does not fail for twitter message" do
+    observer = user_model
+    observer.preferences[:send_observed_names_in_notifications] = true
+    message = generate_message(:submission_graded, :twitter, asset, user: observer)
+    expect(message.body).to match(@submission.user.name)
+  end
+
+  context "with a graded submission and sending scores in emails is allowed" do
+    before do
+      @assignment.points_possible = 100
+      @assignment.save!
+      @submission.score = 99
+      @submission.workflow_state = "graded"
+      @submission.save!
+      @student.preferences[:send_scores_in_emails] = true
+      @student.save!
+    end
+
+    it "shows score" do
+      summary = generate_message(:submission_graded, :summary, asset, user: @student)
+      expect(summary.body).to include("score: #{@submission.score} out of #{@assignment.points_possible}")
+      email = generate_message(:submission_graded, :email, asset, user: @student)
+      expect(email.body).to include("score: #{@submission.score} out of #{@assignment.points_possible}")
+      expect(email.html_body).to include("score: #{@submission.score} out of #{@assignment.points_possible}")
+      twitter = generate_message(:submission_graded, :twitter, asset, user: @student)
+      expect(twitter.body).to include("score: #{@submission.score} out of #{@assignment.points_possible}")
+      sms = generate_message(:submission_graded, :sms, asset, user: @student)
+      expect(sms.body).to include("score: #{@submission.score} out of #{@assignment.points_possible}")
+    end
+
+    it "shows grade instead when user is quantitative data restricted" do
+      course_root_account = @assignment.course.root_account
+      # truthy feature flag
+      course_root_account.enable_feature! :restrict_quantitative_data
+
+      # truthy setting
+      course_root_account.settings[:restrict_quantitative_data] = { value: true, locked: true }
+      course_root_account.save!
+
+      summary = generate_message(:submission_graded, :summary, asset, user: @student)
+      expect(summary.body).to include("grade: A")
+      email = generate_message(:submission_graded, :email, asset, user: @student)
+      expect(email.body).to include("grade: A")
+      expect(email.html_body).to include("grade: A")
+      twitter = generate_message(:submission_graded, :twitter, asset, user: @student)
+      expect(twitter.body).to include("grade: A")
+      sms = generate_message(:submission_graded, :sms, asset, user: @student)
+      expect(sms.body).to include("grade: A")
+    end
   end
 end

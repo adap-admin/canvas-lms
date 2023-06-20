@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -27,7 +29,7 @@ class NotificationFinder
     notifications[name]
   end
 
-  alias :by_name :find_by_name
+  alias_method :by_name, :find_by_name
 
   def reset_cache
     @notifications = []
@@ -36,7 +38,7 @@ class NotificationFinder
 
   def refresh_cache(notifications = Notification.all_cached)
     @notifications = notifications.index_by(&:name)
-    @notifications.values.each(&:freeze)
+    @notifications.each_value(&:freeze)
     true
   end
 end

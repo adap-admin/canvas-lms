@@ -28,6 +28,8 @@
 ///////==============
 /// Global Settings
 ///////==============
+@use "sass:math";
+
 html {
   font-size: 100%;
   -webkit-text-size-adjust: 100%;
@@ -91,14 +93,14 @@ a.text-success:hover { color: darken($ic-color-success, 10%); }
 ///////==============
 
 h1, h2, h3, h4, h5, h6 {
-  margin: $ic-sp/2 0;
+  margin: $ic-sp*0.5 0;
   font-family: $ic-font-family;
   font-weight: $ic-font-weight;
   line-height: $ic-line-height;
   text-rendering: optimizelegibility; // Fix the character spacing for headings
   small {
     font-weight: normal;
-    line-height: $ic-line-height/0.5;
+    line-height: math.div($ic-line-height, 0.5);
     color: $ic-font-color--subdued;
   }
 }
@@ -129,7 +131,7 @@ h3, .h3 {
 }
 
 .page-header {
-  padding-bottom: ($ic-sp / 2);
+  padding-bottom: ($ic-sp * 0.5);
   margin: 20px 0 30px;
   border-bottom: 1px solid $ic-border-color;
 }
@@ -161,7 +163,7 @@ a {
 /// Underline All Links Feature Flag
 ////////=============
 .Underline-All-Links__enabled {
-  a:not(.Button, .btn, .ui-button, .ui-tabs-anchor) {
+  a:not(.Button):not(.btn):not(.ui-button):not(.ui-tabs-anchor) {
     text-decoration: underline;
     &:focus, &:hover { text-decoration: none; }
 
@@ -318,12 +320,6 @@ input[type=radio] + label {
   input[type=radio] + label {
     vertical-align: middle;
   }
-}
-
-// all the browsers render this differently, remove line-height so the text doesn't
-// get ridiculously misaligned.
-input[type=file] {
-  line-height: 1em;
 }
 
 ///////==============
@@ -485,23 +481,6 @@ address {
 /// Popover Settings
 ///////==============
 
-/*
-@styleguide Popovers
-
-## Accessible *body-only* popovers
-
-Here's an accessible way to do it for popovers without a header.
-`.popover-padded` takes care of what `.popover-content` did above.
-
-```html
-<a
-  data-tooltip='{"tooltipClass":"popover popover-padded", "position":"right"}'
-  title="Lo-fi next level kale chips narwhal tattooed, tonx YOLO mixtape.">
-  Text with accessible popover
-</a>
-
-```
-*/
 .ui-widget.ui-tooltip {
   word-wrap: break-word;
 }

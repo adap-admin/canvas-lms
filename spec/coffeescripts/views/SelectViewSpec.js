@@ -17,8 +17,8 @@
  */
 
 import $ from 'jquery'
-import Backbone from 'Backbone'
-import SelectView from 'compiled/views/SelectView'
+import Backbone from '@canvas/backbone'
+import SelectView from 'ui/features/roster/backbone/views/SelectView'
 import 'helpers/jquery.simulate'
 
 let view = null
@@ -29,7 +29,7 @@ QUnit.module('SelectView', {
       template: () => `
         <option>foo</option>
         <option>bar</option>
-      `
+      `,
     })
     view.render()
     view.$el.appendTo($('#fixtures'))
@@ -37,7 +37,7 @@ QUnit.module('SelectView', {
   teardown() {
     view.remove()
     $('#fixtures').empty()
-  }
+  },
 })
 
 test('onChange it updates the model', () => {

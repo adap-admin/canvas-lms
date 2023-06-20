@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -15,11 +17,10 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require File.expand_path(File.dirname(__FILE__) + '/../../lti2_spec_helper')
-require 'spec_helper'
+require_relative "../../lti2_spec_helper"
 
 describe DataFixup::AddToolProxyToMessageHandler do
-  include_context 'lti2_spec_helper'
+  include_context "lti2_spec_helper"
 
   it "sets message handlers' 'tool_proxy' to the resource handler tool proxy" do
     message_handler.update_attribute(:tool_proxy, nil)

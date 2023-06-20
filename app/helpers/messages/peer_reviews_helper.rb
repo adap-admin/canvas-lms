@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -16,20 +18,19 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 module Messages::PeerReviewsHelper
-
   def reviewee_name(asset, reviewer)
-    asset.can_read_assessment_user_name?(reviewer, nil) ? asset.asset.user.name : I18n.t('Anonymous User')
+    asset.can_read_assessment_user_name?(reviewer, nil) ? asset.asset.user.name : I18n.t("Anonymous User")
   end
 
   def submission_comment_author(submission_comment, user)
-     submission_comment.can_read_author?(user, nil) ? (submission_comment.author_name || I18n.t("Someone")) : I18n.t('Anonymous User')
+    submission_comment.can_read_author?(user, nil) ? (submission_comment.author_name || I18n.t("Someone")) : I18n.t("Anonymous User")
   end
 
   def submission_comment_submittor(submission_comment, user)
     if submission_comment.submission.can_read_submission_user_name?(user, nil)
       submission_comment.submission.user.short_name
     else
-      I18n.t('Anonymous User')
+      I18n.t("Anonymous User")
     end
   end
 
@@ -38,6 +39,6 @@ module Messages::PeerReviewsHelper
       submission: asset.asset,
       current_user: user,
       assessment_request: asset
-    ).submission_data_url
+    ).submission_data_url(only_path: false)
   end
 end

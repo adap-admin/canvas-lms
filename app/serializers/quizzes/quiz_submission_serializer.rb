@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -24,10 +26,12 @@ module Quizzes
     attributes :id
 
     def_delegators :@controller,
-      :course_quiz_quiz_submission_url, :course_quiz_history_url
+                   :course_quiz_quiz_submission_url,
+                   :course_quiz_history_url
 
-    def serializable_object(options={})
+    def serializable_object(**)
       return super unless object
+
       hash = quiz_submission_json(object, object.quiz, current_user, session, context)
       hash[:id] = hash[:id].to_s unless hash[:id].nil?
       @wrap_in_array ? [hash] : hash

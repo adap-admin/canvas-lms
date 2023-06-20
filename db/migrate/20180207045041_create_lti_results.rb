@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -34,6 +36,6 @@ class CreateLtiResults < ActiveRecord::Migration[5.0]
       t.timestamps
     end
 
-    add_index :lti_results, %i(lti_line_item_id user_id), unique: true
+    add_index :lti_results, %i[lti_line_item_id user_id], unique: true
   end
 end

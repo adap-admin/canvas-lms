@@ -6,7 +6,6 @@ CopyrightLinter:
     Statuses:
       - added
     Include:
-      - "*.coffee"
       - "*.js"
       - "*.rb"
       # TODO: add the following once the initial autocorrect sweep is complete
@@ -15,18 +14,18 @@ CopyrightLinter:
 #      - "*.erb"
 #      - "*.handlebars"
 #      - "*.hbs"
-    Whitelist:
+    Allowlist:
       - "**/bower/**"
       - "**/mediaelement/**"
       - "**/shims/**"
       - "**/vendor/**"
-      - "**/symlink_to_node_modules/**"
       - "gems/tatl_tael/spec/lib/tatl_tael/linters/fixtures/**"
+      - "gems/plugins/**"
   Regexes:
     FirstLineExceptions:
       - !ruby/regexp '/^#!/' # e.g. "#!/usr/bin/env ruby"
       - !ruby/regexp '/coding:/' # encodings
-      - !ruby/regexp '/@jsx React\.DOM/' # jsx header (see client_apps/quizzes)
+      - !ruby/regexp '/frozen_string_literal:/'
     CommentPrefixRegex: !ruby/regexp '/^( *)?(#|\/\/|\/?\*+|<%|\{\{\!)( *)?/'
   CopyrightYearPlaceholder: "CURRENT_YEAR"
   Copyright: |-
@@ -55,10 +54,6 @@ CopyrightLinter:
     Rb:
       Block: false
       BlockStart: "#" # empty first line
-      Line: "#"
-    Coffee:
-      Block: false
-      BlockStart: "#"
       Line: "#"
   Message: |-
     Please prefix source files with our COPYRIGHT header. i.e.:
@@ -130,21 +125,14 @@ SeleniumSpecsLinter:
     # i.e., the code changes could/should be tested at a lower level.
     PublicJs:
       - "public/javascripts/**.js"
-    PublicJsWhitelist:
+    PublicJsAllowlist:
       - "**/bower/**"
       - "**/mediaelement/**"
       - "**/shims/**"
       - "**/vendor/**"
-      - "**/symlink_to_node_modules/**"
     PublicJsSpec:
       - "spec/coffeescripts/**"
       - "spec/javascripts/**"
-    Coffee:
-      - "app/coffeescripts/**.coffee"
-    CoffeeWhitelist:
-      - "app/coffeescripts/bundles/**"
-    CoffeeSpec:
-      - "spec/coffeescripts/**.coffee"
     Jsx:
       - "app/jsx/**.js"
     JsxSpec:
@@ -152,22 +140,6 @@ SeleniumSpecsLinter:
       - "spec/javascripts/jsx/**"
   Message: Your commit modifies selenium specs, when your changes might be more appropriately
       tested at a lower level. Please limit your selenium specs to happy-path scenarios.
-
-Simple/CoffeeSpecsLinter:
-  Severity: "warn"
-  Precondition:
-    Include:
-    - "app/coffeescripts/**.coffee"
-    Whitelist:
-    - "app/coffeescripts/bundles/**"
-  Requirement:
-    Include:
-    - "app/jsx/**/__tests__/**"
-    - "spec/coffeescripts/**.coffee"
-    - "spec/coffeescripts/jsx/**"
-    - "spec/javascripts/jsx/**"
-  Message: Your commit includes coffee changes, but does not include coffee or jsx
-    specs. Please add some to verify your changes.
 
 Simple/JsxSpecsLinter:
   Severity: "warn"
@@ -177,9 +149,8 @@ Simple/JsxSpecsLinter:
   Requirement:
     Include:
     - "app/jsx/**/__tests__/**"
-    - "spec/coffeescripts/jsx/**"
     - "spec/javascripts/jsx/**"
-  Message: Your commit includes coffee changes, but does not include coffee or jsx
+  Message: Your commit includes JavaScript changes, but does not include
     specs. Please add some to verify your changes.
 
 Simple/PublicJsSpecsLinter:
@@ -187,19 +158,17 @@ Simple/PublicJsSpecsLinter:
   Precondition:
     Include:
     - "public/javascripts/**.js"
-    Whitelist:
+    Allowlist:
     - "**/bower/**"
     - "**/mediaelement/**"
-    - "**/shims/**"
     - "**/vendor/**"
-    - "**/symlink_to_node_modules/**"
   Requirement:
     Include:
     - "app/jsx/**/__tests__/**"
-    - "spec/coffeescripts/**"
+    - "public/javascripts/**/__tests__/**"
     - "spec/javascripts/**"
   Message: Your commit includes changes to public/javascripts, but does not include
-    specs (coffee or jsx). Please add some to verify your changes. Even $.fn.crazyMethods
+    specs. Please add some to verify your changes. Even $.fn.crazyMethods
     can and should be tested (and not via selenium).
 
 Simple/NewErbLinter:
@@ -210,8 +179,8 @@ Simple/NewErbLinter:
     Statuses:
     - added
   Message: |-
-    Your commit includes new ERB files, which has been a no-no in Canvas since 2011. All new UI should be built in React on top of documented APIs.
-    Maybe try doing something like this in your controller instead:
+    Your commit includes new ERB files but you may be able to accomplish
+    everything you need by doing something like this in your controller instead:
 
         @page_title = t('Your Page Title')
         add_body_class 'whatever-classes you-want-to-add-to-body'

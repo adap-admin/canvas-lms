@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -15,18 +17,19 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'canvas_partman/partition_manager/by_date'
-require 'canvas_partman/partition_manager/by_id'
+require "canvas_partman/partition_manager/by_date"
+require "canvas_partman/partition_manager/by_id"
+require "active_record/pg_extensions"
 
 module CanvasPartman
   class PartitionManager
     class << self
       def create(base_class)
         unless base_class < Concerns::Partitioned
-          raise ArgumentError, <<-ERROR
-PartitionManager can only work on models that are Partitioned.
-See CanvasPartman::Concerns::Partitioned.
-          ERROR
+          raise ArgumentError, <<~TEXT
+            PartitionManager can only work on models that are Partitioned.
+            See CanvasPartman::Concerns::Partitioned.
+          TEXT
         end
 
         const_get(base_class.partitioning_strategy.to_s.classify).new(base_class)
@@ -64,27 +67,27 @@ See CanvasPartman::Concerns::Partitioned.
     #
     # @param [Integer] number_to_keep
     #   The number of partitions to keep (excluding the current partition)
-    def prune_partitions(_number_to_keep = 6)
-    end
+    def prune_partitions(_number_to_keep = 6); end
 
     # Create a new partition table.
     #
-    # @param [Integer] graceful
+    # @param [Time/Integer] value
+    #   The time or sequencial value to use in generating the table name.
+    #
+    # @param [Boolean] graceful
     #   Do nothing if the partition table already exists.
     #
     # @return [String]
-    #  The name of the newly created partition table.
+    #   The name of the newly created partition table.
     def create_partition(value, graceful: false)
       partition_table = generate_name_for_partition(value)
 
-      if graceful == true
-        return if partition_exists?(partition_table)
-      end
+      return if graceful && partition_exists?(partition_table)
 
       constraint_check = generate_check_constraint(value)
 
-      base_class.transaction do
-        execute(<<SQL)
+      with_statement_timeout do
+        execute(<<SQL.squish)
         CREATE TABLE #{base_class.connection.quote_table_name(partition_table)} (
           LIKE #{base_class.quoted_table_name} INCLUDING ALL,
           CHECK (#{constraint_check})
@@ -93,8 +96,10 @@ SQL
 
         # copy foreign keys, since INCLUDING ALL won't bring them along
         base_class.connection.foreign_keys(base_class.table_name).each do |foreign_key|
-          base_class.connection.add_foreign_key partition_table, foreign_key.to_table, foreign_key.options.except(:name)
+          base_class.connection.add_foreign_key partition_table, foreign_key.to_table, **foreign_key.options.except(:name)
         end
+
+        CanvasPartman.after_create_callback.call(base_class, partition_table)
       end
 
       partition_table
@@ -110,16 +115,34 @@ SQL
 
     def drop_partition(value)
       partition_table = generate_name_for_partition(value)
+      drop_partition_table(partition_table)
+    end
 
-      base_class.transaction do
-        base_class.connection.drop_table(partition_table)
-      end
+    def with_statement_timeout(timeout_override: nil, &block)
+      tv = timeout_override || ::CanvasPartman.timeout_value
+      base_class.connection.with_statement_timeout(tv.to_f, &block)
     end
 
     protected
 
+    def drop_partition_constraints(table_name)
+      base_class.connection.foreign_keys(table_name).each do |fk|
+        with_statement_timeout do
+          base_class.connection.remove_foreign_key table_name, name: fk.name
+        end
+      end
+    end
+
+    def drop_partition_table(table_name)
+      drop_partition_constraints(table_name)
+      with_statement_timeout do
+        base_class.connection.drop_table(table_name)
+      end
+    end
+
     def initialize(base_class)
-      raise NotImplementedError if self.class == PartitionManager
+      raise NotImplementedError if instance_of?(PartitionManager)
+
       @base_class = base_class
     end
 

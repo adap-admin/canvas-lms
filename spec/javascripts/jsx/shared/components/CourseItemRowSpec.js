@@ -18,9 +18,9 @@
 
 import React from 'react'
 import {mount} from 'enzyme'
-import CourseItemRow from 'jsx/shared/components/CourseItemRow'
-import AnnouncementModel from 'compiled/models/Announcement'
-import IconAssignment from '@instructure/ui-icons/lib/Line/IconAssignment'
+import CourseItemRow from '@canvas/announcements/react/components/CourseItemRow'
+import AnnouncementModel from '@canvas/discussions/backbone/models/Announcement'
+import {IconAssignmentLine} from '@instructure/ui-icons'
 
 QUnit.module('CourseItemRow component')
 
@@ -33,7 +33,7 @@ const props = {
     id: '5',
     display_name: 'John Smith',
     html_url: '',
-    avatar_image_url: null
+    avatar_image_url: null,
   },
   className: '',
   id: '5',
@@ -42,11 +42,16 @@ const props = {
   defaultSelected: false,
   isRead: false,
   showAvatar: true,
-  onSelectedChanged: () => {}
+  onSelectedChanged: () => {},
 }
 
 test('renders the CourseItemRow component', () => {
   const tree = mount(<CourseItemRow {...props} />)
+  ok(tree.exists())
+})
+
+test("renders the CourseItemRow component when author doesn't exist", () => {
+  const tree = mount(<CourseItemRow {...props} author={null} />)
   ok(tree.exists())
 })
 
@@ -78,7 +83,7 @@ test('renders clickable children inside content link', () => {
     />
   )
   ok(tree.find('.ic-item-row__content-col .ic-item-row__content-link .find-me').exists())
-  ok(tree.find('.ic-item-row__content-col .ic-item-row__content-link .find-me2').exists())
+  ok(tree.find('.ic-item-row__content-col .ic-item-row__content-container .find-me2').exists())
   ok(!tree.find('.ic-item-row__content-col .ic-item-row__content-link .find-me3').exists())
   ok(tree.find('.ic-item-row__content-col .ic-item-row__content-link .find-me4').exists())
 })
@@ -105,13 +110,13 @@ test('renders a drag handle if draggable: true', () => {
   const tree = mount(
     <CourseItemRow {...props} draggable connectDragSource={component => component} />
   )
-  const node = tree.find('IconDragHandle')
+  const node = tree.find('IconDragHandleLine')
   ok(node.exists())
 })
 
 test('renders inputted icon', () => {
-  const tree = mount(<CourseItemRow {...props} icon={<IconAssignment />} />)
-  const node = tree.find(IconAssignment)
+  const tree = mount(<CourseItemRow {...props} icon={<IconAssignmentLine />} />)
+  const node = tree.find(IconAssignmentLine)
   ok(node.exists())
 })
 
@@ -121,9 +126,9 @@ test('renders no checkbox if selectable: false', () => {
   notOk(node.exists())
 })
 
-test('renders an avatar if showAvatar: true', () => {
+test('renders an accessible avatar if showAvatar: true', () => {
   const tree = mount(<CourseItemRow {...props} showAvatar />)
-  const node = tree.find('Avatar')
+  const node = tree.find('Avatar').find("img[alt='John Smith']")
   ok(node.exists())
 })
 
@@ -167,8 +172,8 @@ test('renders master course lock icon if isMasterCourse', () => {
       lockedText: '',
       course_id: '3',
       content_id: '5',
-      content_type: 'announcement'
-    })
+      content_type: 'announcement',
+    }),
   }
   const tree = mount(<CourseItemRow {...props} masterCourse={masterCourse} />)
   ok(tree.instance().masterCourseLock)
@@ -189,8 +194,8 @@ test('renders master course lock icon if isChildCourse', () => {
       lockedText: '',
       course_id: '3',
       content_id: '5',
-      content_type: 'announcement'
-    })
+      content_type: 'announcement',
+    }),
   }
   const tree = mount(<CourseItemRow {...props} masterCourse={masterCourse} />)
   ok(tree.instance().masterCourseLock)
@@ -199,7 +204,7 @@ test('renders master course lock icon if isChildCourse', () => {
 test('renders no master course lock icon if no master course data provided', () => {
   const masterCourse = {
     courseData: {},
-    getLockOptions: () => ({})
+    getLockOptions: () => ({}),
   }
   const tree = mount(<CourseItemRow {...props} masterCourse={masterCourse} />)
   notOk(tree.instance().masterCourseLock)
@@ -208,7 +213,7 @@ test('renders no master course lock icon if no master course data provided', () 
 test('renders no master course lock icon if isMasterCourse and isChildCourse are false', () => {
   const masterCourse = {
     courseData: {isMasterCourse: false, isChildCourse: false},
-    getLockOptions: () => ({})
+    getLockOptions: () => ({}),
   }
   const tree = mount(<CourseItemRow {...props} masterCourse={masterCourse} />)
   notOk(tree.instance().masterCourseLock)

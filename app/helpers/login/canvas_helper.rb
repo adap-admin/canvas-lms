@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -18,12 +20,12 @@
 
 module Login::CanvasHelper
   def session_timeout_enabled?
-    PluginSetting.cached_plugin_setting('sessions')&.enabled?
+    PluginSetting.cached_plugin_setting("sessions")&.enabled?
   end
 
   def reg_link_data(auth_type)
     template = auth_type.present? ? "#{auth_type.downcase}Dialog" : "newParentDialog"
     path = auth_type.present? ? external_auth_validation_path : users_path
-    {template: template, path: path}
+    { template:, path: }
   end
 end

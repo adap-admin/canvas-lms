@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,11 +18,10 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/../../views_helper')
+require_relative "../../views_helper"
 
-describe "/shared/errors/404_message" do
-  it "should render" do
+describe "shared/errors/404_message" do
+  it "renders" do
     course_with_student
     view_context
     begin
@@ -28,8 +29,7 @@ describe "/shared/errors/404_message" do
     rescue => e
       exception = assign(:exception, e)
     end
-    render "shared/errors/404_message", :locals => {:exception => exception, :status => ""}
+    render "shared/errors/404_message", locals: { exception:, status: "" }
     expect(response).not_to be_nil
   end
 end
-

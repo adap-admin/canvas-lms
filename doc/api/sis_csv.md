@@ -124,8 +124,9 @@ sends a partial or an empty file, diffing would see that all users not included
 should be removed. Using `change_threshold=10` will then not perform diffing if
 the files being compared are greater than 10% different. The threshold can be
 set to help prevent removing objects unintentionally. When set and the file is
-over 10% different it will be the same as if `diffing_remaster_data_set=true`.
-The change_threshold can be set to any integer between 1 and 100.
+over 10% different, the entire import file will be applied instead of diffing
+against a previous batch and this batch will not be used for diffing any future
+batches. The change_threshold can be set to any integer between 1 and 100.
 
 change_threshold also impacts batch mode.
 
@@ -188,12 +189,9 @@ LDAP), this will be their username from the remote system.</td>
 <td><p>If the account is configured to use LDAP or an SSO protocol then
 this should not be set. Otherwise this is the password that will be used to
 login to Canvas along with the 'login_id' above.</p>
-<p>Setting the password will in most cases log the user out of Canvas. If
-the user has managed to change their password in Canvas they will not be
-affected by this.  This latter case would happen if your institution
-transitioned from using Canvas authentication to a SSO solution.
-For this reason it is important to not set this if you are using LDAP or an
-SSO protocol.</p>
+<p>Setting the password will in most cases log the user out of Canvas. The
+password can only be set one time. If the password has been set by the user
+or a previous sis import, it will not be changed.</p>
 </td>
 </tr>
 <tr>
@@ -265,15 +263,50 @@ user's name, but you can customize it here.</td>
 <td>text</td>
 <td></td>
 <td></td>
-<td>The email address of the user. This might be the same as login_id, but should
-still be provided.</td>
+<td>The email address of the user. This might be the same as login_id but would
+be used to set email for user and will tie the email to the login. It is
+recommended to omit this field over using fake email addresses for testing.</td>
+</tr>
+<tr>
+<td>pronouns</td>
+<td>text</td>
+<td></td>
+<td>✓</td>
+<td>User's preferred pronouns. Can pass "&lt;delete>" to remove the pronoun from the user.</td>
+</tr>
+<tr>
+<td>declared_user_type</td>
+<td>enum</td>
+<td></td>
+<td></td>
+<td>User's declared user type. Can be either administrative, observer, staff,
+student, student_other, or teacher. Can pass "&lt;delete>" to remove the
+declared user type from the user.</td>
+</tr>
+<tr>
+<td>canvas_password_notification</td>
+<td>boolean</td>
+<td></td>
+<td></td>
+<td>Defaults to false. When true, user is notified for password setup if
+the authentication_provider_id is canvas</td>
+</tr>
+<tr>
+<td>home_account</td>
+<td>boolean</td>
+<td></td>
+<td></td>
+<td>Setting this to true will create a new user in the target account for the
+SIS import and merge in another existing user from another account within the
+consortium with a matching integration_id. Will be ignored unless the target
+account is associated with an auto-merge consortium.</td>
 </tr>
 <tr>
 <td>status</td>
 <td>enum</td>
 <td>✓</td>
-<td></td>
-<td>active, deleted</td>
+<td>✓</td>
+<td>active, suspended, deleted</td>
 </tr>
 </table>
 
@@ -285,7 +318,8 @@ the login_id will be used as the name.</p>
 If the login is the last one, all of the users enrollments will also be deleted
 and they won't be able to log in to the school's account. If you still want the
 student to be able to log in but just not participate, leave the student
-'active' but set the enrollments to 'completed'.</p>
+'active' but set the enrollments to 'completed'. If you want to leave a student's
+enrollments intact, but not allow them to login, use the 'suspended' status.</p>
 
 Sample:
 
@@ -419,7 +453,7 @@ When set, all columns except term_id, status, start_date, and end_date will be i
 <td></td>
 <td>✓</td>
 <td>The date the term starts. The format should be in ISO 8601:
-YYYY-MM-DDTHH:MM:SSZ</td>
+YYYY-MM-DDTHH:MM:SSZ. Will be cleared if empty.</td>
 </tr>
 <tr>
 <td>end_date</td>
@@ -427,7 +461,7 @@ YYYY-MM-DDTHH:MM:SSZ</td>
 <td></td>
 <td>✓</td>
 <td>The date the term ends. The format should be in ISO 8601:
-YYYY-MM-DDTHH:MM:SSZ</td>
+YYYY-MM-DDTHH:MM:SSZ. Will be cleared if empty.</td>
 </tr>
 </table>
 
@@ -496,7 +530,7 @@ specified the default term for the account will be used</td>
 <td>enum</td>
 <td>✓</td>
 <td>✓</td>
-<td>active, deleted, completed</td>
+<td>active, deleted, completed, published</td>
 </tr>
 <tr>
 <td>integration_id</td>
@@ -511,7 +545,8 @@ specified the default term for the account will be used</td>
 <td></td>
 <td>✓</td>
 <td>The course start date. The format should be in ISO 8601:
-YYYY-MM-DDTHH:MM:SSZ</td>
+YYYY-MM-DDTHH:MM:SSZ. To remove the start date pass "&lt;delete&gt;".
+Will keep any existing value if empty.</td>
 </tr>
 <tr>
 <td>end_date</td>
@@ -519,7 +554,8 @@ YYYY-MM-DDTHH:MM:SSZ</td>
 <td></td>
 <td>✓</td>
 <td>The course end date. The format should be in ISO 8601:
-YYYY-MM-DDTHH:MM:SSZ</td>
+YYYY-MM-DDTHH:MM:SSZ. To remove the end date pass "&lt;delete&gt;"
+Will keep any existing value if empty.</td>
 </tr>
 <tr>
 <td>course_format</td>
@@ -533,11 +569,32 @@ YYYY-MM-DDTHH:MM:SSZ</td>
 <td>text</td>
 <td></td>
 <td></td>
-<td>The SIS id of a pre-existing Blueprint course. When provided, 
+<td>The SIS id of a pre-existing Blueprint course. When provided,
 the current course will be set up to receive updates from the blueprint course.
 Requires Blueprint Courses feature.
 To remove the Blueprint Course link you can pass 'dissociate' in place of the id.
 </td>
+</tr>
+<tr>
+<td>grade_passback_setting</td>
+<td>text</td>
+<td></td>
+<td>✓</td>
+<td>nightly_sync, not_set</td>
+</tr>
+<tr>
+<td>homeroom_course</td>
+<td>boolean</td>
+<td></td>
+<td></td>
+<td>Whether the course is a homeroom course. Requires the courses to be associated with a "Canvas for Elementary"-enabled account.</td>
+</tr>
+<tr>
+<td>friendly_name</td>
+<td>text</td>
+<td></td>
+<td></td>
+<td>Friendly name for course, will be shown only for the Elementary account</td>
 </tr>
 </table>
 
@@ -605,14 +662,14 @@ interface, this is called the SIS ID.</td>
 <td>date</td>
 <td></td>
 <td>✓</td>
-<td>The section start date. The format should be in ISO 8601: YYYY-MM-DDTHH:MM:SSZ</td>
+<td>The section start date. The format should be in ISO 8601: YYYY-MM-DDTHH:MM:SSZ. Will be cleared if empty.</td>
 </tr>
 <tr>
 <td>end_date</td>
 <td>date</td>
 <td></td>
 <td>✓</td>
-<td>The section end date The format should be in ISO 8601: YYYY-MM-DDTHH:MM:SSZ</td>
+<td>The section end date The format should be in ISO 8601: YYYY-MM-DDTHH:MM:SSZ. Will be cleared if empty.</td>
 </tr>
 </table>
 
@@ -657,14 +714,14 @@ enrollments.csv
 <td>date</td>
 <td></td>
 <td>✓</td>
-<td>The enrollment start date. For start_date to take effect the end_date also needs to be populated. The format should be in ISO 8601: YYYY-MM-DDTHH:MM:SSZ</td>
+<td>The enrollment start date. For start_date to take effect the end_date also needs to be populated. The format should be in ISO 8601: YYYY-MM-DDTHH:MM:SSZ. Will be cleared if empty.</td>
 </tr>
 <tr>
 <td>end_date</td>
 <td>date</td>
 <td></td>
 <td>✓</td>
-<td>The enrollment end date. For end_date to take effect the start_date also needs to be populated. The format should be in ISO 8601: YYYY-MM-DDTHH:MM:SSZ</td>
+<td>The enrollment end date. For end_date to take effect the start_date also needs to be populated. The format should be in ISO 8601: YYYY-MM-DDTHH:MM:SSZ. Will be cleared if empty.</td>
 </tr>
 <tr>
 <td>user_id</td>
@@ -688,8 +745,7 @@ enrollments.csv
 <td>✓&#42;</td>
 <td></td>
 <td>student, teacher, ta, observer, designer, or a custom role defined
-by the account</td>
-</tr>
+by the account. When using a custom role, the name is case sensitive.</td></tr>
 <tr>
 <td>role_id</td>
 <td>text</td>
@@ -710,7 +766,7 @@ is specified the default section for the course will be used</td>
 <td>enum</td>
 <td>✓</td>
 <td></td>
-<td>active, deleted, completed, inactive</td>
+<td>active, deleted, completed, inactive, deleted_last_completed&#42;&#42;</td>
 </tr>
 <tr>
 <td>associated_user_id</td>
@@ -729,10 +785,26 @@ Ignored for any role other than observer</td>
 <td>Defaults to false. When true, the enrollment will only allow the user to see
  and interact with users enrolled in the section given by course_section_id. </td>
 </tr>
+<tr>
+<td>notify</td>
+<td>boolean</td>
+<td></td>
+<td></td>
+<td>If true, a notification will be sent to the enrolled user. Notifications are
+ not sent by default. </td>
+</tr>
 </table>
 
 &#42; course_id or section_id is required, role or role_id is required, and
  user_id or user_integration_id is required.
+
+&#42;&#42; deleted_last_completed is not a state, but it combines the deleted
+ and completed states in a function that will delete an enrollment from a course
+ if there are at least one other active enrollment in the course. If it is the
+ last enrollment in the course it will complete it. This may be useful for when
+ a user moves to a different section of a course in which there are section
+ specific assignments. It offloads the logic required to determine if the
+ enrollment is the users last enrollment in the given course or not.
 
 When an enrollment is in a 'completed' state the student is limited to read-only access to the
 course.
@@ -1057,7 +1129,8 @@ admins.csv
 <td>text</td>
 <td>✓&#42;</td>
 <td></td>
-<td>AccountAdmin, or a custom role defined by the account</td>
+<td>AccountAdmin, or a custom role defined by the account.
+ When using a custom role, the name is case sensitive.</td>
 </tr>
 <tr>
 <td>status</td>
@@ -1137,12 +1210,9 @@ LDAP), this will be their username from the remote system.</td>
 <td><p>If the account is configured to use LDAP or an SSO protocol then
 this should not be set. Otherwise this is the password that will be used to
 login to Canvas along with the 'login_id' above.</p>
-<p>Setting the password will in most cases log the user out of Canvas. If
-the user has managed to change their password in Canvas they will not be
-affected by this.  This latter case would happen if your institution
-transitioned from using Canvas authentication to a SSO solution.
-For this reason it is important to not set this if you are using LDAP or an
-SSO protocol.</p>
+<p>Setting the password will in most cases log the user out of Canvas. The
+password can only be set one time. If the password has been set by the user
+or a previous sis import, it will not be changed.</p>
 </td>
 </tr>
 <tr>
@@ -1172,30 +1242,30 @@ first matching provider).</p>
 <tr>
 <td>existing_user_id</td>
 <td>text</td>
-<td></td>
 <td>✓&#42;</td>
+<td></td>
 <td>The User sis id from users.csv, required to identify a user.</td>
 </tr>
 <tr>
 <td>existing_integration_id</td>
 <td>text</td>
-<td></td>
 <td>✓&#42;</td>
+<td></td>
 <td>The User integration_id from users.csv, required to identify a user.</td>
 </tr>
 <tr>
 <td>existing_canvas_user_id</td>
 <td>text</td>
-<td></td>
 <td>✓&#42;</td>
+<td></td>
 <td>The canvas id for a user, required to identify a user.</td>
 </tr>
 <tr>
 <td>root_account</td>
 <td>text</td>
+<td>✓&#42;</td>
 <td></td>
-<td></td>
-<td>The domain of the account to search for the user.</td>
+<td>The domain of the account to search for the user. This field is required when identifying a user in a trusted account.</td>
 </tr>
 <tr>
 <td>email</td>

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -24,10 +26,10 @@ class AlertsController < ApplicationController
       convert_recipients
       @alert = @context.alerts.build(alert_params)
       if @alert.save
-        headers['Location'] = named_context_url(@context, :context_alert_url, @alert.id)
-        render :json => @alert.as_json(:include => :criteria)
+        headers["Location"] = named_context_url(@context, :context_alert_url, @alert.id)
+        render json: @alert.as_json(include: :criteria)
       else
-        render :json => @alert.errors, :status => :bad_request
+        render json: @alert.errors, status: :bad_request
       end
     end
   end
@@ -36,11 +38,11 @@ class AlertsController < ApplicationController
     if authorized_action(@context, @current_user, :manage_interaction_alerts)
       convert_recipients
       @alert = @context.alerts.find(params[:id])
-      if @alert.update_attributes(alert_params)
-        headers['Location'] = named_context_url(@context, :context_alert_url, @alert.id)
-        render :json => @alert.as_json(:include => :criteria)
+      if @alert.update(alert_params)
+        headers["Location"] = named_context_url(@context, :context_alert_url, @alert.id)
+        render json: @alert.as_json(include: :criteria)
       else
-        render :json => @alert.errors, :status => :bad_request
+        render json: @alert.errors, status: :bad_request
       end
     end
   end
@@ -49,23 +51,24 @@ class AlertsController < ApplicationController
     if authorized_action(@context, @current_user, :manage_interaction_alerts)
       @alert = @context.alerts.find(params[:id])
       @alert.destroy
-      render :json => @alert
+      render json: @alert
     end
   end
 
   protected
+
   def convert_recipients
     params[:alert][:recipients] = params[:alert][:recipients].to_a.map do |r|
-      if r.is_a?(String) && r[0] == ':'
-        r[1..-1].to_sym
-      elsif role = (@context.is_a?(Account) ? @context.get_role_by_id(r) : @context.account.get_role_by_id(r))
-        {:role_id => role.id}
+      if r.is_a?(String) && r[0] == ":"
+        r[1..].to_sym
+      elsif (role = (@context.is_a?(Account) ? @context.get_role_by_id(r) : @context.account.get_role_by_id(r)))
+        { role_id: role.id }
       end
     end.flatten
   end
 
   def alert_params
-    params.require(:alert).
-      permit(:context, :repetition, :criteria => [:criterion_type, :threshold], :recipients => strong_anything)
+    params.require(:alert)
+          .permit(:context, :repetition, criteria: [:criterion_type, :threshold], recipients: strong_anything)
   end
 end

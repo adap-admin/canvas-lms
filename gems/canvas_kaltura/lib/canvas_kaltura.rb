@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -15,8 +17,8 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'canvas_http'
-require 'canvas_sort'
+require "canvas_http"
+require "canvas_sort"
 
 module CanvasKaltura
   require "canvas_kaltura/kaltura_client_v3"
@@ -30,20 +32,28 @@ module CanvasKaltura
     @logger
   end
 
+  def self.error_handler=(error_handler)
+    @error_handler = error_handler
+  end
+
+  def self.error_handler
+    @error_handler
+  end
+
   def self.cache=(cache)
     @cache = cache
   end
 
   def self.cache
     return @cache.call if @cache.is_a?(Proc)
+
     @cache
   end
 
-  def self.with_timeout_protector(options = {}, &block)
-    @timeout_protector_proc ||= Proc.new do
-      block.call
-    end
-    @timeout_protector_proc.call(options, &block)
+  def self.with_timeout_protector(options = {}, &)
+    return yield unless @timeout_protector_proc
+
+    @timeout_protector_proc.call(options, &)
   end
 
   def self.timeout_protector_proc=(callable)

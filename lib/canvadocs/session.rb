@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -23,9 +25,11 @@ module Canvadocs
     def canvadocs_session_url(opts = {})
       user = opts.delete(:user)
       enable_annotations = opts.delete(:enable_annotations)
-      opts.merge! canvadoc_permissions_for_user(user, enable_annotations)
+      read_only = opts.delete(:read_only) || false
+      opts.reverse_merge! canvadoc_permissions_for_user(user, enable_annotations, read_only)
       opts[:url] = attachment.public_url(expires_in: 7.days)
       opts[:locale] = I18n.locale || I18n.default_locale
+      opts[:send_usage_metrics] = user.account.feature_enabled?(:send_usage_metrics) if user
 
       Canvas.timeout_protection("canvadocs", raise_on_timeout: true) do
         session = canvadocs_api.session(document_id, opts)
@@ -38,9 +42,10 @@ module Canvadocs
     end
     private :canvadocs_api
 
-    def canvadoc_permissions_for_user(user, enable_annotations)
+    def canvadoc_permissions_for_user(user, enable_annotations, read_only = false)
       return {} unless enable_annotations && canvadocs_can_annotate?(user)
-      opts = canvadocs_default_options_for_user(user)
+
+      opts = canvadocs_default_options_for_user(user, read_only)
       return opts if submissions.empty?
 
       if submissions.any? { |s| s.user_can_read_grade?(user) }
@@ -62,12 +67,13 @@ module Canvadocs
 
     def observing?(user)
       user.observer_enrollments.active.where(course_id: submission_context_ids,
-        associated_user_id: submissions.map(&:user_id)).exists?
+                                             associated_user_id: submissions.map(&:user_id)).exists?
     end
 
     def managing?(user)
       is_teacher = user.teacher_enrollments.active.where(course_id: submission_context_ids).exists?
       return true if is_teacher
+
       course = submissions.first.assignment.course
       course.account_membership_allows(user)
     end
@@ -82,22 +88,25 @@ module Canvadocs
       if ApplicationController.test_cluster?
         return "default-#{ApplicationController.test_cluster_name}"
       end
+
       "default"
     end
     private :canvadocs_annotation_context
 
-    def canvadocs_permissions(user)
-      return 'readwrite' if submissions.empty?
-      return 'readwritemanage' if managing?(user)
-      return 'read' if observing?(user)
-      'readwrite'
+    def canvadocs_permissions(user, read_only)
+      return "read" if read_only
+      return "readwrite" if submissions.empty?
+      return "readwritemanage" if managing?(user)
+      return "read" if observing?(user)
+
+      "readwrite"
     end
     private :canvadocs_permissions
 
-    def canvadocs_default_options_for_user(user)
+    def canvadocs_default_options_for_user(user, read_only)
       opts = {
         annotation_context: canvadocs_annotation_context,
-        permissions: canvadocs_permissions(user),
+        permissions: canvadocs_permissions(user, read_only),
         user_id: canvadocs_user_id(user),
         user_name: canvadocs_user_name(user),
         user_filter: canvadocs_user_id(user),

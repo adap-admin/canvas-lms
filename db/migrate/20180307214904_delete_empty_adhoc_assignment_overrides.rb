@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -21,8 +23,5 @@ class DeleteEmptyAdhocAssignmentOverrides < ActiveRecord::Migration[5.0]
 
   def up
     DataFixup::DeleteEmptyAdhocAssignmentOverrides.run
-  end
-
-  def down
   end
 end

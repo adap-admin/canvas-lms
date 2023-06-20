@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -16,12 +18,10 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../../../spec_helper.rb')
-require File.expand_path(File.dirname(__FILE__) + '/answer_parser_spec_helper.rb')
+require_relative "answer_parser_spec_helper"
 
 describe Quizzes::QuizQuestion::AnswerParsers::Matching do
-
- context "#parse" do
+  context "#parse" do
     let(:raw_answers) do
       [
         {
@@ -58,9 +58,6 @@ describe Quizzes::QuizQuestion::AnswerParsers::Matching do
 
     let(:parser_class) { Quizzes::QuizQuestion::AnswerParsers::Matching }
 
-    include_examples "All answer parsers"
-
-
     let(:raw_dupe_answers) do
       [
         {
@@ -87,6 +84,8 @@ describe Quizzes::QuizQuestion::AnswerParsers::Matching do
       ]
     end
 
+    include_examples "All answer parsers"
+
     it "reuses match_id for duplicate answer_match_right" do
       question = Quizzes::QuizQuestion::QuestionData.new(question_params)
       question.answers = Quizzes::QuizQuestion::AnswerGroup.new(raw_dupe_answers)
@@ -100,6 +99,5 @@ describe Quizzes::QuizQuestion::AnswerParsers::Matching do
       # but 2nd & 3rd are both "California" and should have the same :match_id
       expect(@answer_data[1][:match_id]).to eql @answer_data[2][:match_id]
     end
-
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -50,8 +52,11 @@ class GradingStandard < ActiveRecord::Base
   # 89.5 is an A-.
   serialize :data
 
+  before_save :trim_whitespace, if: :will_save_change_to_data?
   before_save :update_usage_count
   attr_accessor :default_standard
+
+  before_create :set_root_account_id
 
   workflow do
     state :active
@@ -59,19 +64,19 @@ class GradingStandard < ActiveRecord::Base
   end
 
   scope :active, -> { where("grading_standards.workflow_state<>'deleted'") }
-  scope :sorted, -> { order(Arel.sql("usage_count >= 3 DESC")).order(nulls(:last, best_unicode_collation_key('title'))) }
+  scope :sorted, -> { order(Arel.sql("usage_count >= 3 DESC")).order(nulls(:last, best_unicode_collation_key("title"))) }
 
   VERSION = 2
 
   set_policy do
-    given { |user| self.context.grants_right?(user, :manage_grades) }
+    given { |user| context.grants_right?(user, :manage_grades) }
     can :manage
   end
 
   def self.for(context)
     context_codes = [context.asset_string]
     context_codes.concat Account.all_accounts_for(context).map(&:asset_string)
-    GradingStandard.active.where(:context_code => context_codes.uniq)
+    GradingStandard.active.where(context_code: context_codes.uniq)
   end
 
   def version
@@ -80,20 +85,20 @@ class GradingStandard < ActiveRecord::Base
 
   def ordered_scheme
     # Convert to BigDecimal so we don't get weird float behavior: 0.545 * 100 (gives 54.50000000000001 with floats)
-    @ordered_scheme ||= grading_scheme.to_a.
-        map { |grade_letter, percent| [grade_letter, BigDecimal(percent.to_s)] }.
-        sort_by { |_, percent| -percent }
+    @ordered_scheme ||= grading_scheme.to_a
+                                      .map { |grade_letter, percent| [grade_letter, BigDecimal(percent.to_s)] }
+                                      .sort_by { |_, percent| -percent }
   end
 
   def place_in_scheme(key_name)
     # look for keys with only digits and a single '.'
-    if key_name.to_s =~ (/\A(\d*[.])?\d+\Z/)
-    # compare numbers
-      # second condition to filter letters so zeros work properly ("A".to_f == 0)
-      ordered_scheme.index { |g, _| g.to_f == key_name.to_f && g.to_s.match(/\A(\d*[.])?\d+\Z/)}
+    if key_name.to_s&.match?(/\A(\d*[.])?\d+\Z/)
+      # compare numbers
+      # second condition to filter letters so zeros work properly ("A".to_d == 0)
+      ordered_scheme.index { |g, _| g.to_d == key_name.to_d && g.to_s.match(/\A(\d*[.])?\d+\Z/) }
     else
-    # compare words
-      ordered_scheme.index { |g, _| g.to_s.downcase == key_name.to_s.downcase}
+      # compare words
+      ordered_scheme.index { |g, _| g.to_s.casecmp?(key_name.to_s) }
     end
   end
 
@@ -107,10 +112,10 @@ class GradingStandard < ActiveRecord::Base
     # grade cutoffs.
     # otherwise, we step down just 1/10th of a point, which is the
     # granularity we support right now
-    elsif idx && (ordered_scheme[idx].last - ordered_scheme[idx - 1].last).abs >= 0.01
-      ordered_scheme[idx - 1].last * 100.0 - 1.0
+    elsif idx && (ordered_scheme[idx].last - ordered_scheme[idx - 1].last).abs >= BigDecimal("0.01")
+      (ordered_scheme[idx - 1].last * BigDecimal("100.0")) - BigDecimal("1.0")
     elsif idx
-      ordered_scheme[idx - 1].last * 100.0 - 0.1
+      (ordered_scheme[idx - 1].last * BigDecimal("100.0")) - BigDecimal("0.1")
     else
       nil
     end
@@ -122,7 +127,7 @@ class GradingStandard < ActiveRecord::Base
     # assign the highest grade whose min cutoff is less than the score
     # if score is less than all scheme cutoffs, assign the lowest grade
     score = BigDecimal(score.to_s) # Cast this to a BigDecimal too or comparisons get wonky
-    ordered_scheme.max_by {|_, lower_bound| score >= lower_bound * 100 ? lower_bound : -lower_bound }[0]
+    ordered_scheme.max_by { |_, lower_bound| (score >= lower_bound * BigDecimal("100.0")) ? lower_bound : -lower_bound }[0]
   end
 
   def data=(new_val)
@@ -131,16 +136,16 @@ class GradingStandard < ActiveRecord::Base
     # and dup the data while we're at it. (new_val.dup only dups one level, the
     # elements of new_val.dup are the same objects as the elements of new_val)
     if new_val.respond_to?(:map)
-      new_val = new_val.map{ |grade_name, lower_bound| [ grade_name, lower_bound.round(4) ] }
+      new_val = new_val.map { |grade_name, lower_bound| [grade_name, lower_bound.round(4)] }
     end
     write_attribute(:data, new_val)
     @ordered_scheme = nil
   end
 
   def data
-    unless self.version == VERSION
+    unless version == VERSION
       data = read_attribute(:data)
-      data = GradingStandard.upgrade_data(data, self.version) unless data.nil?
+      data = GradingStandard.upgrade_data(data, version) unless data.nil?
       self.data = data
     end
     read_attribute(:data)
@@ -151,8 +156,8 @@ class GradingStandard < ActiveRecord::Base
     when VERSION
       data
     when 1
-      0.upto(data.length-2) do |i|
-        data[i][1] = data[i+1][1] + 0.01
+      0.upto(data.length - 2) do |i|
+        data[i][1] = data[i + 1][1] + 0.01
       end
       data[-1][1] = 0
       data
@@ -161,75 +166,80 @@ class GradingStandard < ActiveRecord::Base
     end
   end
 
+  def trim_whitespace
+    data.each do |scheme|
+      scheme.first.strip!
+    end
+  end
+  private :trim_whitespace
+
   def update_usage_count
-    self.usage_count = self.assignments.active.count
-    self.context_code = "#{self.context_type.underscore}_#{self.context_id}" rescue nil
+    self.usage_count = assignments.active.count
+    self.context_code = "#{context_type.underscore}_#{context_id}" rescue nil
   end
 
   def assessed_assignment?
-    self.assignments.active.joins(:submissions).where("submissions.workflow_state='graded'").exists?
+    assignments.active.joins(:submissions).where("submissions.workflow_state='graded'").exists?
   end
 
-  def context_name
-    self.context.name
-  end
+  delegate :name, to: :context, prefix: true
 
   def update_data(params)
-    self.data = params.to_a.sort_by{|_, lower_bound| lower_bound}.reverse
+    self.data = params.to_a.sort_by { |_, lower_bound| lower_bound }.reverse
   end
 
   def display_name
     res = ""
-    res += self.user.name + ", " rescue ""
-    res += self.context.name rescue ""
+    res += user.name + ", " rescue ""
+    res += context.name rescue ""
     res = t("unknown_grading_details", "Unknown Details") if res.empty?
     res
   end
 
   alias_method :destroy_permanently!, :destroy
   def destroy
-    self.workflow_state = 'deleted'
-    self.save
+    self.workflow_state = "deleted"
+    save
   end
 
   def grading_scheme
     res = {}
-    self.data.sort_by{|_, lower_bound| lower_bound}.reverse_each do |grade_name, lower_bound|
+    data.sort_by { |_, lower_bound| lower_bound }.reverse_each do |grade_name, lower_bound|
       res[grade_name] = lower_bound.to_f
     end
     res
   end
 
-  def standard_data=(params={})
+  def standard_data=(params = {})
     params ||= {}
     res = {}
-    params.each do |key, row|
+    params.each_value do |row|
       res[row[:name]] = (row[:value].to_f / 100.0) if row[:name] && row[:value]
     end
-    self.data = res.to_a.sort_by{|_, lower_bound| lower_bound}.reverse
+    self.data = res.to_a.sort_by { |_, lower_bound| lower_bound }.reverse
   end
 
   def valid_grading_scheme_data
-    self.errors.add(:data, 'grading scheme values cannot be negative') if self.data.present? && self.data.any?{ |v| v[1] < 0 }
-    self.errors.add(:data, 'grading scheme cannot contain duplicate values') if self.data.present? && self.data.map{|v| v[1]} != self.data.map{|v| v[1]}.uniq
-    self.errors.add(:data, 'a grading scheme name is too long') if self.data.present? && self.data.any?{|v| v[0].length > self.class.maximum_string_length}
+    errors.add(:data, "grading scheme values cannot be negative") if data.present? && data.any? { |v| v[1] < 0 }
+    errors.add(:data, "grading scheme cannot contain duplicate values") if data.present? && data.pluck(1) != data.pluck(1).uniq
+    errors.add(:data, "a grading scheme name is too long") if data.present? && data.any? { |v| v[0].length > self.class.maximum_string_length }
   end
 
   def full_range_scheme
-    if data.present? && data.none? { |datum| datum[1] == 0.0 }
-      errors.add(:data, 'grading schemes must have 0% for the lowest grade')
+    if data.present? && data.none? { |datum| datum[1].abs < Float::EPSILON }
+      errors.add(:data, "grading schemes must have 0% for the lowest grade")
     end
   end
   private :full_range_scheme
 
   def self.default_grading_standard
-    default_grading_scheme.to_a.sort_by{|_, lower_bound| lower_bound}.reverse
+    default_grading_scheme.to_a.sort_by { |_, lower_bound| lower_bound }.reverse
   end
 
   def self.default_instance
-    gs = GradingStandard.new()
+    gs = GradingStandard.new
     gs.data = default_grading_scheme
-    gs.title = 'Default Grading Scheme'
+    gs.title = "Default Grading Scheme"
     gs.default_standard = true
     gs
   end
@@ -253,5 +263,9 @@ class GradingStandard < ActiveRecord::Base
       "D-" => 0.61,
       "F" => 0.0,
     }
+  end
+
+  def set_root_account_id
+    self.root_account_id ||= context.is_a?(Account) ? context.resolved_root_account_id : context.root_account_id
   end
 end

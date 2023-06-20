@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -16,15 +18,8 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 group :development, :test do
-  gem 'dress_code', '1.2.0'
-    gem 'colored', '1.2', require: false
-    gem 'colorize', '0.8.1', require: false
-    gem 'mustache', '1.1.0', require: false
-    gem 'pygments.rb', '1.2.1', require: false
-    gem 'redcarpet', '3.4.0', require: false
-  gem 'bluecloth', '2.2.0' # for generating api docs
-  gem 'yard', '0.9.5'
-  gem 'yard-appendix', '0.1.8'
-
-  gem 'bullet', '5.7.5', require: false, github: 'flyerhzm/bullet', ref: '1677bc0ff78ed550e82a8fd5ecb97f64c7e83e36' if CANVAS_RAILS5_2
+  gem "dress_code", "1.2.1"
+  gem "bluecloth", "2.2.0" # for generating api docs
+  gem "yard", "~> 0.9"
+  gem "yard-appendix", "0.1.8"
 end

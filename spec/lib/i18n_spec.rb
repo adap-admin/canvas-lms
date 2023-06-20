@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,48 +18,70 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper.rb')
-
 describe I18n do
-  context "_core_en.js" do
-    it "should be up-to-date" do
-      skip("Rails 5.2 specific") unless CANVAS_RAILS5_2
-      translations = {'en' => I18n.backend.send(:translations)[:en].slice(*I18nTasks::Utils::CORE_KEYS)}
-
-      # HINT: if this spec fails, run `rake i18n:generate_js`...
-      # it probably means you added a format or a new language
-      expect(File.read('public/javascripts/translations/_core_en.js')).to eq(
-          I18nTasks::Utils.dump_js(translations)
-      )
+  context "DontTrustPluralizations" do
+    it "does not raise an exception for a bad pluralization entry" do
+      missing_other_key = { en: { __pluralize_test: { one: "One thing" } } }
+      I18n.backend.stub(missing_other_key) do
+        expect(I18n.t(:__pluralize_test, count: 123)).to eq ""
+      end
     end
   end
 
   context "interpolation" do
-    before { I18n.locale = I18n.default_locale }
-    after { I18n.locale = I18n.default_locale }
-
-    it "should fall back to en if the current locale's interpolation is broken" do
-      I18n.locale = :es
-      I18n.backend.stub es: {__interpolation_test: "Hola %{mundo}"} do
-        expect(I18n.t(:__interpolation_test, "Hello %{mundo}", {mundo: "WORLD"})).
-          to eq "Hola WORLD"
-        expect(I18n.t(:__interpolation_test, "Hello %{world}", {world: "WORLD"})).
-          to eq "Hello WORLD"
+    it "falls back to en if the current locale's interpolation is broken" do
+      I18n.with_locale(:es) do
+        I18n.backend.stub es: { __interpolation_test: "Hola %{mundo}" } do
+          expect(I18n.t(:__interpolation_test, "Hello %{mundo}", { mundo: "WORLD" }))
+            .to eq "Hola WORLD"
+          expect(I18n.t(:__interpolation_test, "Hello %{world}", { world: "WORLD" }))
+            .to eq "Hello WORLD"
+        end
       end
     end
 
-    it "should raise an error if the the en interpolation is broken" do
-      expect {
-        I18n.t(:__interpolation_test, "Hello %{world}", {foo: "bar"})
-      }.to raise_error(I18n::MissingInterpolationArgument)
+    it "raises an error if the the en interpolation is broken" do
+      expect do
+        I18n.t(:__interpolation_test, "Hello %{world}", { foo: "bar" })
+      end.to raise_error(I18n::MissingInterpolationArgument)
     end
 
-    it "should format count numbers" do
-      I18n.backend.stub(en: { __interpolation_test: { one: "One thing", other: "%{count} things" }}) do
+    it "formats count numbers" do
+      I18n.backend.stub(en: { __interpolation_test: { one: "One thing", other: "%{count} things" } }) do
         expect(I18n.t(:__interpolation_test,
                       one: "One thing",
                       other: "%{count} things",
                       count: 1001)).to eq "1,001 things"
+      end
+    end
+  end
+
+  context "genitives" do
+    it "forms with `'s` in english" do
+      expect(I18n.form_proper_noun_singular_genitive("Cody")).to eq("Cody's")
+    end
+
+    it "forms with `s` in german generally" do
+      I18n.with_locale(:de) do
+        expect(I18n.form_proper_noun_singular_genitive("Cody")).to eq("Codys")
+      end
+    end
+
+    it "forms with `'` in german when ending appropriately" do
+      I18n.with_locale(:de) do
+        expect(I18n.form_proper_noun_singular_genitive("Max")).to eq("Max'")
+      end
+    end
+
+    it "forms with `de ` in spanish" do
+      I18n.with_locale(:es) do
+        expect(I18n.form_proper_noun_singular_genitive("Cody")).to eq("de Cody")
+      end
+    end
+
+    it "returns it untouched in chinese" do
+      I18n.with_locale(:"zh-Hant") do
+        expect(I18n.form_proper_noun_singular_genitive("Cody")).to eq("Cody")
       end
     end
   end

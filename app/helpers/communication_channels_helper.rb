@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -19,9 +21,9 @@
 module CommunicationChannelsHelper
   def merge_or_login_link(pseudonym)
     if @current_user && pseudonym.user_id == @current_user.id
-      registration_confirmation_path(@nonce, :enrollment => @enrollment.try(:uuid), :confirm => 1)
+      registration_confirmation_path(@nonce, enrollment: @enrollment.try(:uuid), confirm: 1)
     else
-      login_url(:host => HostUrl.context_host(pseudonym.account, @request.try(:host_with_port)), :confirm => @nonce, :enrollment => @enrollment.try(:uuid), :pseudonym_session => { :unique_id => pseudonym.unique_id }, :expected_user_id => pseudonym.user_id)
+      login_url(host: HostUrl.context_host(pseudonym.account, @request.try(:host_with_port)), confirm: @nonce, enrollment: @enrollment.try(:uuid), pseudonym_session: { unique_id: pseudonym.unique_id }, expected_user_id: pseudonym.user_id)
     end
   end
 
@@ -33,15 +35,15 @@ module CommunicationChannelsHelper
       return user.name unless pseudonym
     end
 
-    if !(conflicting_users = merge_opportunities.select { |(user, pseudonyms)| user != pseudonym.user && user.name == pseudonym.user.name }).empty?
+    if (conflicting_users = merge_opportunities.select { |u, _pseudonym| u != pseudonym.user && u.name == pseudonym.user.name }).empty?
+      pseudonym.user.name
+    else
       conflicting_pseudonyms = conflicting_users.map(&:last).flatten
-      if conflicting_pseudonyms.find { |p| p.account != pseudonym.account}
+      if conflicting_pseudonyms.find { |p| p.account != pseudonym.account }
         "#{pseudonym.user.name} (#{pseudonym.account.name} - #{pseudonym.unique_id})"
       else
         "#{pseudonym.user.name} (#{pseudonym.unique_id})"
       end
-    else
-      pseudonym.user.name
     end
   end
 end

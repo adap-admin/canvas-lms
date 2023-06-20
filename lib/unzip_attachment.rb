@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -19,9 +21,9 @@
 # This is used to take a zipped file, unzip it, add directories to a
 # context, and attach the files in the correct directories.
 class UnzipAttachment
-  THINGS_TO_IGNORE_REGEX  = /^(__MACOSX|thumbs\.db|\.DS_Store)$/
+  THINGS_TO_IGNORE_REGEX = /^(__MACOSX|thumbs\.db|\.DS_Store)$/
 
-  def self.process(opts={})
+  def self.process(opts = {})
     @ua = new(opts)
     @ua.process
     @ua
@@ -32,14 +34,14 @@ class UnzipAttachment
 
   # for backwards compatibility
   def course
-    self.context
+    context
   end
 
   def course_files_folder
-    self.context_files_folder
+    context_files_folder
   end
 
-  def initialize(opts={})
+  def initialize(opts = {})
     @context = opts[:course] || opts[:context]
     @filename = opts[:filename]
     # opts[:callback] is for backwards-compatibility, it's just a progress proc
@@ -51,16 +53,17 @@ class UnzipAttachment
     @rename_files = !!opts[:rename_files]
     @migration_id_map = opts[:migration_id_map] || {}
 
-    raise ArgumentError, "Must provide a context." unless self.context && self.context.is_a_context?
-    raise ArgumentError, "Must provide a filename." unless self.filename
-    raise ArgumentError, "Must provide a context files folder." unless self.context_files_folder
+    raise ArgumentError, "Must provide a context." unless context&.is_a_context?
+    raise ArgumentError, "Must provide a filename." unless filename
+    raise ArgumentError, "Must provide a context files folder." unless context_files_folder
   end
 
   def update_progress(pct)
     return unless @progress_proc
+
     if @progress_proc.arity == 0
       # for backwards compatibility with callback procs that expect no arguments
-      @progress_proc.call()
+      @progress_proc.call
     else
       @progress_proc.call(pct)
     end
@@ -87,50 +90,58 @@ class UnzipAttachment
   # added to the root_folder/some_entry folder in the database
   # Tempfile will unlink its new file as soon as f is garbage collected.
   def process
-
     Folder.reset_path_lookups!
     with_unzip_configuration do
       zip_stats.validate_against(context)
 
       id_positions = {}
       path_positions = zip_stats.paths_with_positions(last_position)
-      CanvasUnzip.extract_archive(self.filename) do |entry, index|
+      not_created_folders = []
+      CanvasUnzip.extract_archive(filename) do |entry, index|
         next if should_skip?(entry)
 
         folder_path_array = path_elements_for(@context_files_folder.full_name)
         entry_path_array = path_elements_for(entry.name)
-        filename = entry_path_array.pop
+        entry_path_array.pop
 
         folder_path_array += entry_path_array
-        folder_name = folder_path_array.join('/')
-        folder = Folder.assert_path(folder_name, @context)
+        folder_name = folder_path_array.join("/")
+        display_name = display_name(entry.name)
+        if not_created_folders.include?(folder_name)
+          @logger&.warn "Couldn't create file #{display_name}: #{folder_name} not created"
+          next
+        end
+        begin
+          folder = Folder.assert_path(folder_name, @context)
+        rescue ActiveRecord::StatementInvalid => e
+          @logger&.warn "Couldn't create sub-folder #{folder_name}: #{e.message}"
+          not_created_folders << folder_name
+          next
+        end
 
         update_progress(zip_stats.percent_complete(index))
 
         # Hyphenate the path.  So, /some/file/path becomes some-file-path
         # Since Tempfile guarantees that the names are unique, we don't
         # have to worry about what this name actually is.
-        Tempfile.open(filename) do |f|
-          begin
-            file_size = 0
-            md5 = entry.extract(f.path, true) do |bytes|
-              file_size += bytes
-            end
-            zip_stats.charge_quota(file_size)
-            # This is where the attachment actually happens.  See file_in_context.rb
-            attachment = attach(f.path, entry, folder, md5)
-            id_positions[attachment.id] = path_positions[entry.name]
-            if migration_id = @migration_id_map[entry.name]
-              attachment.update_attribute(:migration_id, migration_id)
-            end
-          rescue Attachment::OverQuotaError
-            f.unlink
-            raise
-          rescue => e
-            @logger.warn "Couldn't unzip archived file #{f.path}: #{e.message}" if @logger
+        Tempfile.open do |f|
+          file_size = 0
+          sha512 = entry.extract(f.path, true) do |bytes|
+            file_size += bytes
           end
+          zip_stats.charge_quota(file_size)
+          # This is where the attachment actually happens.  See file_in_context.rb
+          migration_id = @migration_id_map[entry.name]
+          attachment = attach(f.path, entry, folder, sha512, migration_id:)
+          id_positions[attachment.id] = path_positions[entry.name]
+        rescue Attachment::OverQuotaError
+          f.unlink
+          raise
+        rescue ActiveRecord::StatementInvalid => e
+          @logger&.warn "Couldn't create file #{display_name}: #{e.message}"
+        rescue => e
+          @logger&.warn "Couldn't unzip archived file #{display_name}: #{e.message}"
         end
-
       end
       update_attachment_positions(id_positions)
     end
@@ -149,16 +160,28 @@ class UnzipAttachment
     end
 
     if updates.any?
-      Attachment.where(id: id_positions.keys).update_all("position=CASE #{updates.join(' ')} ELSE position END")
+      Attachment.where(id: id_positions.keys).update_all("position=CASE #{updates.join(" ")} ELSE position END")
     end
   end
 
-  def attach(path, entry, folder, md5)
-    begin
-      FileInContext.attach(self.context, path, display_name(entry.name), folder, File.split(entry.name).last, @rename_files, md5)
-    rescue
-      FileInContext.attach(self.context, path, display_name(entry.name), folder, File.split(entry.name).last, @rename_files, md5)
-    end
+  def attach(path, entry, folder, md5, migration_id: nil)
+    FileInContext.attach(context,
+                         path,
+                         display_name: display_name(entry.name),
+                         folder:,
+                         explicit_filename: File.split(entry.name).last,
+                         allow_rename: @rename_files,
+                         md5:,
+                         migration_id:)
+  rescue
+    FileInContext.attach(context,
+                         path,
+                         display_name: display_name(entry.name),
+                         folder:,
+                         explicit_filename: File.split(entry.name).last,
+                         allow_rename: @rename_files,
+                         md5:,
+                         migration_id:)
   end
 
   def with_unzip_configuration
@@ -176,18 +199,18 @@ class UnzipAttachment
   end
 
   def last_position
-    @last_position ||= (@context.attachments.active.map(&:position).compact.last || 0)
+    @last_position ||= (@context.attachments.active.filter_map(&:position).last || 0)
   end
 
   def should_skip?(entry)
     entry.directory? ||
-    entry.name.split('/').any?{|p| p =~ THINGS_TO_IGNORE_REGEX} ||
-    (@valid_paths && !@valid_paths.include?(entry.name))
+      entry.name.split("/").any? { |p| p =~ THINGS_TO_IGNORE_REGEX } ||
+      (@valid_paths && !@valid_paths.include?(entry.name))
   end
 
   def path_elements_for(path)
     list = File.split(path) rescue []
-    list.shift if list[0] == '.'
+    list.shift if list[0] == "."
     list
   end
 
@@ -196,49 +219,48 @@ class UnzipAttachment
   # Creates a title-ized name from a path.
   # So, display_name(/tmp/foo/bar_baz) generates 'Bar baz'
   def display_name(path)
-    display_name = File.split(path).last
+    File.split(path).last
   end
 
   # Finds the folder in the database, creating the path if necessary
   def infer_folder(path)
-    list = path.split('/')
+    list = path.split("/")
     current = (@root_directory ||= folders.root_directory)
     # For every directory in the path...
     # (-2 means all entries but the last, which should be a filename)
     list[0..-2].each do |dir|
-      if new_dir = current.sub_folders.where(name: dir).first
-        current = new_dir
-      else
-        current = assert_folder(current, dir)
-      end
+      current = if (new_dir = current.sub_folders.where(name: dir).first)
+                  new_dir
+                else
+                  assert_folder(current, dir)
+                end
     end
     current
   end
 
   # Actually creates the folder in the database.
   def assert_folder(root, dir)
-    folder = Folder.new(:parent_folder_id => root.id, :name => dir)
-    folder.context = self.context
+    folder = Folder.new(parent_folder_id: root.id, name: dir)
+    folder.context = context
     folder.save!
     folder
   end
 
   # A cached list of folders that we know about.
   # Used by infer_folder to know whether to create a folder or not.
-  def folders(reset=false)
+  def folders(reset = false)
     @folders = nil if reset
     return @folders if @folders
-    root_folders = Folder.root_folders(self.context)
-    @folders = OpenStruct.new(:root_directory => self.context_files_folder)
+
+    @folders = OpenStruct.new(root_directory: context_files_folder)
   end
 end
 
-
-#this is just a helper class that wraps an archive
-#for just the duration of this operation; it doesn't
-#quite seem appropriate to move it to it's own file
-#since it's such an integral part of the unzipping
-#process
+# this is just a helper class that wraps an archive
+# for just the duration of this operation; it doesn't
+# quite seem appropriate to move it to it's own file
+# since it's such an integral part of the unzipping
+# process
 class ZipFileStats
   attr_reader :file_count, :total_size, :paths, :filename, :quota_remaining
 
@@ -252,7 +274,7 @@ class ZipFileStats
   end
 
   def validate_against(context)
-    max = Setting.get('max_zip_file_count', '100000').to_i
+    max = Setting.get("max_zip_file_count", "100000").to_i
     if file_count > max
       raise ArgumentError, "Zip File cannot have more than #{max} entries"
     end
@@ -264,6 +286,7 @@ class ZipFileStats
       if (quota_hash[:quota_used] + total_size) > quota_hash[:quota]
         raise Attachment::OverQuotaError, "Zip file would exceed quota limit"
       end
+
       @quota_remaining = quota_hash[:quota] - quota_hash[:quota_used]
     end
   end
@@ -275,12 +298,13 @@ class ZipFileStats
     if size > @quota_remaining
       raise Attachment::OverQuotaError, "Zip contents exceed course quota limit"
     end
+
     @quota_remaining -= size
   end
 
   def paths_with_positions(base)
     positions_hash = {}
-    paths.sort.each_with_index{|p, idx| positions_hash[p] = idx + base }
+    paths.sort.each_with_index { |p, idx| positions_hash[p] = idx + base }
     positions_hash
   end
 
@@ -289,13 +313,13 @@ class ZipFileStats
   end
 
   private
+
   def process!
-    CanvasUnzip::extract_archive(filename) do |entry|
+    CanvasUnzip.extract_archive(filename) do |entry|
       @file_count += 1
       @total_size += [entry.size, Attachment.minimum_size_for_quota].max
       @paths << entry.name
     end
     @file_count = 1 if @file_count == 0
   end
-
 end

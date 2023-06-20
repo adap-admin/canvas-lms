@@ -18,8 +18,8 @@
 
 import React from 'react'
 import {shallow, mount} from 'enzyme'
-import UsersList from 'jsx/account_course_user_search/components/UsersList'
-import UsersListRow from 'jsx/account_course_user_search/components/UsersListRow'
+import UsersList from 'ui/features/account_course_user_search/react/components/UsersList'
+import UsersListRow from 'ui/features/account_course_user_search/react/components/UsersListRow'
 
 QUnit.module('Account Course User Search UsersList View')
 
@@ -29,37 +29,38 @@ const usersProps = {
     {
       id: '1',
       name: 'UserA',
-      avatar_url: 'http://someurl'
+      avatar_url: 'http://someurl',
     },
     {
       id: '2',
       name: 'UserB',
-      avatar_url: 'http://someurl'
+      avatar_url: 'http://someurl',
     },
     {
       id: '3',
       name: 'UserC',
-      avatar_url: 'http://someurl'
-    }
+      avatar_url: 'http://someurl',
+    },
   ],
   handlers: {
     handleOpenEditUserDialog() {},
     handleSubmitEditUserForm() {},
-    handleCloseEditUserDialog() {}
+    handleCloseEditUserDialog() {},
   },
   permissions: {
     can_masquerade: true,
     can_message_users: true,
-    can_edit_users: true
+    can_edit_users: true,
   },
   searchFilter: {
     search_term: 'User',
     sort: 'username',
-    order: 'asc'
+    order: 'asc',
   },
   onUpdateFilters: sinon.spy(),
   onApplyFilters: sinon.spy(),
-  roles: {}
+  sortColumnHeaderRef: sinon.spy(),
+  roles: {},
 }
 
 test('displays users that are passed in as props', () => {
@@ -75,61 +76,58 @@ Object.entries({
   username: 'Name',
   email: 'Email',
   sis_id: 'SIS ID',
-  last_login: 'Last Login'
+  last_login: 'Last Login',
 }).forEach(([columnID, label]) => {
   Object.entries({
     asc: {
       expectedArrow: 'Up',
       unexpectedArrow: 'Down',
-      expectedTip: `Click to sort by ${label} descending`
+      expectedTip: `Click to sort by ${label} descending`,
     },
     desc: {
       expectedArrow: 'Down',
       unexpectedArrow: 'Up',
-      expectedTip: `Click to sort by ${label} ascending`
-    }
+      expectedTip: `Click to sort by ${label} ascending`,
+    },
   }).forEach(([sortOrder, {expectedArrow, unexpectedArrow, expectedTip}]) => {
     const props = {
       ...usersProps,
       searchFilter: {
         search_term: 'User',
         sort: columnID,
-        order: sortOrder
-      }
+        order: sortOrder,
+      },
     }
 
     test(`sorting by ${columnID} ${sortOrder} puts ${expectedArrow}-arrow on ${label} only`, () => {
       const wrapper = mount(<UsersList {...props} />)
       equal(
-        wrapper.find(`IconMiniArrow${unexpectedArrow}`).length,
+        wrapper.find(`IconMiniArrow${unexpectedArrow}Solid`).length,
         0,
         `no columns have an ${unexpectedArrow} arrow`
       )
-      const icons = wrapper.find(`IconMiniArrow${expectedArrow}`)
+      const icons = wrapper.find(`IconMiniArrow${expectedArrow}Solid`)
       equal(icons.length, 1, `only one ${expectedArrow} arrow`)
-      const header = icons.closest('UsersListHeader')
+      const header = icons.closest('[data-testid="UsersListHeader"]')
       ok(
-        header
-          .find('Tooltip')
-          .prop('tip')
-          .match(RegExp(expectedTip, 'i')),
+        header.find('Tooltip').first().prop('renderTip').match(RegExp(expectedTip, 'i')),
         'has right tooltip'
       )
       ok(header.text().includes(label), `${label} is the one that has the ${expectedArrow} arrow`)
     })
 
-    test(`clicking the ${label} column header calls onChangeSort with ${columnID}`, function() {
+    test(`clicking the ${label} column header calls onChangeSort with ${columnID}`, () => {
       const sortSpy = sinon.spy()
       const wrapper = mount(
         <UsersList
           {...{
             ...props,
-            onUpdateFilters: sortSpy
+            onUpdateFilters: sortSpy,
           }}
         />
       )
       const header = wrapper
-        .find('UsersListHeader')
+        .find('[data-testid="UsersListHeader"]')
         .filterWhere(n => n.text().includes(label))
         .find('button')
       header.simulate('click')
@@ -139,7 +137,7 @@ Object.entries({
           search_term: 'User',
           sort: columnID,
           order: sortOrder === 'asc' ? 'desc' : 'asc',
-          role_filter_id: undefined
+          role_filter_id: undefined,
         })
       )
     })

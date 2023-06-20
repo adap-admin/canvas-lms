@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -47,36 +49,36 @@ module Quizzes::LogAuditing
     # @return [Hash] Submission data is returned
     #
     def run(quiz_submission_id, attempt, timestamp)
-      sql_string = <<-SQL
+      sql_string = <<~SQL.squish
         quiz_submission_id = :qs_id
         AND attempt = :attempt
         AND event_type IN(:filter)
         AND created_at <= :time
       SQL
       events = Quizzes::QuizSubmissionEvent.where(sql_string, {
-        qs_id: quiz_submission_id,
-        attempt: attempt,
-        filter: [
-          Quizzes::QuizSubmissionEvent::EVT_QUESTION_ANSWERED,
-          Quizzes::QuizSubmissionEvent::EVT_QUESTION_FLAGGED
-        ],
-        time: timestamp
-      }).order("created_at ASC")
+                                                    qs_id: quiz_submission_id,
+                                                    attempt:,
+                                                    filter: [
+                                                      Quizzes::QuizSubmissionEvent::EVT_QUESTION_ANSWERED,
+                                                      Quizzes::QuizSubmissionEvent::EVT_QUESTION_FLAGGED
+                                                    ],
+                                                    time: timestamp
+                                                  }).order("created_at ASC")
       filtered_events, final_answers = pick_latest_distinct_events_and_answers(events)
       submission_data_hash = build_submission_data_from_events(filtered_events)
       submission_data_hash.merge build_submission_data_from_answers(final_answers)
     end
 
     private
+
     # constructs submission data from events, including the parsing of flagged
     # to indicate that they are 'marked' or 'flagged'
     def build_submission_data_from_events(events)
-      events.reduce({}) do |submission_data, event|
+      events.each_with_object({}) do |event, submission_data|
         case event.event_type
         when Quizzes::QuizSubmissionEvent::EVT_QUESTION_FLAGGED
-          submission_data["question_#{event.event_data['quiz_question_id']}_marked"] = event.event_data['flagged']
+          submission_data["question_#{event.event_data["quiz_question_id"]}_marked"] = event.event_data["flagged"]
         end
-        submission_data
       end
     end
 
@@ -86,12 +88,12 @@ module Quizzes::LogAuditing
       submission_data = {}
       answers.each do |question_id, answer|
         question = quiz.quiz_questions.find { |qq| qq.id == question_id.to_i }
-        question = Quizzes::QuizQuestion.where(id: question_id).first unless question
-        if question.question_data["question_type"] != "text_only_question"
-          serializer = Quizzes::QuizQuestion::AnswerSerializers.serializer_for(question)
-          thing = serializer.serialize(answer).answer
-          submission_data.merge! thing
-        end
+        question ||= Quizzes::QuizQuestion.where(id: question_id).first
+        next unless question.question_data["question_type"] != "text_only_question"
+
+        serializer = Quizzes::QuizQuestion::AnswerSerializers.serializer_for(question)
+        thing = serializer.serialize(answer).answer
+        submission_data.merge! thing
       end
       submission_data
     end
@@ -104,12 +106,12 @@ module Quizzes::LogAuditing
       events.each do |event|
         case event.event_type
         when Quizzes::QuizSubmissionEvent::EVT_QUESTION_ANSWERED
-          kept_events["#{event.event_type}_#{event.event_data.first['quiz_question_id']}"] = event
+          kept_events["#{event.event_type}_#{event.event_data.first["quiz_question_id"]}"] = event
           event.event_data.each do |answer|
-            kept_answers[answer['quiz_question_id']] = answer["answer"]
+            kept_answers[answer["quiz_question_id"]] = answer["answer"]
           end
         else
-          kept_events["#{event.event_type}_#{event.event_data['quiz_question_id']}"] = event
+          kept_events["#{event.event_type}_#{event.event_data["quiz_question_id"]}"] = event
         end
       end
       [kept_events.values, kept_answers]

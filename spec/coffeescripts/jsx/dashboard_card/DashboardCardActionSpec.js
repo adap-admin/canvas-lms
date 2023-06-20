@@ -20,24 +20,24 @@ import $ from 'jquery'
 import React from 'react'
 import ReactDOM from 'react-dom'
 import TestUtils from 'react-dom/test-utils'
-import _ from 'underscore'
-import DashboardCardAction from 'jsx/dashboard_card/DashboardCardAction'
+import _ from 'lodash'
+import DashboardCardAction from '@canvas/dashboard-card/react/DashboardCardAction'
 
 QUnit.module('DashboardCardAction', {
   setup() {
     this.props = {
       iconClass: 'icon-assignment',
-      path: '/courses/1/assignments/'
+      path: '/courses/1/assignments/',
     }
   },
   teardown() {
     if (this.component) {
       ReactDOM.unmountComponentAtNode(ReactDOM.findDOMNode(this.component).parentNode)
     }
-  }
+  },
 })
 
-test('should render link & icon', function() {
+test('should render link & icon', function () {
   this.component = TestUtils.renderIntoDocument(<DashboardCardAction {...this.props} />)
   const $html = $(ReactDOM.findDOMNode(this.component))
   equal($html.prop('tagName'), 'A', 'parent tag should be link')
@@ -45,16 +45,20 @@ test('should render link & icon', function() {
   equal($html.find('span.screenreader-only').length, 0, 'should not have screenreader span')
 })
 
-test('should render fallback icon for unrecognized iconClass', function() {
+test('should render fallback icon for unrecognized iconClass', function () {
   this.props.iconClass = 'icon-something-else'
   this.component = TestUtils.renderIntoDocument(<DashboardCardAction {...this.props} />)
   const $html = $(ReactDOM.findDOMNode(this.component))
   equal($html.prop('tagName'), 'A', 'parent tag should be link')
-  equal($html.find('i').attr('class'), this.props.iconClass, 'i tag should have given prop as class')
+  equal(
+    $html.find('i').attr('class'),
+    this.props.iconClass,
+    'i tag should have given prop as class'
+  )
   equal($html.find('span.screenreader-only').length, 0, 'should not have screenreader span')
 })
 
-test('should render actionType as screenreader text if provided', function() {
+test('should render actionType as screenreader text if provided', function () {
   const screen_reader_label = 'Dashboard Action'
   const component = TestUtils.renderIntoDocument(
     <DashboardCardAction {...this.props} screenReaderLabel={screen_reader_label} />
@@ -63,7 +67,7 @@ test('should render actionType as screenreader text if provided', function() {
   equal($html.find('span.screenreader-only').text(), screen_reader_label)
 })
 
-test('should display unread count when it is greater than zero', function() {
+test('should display unread count when it is greater than zero', function () {
   const unread_count = 2
   this.component = TestUtils.renderIntoDocument(
     <DashboardCardAction {...this.props} unreadCount={unread_count} />

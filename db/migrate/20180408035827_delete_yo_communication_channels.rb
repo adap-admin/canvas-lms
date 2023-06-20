@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -20,7 +22,7 @@ class DeleteYoCommunicationChannels < ActiveRecord::Migration[5.1]
   tag :postdeploy
 
   def up
-    NotificationPolicy.where(:communication_channel_id => CommunicationChannel.where(path_type: 'yo').select(:id)).delete_all
-    CommunicationChannel.where(path_type: 'yo').delete_all
+    NotificationPolicy.where(communication_channel_id: CommunicationChannel.where(path_type: "yo").select(:id)).delete_all
+    CommunicationChannel.where(path_type: "yo").delete_all
   end
 end

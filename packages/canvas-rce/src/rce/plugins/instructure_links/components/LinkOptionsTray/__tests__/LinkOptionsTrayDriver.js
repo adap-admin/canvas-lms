@@ -15,7 +15,13 @@
  * You should have received a copy of the GNU Affero General Public License along
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-import {getAllByText, fireEvent, queryByLabelText, queryHelpers} from '@testing-library/dom'
+import {
+  getAllByText,
+  fireEvent,
+  queryByLabelText,
+  queryByTestId,
+  queryHelpers,
+} from '@testing-library/dom'
 
 export default class LinkOptionsTrayDriver {
   static find() {
@@ -50,14 +56,30 @@ export default class LinkOptionsTrayDriver {
     return queryHelpers.queryByAttribute('name', this.$element, 'auto-preview')
   }
 
-  get $disablePreviewCheckbox() {
-    return queryHelpers.queryByAttribute('name', this.$element, 'disable-preview')
-  }
-
   get $doneButton() {
     return [...this.$element.querySelectorAll('button,[role="button"]')].find(
       $button => $button.textContent.trim() === 'Done'
     )
+  }
+
+  get $previewOptionOverlayRadioInput() {
+    return queryHelpers.queryByAttribute('value', this.$element, 'overlay')
+  }
+
+  get $previewOptionInlineRadioInput() {
+    return queryHelpers.queryByAttribute('value', this.$element, 'inline')
+  }
+
+  get $previewOptionDisableRadioInput() {
+    return queryHelpers.queryByAttribute('value', this.$element, 'disable')
+  }
+
+  get doneButtonIsDisabled() {
+    return this.$doneButton.getAttribute('disabled') !== null
+  }
+
+  get $errorMessage() {
+    return queryByTestId(this.$element, 'url-error')
   }
 
   get text() {
@@ -70,6 +92,16 @@ export default class LinkOptionsTrayDriver {
 
   get autoPreview() {
     return this.$previewCheckbox.checked
+  }
+
+  get previewOption() {
+    const $overlay = this.$previewOptionOverlayRadioInput
+    const $inline = this.$previewOptionInlineRadioInput
+    const $disable = this.$previewOptionDisableRadioInput
+    if ($overlay.checked) return 'overlay'
+    if ($inline.checked) return 'inline'
+    if ($disable.checked) return 'disable'
+    throw new Error('something is wrong')
   }
 
   setText(text) {
@@ -87,10 +119,7 @@ export default class LinkOptionsTrayDriver {
     }
   }
 
-  setDisablePreview(value) {
-    const $input = this.$disablePreviewCheckbox
-    if ($input.checked !== value) {
-      $input.click()
-    }
+  setPreviewOption(value) {
+    queryHelpers.queryByAttribute('value', this.$element, value).click()
   }
 }

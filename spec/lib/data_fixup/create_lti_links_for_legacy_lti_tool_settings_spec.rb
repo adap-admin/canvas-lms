@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -16,37 +18,37 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 require "spec_helper"
-require File.expand_path(File.dirname(__FILE__) + '../../../lti2_course_spec_helper')
+require_relative "../../lti2_course_spec_helper"
 
 describe DataFixup::CreateLtiLinksForLegacyLtiToolSettings do
-  include_context 'lti2_course_spec_helper'
+  include_context "lti2_course_spec_helper"
 
   let(:link_tool_setting) do
     Lti::ToolSetting.create!(
-      tool_proxy: tool_proxy,
+      tool_proxy:,
       context: course,
       resource_link_id: SecureRandom.uuid,
       vendor_code: product_family.vendor_code,
       product_code: product_family.product_code,
       resource_type_code: resource_handler.resource_type_code,
-      resource_url: 'http://example.com/resource',
-      custom_parameters: { foo: 'bar' }
+      resource_url: "http://example.com/resource",
+      custom_parameters: { foo: "bar" }
     )
   end
 
   let(:proxy_tool_setting) do
     Lti::ToolSetting.create!(
-      tool_proxy: tool_proxy,
+      tool_proxy:,
       custom: { param: 42 }
     )
   end
 
-  before(:each) do
+  before do
     link_tool_setting
     proxy_tool_setting
   end
 
-  it 'creates lti links from link tool settings' do
+  it "creates lti links from link tool settings" do
     DataFixup::CreateLtiLinksForLegacyLtiToolSettings.run
 
     lti_links = Lti::Link.all

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -16,14 +18,14 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'nokogiri'
+require "nokogiri"
 
 module Api
   module Html
     class TrackTag
       include LocaleSelection
 
-      def initialize(media_track, doc, node_builder=Nokogiri::XML::Node)
+      def initialize(media_track, doc, node_builder = Nokogiri::XML::Node)
         @media_track = media_track
         @doc = doc
         @node_builder = node_builder
@@ -31,17 +33,18 @@ module Api
       attr_reader :media_track, :doc, :node_builder
 
       def to_node(url_helper)
-        node_builder.new('track', doc).tap do |n|
-          n['kind'] = media_track.kind
-          n['srclang'] = media_track.locale
-          n['src'] = url_helper.show_media_tracks_url(
+        node_builder.new("track", doc).tap do |n|
+          n["kind"] = media_track.kind
+          n["srclang"] = media_track.locale
+          n["src"] = url_helper.show_media_tracks_url(
             media_track.media_object_id, media_track.id
           )
-          n['label'] = language_name
+          n["label"] = language_name
         end
       end
 
       private
+
       def language_name
         available_locales[media_track.locale] || media_track.locale
       end

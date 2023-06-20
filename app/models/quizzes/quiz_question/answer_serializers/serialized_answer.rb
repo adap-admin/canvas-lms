@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -17,7 +19,6 @@
 
 module Quizzes::QuizQuestion::AnswerSerializers
   class Quizzes::QuizQuestion::AnswerSerializers::SerializedAnswer
-
     # @property [Hash] answer
     #
     # The output of the serializer which is compatible for merging with
@@ -42,7 +43,7 @@ module Quizzes::QuizQuestion::AnswerSerializers
     def reject(reason, *args)
       self.error = reason.to_s
 
-      if reason.is_a?(Symbol) && ERROR_CODES.has_key?(reason)
+      if reason.is_a?(Symbol) && ERROR_CODES.key?(reason)
         actual_reason = ERROR_CODES[reason]
         actual_reason = actual_reason.call(*args) if actual_reason.is_a?(Proc)
 
@@ -52,16 +53,15 @@ module Quizzes::QuizQuestion::AnswerSerializers
       self
     end
 
-    private
-
     ERROR_CODES = {
-      invalid_type: lambda { |param_name, expected_type|
-        '%s must be of type %s' % [ param_name, expected_type.to_s ]
-      },
-      unknown_answer: lambda { |id| "Unknown answer '#{id}'" },
-      unknown_match: lambda { |id| "Unknown match '#{id}'" },
-      unknown_blank: lambda { |id| "Unknown blank '#{id}'" },
-      text_too_long: 'Text is too long.'
-    }
+      invalid_type: lambda do |param_name, expected_type|
+        "%s must be of type %s" % [param_name, expected_type.to_s]
+      end,
+      unknown_answer: ->(id) { "Unknown answer '#{id}'" },
+      unknown_match: ->(id) { "Unknown match '#{id}'" },
+      unknown_blank: ->(id) { "Unknown blank '#{id}'" },
+      text_too_long: "Text is too long."
+    }.freeze
+    private_constant :ERROR_CODES
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -16,25 +18,22 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 class Notifier
-  def send_notification(record, dispatch, messages, to_list, data=nil)
-    messages = DelayedNotification.send_later_if_production_enqueue_args(
-        :process,
-        {:priority => 30, :max_attempts => 1},
-        record,
-        messages,
-        (to_list || []).compact.map(&:asset_string),
-        data
-    )
+  def send_notification(record, dispatch, messages, to_list, data = nil)
+    recipient_keys = (to_list || []).compact.map { |o| o.is_a?(String) ? o : o.asset_string }
+    messages = DelayedNotification.delay_if_production(priority: 30)
+                                  .process(record, messages, recipient_keys, data, **{})
+    # RUBY 3.0 - **{} can go away, because data won't implicitly convert to kwargs
 
     messages ||= DelayedNotification.new(
-          :asset => record,
-          :notification => messages,
-          :recipient_keys => (to_list || []).compact.map(&:asset_string),
-          :data => data
-      )
+      asset: record,
+      notification: messages,
+      recipient_keys:,
+      data:
+    )
 
     if Rails.env.test?
-      record.messages_sent[dispatch] = messages.is_a?(DelayedNotification) ? messages.process : messages
+      record.messages_sent[dispatch] ||= []
+      record.messages_sent[dispatch] += messages.is_a?(DelayedNotification) ? messages.process : messages
     end
 
     messages

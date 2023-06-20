@@ -16,8 +16,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import * as AssignmentActions from 'jsx/assignments/GradeSummary/assignment/AssignmentActions'
-import configureStore from 'jsx/assignments/GradeSummary/configureStore'
+import * as AssignmentActions from 'ui/features/assignment_grade_summary/react/assignment/AssignmentActions'
+import configureStore from 'ui/features/assignment_grade_summary/react/configureStore'
 
 QUnit.module('GradeSummary assignmentReducer()', suiteHooks => {
   let store
@@ -29,12 +29,12 @@ QUnit.module('GradeSummary assignmentReducer()', suiteHooks => {
         gradesPublished: false,
         id: '2301',
         muted: true,
-        title: 'Example Assignment'
+        title: 'Example Assignment',
       },
       graders: [
         {graderId: '1101', graderName: 'Miss Frizzle'},
-        {graderId: '1102', graderName: 'Mr. Keating'}
-      ]
+        {graderId: '1102', graderName: 'Mr. Keating'},
+      ],
     })
   })
 
@@ -87,6 +87,11 @@ QUnit.module('GradeSummary assignmentReducer()', suiteHooks => {
     test('optionally sets the "release grades" status to "not all selected"', () => {
       setReleaseGradesStatus(AssignmentActions.NOT_ALL_SUBMISSIONS_HAVE_SELECTED_GRADE)
       equal(getReleaseGradesStatus(), 'NOT_ALL_SUBMISSIONS_HAVE_SELECTED_GRADE')
+    })
+
+    test('optionally sets the "release grades" status to "selected grades from unavailable graders"', () => {
+      setReleaseGradesStatus(AssignmentActions.SELECTED_GRADES_FROM_UNAVAILABLE_GRADERS)
+      equal(getReleaseGradesStatus(), 'SELECTED_GRADES_FROM_UNAVAILABLE_GRADERS')
     })
   })
 

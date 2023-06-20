@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -17,15 +19,15 @@
 #
 
 module Factories
-  def announcement_model(opts={})
-    @context = opts[:context] || @context || course_model(:reusable => true)
+  def announcement_model(opts = {})
+    @context = opts[:context] || @context || course_model(reusable: true)
     @a = @context.announcements.create!(valid_announcement_attributes.merge(opts))
   end
 
   def valid_announcement_attributes
     {
-      :title => "value for title",
-      :message => "value for message"
+      title: "value for title",
+      message: "value for message"
     }
   end
 end

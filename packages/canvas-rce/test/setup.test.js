@@ -16,17 +16,20 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import { StyleSheetTestUtils } from "aphrodite";
-import jsdom from "jsdom-global"
+import {StyleSheetTestUtils} from 'aphrodite'
+import jsdom from 'jsdom-global'
 
 beforeEach(() => {
   jsdom()
 })
 
 before(() => {
-  StyleSheetTestUtils.suppressStyleInjection();
-});
+  StyleSheetTestUtils.suppressStyleInjection()
+
+  // Building an svg for Icon Maker requires canvas at times.
+  HTMLCanvasElement.prototype.getContext = () => ({})
+})
 
 after(() => {
-  StyleSheetTestUtils.clearBufferAndResumeStyleInjection();
-});
+  StyleSheetTestUtils.clearBufferAndResumeStyleInjection()
+})

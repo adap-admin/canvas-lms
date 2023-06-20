@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -15,8 +17,6 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'active_support/concern'
-
 module Canvas::OutcomeImportValidations
   extend ActiveSupport::Concern
 
@@ -24,8 +24,10 @@ module Canvas::OutcomeImportValidations
     validate :validate_latest_outcome_import
 
     def validate_latest_outcome_import
-      if latest_outcome_import
-        errors.add(t("latest_outcome_import context is not self")) unless latest_outcome_import.context == self
+      return unless has_attribute?(:latest_outcome_import_id)
+
+      if latest_outcome_import_id_changed? && latest_outcome_import && latest_outcome_import.context != self
+        errors.add(t("latest_outcome_import context is not self"))
       end
     end
   end

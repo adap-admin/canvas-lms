@@ -16,10 +16,10 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import accessibleDateFormat from 'jsx/shared/helpers/accessibleDateFormat'
+import accessibleDateFormat from '@canvas/datetime/accessibleDateFormat'
 
 QUnit.module('accessibleDateFormat', {
-  setup() {}
+  setup() {},
 })
 
 test('it pulls out the links from an Axios response header', () => {

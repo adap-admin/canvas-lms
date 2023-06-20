@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,28 +18,27 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'spec_helper'
-require 'spec/views/views_helper'
+require_relative "../views_helper"
 
-describe "/gradebooks/submissions_zip_upload", type: :view do
+describe "gradebooks/submissions_zip_upload" do
   before do
     course_with_student
     view_context
     assign(:students, [@user])
-    assign(:assignment, @course.assignments.create!(:title => "some assignment"))
+    assign(:assignment, @course.assignments.create!(title: "some assignment"))
     assign(:comments, [])
     assign(:failures, [])
   end
 
-  it "should render" do
-    render 'gradebooks/submissions_zip_upload'
+  it "renders" do
+    render "gradebooks/submissions_zip_upload"
 
     expect(rendered).to be_present
   end
 
   it "includes a link back to the gradebook (gradebook by default)" do
-    render 'gradebooks/submissions_zip_upload'
+    render "gradebooks/submissions_zip_upload"
 
-    expect(view.content_for(:right_side)).to match(/a.+?href="\/courses\/#{@course.id}\/gradebook"/)
+    expect(view.content_for(:right_side)).to match(%r{a.+?href="/courses/#{@course.id}/gradebook"})
   end
 end

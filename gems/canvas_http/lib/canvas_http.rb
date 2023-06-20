@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -15,41 +17,65 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'uri'
-require 'ipaddr'
-require 'resolv'
+require "uri"
+require "ipaddr"
+require "resolv"
+require "canvas_http/circuit_breaker"
+require "logger"
 
 module CanvasHttp
-  class Error < ::StandardError; end
+  class Error < ::StandardError
+    attr_reader :body
+
+    def initialize(body = nil)
+      super
+      @body = body
+    end
+  end
+
   class TooManyRedirectsError < CanvasHttp::Error; end
+
   class InvalidResponseCodeError < CanvasHttp::Error
     attr_reader :code
-    def initialize(code)
-      super()
+
+    def initialize(code, body = nil)
+      super(body)
       @code = code
     end
   end
-  class RelativeUriError < ArgumentError; end
-  class InsecureUriError < ArgumentError; end
 
-  def self.put(*args, &block)
-    CanvasHttp.request(Net::HTTP::Put, *args, &block)
+  class RelativeUriError < CanvasHttp::Error; end
+
+  class InsecureUriError < CanvasHttp::Error; end
+
+  class UnresolvableUriError < CanvasHttp::Error; end
+
+  class CircuitBreakerError < CanvasHttp::Error; end
+
+  class ResponseTooLargeError < CanvasHttp::Error; end
+
+  def self.put(*args, **kwargs, &)
+    CanvasHttp.request(Net::HTTP::Put, *args, **kwargs, &)
   end
 
-  def self.delete(*args, &block)
-    CanvasHttp.request(Net::HTTP::Delete, *args, &block)
+  def self.delete(*args, **kwargs, &)
+    CanvasHttp.request(Net::HTTP::Delete, *args, **kwargs, &)
   end
 
-  def self.head(*args, &block)
-    CanvasHttp.request(Net::HTTP::Head, *args, &block)
+  def self.head(*args, **kwargs, &)
+    CanvasHttp.request(Net::HTTP::Head, *args, **kwargs, &)
   end
 
-  def self.get(*args, &block)
-    CanvasHttp.request(Net::HTTP::Get, *args, &block)
+  def self.get(*args, **kwargs, &)
+    CanvasHttp.request(Net::HTTP::Get, *args, **kwargs, &)
   end
 
-  def self.post(*args, &block)
-    CanvasHttp.request(Net::HTTP::Post, *args, &block)
+  def self.post(*args, **kwargs, &)
+    CanvasHttp.request(Net::HTTP::Post, *args, **kwargs, &)
+  end
+
+  def self.patch(*args, **kwargs, &)
+    CanvasHttp.request(Net::HTTP::Patch, *args, **kwargs, &)
   end
 
   # Use this helper method to do HTTP GET requests. It knows how to handle
@@ -65,32 +91,71 @@ module CanvasHttp
   #
   # Eventually it may be expanded to optionally do cert verification as well.
   def self.request(request_class, url_str, other_headers = {}, redirect_limit: 3, form_data: nil, multipart: false,
-    streaming: false, body: nil, content_type: nil, redirect_spy: nil)
+                   streaming: false, body: nil, content_type: nil, redirect_spy: nil, max_response_body_length: nil)
     last_scheme = nil
     last_host = nil
-
+    current_host = nil
+    request_cost = 0
+    logger.info("CANVAS_HTTP START REQUEST CHAIN | method: #{request_class} | url: #{url_str}")
     loop do
       raise(TooManyRedirectsError) if redirect_limit <= 0
 
       _, uri = CanvasHttp.validate_url(url_str, host: last_host, scheme: last_scheme, check_host: true) # uses the last host and scheme for relative redirects
+      current_host = uri.host
+      raise CircuitBreakerError if CircuitBreaker.tripped?(current_host)
+
       http = CanvasHttp.connection_for_uri(uri)
 
       request = request_class.new(uri.request_uri, other_headers)
-      add_form_data(request, form_data, multipart: multipart, streaming: streaming) if form_data
+      add_form_data(request, form_data, multipart:, streaming:) if form_data
       request.body = body if body
       request.content_type = content_type if content_type
 
-      http.verify_mode = OpenSSL::SSL::VERIFY_NONE
+      http.verify_hostname = false # temporary; remove once all offenders have been fixed
+
+      curr_cert = 0
+      num_certs = nil
+      http.verify_callback = lambda do |preverify_ok, x509_store_context| # temporary; remove once all offenders have been fixed
+        Sentry.with_scope do |scope|
+          scope.set_tags(verify_host: "#{uri.host}:#{uri.port}")
+
+          valid = preverify_ok
+          error = valid ? "" : x509_store_context.error_string
+          num_certs ||= x509_store_context.chain.length
+
+          # only check the last certificate (aka the peer certificate)
+          # We can't have OpenSSL and Net::HTTP check this without failing, so manually check it
+          if (curr_cert += 1) == num_certs && valid && !(valid = OpenSSL::SSL.verify_certificate_identity(x509_store_context.current_cert, uri.host))
+            error = "Hostname mismatch"
+          end
+
+          unless valid
+            scope.set_tags(verify_error: error)
+            Sentry.capture_message("Certificate verify failed: #{error}", level: :warning)
+          end
+
+          true # never fail 🦸
+        end
+      end
+      logger.info("CANVAS_HTTP INITIATE REQUEST | url: #{url_str}")
+      start_time = Time.now
       http.request(request) do |response|
+        end_time = Time.now
+        elapsed_time = (end_time - start_time) # seconds
+        request_cost += elapsed_time
         if response.is_a?(Net::HTTPRedirection) && !response.is_a?(Net::HTTPNotModified)
           redirect_spy.call(response) if redirect_spy.is_a?(Proc)
           last_host = uri.host
           last_scheme = uri.scheme
-          url_str = response['Location']
+          url_str = response["Location"]
+          logger.info("CANVAS_HTTP CONSUME REDIRECT | url: #{url_str} | elapsed: #{elapsed_time} s")
           redirect_limit -= 1
         else
+          logger.info("CANVAS_HTTP RESOLVE RESPONSE | url: #{url_str} | elapsed: #{elapsed_time} s")
           if block_given?
             yield response
+          elsif max_response_body_length
+            read_body_max_length(response, max_response_body_length)
           else
             # have to read the body before we exit this block, and
             # close the connection
@@ -100,6 +165,22 @@ module CanvasHttp
         end
       end
     end
+  rescue Net::ReadTimeout, Net::OpenTimeout
+    CircuitBreaker.trip_if_necessary(current_host)
+    raise
+  ensure
+    increment_cost(request_cost)
+  end
+
+  def self.read_body_max_length(response, max_length)
+    body = nil
+    response.read_body do |chunk|
+      body ||= +""
+      raise ResponseTooLargeError if body.length + chunk.length > max_length
+
+      body << chunk
+    end
+    response.body = body
   end
 
   def self.add_form_data(request, form_data, multipart:, streaming:)
@@ -110,24 +191,25 @@ module CanvasHttp
       else
         request.body, header = Multipart::Post.new.prepare_query(form_data)
       end
-      request.content_type = header['Content-type']
+      request.content_type = header["Content-type"]
     elsif form_data.is_a?(String)
       request.body = form_data
-      request.content_type = 'application/x-www-form-urlencoded'
+      request.content_type = "application/x-www-form-urlencoded"
     else
       request.set_form_data(form_data)
     end
   end
 
   # returns [normalized_url_string, URI] if valid, raises otherwise
-  def self.validate_url(value, host: nil, scheme: nil, allowed_schemes: %w{http https}, check_host: false)
+  def self.validate_url(value, host: nil, scheme: nil, allowed_schemes: %w[http https], check_host: false)
     value = value.strip
     raise ArgumentError if value.empty?
+
     uri = nil
     begin
       uri = URI.parse(value)
     rescue URI::InvalidURIError => e
-      if e.message =~ /URI must be ascii only/
+      if e.message.include?("URI must be ascii only")
         uri = URI.parse(Addressable::URI.normalized_encode(value).chomp("/"))
         value = uri.to_s
       else
@@ -147,29 +229,56 @@ module CanvasHttp
     end
     raise ArgumentError if !allowed_schemes.nil? && !allowed_schemes.include?(uri.scheme.downcase)
     raise(RelativeUriError) if uri.host.nil? || uri.host.strip.empty?
-    raise InsecureUriError if check_host && self.insecure_host?(uri.host)
+    raise InsecureUriError if check_host && insecure_host?(uri.host)
 
-    return value, uri
+    [value, uri]
   end
 
   def self.insecure_host?(host)
-    return unless filters = self.blocked_ip_filters
-    addrs = Resolv.getaddresses(host).map { |ip| ::IPAddr.new(ip) rescue nil}.compact
-    return true unless addrs.any?
+    return unless (filters = blocked_ip_filters)
 
-    filters.any? do |filter|
-      addr_range = ::IPAddr.new(filter) rescue nil
-      addr_range && addrs.any?{|addr| addr_range.include?(addr)}
+    resolved_addrs = Resolv.getaddresses(host)
+    unless resolved_addrs.any?
+      # this is actually a different condition than the host being insecure,
+      # and having separate telemetry is helpful for understanding transient failures.
+      raise UnresolvableUriError, "#{host} cannot be resolved to any address"
     end
+
+    ip_addrs = resolved_addrs.filter_map do |ip|
+      ::IPAddr.new(ip)
+    rescue IPAddr::InvalidAddressError
+      # this should never happen, Resolv should only be passing back IPs, but
+      # let's make sure we can see if the impossible occurs
+      logger.warn("CANVAS_HTTP WARNING | host: #{host} | invalid_ip: #{ip}")
+      nil
+    end
+    unless ip_addrs.any?
+      raise UnresolvableUriError, "#{host} resolves to only unparseable IPs..."
+    end
+
+    filters.each do |filter|
+      addr_range = ::IPAddr.new(filter)
+      ip_addrs.any? do |addr|
+        if addr_range.include?(addr)
+          logger.warn("CANVAS_HTTP WARNING insecure address | host: #{host} | insecure_address: #{addr} | filter: #{filter}")
+          return true
+        end
+      end
+    end
+    false
   end
 
   # returns a Net::HTTP connection object for the given URI object
   def self.connection_for_uri(uri)
     http = Net::HTTP.new(uri.host, uri.port)
-    http.use_ssl = (uri.scheme == 'https')
+    http.use_ssl = (uri.scheme == "https")
     http.ssl_timeout = http.open_timeout = open_timeout
     http.read_timeout = read_timeout
-    return http
+    # Don't rely on net/http's internal retries, since they swallow errors in a
+    # way that can't be detected when streaming responses, leading to duplicate
+    # data
+    http.max_retries = 0
+    http
   end
 
   def self.open_timeout
@@ -184,8 +293,26 @@ module CanvasHttp
     @blocked_ip_filters.respond_to?(:call) ? @blocked_ip_filters.call : @blocked_ip_filters
   end
 
+  def self.logger
+    (@logger.respond_to?(:call) ? @logger.call : @logger) || default_logger
+  end
+
+  def self.default_logger
+    @_default_logger ||= Logger.new($stdout)
+  end
+
   class << self
-    attr_writer :open_timeout, :read_timeout, :blocked_ip_filters
+    attr_writer :open_timeout, :read_timeout, :blocked_ip_filters, :logger
+    attr_accessor :cost
+
+    def reset_cost!
+      self.cost = 0
+    end
+
+    def increment_cost(amount)
+      self.cost ||= 0
+      self.cost += amount
+    end
   end
 
   # returns a tempfile with a filename based on the uri (same extension, if
@@ -193,7 +320,7 @@ module CanvasHttp
   def self.tempfile_for_uri(uri)
     basename = File.basename(uri.path)
     basename, ext = basename.split(".", 2)
-    basename = basename.slice(0,100)
+    basename = basename.slice(0, 100)
     tmpfile = if ext
                 Tempfile.new([basename, ext])
               else

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,27 +18,25 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/../views_helper')
+require_relative "../views_helper"
 
-describe "/collaborations/index" do
+describe "collaborations/index" do
   before do
     course_with_student
     view_context(@course, @user)
     assign(:collaborations, [@course.collaborations.create!(user: @user, title: "my collab!")])
   end
 
-  it "should render" do
-    render 'collaborations/index'
+  it "renders" do
+    render "collaborations/index"
     expect(response).not_to be_nil
   end
 
-  it "should provide labels for accessibility devices i.e. screen readers" do
-    render :partial => "collaborations/forms"
+  it "provides labels for accessibility devices i.e. screen readers" do
+    render partial: "collaborations/forms"
     expect(response).not_to be_nil
-    expect(response).to have_tag("label[for=collaboration_title]", :text => "Document name:")
-    expect(response).to have_tag("label[for=collaboration_description]", :text => "Description:")
-    expect(response).to have_tag("label[for=collaboration_collaboration_type]", :text => "Collaborate using:")
+    expect(response).to have_tag("label[for=collaboration_title]", text: "Document name:")
+    expect(response).to have_tag("label[for=collaboration_description]", text: "Description:")
+    expect(response).to have_tag("label[for=collaboration_collaboration_type]", text: "Collaborate using:")
   end
 end
-

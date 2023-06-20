@@ -16,12 +16,12 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import _ from 'underscore'
-import assignmentHelper from 'jsx/gradebook/shared/helpers/assignmentHelper'
+import _ from 'lodash'
+import assignmentHelper from 'ui/features/gradebook/react/shared/helpers/assignmentHelper'
 
 QUnit.module('assignmentHelper#getComparator', {
   setup() {},
-  teardown() {}
+  teardown() {},
 })
 
 test('returns the correct function when passed "due_date"', () => {
@@ -38,20 +38,15 @@ test('returns the correct function when passed "assignment_group"', () => {
 
 QUnit.module('assignmentHelper#compareByDueDate', {
   setup() {},
-  teardown() {}
+  teardown() {},
 })
-const generateAssignment = function(options) {
+const generateAssignment = function (options) {
   options = options || {}
   return _.defaults(options, {
     name: 'assignment',
     due_at: new Date('Mon May 11 2015'),
-    effectiveDueDates: {}
   })
 }
-const generateEffectiveDueDates = () => ({
-  '1': {due_at: 'Mon May 11 2015'},
-  '2': {due_at: 'Tue May 12 2015'}
-})
 
 test('compares assignments by due date', () => {
   const assignment1 = generateAssignment()
@@ -90,79 +85,14 @@ test('ignores case when comparing by name', () => {
   ok(comparisonVal > 0)
 })
 
-test('compares by due date overrides if dates are both null', () => {
-  const assignment1 = generateAssignment({due_at: null})
-  assignment1.effectiveDueDates = generateEffectiveDueDates()
-  const assignment2 = generateAssignment({due_at: null})
-  const comparisonVal = assignmentHelper.compareByDueDate(assignment1, assignment2)
-  ok(comparisonVal < 0)
-})
-
-test('hasMultipleDueDates returns false when provided an empty object', () => {
-  const assignment = {}
-  notOk(assignmentHelper.hasMultipleDueDates(assignment))
-})
-
-test('hasMultipleDueDates returns false when there is only 1 unique effective due date', () => {
-  const assignment = generateAssignment({due_at: null})
-  assignment.effectiveDueDates = {'1': {due_at: 'Mon May 11 2015'}}
-  notOk(assignmentHelper.hasMultipleDueDates(assignment))
-})
-
-test('hasMultipleDueDates returns true when provided overrides with a length greater than 1', () => {
-  const assignment = generateAssignment({due_at: null})
-  assignment.effectiveDueDates = generateEffectiveDueDates()
-  ok(assignmentHelper.hasMultipleDueDates(assignment))
-})
-
-test(
-  'treats assignments with a single override with a null date as' +
-    '"greater" than assignments with multiple overrides',
-  () => {
-    const assignment1 = generateAssignment({due_at: null})
-    assignment1.effectiveDueDates = {'1': {due_at: null}}
-    const assignment2 = generateAssignment({due_at: null})
-    assignment2.effectiveDueDates = {
-      '1': {due_at: null},
-      '2': {due_at: 'Mon May 11 2015'}
-    }
-    const comparisonVal = assignmentHelper.compareByDueDate(assignment1, assignment2)
-    ok(comparisonVal > 0)
-  }
-)
-
-test('compares by name if dates are both null and both have multiple overrides', () => {
+test('compares by name if dates are both null', () => {
   const assignment1 = {
     name: 'Banana',
-    due_at: null
-  }
-  assignment1.effectiveDueDates = {
-    '1': {due_at: null},
-    '2': {due_at: 'Mon May 11 2015'}
+    due_at: null,
   }
   const assignment2 = {
     name: 'Apple',
-    due_at: null
-  }
-  assignment2.effectiveDueDates = {
-    '1': {due_at: null},
-    '2': {due_at: 'Mon May 11 2015'}
-  }
-  let comparisonVal = assignmentHelper.compareByDueDate(assignment1, assignment2)
-  ok(comparisonVal > 0)
-  assignment2.name = 'Carrot'
-  comparisonVal = assignmentHelper.compareByDueDate(assignment1, assignment2)
-  ok(comparisonVal < 0)
-})
-
-test('compares by name if dates are both null and neither have due date overrides', () => {
-  const assignment1 = {
-    name: 'Banana',
-    due_at: null
-  }
-  const assignment2 = {
-    name: 'Apple',
-    due_at: null
+    due_at: null,
   }
   let comparisonVal = assignmentHelper.compareByDueDate(assignment1, assignment2)
   ok(comparisonVal > 0)
@@ -175,7 +105,7 @@ test('treats assignments with the same dates and names as equal', () => {
   const assignment1 = generateAssignment()
   const assignment2 = generateAssignment()
   const comparisonVal = assignmentHelper.compareByDueDate(assignment1, assignment2)
-  ok(comparisonVal === 0)
+  strictEqual(comparisonVal, 0)
 })
 
 test('handles one due_at passed in as string and another passed in as date', () => {
@@ -200,17 +130,17 @@ test('handles both due_ats passed in as strings', () => {
 
 QUnit.module('assignmentHelper#compareByAssignmentGroup', {
   setup() {},
-  teardown() {}
+  teardown() {},
 })
 
 test('compares assignments by their assignment group position', () => {
   const assignment1 = {
     assignment_group_position: 1,
-    position: 1
+    position: 1,
   }
   const assignment2 = {
     assignment_group_position: 2,
-    position: 1
+    position: 1,
   }
   let comparisonVal = assignmentHelper.compareByAssignmentGroup(assignment1, assignment2)
   ok(comparisonVal < 0)
@@ -222,11 +152,11 @@ test('compares assignments by their assignment group position', () => {
 test('compares by assignment position if assignment group position is the same', () => {
   const assignment1 = {
     assignment_group_position: 1,
-    position: 2
+    position: 2,
   }
   const assignment2 = {
     assignment_group_position: 1,
-    position: 1
+    position: 1,
   }
   let comparisonVal = assignmentHelper.compareByAssignmentGroup(assignment1, assignment2)
   ok(comparisonVal > 0)
@@ -238,12 +168,43 @@ test('compares by assignment position if assignment group position is the same',
 test('treats assignments with the same position and group position as equal', () => {
   const assignment1 = {
     assignment_group_position: 1,
-    position: 1
+    position: 1,
   }
   const assignment2 = {
     assignment_group_position: 1,
-    position: 1
+    position: 1,
   }
   const comparisonVal = assignmentHelper.compareByAssignmentGroup(assignment1, assignment2)
-  ok(comparisonVal === 0)
+  strictEqual(comparisonVal, 0)
+})
+
+QUnit.module('assignmentHelper#gradeByGroup', hooks => {
+  let assignment
+
+  hooks.beforeEach(() => {
+    assignment = {
+      grade_group_students_individually: false,
+      group_category_id: null,
+      id: '2301',
+    }
+  })
+
+  test('returns false when not a group assignment', () => {
+    strictEqual(assignmentHelper.gradeByGroup(assignment), false)
+  })
+
+  QUnit.module('when group assignment', contextHooks => {
+    contextHooks.beforeEach(() => {
+      assignment.group_category_id = '2201'
+    })
+
+    test('returns false when grading individually', () => {
+      assignment.grade_group_students_individually = true
+      strictEqual(assignmentHelper.gradeByGroup(assignment), false)
+    })
+
+    test('returns true when not grading individually', () => {
+      strictEqual(assignmentHelper.gradeByGroup(assignment), true)
+    })
+  })
 })

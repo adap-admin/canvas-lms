@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -72,7 +74,7 @@ class ScopesApiController < ApplicationController
   def index
     named_scopes = TokenScopes.named_scopes
     if authorized_action(@context, @current_user, :manage_developer_keys)
-      scopes = params[:group_by] == "resource_name" ? named_scopes.group_by {|route| route[:resource_name]} : named_scopes
+      scopes = (params[:group_by] == "resource_name") ? named_scopes.group_by { |route| route[:resource_name] } : named_scopes
       render json: scopes
     end
   end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -19,6 +21,6 @@
 class AddIndexToObserverAlertThreshold < ActiveRecord::Migration[5.1]
   tag :predeploy
   def change
-    add_index :observer_alert_thresholds, [:alert_type, :user_observation_link_id], unique: true, name: 'observer_alert_thresholds_on_alert_type_and_observer'
+    add_index :observer_alert_thresholds, [:alert_type, :user_observation_link_id], unique: true, name: "observer_alert_thresholds_on_alert_type_and_observer"
   end
 end

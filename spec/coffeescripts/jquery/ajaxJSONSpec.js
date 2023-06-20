@@ -16,10 +16,11 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import INST from 'INST'
 import $ from 'jquery'
-import 'jquery.ajaxJSON'
+import '@canvas/jquery/jquery.ajaxJSON'
 import sinon from 'sinon'
+
+if (!('INST' in window)) window.INST = {}
 
 let storedInstEnv = null
 
@@ -30,27 +31,27 @@ QUnit.module('$.fn.defaultAjaxError', {
   },
   teardown() {
     INST.environment = storedInstEnv
-  }
+  },
 })
 
-test('should call the function if not production', function() {
+test('should call the function if not production', () => {
   notEqual(INST.environment, 'production')
   deepEqual($.ajaxJSON.unhandledXHRs, [])
   const spy = sinon.spy()
   $('#fixtures').defaultAjaxError(spy)
   const xhr = {
     status: 200,
-    responseText: '{"status": "ok"}'
+    responseText: '{"status": "ok"}',
   }
   $.fn.defaultAjaxError.func({}, xhr)
   ok(spy.called)
 })
 
-test('should call the function if unhandled', function() {
+test('should call the function if unhandled', () => {
   INST.environment = 'production'
   const xhr = {
     status: 400,
-    responseText: '{"status": "ok"}'
+    responseText: '{"status": "ok"}',
   }
   $.ajaxJSON.unhandledXHRs.push(xhr)
   const spy = sinon.spy()
@@ -59,14 +60,14 @@ test('should call the function if unhandled', function() {
   ok(spy.called)
 })
 
-test('should call the function if unauthenticated', function() {
+test('should call the function if unauthenticated', () => {
   INST.environment = 'production'
   deepEqual($.ajaxJSON.unhandledXHRs, [])
   const spy = sinon.spy()
   $('#fixtures').defaultAjaxError(spy)
   const xhr = {
     status: 401,
-    responseText: '{"status": "unauthenticated"}'
+    responseText: '{"status": "unauthenticated"}',
   }
   $.fn.defaultAjaxError.func({}, xhr)
   ok(spy.called)
@@ -80,7 +81,7 @@ test('returns false if status is not 401', () =>
 test('returns false if status is 401 but the message is not unauthenticated', () => {
   const xhr = {
     status: 401,
-    responseText: ''
+    responseText: '',
   }
   equal($.ajaxJSON.isUnauthenticated(xhr), false)
 })
@@ -88,7 +89,7 @@ test('returns false if status is 401 but the message is not unauthenticated', ()
 test('returns false if status is 401 but the message is not unauthenticated', () => {
   const xhr = {
     status: 401,
-    responseText: '{"status": "unauthorized"}'
+    responseText: '{"status": "unauthorized"}',
   }
   equal($.ajaxJSON.isUnauthenticated(xhr), false)
 })
@@ -96,7 +97,7 @@ test('returns false if status is 401 but the message is not unauthenticated', ()
 test('returns true if status is 401 and message is unauthenticated', () => {
   const xhr = {
     status: 401,
-    responseText: '{"status": "unauthenticated"}'
+    responseText: '{"status": "unauthenticated"}',
   }
   equal($.ajaxJSON.isUnauthenticated(xhr), true)
 })
@@ -104,12 +105,12 @@ test('returns true if status is 401 and message is unauthenticated', () => {
 let abortXhr
 
 QUnit.module('$.ajaxJSON.abortRequest', {
-  setup () {
+  setup() {
     abortXhr = {
       readyState: 0,
-      abort: sinon.spy()
+      abort: sinon.spy(),
     }
-  }
+  },
 })
 
 test('aborts xhr if not done', () => {
@@ -143,7 +144,7 @@ test('does not call success or error handler', () => {
   const spy = sinon.spy()
   $.ajaxJSON('/api', 'GET', {}, spy, spy)
   $.ajaxJSON.abortRequest(xhr)
-  xhr.readyStateChange(sinon.FakeXMLHttpRequest.DONE);
+  xhr.readyStateChange(sinon.FakeXMLHttpRequest.DONE)
   fakeXhr.restore()
   ok(spy.notCalled)
 })

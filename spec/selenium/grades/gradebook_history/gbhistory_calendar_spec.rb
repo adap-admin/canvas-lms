@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -15,8 +17,8 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_relative '../pages/gradebook_history_page'
-require_relative '../setup/gradebook_setup'
+require_relative "../pages/gradebook_history_page"
+require_relative "../setup/gradebook_setup"
 
 describe "Gradebook History Page" do
   include_context "in-process server selenium tests"
@@ -29,25 +31,23 @@ describe "Gradebook History Page" do
     course_factory(active_all: true)
   end
 
-  before(:each) do
+  before do
     user_session(@teacher)
     GradeBookHistory.visit(@course)
   end
 
-  context "has filter button disabled" do
-
-    it "and shows error message on entering backward dates", test_id: 3308866, priority: "1" do
-      GradeBookHistory.enter_start_date('October 7, 2017')
-      GradeBookHistory.enter_end_date(['October 4, 2017', :enter])
+  describe "date pickers" do
+    it "disables the filter button when the 'To' date precedes the 'From' date", priority: "1" do
+      GradeBookHistory.enter_start_date("October 7, 2017")
+      GradeBookHistory.enter_end_date(["October 4, 2017", :tab])
       expect(GradeBookHistory.error_text_invalid_dates).to be_displayed
     end
 
-    it "on entering invalid dates", test_id: 3308867, priority: "1" do
-      GradeBookHistory.enter_start_date('bad date')
-      GradeBookHistory.enter_end_date('invalid date')
+    it "clears the value of the field when entering an invalid date and moving away from the field" do
+      GradeBookHistory.enter_end_date("invalid date")
       GradeBookHistory.enter_end_date(:tab)
-      filter_button_updated=GradeBookHistory.filter_button
-      expect(element_value_for_attr(filter_button_updated, 'disabled')).to eq('true')
+
+      expect(element_value_for_attr(GradeBookHistory.end_date_textfield, "value")).to eq ""
     end
   end
 end

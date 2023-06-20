@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2012 - present Instructure, Inc.
 #
@@ -18,11 +20,11 @@
 module LearningOutcomeContext
   def self.included(klass)
     if klass < ActiveRecord::Base
-      klass.has_many :learning_outcome_links, -> { where("content_tags.tag_type='learning_outcome_association' AND content_tags.workflow_state<>'deleted'") }, as: :context, inverse_of: :context, class_name: 'ContentTag'
-      klass.has_many :linked_learning_outcomes, -> { distinct.where(content_tags: { content_type: 'LearningOutcome' }) }, through: :learning_outcome_links, source: :learning_outcome_content
-      klass.has_many :created_learning_outcomes, :class_name => 'LearningOutcome', :as => :context, :inverse_of => :context
-      klass.has_many :learning_outcome_groups, :as => :context, :inverse_of => :context
-      klass.send :include, InstanceMethods
+      klass.has_many :learning_outcome_links, -> { where("content_tags.tag_type='learning_outcome_association' AND content_tags.workflow_state<>'deleted'") }, as: :context, inverse_of: :context, class_name: "ContentTag"
+      klass.has_many :linked_learning_outcomes, -> { distinct.where(content_tags: { content_type: "LearningOutcome" }) }, through: :learning_outcome_links, source: :learning_outcome_content
+      klass.has_many :created_learning_outcomes, class_name: "LearningOutcome", as: :context, inverse_of: :context
+      klass.has_many :learning_outcome_groups, as: :context, inverse_of: :context
+      klass.include InstanceMethods
 
       klass.after_save :update_root_outcome_group_name, if: -> { saved_change_to_name? }
     end
@@ -38,7 +40,7 @@ module LearningOutcomeContext
 
     # return the outcome but only if it's available in either the context or one
     # of the context's associated accounts.
-    def available_outcome(outcome_id, opts={})
+    def available_outcome(outcome_id, opts = {})
       if opts[:allow_global]
         outcome = LearningOutcome.global.where(id: outcome_id).first
         return outcome if outcome
@@ -51,12 +53,12 @@ module LearningOutcomeContext
 
       unless opts[:recurse] == false
         (associated_accounts.uniq - [self]).each do |context|
-          outcome = context.available_outcome(outcome_id, :recurse => false)
+          outcome = context.available_outcome(outcome_id, recurse: false)
           return outcome if outcome
         end
       end
 
-      return nil
+      nil
     end
 
     def available_outcomes
@@ -66,20 +68,21 @@ module LearningOutcomeContext
     end
 
     def has_outcomes?
-      Rails.cache.fetch(['has_outcomes', self].cache_key) do
-        linked_learning_outcomes.count > 0
+      Rails.cache.fetch(["has_outcomes", self].cache_key) do
+        linked_learning_outcomes.exists?
       end
     end
 
-    def root_outcome_group(force=true)
+    def root_outcome_group(force = true)
       LearningOutcomeGroup.find_or_create_root(self, force)
     end
 
     def update_root_outcome_group_name
       root = root_outcome_group(false)
       return unless root
+
       self.class.connection.after_transaction_commit do
-        root.update! title: self.name
+        root.update! title: name
       end
     end
   end

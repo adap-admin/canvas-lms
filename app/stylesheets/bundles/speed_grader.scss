@@ -16,11 +16,13 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+@use "sass:math";
+
 @import "base/environment";
 @import "components/ui.selectmenu";
 @import "vendor/_xflex.scss";
 @import "components/rubric";
-
+@import "components/emoji";
 
 .ic-Layout-contentMain {
   padding: 0;
@@ -33,8 +35,11 @@
 $gradebook_header_height: 3.5em;
 
 #gradebook_header_container {
-  height: $gradebook_header_height;
   overflow: hidden;
+}
+
+.speed_grader_nav_form {
+  margin: 0;
 }
 
 #speed_grader_loading {
@@ -45,7 +50,6 @@ $gradebook_header_height: 3.5em;
 #gradebook_header {
   background-color: var(--ic-brand-global-nav-bgd);
   color: var(--ic-brand-global-nav-menu-item__text-color);
-
   padding: 0.375em 0.75em;
   @include fontSize(11px);
   min-width: 960px;
@@ -62,6 +66,13 @@ $gradebook_header_height: 3.5em;
     select {
       width: 230px;
       z-index: 100;
+    }
+
+    &:focus-within {
+      // Firefox
+      outline: thin dotted var(--ic-brand-global-nav-menu-item__text-color);
+      // Webkit/Chrome
+      outline: 5px auto -webkit-focus-ring-color;
     }
   }
 
@@ -105,7 +116,7 @@ $icon-size: 1.4rem;
   // sizes the icon font
   .gradebookActions__Button {
     @include overwrite-default-icon-size($icon-size);
-    margin-#{direction(right)}: $ic-sp/3;
+    margin-#{direction(right)}: math.div($ic-sp, 3);
     color: var(--ic-brand-global-nav-ic-icon-svg-fill);
   }
 
@@ -212,7 +223,7 @@ $icon-size: 1.4rem;
   display: block;
 }
 
-#settings_link, #mute_link {
+#settings_link {
   position: relative;
   .ui-icon {
     display: inline-block;
@@ -226,15 +237,7 @@ $icon-size: 1.4rem;
 }
 
 #full_width_container {
-  position: absolute;
-  top: $gradebook_header_height + 0.0625em;
-  bottom: 0;
-  #{direction(left)}: 0;
-  #{direction(right)}: 0;
-  min-width: 960px;
-  &.with_enrollment_notice {
-    top: $gradebook_header_height + 3.3625em;
-  }
+  position: relative;
 }
 
 .full_width {
@@ -275,7 +278,6 @@ $icon-size: 1.4rem;
 }
 
 #enrollment_inactive_notice, #enrollment_concluded_notice, #closed_gp_notice {
-  width: 100%;
   border-bottom: 1px solid $ic-border-light;
   border-radius: 0;
   text-align: center;
@@ -408,9 +410,19 @@ $icon-size: 1.4rem;
     font-size: 1.2em;
     display: none;
   }
+
+  .submission-status-pill {
+    display: none;
+  }
+
   .submission-late-pill,
-  .submission-missing-pill {
+  .submission-missing-pill,
+  .submission-excused-pill,
+  .submission-extended-pill {
+    display: inline;
     font-size: 1rem;
+    padding-left: 10px;
+    padding-right: 10px;
   }
 }
 
@@ -425,15 +437,6 @@ $icon-size: 1.4rem;
 }
 
 #rubric_full {
-  #rubric_full_resizer #rubric_full_resizer_handle {
-    position: absolute;
-    top: 50%;
-    #{direction(left)}: 0px;
-    background: transparent url("/images/splitpane_handle-ew.gif") no-repeat scroll 50% 50%;
-    cursor: pointer;
-    height: 20px;
-    width: 7px;
-  }
   a.big_link {
     display: none;
   }
@@ -446,6 +449,7 @@ $icon-size: 1.4rem;
 }
 #comments {
   overflow-y: auto;
+  word-break: break-word;
   .comment {
     .avatar {
       flex-grow: 0;
@@ -471,6 +475,8 @@ $icon-size: 1.4rem;
   }
 
   .attach_things {
+    align-self: center;
+    display: flex;
     list-style: none;
 
     //Chrome has a nice bug where clicking on block element
@@ -496,14 +502,25 @@ $icon-size: 1.4rem;
       float: direction(left);
       margin-#{direction(right)}: 5px;
     }
+
+    &.emojis {
+      flex-direction: row-reverse;
+    }
   }
   #comment_attachments {
-    padding: $ic-sp/2 0;
+    padding: $ic-sp*0.5 0;
     display: block;
     a {
       float: direction(right);
     }
   }
+}
+
+#emojis-attachments-container {
+  display: flex;
+  align-self: stretch;
+  flex: 1;
+  justify-content: space-between;
 }
 
 body .ui-selectmenu-dropdown {
@@ -683,7 +700,10 @@ body .ui-selectmenu-dropdown:hover .ui-selectmenu-icon, body .ui-state-active .u
   #submission_not_newest_notice {
     color: $orange;
     font-weight: bold;
-    padding: $ic-sp/2 0;
+    padding: $ic-sp*0.5 0;
+  }
+  #submission_attachment_viewed_at_container {
+    margin-top: 40px;
   }
   .submission_attachment_viewed_at {
     display: inline;
@@ -705,7 +725,7 @@ body .ui-selectmenu-dropdown:hover .ui-selectmenu-icon, body .ui-state-active .u
     overflow: hidden;
     .submission-file {
       position: relative;
-      padding: $ic-sp/2 0;
+      padding: $ic-sp*0.5 0;
       .turnitin_score_container {
         float: direction(left);
         margin-#{direction(right)}: $ic-sp;
@@ -732,6 +752,15 @@ body .ui-selectmenu-dropdown:hover .ui-selectmenu-icon, body .ui-state-active .u
         top: 3px;
         #{direction(right)}: 1px;
         overflow: hidden;
+      }
+      .submission-file-delete {
+        width: 16px;
+        height: 16px;
+        position: absolute;
+        top: 3px;
+        #{direction(right)}: 24px;
+        overflow: hidden;
+        font-size: 0.7rem;
       }
       .display_name {
         white-space: nowrap;
@@ -898,5 +927,72 @@ body .ui-selectmenu-dropdown:hover .ui-selectmenu-icon, body .ui-state-active .u
 #grading_details_container {
   button {
     padding: 0;
+  }
+}
+
+.similarity_score_container {
+  i {
+    &.icon-empty,
+    &.icon-oval-half {
+      color: $ic-color-danger;
+    }
+
+    &.icon-certified {
+      color: $ic-color-success;
+    }
+
+    &.icon-warning,
+    &.icon-clock {
+      cursor: pointer;
+    }
+  }
+
+  .turnitin_similarity_score {
+    color: $ic-color-dark;
+  }
+}
+
+#library-suggestions {
+  float: direction(right);
+}
+
+#textarea-container {
+  position: relative;
+}
+
+.secondary_mount_point_container {
+  position: relative;
+
+  #speed_grader_edit_status_secondary_mount_point {
+    position: absolute;
+    right: 24px;
+    top: 33px;
+  }
+}
+
+.do-not-show-again {
+  float: left;
+  display: inline-block;
+  margin-top: 1em;
+}
+
+.emoji-picker-container {
+  position: absolute;
+  bottom: 0px;
+  #{direction(right)}: 10px;
+}
+
+figure {
+  margin: 0;
+}
+
+// even though we show no headers in speed grader, we want the
+// masquerade bar to always show if someone is masquerading
+// (#masquerade_bar is set to 'display: none !important' for
+// body.no-headers at the top level _layout.scss, and speed grader
+// uses body.no-headers to hide the standard canvas headers/footer)
+body.no-headers {
+  #masquerade_bar {
+    display: flex !important
   }
 }

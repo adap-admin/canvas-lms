@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -20,14 +22,16 @@ module Factories
   def line_item_model(overrides = {})
     assignment_opts = {
       course: overrides[:course] || course_factory(active_course: true),
-      submission_types: overrides[:tool] ? 'external_tool' : nil,
-      external_tool_tag_attributes: overrides[:tool] ?
-        {
-          url: overrides[:tool].url,
-          content_type: 'context_external_tool',
-          content_id: overrides[:tool].id
-        } :
-        nil
+      submission_types: overrides[:tool] ? "external_tool" : nil,
+      external_tool_tag_attributes: if overrides[:tool]
+                                      {
+                                        url: overrides[:tool].url,
+                                        content_type: "context_external_tool",
+                                        content_id: overrides[:tool].id
+                                      }
+                                    else
+                                      nil
+                                    end
     }.compact
     assignment = overrides[:assignment] || assignment_model(assignment_opts)
     params = base_line_item_params_with_resource_link(assignment, overrides).merge(
@@ -41,8 +45,8 @@ module Factories
   def base_line_item_params(assignment, developer_key = nil)
     {
       score_maximum: 10,
-      label: 'Test Line Item',
-      assignment: assignment,
+      label: "Test Line Item",
+      assignment:,
       client_id: developer_key&.global_id
     }
   end
@@ -50,9 +54,11 @@ module Factories
   def base_line_item_params_with_resource_link(assignment, overrides)
     base_line_item_params(assignment).merge(resource_link: overrides.fetch(
       :resource_link,
-      overrides[:with_resource_link] ?
-        resource_link_model(overrides: overrides.merge(resource_link_id:  assignment.lti_context_id)) :
+      if overrides[:with_resource_link]
+        resource_link_model(overrides: overrides.merge(resource_link_uuid: assignment.lti_context_id))
+      else
         nil
+      end
     ))
   end
 end

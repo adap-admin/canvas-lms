@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -15,12 +17,10 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_dependency 'setting'
-
-config = ConfigFile.load('marginalia') || {}
+config = ConfigFile.load("marginalia") || {}
 
 if config[:components].present?
-  require 'marginalia'
+  require "marginalia"
   Marginalia::Railtie.insert
 
   module Marginalia
@@ -29,7 +29,7 @@ if config[:components].present?
         attr_accessor :migration, :rake_task
 
         def context_id
-          RequestContextGenerator.request_id
+          RequestContext::Generator.request_id
         end
 
         def job_tag
@@ -40,10 +40,11 @@ if config[:components].present?
   end
 
   Marginalia::Comment.components = config[:components].map(&:to_sym)
+  Marginalia::Comment.prepend_comment = true
 
   module Marginalia::RakeTask
     def execute(args = nil)
-      previous, Marginalia::Comment.rake_task = Marginalia::Comment.rake_task, self.name
+      previous, Marginalia::Comment.rake_task = Marginalia::Comment.rake_task, name
       super
     ensure
       Marginalia::Comment.rake_task = previous

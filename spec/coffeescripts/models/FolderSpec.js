@@ -16,8 +16,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Folder from 'compiled/models/Folder'
-import FileModel from 'compiled/models/File'
+import Folder from '@canvas/files/backbone/models/Folder'
+import FileModel from '@canvas/files/backbone/models/File'
 
 QUnit.module('Folder', {
   setup() {
@@ -39,10 +39,10 @@ QUnit.module('Folder', {
   },
   teardown() {
     this.model = null
-  }
+  },
 })
 
-test('sorts children naturally', function() {
+test('sorts children naturally', function () {
   const actualChildren = this.model.children({})
   const expectedChildren = [
     this.folder3,
@@ -51,7 +51,7 @@ test('sorts children naturally', function() {
     this.file2,
     this.file4,
     this.folder2,
-    this.folder1
+    this.folder1,
   ]
   deepEqual(actualChildren, expectedChildren, 'Children did not sort properly')
 })

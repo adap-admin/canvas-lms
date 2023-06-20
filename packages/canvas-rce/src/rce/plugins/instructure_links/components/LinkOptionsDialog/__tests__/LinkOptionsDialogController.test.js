@@ -19,7 +19,7 @@
 import ReactDOM from 'react-dom'
 
 import LinkOptionsDialogController, {CONTAINER_ID} from '../LinkOptionsDialogController'
-import FakeEditor from '../../../../shared/__tests__/FakeEditor'
+import FakeEditor from '../../../../../__tests__/FakeEditor'
 import bridge from '../../../../../../bridge'
 import LinkOptionsDialogDriver from './LinkOptionsDialogDriver'
 
@@ -83,13 +83,23 @@ describe('RCE "Links" Plugin > LinkOptionsDialog > LinkOptionsDialogController',
       dialogController.showDialogForEditor(editor, 'create')
       dialogController._applyLinkOptions({})
       expect(getDialog()).toBeNull()
-
     })
 
     it('inserts the link', () => {
       dialogController.showDialogForEditor(editor, 'create')
       dialogController._applyLinkOptions({})
-      expect(bridge.insertLink).toHaveBeenCalledWith({}, false)
+      expect(bridge.insertLink).toHaveBeenCalledWith({})
+    })
+  })
+
+  describe('Done', () => {
+    it('focuses the editor on saving the new link', () => {
+      dialogController.showDialogForEditor(editor, 'create')
+      const lodd = getDialog('create')
+      lodd.setText('link text')
+      lodd.setLink('http://example.com')
+      lodd.$doneButton.click()
+      expect(bridge.focusEditor).toHaveBeenCalledWith(editor.rceWrapper)
     })
   })
 })

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -17,7 +19,10 @@
 
 module SubmissionCommentsHelper
   def comment_author_name_for(comment)
-    can_do(comment, @current_user, :read_author) ?
-      comment.author_name : t("Anonymous User")
+    if can_do(comment, @current_user, :read_author)
+      comment.author_name
+    else
+      I18n.t("Anonymous User")
+    end
   end
 end

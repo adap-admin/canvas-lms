@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -18,10 +20,10 @@
 # From: http://deftcode.com/code/flickr_upload/multipartpost.rb
 ## Helper class to prepare an HTTP POST request with a file upload
 ## Mostly taken from
-#http://blade.nagaokaut.ac.jp/cgi-bin/scat.rb/ruby/ruby-talk/113774
+# http://blade.nagaokaut.ac.jp/cgi-bin/scat.rb/ruby/ruby-talk/113774
 ### WAS:
 ## Anything that's broken and wrong probably the fault of Bill Stilwell
-##(bill@marginalia.org)
+# #(bill@marginalia.org)
 ### NOW:
 ## Everything wrong is due to keith@oreilly.com
 

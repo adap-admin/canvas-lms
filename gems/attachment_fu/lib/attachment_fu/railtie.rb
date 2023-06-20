@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -18,12 +20,12 @@
 module AttachmentFu
   class Railtie < ::Rails::Railtie
     initializer "attachment_fu.canvas_plugin" do
-      ActiveRecord::Base.send(:extend, AttachmentFu::ActMethods)
+      ActiveRecord::Base.extend AttachmentFu::ActMethods
       AttachmentFu::Railtie.setup_tempfile_path
     end
 
     def self.setup_tempfile_path
-      AttachmentFu.tempfile_path = '/tmp/attachment_fu'
+      AttachmentFu.tempfile_path = "/tmp/attachment_fu"
       AttachmentFu.tempfile_path = ATTACHMENT_FU_TEMPFILE_PATH if Object.const_defined?(:ATTACHMENT_FU_TEMPFILE_PATH)
 
       begin

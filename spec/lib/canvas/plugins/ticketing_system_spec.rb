@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -15,14 +17,11 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'spec_helper'
-require_dependency "canvas/plugins/ticketing_system"
-
 module Canvas::Plugins
   describe TicketingSystem do
-
     describe ".is_selected?" do
-      let(:fake_settings){ double(settings_for_plugin: {type: 'some_service'}) }
+      let(:fake_settings) { double(settings_for_plugin: { type: "some_service" }) }
+
       it "is true if the provided plugin id is the byots selection" do
         expect(TicketingSystem.is_selected?("some_service", fake_settings)).to be(true)
       end
@@ -35,9 +34,9 @@ module Canvas::Plugins
     describe ".register_plugin" do
       it "registers the given plugin with Canvas::Plugin using the TS tag" do
         id = "some_plugin_id"
-        settings = {one: "two"}
+        settings = { one: "two" }
         expect(Canvas::Plugin).to receive(:register).with(id, TicketingSystem::PLUGIN_ID, settings)
-        TicketingSystem.register_plugin(id, settings){|r| }
+        TicketingSystem.register_plugin(id, settings) { nil }
       end
 
       it "fires the provided call back on every error report" do
@@ -54,12 +53,12 @@ module Canvas::Plugins
     describe ".get_settings" do
       it "returns the settings from Canvas::Plugin for that plugin id" do
         plugin_id = "some_plugin"
-        allow(Canvas::Plugin).to receive(:find).with(plugin_id).and_return(double(settings: {"a" => "b"}))
-        expect(TicketingSystem.get_settings(plugin_id)['a']).to eq('b')
+        allow(Canvas::Plugin).to receive(:find).with(plugin_id).and_return(double(settings: { "a" => "b" }))
+        expect(TicketingSystem.get_settings(plugin_id)["a"]).to eq("b")
       end
 
-      it 'returns an empty hash if nothing is registered' do
-        expect(TicketingSystem.get_settings('none')).to be_empty
+      it "returns an empty hash if nothing is registered" do
+        expect(TicketingSystem.get_settings("none")).to be_empty
       end
     end
   end

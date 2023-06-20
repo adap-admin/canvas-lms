@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,18 +18,15 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../../spec_helper')
-require File.expand_path(File.dirname(__FILE__) + '/../../views_helper')
+require_relative "../../views_helper"
 
-describe "/quizzes/quizzes/_form_question" do
-
-  it "should render" do
+describe "quizzes/quizzes/_form_question" do
+  it "renders" do
     course_with_student
     view_context
-    assign(:js_env, {quiz_max_combination_count: 200})
-    render :partial => "quizzes/quizzes/form_question"
+    assign(:js_env, { quiz_max_combination_count: 200 })
+    render partial: "quizzes/quizzes/form_question"
 
     expect(response).not_to be_nil
   end
 end
-

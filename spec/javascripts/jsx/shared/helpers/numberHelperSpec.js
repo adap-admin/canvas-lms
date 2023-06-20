@@ -16,8 +16,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import numberHelper from 'jsx/shared/helpers/numberHelper'
-import I18n from 'i18nObj'
+import numberHelper from '@canvas/i18n/numberHelper'
+import I18n from '@canvas/i18n'
 import I18nStubber from 'helpers/I18nStubber'
 
 let input, output, delimiter, separator
@@ -28,14 +28,8 @@ QUnit.module('Number Helper Parse and Validate', {
     separator = ','
     I18nStubber.pushFrame()
     I18nStubber.stub('foo', {
-      number: {
-        format: {
-          delimiter,
-          separator,
-          precision: 3,
-          strip_insignificant_zeros: false
-        }
-      }
+      'number.format.delimiter': delimiter,
+      'number.format.separator': separator,
     })
     I18nStubber.setLocale('foo')
 
@@ -45,11 +39,11 @@ QUnit.module('Number Helper Parse and Validate', {
   },
 
   teardown() {
-    I18nStubber.popFrame()
+    I18nStubber.clear()
     if (numberHelper._parseNumber.restore) {
       numberHelper._parseNumber.restore()
     }
-  }
+  },
 })
 
 test('uses default parse function', () => {
@@ -71,7 +65,7 @@ test('uses delimiter and separator from current locale', () => {
   ok(
     numberHelper._parseNumber.calledWithMatch(input, {
       thousands: delimiter,
-      decimal: separator
+      decimal: separator,
     })
   )
 })
@@ -91,6 +85,11 @@ test('returns NaN for null and undefined values', () => {
 test('returns input if already a number', () => {
   const input = 4.7
   equal(numberHelper.parse(input), input)
+})
+
+test('supports e notation', () => {
+  numberHelper._parseNumber.restore()
+  equal(numberHelper.parse('3e2'), 300)
 })
 
 test('parses toString value of objects', () => {

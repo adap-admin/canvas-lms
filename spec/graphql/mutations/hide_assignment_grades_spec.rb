@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -51,22 +53,11 @@ describe Mutations::HideAssignmentGrades do
   end
 
   def execute_query(mutation_str, context)
-    CanvasSchema.execute(mutation_str, context: context)
-  end
-
-  before(:each) do
-    course.enable_feature!(:new_gradebook)
-    PostPolicy.enable_feature!
+    CanvasSchema.execute(mutation_str, context:)
   end
 
   context "when user has grade permission" do
     let(:context) { { current_user: teacher } }
-
-    it "requires that the PostPolicy feature be enabled" do
-      PostPolicy.disable_feature!
-      result = execute_query(mutation_str(assignment_id: assignment.id), context)
-      expect(result.dig("errors", 0, "message")).to eql "Post Policies feature not enabled"
-    end
 
     it "requires that assignmentId be passed in the query" do
       result = execute_query(mutation_str, context)
@@ -91,13 +82,13 @@ describe Mutations::HideAssignmentGrades do
       now = Time.zone.now
       assignment.update!(moderated_grading: true, grader_count: 2, final_grader: teacher, grades_published_at: now)
       result = execute_query(mutation_str(assignment_id: assignment.id), context)
-      expect(result.dig("errors")).to be nil
+      expect(result["errors"]).to be_nil
     end
 
     describe "hiding the grades" do
       let(:hide_submissions_job) { Delayed::Job.where(tag: "Assignment#hide_submissions").order(:id).last }
 
-      before(:each) do
+      before do
         @student_submission = assignment.submissions.find_by(user: student)
         @student_submission.update!(posted_at: Time.zone.now)
       end
@@ -143,7 +134,7 @@ describe Mutations::HideAssignmentGrades do
       describe "section_ids" do
         let(:section2) { course.course_sections.create! }
 
-        before(:each) do
+        before do
           @section2_student = section2.enroll_user(User.create!, "StudentEnrollment", "active").user
           @student2_submission = assignment.submissions.find_by(user: @section2_student)
           @student2_submission.update!(posted_at: Time.zone.now)
@@ -171,7 +162,7 @@ describe Mutations::HideAssignmentGrades do
       describe "only_student_ids" do
         let(:student2) { course.enroll_user(User.create!, "StudentEnrollment", enrollment_state: "active").user }
 
-        before(:each) do
+        before do
           @student2_submission = assignment.submissions.find_by(user: student2)
           @student2_submission.update!(posted_at: Time.zone.now)
         end
@@ -198,7 +189,7 @@ describe Mutations::HideAssignmentGrades do
       describe "skip_student_ids" do
         let(:student2) { course.enroll_user(User.create!, "StudentEnrollment", enrollment_state: "active").user }
 
-        before(:each) do
+        before do
           @student2_submission = assignment.submissions.find_by(user: student2)
           @student2_submission.update!(posted_at: Time.zone.now)
         end
@@ -232,7 +223,7 @@ describe Mutations::HideAssignmentGrades do
         let(:secret_student) { User.create! }
         let(:secret_section) { course.course_sections.create! }
 
-        before(:each) do
+        before do
           Enrollment.limit_privileges_to_course_section!(course, teacher, true)
           course.enroll_student(secret_student, enrollment_state: "active", section: secret_section)
 
@@ -242,7 +233,7 @@ describe Mutations::HideAssignmentGrades do
         it "only hides grades for students that the user can see" do
           execute_query(mutation_str(assignment_id: assignment.id), context)
           hide_submissions_job.invoke_job
-          expect(assignment.submission_for_student(secret_student).posted_at).not_to be nil
+          expect(assignment.submission_for_student(secret_student).posted_at).not_to be_nil
         end
 
         it "stores only the user ids of affected students on the Progress object" do
@@ -265,7 +256,7 @@ describe Mutations::HideAssignmentGrades do
 
     it "does not return data for the related submissions" do
       result = execute_query(mutation_str(assignment_id: assignment.id), context)
-      expect(result.dig("data", "hideAssignmentGrades")).to be nil
+      expect(result.dig("data", "hideAssignmentGrades")).to be_nil
     end
   end
 end

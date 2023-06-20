@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -16,10 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../../../spec_helper.rb')
-
 describe Quizzes::QuizQuestion::AnswerGroup do
-
   let(:question_data_params) do
     {
       answers: [
@@ -82,7 +81,6 @@ describe Quizzes::QuizQuestion::AnswerGroup do
     it "returns the correct answer" do
       expect(question_data.answers.correct_answer[:text]).to eq "A"
     end
-
   end
 end
 
@@ -95,7 +93,7 @@ describe Quizzes::QuizQuestion::AnswerGroup::Answer do
     }
   end
 
-  before(:each) do
+  before do
     @answer = Quizzes::QuizQuestion::AnswerGroup::Answer.new(params)
   end
 
@@ -133,7 +131,7 @@ describe Quizzes::QuizQuestion::AnswerGroup::Answer do
     end
 
     it "ignores any keys supplied that don't exist" do
-      expect(@answer.any_value_of([:blah, :weight, :answer_weight, :foo])).to eq 100
+      expect(@answer.any_value_of(%i[blah weight answer_weight foo])).to eq 100
     end
 
     it "returns the supplied default if none of the keys are found" do
@@ -144,7 +142,7 @@ describe Quizzes::QuizQuestion::AnswerGroup::Answer do
   describe "#set_id" do
     it "assigns a randomly generated id to the answer" do
       @answer.set_id([])
-      expect(@answer[:id]).to be_kind_of(Integer)
+      expect(@answer[:id]).to be_a(Integer)
       expect(@answer[:id]).to be > 0
     end
 

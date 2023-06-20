@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -16,7 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 class Attachments::LocalStorage
-
   attr_reader :attachment
 
   def self.key
@@ -28,46 +29,45 @@ class Attachments::LocalStorage
   end
 
   def exists?
-    File.exists?(attachment.full_filename)
+    File.exist?(attachment.full_filename)
   end
 
   def change_namespace(old_full_filename)
     return if old_full_filename == attachment.full_filename
+
     FileUtils.mv old_full_filename, attachment.full_filename
   end
 
-  def initialize_ajax_upload_params(local_upload_url, s3_success_url, options)
+  def initialize_ajax_upload_params(local_upload_url, _s3_success_url, options)
     {
-      :upload_url => local_upload_url,
-      :file_param => options[:file_param] || 'attachment[uploaded_data]', # uploadify ignores this and uses 'file'
-      :upload_params => options[:upload_params] || {}
+      upload_url: local_upload_url,
+      file_param: options[:file_param] || "attachment[uploaded_data]", # uploadify ignores this and uses 'file'
+      upload_params: options[:upload_params] || {}
     }
   end
 
-  def amend_policy_conditions(policy, pseudonym:, datetime: nil)
-    # flash won't send the session cookie, so for local uploads we put the user id in the signed
-    # policy so we can mock up the session for FilesController#create
-    policy['conditions'] << { 'pseudonym_id' => pseudonym.id }
-    policy['attachment_id'] = attachment.id
+  def amend_policy_conditions(policy, datetime: nil)
+    policy["attachment_id"] = attachment.id
     policy
   end
 
-  def shared_secret(datetime)
+  def shared_secret(_datetime)
     Attachment.shared_secret
   end
 
   def sign_policy(policy_encoded, datetime)
     signature = Base64.encode64(
       OpenSSL::HMAC.digest(
-        OpenSSL::Digest.new('sha1'), shared_secret(datetime), policy_encoded
+        OpenSSL::Digest.new("sha1"), shared_secret(datetime), policy_encoded
       )
-    ).gsub(/\n/, '')
-    ['Signature', signature]
+    ).delete("\n")
+    ["Signature", signature]
   end
 
-  def open(opts)
+  def open(integrity_check: false, **)
+    attachment.validate_hash { |hash_context| hash_context&.file(attachment.full_filename) } if integrity_check
     if block_given?
-      File.open(attachment.full_filename, 'rb') do |file|
+      File.open(attachment.full_filename, "rb") do |file|
         chunk = file.read(4096)
         while chunk
           yield chunk
@@ -75,7 +75,7 @@ class Attachments::LocalStorage
         end
       end
     else
-      File.open(attachment.full_filename, 'rb')
+      File.open(attachment.full_filename, "rb")
     end
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -16,19 +18,15 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require File.expand_path(File.dirname(__FILE__) + '/../spec_helper.rb')
-
 describe UsageRights do
-
-  describe '#license_url' do
-    it 'returns the private license url if no license is specified' do
-      expect(subject.license_url).to eq 'http://en.wikipedia.org/wiki/Copyright'
+  describe "#license_url" do
+    it "returns the private license url if no license is specified" do
+      expect(subject.license_url).to eq "http://en.wikipedia.org/wiki/Copyright"
     end
 
-    it 'returns the url for the license' do
-      subject.license = 'cc_by_nc_nd'
-      expect(subject.license_url).to eq 'http://creativecommons.org/licenses/by-nc-nd/4.0/'
+    it "returns the url for the license" do
+      subject.license = "cc_by_nc_nd"
+      expect(subject.license_url).to eq "http://creativecommons.org/licenses/by-nc-nd/4.0/"
     end
   end
-
 end

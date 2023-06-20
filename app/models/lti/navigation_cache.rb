@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -18,7 +20,7 @@
 
 module Lti
   class NavigationCache
-    CACHE_KEY = 'navigation_tabs_key'
+    CACHE_KEY = "navigation_tabs_key"
 
     def initialize(account)
       @account = account

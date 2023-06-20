@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 
 #
 # Copyright (C) 2018 - present Instructure, Inc.
@@ -17,9 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 module CanvasDynamoDB
-
   class BatchWriteBuilder < BatchBuilderBase
-
     def operation
       :batch_write_item
     end
@@ -33,12 +32,12 @@ module CanvasDynamoDB
     end
 
     def put(table_name, *items)
-      vals = items.map { |item| { put_request: { item: item } } }
+      vals = items.map { |item| { put_request: { item: } } }
       add(table_name, *vals)
     end
 
     def delete(table_name, *keys)
-      vals = keys.map { |key| { delete_request: { key: key } } }
+      vals = keys.map { |key| { delete_request: { key: } } }
       add(table_name, *vals)
     end
 
@@ -48,7 +47,5 @@ module CanvasDynamoDB
         true
       end
     end
-
   end
-
 end

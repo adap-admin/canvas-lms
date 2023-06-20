@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -15,10 +17,10 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-shared_examples_for 'it has a proc attribute setter and getter for' do |attribute|
+shared_examples_for "it has a proc attribute setter and getter for" do |attribute|
   it "the attribute '#{attribute}'" do
     obj = described_class.new
-    expect(obj.send(attribute)).to eq nil
+    expect(obj.send(attribute)).to be_nil
     obj.send("#{attribute}=", -> { 10 })
     expect(obj.send(attribute)).to eq 10
   end

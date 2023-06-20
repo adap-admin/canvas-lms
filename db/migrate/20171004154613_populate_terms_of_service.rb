@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -24,8 +26,5 @@ class PopulateTermsOfService < ActiveRecord::Migration[4.2]
     Account.root_accounts.each do |ra|
       TermsOfService.ensure_terms_for_account(ra)
     end
-  end
-
-  def down
   end
 end

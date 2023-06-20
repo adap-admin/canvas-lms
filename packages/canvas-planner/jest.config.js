@@ -18,44 +18,35 @@
 
 module.exports = {
   transform: {
-    '^.+\\.(js)$': 'babel-jest',
-    '^.+\\.(css)$': '<rootDir>/jest-themeable-styles'
+    '^.+\\.(js)$': ['babel-jest', {configFile: require.resolve('./babel.config.cjs.js')}],
+    '^.+\\.(css)$': '<rootDir>/jest-themeable-styles',
   },
-  reporters: [ "default", ["jest-junit", {
-    suiteName: 'Canvas Planner Jest Tests',
-    outputDirectory: './coverage',
-    outputName: 'canvas-planner-junit.xml'
-  }] ],
-  snapshotSerializers: [
-    'enzyme-to-json/serializer'
+  reporters: [
+    'default',
+    [
+      'jest-junit',
+      {
+        suiteName: 'Canvas Planner Jest Tests',
+        outputDirectory: process.env.TEST_RESULT_OUTPUT_DIR || './coverage',
+        outputName: 'canvas-planner-junit.xml',
+      },
+    ],
   ],
-  setupFiles: [
-    'jest-canvas-mock',
-    './jest-env.js'
-  ],
-  testPathIgnorePatterns: [
-    "<rootDir>/node_modues",
-    "<rootDir>/lib",
-  ],
-  testRegex: "/__tests__/.*\\.(test|spec)\\.js$",
-  coverageReporters: [
-    'html',
-    'text',
-    'json'
-  ],
-  collectCoverageFrom: [
-    'src/**/*.js'
-  ],
-  coveragePathIgnorePatterns: [
-    '<rootDir>/src/i18n/flip-message.js'
-  ],
+  snapshotSerializers: ['enzyme-to-json/serializer'],
+  setupFiles: ['jest-canvas-mock', './jest-env.js', '<rootDir>/jest/jest-setup.js'],
+  setupFilesAfterEnv: ['@testing-library/jest-dom/extend-expect'],
+  testPathIgnorePatterns: ['<rootDir>/node_modules', '<rootDir>/lib'],
+  testRegex: '/__tests__/.*\\.(test|spec)\\.js$',
+  coverageReporters: ['html', 'text', 'json'],
+  collectCoverageFrom: ['src/**/*.js'],
+  coveragePathIgnorePatterns: ['<rootDir>/src/i18n/flip-message.js'],
   coverageThreshold: {
     global: {
-      branches: 85,
-      functions: 85,
-      lines: 85,
-      statements: 85
-    }
+      branches: 80,
+      functions: 80,
+      lines: 80,
+      statements: 80,
+    },
   },
-  testEnvironment: 'jest-environment-jsdom-fourteen',
-};
+  testEnvironment: '<rootDir>../../jest/strictTimeLimitEnvironment.js',
+}

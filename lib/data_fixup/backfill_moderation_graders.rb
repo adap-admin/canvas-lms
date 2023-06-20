@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -24,9 +26,9 @@ module DataFixup::BackfillModerationGraders
     return if courses.blank?
 
     # Find all provisional graders for this batch of assignments
-    graders = ModeratedGrading::ProvisionalGrade.joins(:submission).
-      where("submissions.assignment_id IN (?)", assignments.select(:id)).
-      pluck(Arel.sql("distinct submissions.assignment_id, moderated_grading_provisional_grades.scorer_id"))
+    graders = ModeratedGrading::ProvisionalGrade.joins(:submission)
+                                                .where(submissions: { assignment_id: assignments.select(:id) })
+                                                .pluck(Arel.sql("distinct submissions.assignment_id, moderated_grading_provisional_grades.scorer_id"))
     created_at = Time.zone.now
 
     Assignment.transaction do
@@ -37,10 +39,10 @@ module DataFixup::BackfillModerationGraders
           anonymous_id = Anonymity.generate_id(existing_ids: existing_anonymous_ids[assignment_id])
           existing_anonymous_ids[assignment_id] << anonymous_id
           {
-            anonymous_id: anonymous_id,
-            assignment_id: assignment_id,
+            anonymous_id:,
+            assignment_id:,
             user_id: grader_id,
-            created_at: created_at,
+            created_at:,
             updated_at: created_at
           }
         end
@@ -58,17 +60,17 @@ module DataFixup::BackfillModerationGraders
       courses.map! do |course_id|
         vals = [
           Course.connection.quote(course_id),
-          Course.connection.quote('Course'),
-          Course.connection.quote('moderated_grading'),
-          Course.connection.quote('on'),
+          Course.connection.quote("Course"),
+          Course.connection.quote("moderated_grading"),
+          Course.connection.quote("on"),
           Course.connection.quote(created_at),
           Course.connection.quote(created_at)
         ]
-        "(#{vals.join(',')})"
+        "(#{vals.join(",")})"
       end
-      ActiveRecord::Base.connection.exec_insert <<~SQL
+      ActiveRecord::Base.connection.exec_insert <<~SQL.squish
         INSERT INTO #{FeatureFlag.quoted_table_name}
-          (context_id, context_type, feature, state, created_at, updated_at) VALUES #{courses.join(',')}
+          (context_id, context_type, feature, state, created_at, updated_at) VALUES #{courses.join(",")}
           ON CONFLICT (context_id, context_type, feature) DO UPDATE SET
             state = excluded.state,
             updated_at = excluded.updated_at

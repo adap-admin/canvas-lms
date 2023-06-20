@@ -19,7 +19,7 @@
 import React from 'react'
 import {func, shape} from 'prop-types'
 import {Button} from '@instructure/ui-buttons'
-import {View} from '@instructure/ui-layout'
+import {View} from '@instructure/ui-view'
 
 import formatMessage from '../../format-message'
 
@@ -35,6 +35,6 @@ export default function LoadMoreButton({loader}) {
 
 LoadMoreButton.propTypes = {
   loader: shape({
-    onLoadMore: func.isRequired
-  }).isRequired
+    onLoadMore: func.isRequired,
+  }).isRequired,
 }

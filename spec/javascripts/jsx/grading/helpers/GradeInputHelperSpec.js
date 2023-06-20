@@ -16,12 +16,23 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import round from 'compiled/util/round'
-import * as GradeInputHelper from 'jsx/grading/helpers/GradeInputHelper'
+import round from '@canvas/round'
+import * as GradeInputHelper from '@canvas/grading/GradeInputHelper'
+import fakeENV from 'helpers/fakeENV'
 
 /* eslint-disable qunit/no-identical-names */
 
-QUnit.module('GradeInputHelper', () => {
+QUnit.module('GradeInputHelper', suiteHooks => {
+  suiteHooks.beforeEach(() => {
+    fakeENV.setup({
+      GRADEBOOK_OPTIONS: {assignment_missing_shortcut: true}
+    })
+  })
+
+  suiteHooks.afterEach(() => {
+    fakeENV.teardown()
+  })
+
   QUnit.module('.isExcused()', () => {
     test('returns true when given "EX"', () => {
       strictEqual(GradeInputHelper.isExcused('EX'), true)
@@ -60,6 +71,44 @@ QUnit.module('GradeInputHelper', () => {
     })
   })
 
+  QUnit.module('.isMissing()', () => {
+    test('returns true when given "MI"', () => {
+      strictEqual(GradeInputHelper.isMissing('MI'), true)
+    })
+
+    test('returns true when given "mi"', () => {
+      strictEqual(GradeInputHelper.isMissing('mi'), true)
+    })
+
+    test('return true when given "  MI  "', () => {
+      strictEqual(GradeInputHelper.isMissing('  MI  '), true)
+    })
+
+    test('returns false when given "M I"', () => {
+      strictEqual(GradeInputHelper.isMissing('M I'), false)
+    })
+
+    test('returns false when given a point value', () => {
+      strictEqual(GradeInputHelper.isMissing('7'), false)
+    })
+
+    test('returns false when given a percentage value', () => {
+      strictEqual(GradeInputHelper.isMissing('7%'), false)
+    })
+
+    test('returns false when given a letter grade', () => {
+      strictEqual(GradeInputHelper.isMissing('A'), false)
+    })
+
+    test('returns false when given an empty string ""', () => {
+      strictEqual(GradeInputHelper.isMissing(''), false)
+    })
+
+    test('returns false when given null', () => {
+      strictEqual(GradeInputHelper.isMissing(null), false)
+    })
+  })
+
   QUnit.module('.hasGradeChanged()', hooks => {
     let options
     let pendingGradeInfo
@@ -72,18 +121,31 @@ QUnit.module('GradeInputHelper', () => {
     hooks.beforeEach(() => {
       options = {
         enterGradesAs: 'points',
-        gradingScheme: [['A', 0.9], ['B', 0.8], ['C', 0.7], ['D', 0.6], ['F', 0.5]],
-        pointsPossible: 10
+        gradingScheme: [
+          ['A', 0.9],
+          ['B', 0.8],
+          ['C', 0.7],
+          ['D', 0.6],
+          ['F', 0.5],
+        ],
+        pointsPossible: 10,
       }
       // cleared grade info
       pendingGradeInfo = {
         enteredAs: null,
         excused: false,
+        late_policy_status: null,
         grade: null,
         score: null,
-        valid: true
+        valid: true,
       }
-      submission = {enteredGrade: 'A', enteredScore: 10, excused: false, grade: 'B'}
+      submission = {
+        enteredGrade: 'A',
+        enteredScore: 10,
+        excused: false,
+        grade: 'B',
+        late_policy_status: null
+      }
     })
 
     test('returns true when the pending grade is invalid', () => {
@@ -99,6 +161,30 @@ QUnit.module('GradeInputHelper', () => {
     test('returns true when the submission is becoming unexcused', () => {
       submission = {enteredGrade: null, enteredScore: null, excused: true, grade: null}
       strictEqual(hasGradeChanged(), true)
+    })
+
+    test('returns true when the submission is becoming missing', () => {
+      Object.assign(pendingGradeInfo, {late_policy_status: 'missing'})
+      submission = {
+        enteredGrade: null,
+        enteredScore: null,
+        excused: false,
+        late_policy_status: null,
+        grade: null
+      }
+      strictEqual(hasGradeChanged(), true)
+    })
+
+    test('returns false when the submission is already missing', () => {
+      Object.assign(pendingGradeInfo, {late_policy_status: 'missing'})
+      submission = {
+        enteredGrade: null,
+        enteredScore: null,
+        excused: false,
+        late_policy_status: 'missing',
+        grade: null
+      }
+      strictEqual(hasGradeChanged(), false)
     })
 
     QUnit.module('when the pending grade is entered as "points"', contextHooks => {
@@ -200,8 +286,14 @@ QUnit.module('GradeInputHelper', () => {
       hooks.beforeEach(() => {
         options = {
           enterGradesAs: 'points',
-          gradingScheme: [['A', 0.9], ['B', 0.8], ['C', 0.7], ['D', 0.6], ['F', 0.5]],
-          pointsPossible: 10
+          gradingScheme: [
+            ['A', 0.9],
+            ['B', 0.8],
+            ['C', 0.7],
+            ['D', 0.6],
+            ['F', 0.5],
+          ],
+          pointsPossible: 10,
         }
       })
 
@@ -259,7 +351,7 @@ QUnit.module('GradeInputHelper', () => {
           ['3.0', 0.8],
           ['2.0', 0.7],
           ['1.0', 0.6],
-          ['0.0', 0.5]
+          ['0.0', 0.5],
         ]
         strictEqual(parseTextValue('3.0').grade, '3')
       })
@@ -270,7 +362,7 @@ QUnit.module('GradeInputHelper', () => {
           ['85%', 0.8],
           ['75%', 0.7],
           ['65%', 0.6],
-          ['0%', 0.5]
+          ['0%', 0.5],
         ]
         strictEqual(parseTextValue('85%').grade, '8.9')
       })
@@ -369,7 +461,7 @@ QUnit.module('GradeInputHelper', () => {
           ['3.0', 0.8],
           ['2.0', 0.7],
           ['1.0', 0.6],
-          ['0.0', 0.5]
+          ['0.0', 0.5],
         ]
         strictEqual(parseTextValue('3.0').score, 3)
       })
@@ -380,7 +472,7 @@ QUnit.module('GradeInputHelper', () => {
           ['85%', 0.8],
           ['75%', 0.7],
           ['65%', 0.6],
-          ['0%', 0.5]
+          ['0%', 0.5],
         ]
         strictEqual(parseTextValue('85%').score, 8.9)
       })
@@ -459,6 +551,14 @@ QUnit.module('GradeInputHelper', () => {
         strictEqual(parseTextValue('E X').excused, false)
       })
 
+      test('sets late_policy_status to "missing" when the value is "MI"', () => {
+        strictEqual(parseTextValue('MI').late_policy_status, 'missing')
+      })
+
+      test('sets late_policy_status to null for any other value', () => {
+        strictEqual(parseTextValue('8.34').late_policy_status, null)
+      })
+
       test('sets "enteredAs" to "excused" when given "EX"', () => {
         strictEqual(parseTextValue('EX').enteredAs, 'excused')
       })
@@ -481,7 +581,7 @@ QUnit.module('GradeInputHelper', () => {
           ['3.0', 0.8],
           ['2.0', 0.7],
           ['1.0', 0.6],
-          ['0.0', 0.5]
+          ['0.0', 0.5],
         ]
         strictEqual(parseTextValue('3.0').enteredAs, 'points')
       })
@@ -492,7 +592,7 @@ QUnit.module('GradeInputHelper', () => {
           ['85%', 0.8],
           ['75%', 0.7],
           ['65%', 0.6],
-          ['0%', 0.5]
+          ['0%', 0.5],
         ]
         strictEqual(parseTextValue('85%').enteredAs, 'gradingScheme')
       })
@@ -525,6 +625,10 @@ QUnit.module('GradeInputHelper', () => {
         strictEqual(parseTextValue('EX').valid, true)
       })
 
+      test('sets "valid" to true when the value is "MI"', () => {
+        strictEqual(parseTextValue('MI').valid, true)
+      })
+
       test('sets "valid" to false when given non-numerical string not in the grading scheme', () => {
         strictEqual(parseTextValue('B-').valid, false)
       })
@@ -534,8 +638,14 @@ QUnit.module('GradeInputHelper', () => {
       hooks.beforeEach(() => {
         options = {
           enterGradesAs: 'percent',
-          gradingScheme: [['A', 0.9], ['B', 0.8], ['C', 0.7], ['D', 0.6], ['F', 0.5]],
-          pointsPossible: 10
+          gradingScheme: [
+            ['A', 0.9],
+            ['B', 0.8],
+            ['C', 0.7],
+            ['D', 0.6],
+            ['F', 0.5],
+          ],
+          pointsPossible: 10,
         }
       })
 
@@ -593,7 +703,7 @@ QUnit.module('GradeInputHelper', () => {
           ['3.0', 0.8],
           ['2.0', 0.7],
           ['1.0', 0.6],
-          ['0.0', 0.5]
+          ['0.0', 0.5],
         ]
         strictEqual(parseTextValue('3.0').grade, '3%')
       })
@@ -604,7 +714,7 @@ QUnit.module('GradeInputHelper', () => {
           ['85%', 0.8],
           ['75%', 0.7],
           ['65%', 0.6],
-          ['0%', 0.5]
+          ['0%', 0.5],
         ]
         strictEqual(parseTextValue('85%').grade, '85%')
       })
@@ -709,7 +819,7 @@ QUnit.module('GradeInputHelper', () => {
           ['3.0', 0.8],
           ['2.0', 0.7],
           ['1.0', 0.6],
-          ['0.0', 0.5]
+          ['0.0', 0.5],
         ]
         strictEqual(parseTextValue('3.0').score, 0.3)
       })
@@ -720,7 +830,7 @@ QUnit.module('GradeInputHelper', () => {
           ['85%', 0.8],
           ['75%', 0.7],
           ['65%', 0.6],
-          ['0%', 0.5]
+          ['0%', 0.5],
         ]
         strictEqual(parseTextValue('85%').score, 8.5)
       })
@@ -791,6 +901,14 @@ QUnit.module('GradeInputHelper', () => {
         strictEqual(parseTextValue('E X').excused, false)
       })
 
+      test('sets late_policy_status to "missing" when the value is "MI"', () => {
+        strictEqual(parseTextValue('MI').late_policy_status, 'missing')
+      })
+
+      test('sets late_policy_status to null for any other value', () => {
+        strictEqual(parseTextValue('83.45%').late_policy_status, null)
+      })
+
       test('sets "enteredAs" to "excused" when given "EX"', () => {
         strictEqual(parseTextValue('EX').enteredAs, 'excused')
       })
@@ -813,7 +931,7 @@ QUnit.module('GradeInputHelper', () => {
           ['3.0', 0.8],
           ['2.0', 0.7],
           ['1.0', 0.6],
-          ['0.0', 0.5]
+          ['0.0', 0.5],
         ]
         strictEqual(parseTextValue('3.0').enteredAs, 'percent')
       })
@@ -824,7 +942,7 @@ QUnit.module('GradeInputHelper', () => {
           ['85%', 0.8],
           ['75%', 0.7],
           ['65%', 0.6],
-          ['0%', 0.5]
+          ['0%', 0.5],
         ]
         strictEqual(parseTextValue('85%').enteredAs, 'percent')
       })
@@ -857,6 +975,10 @@ QUnit.module('GradeInputHelper', () => {
         strictEqual(parseTextValue('EX').valid, true)
       })
 
+      test('sets "valid" to true when the value is "MI"', () => {
+        strictEqual(parseTextValue('MI').valid, true)
+      })
+
       test('sets "valid" to false when given non-numerical string not in the grading scheme', () => {
         strictEqual(parseTextValue('B-').valid, false)
       })
@@ -866,8 +988,14 @@ QUnit.module('GradeInputHelper', () => {
       hooks.beforeEach(() => {
         options = {
           enterGradesAs: 'gradingScheme',
-          gradingScheme: [['A', 0.9], ['B', 0.8], ['C', 0.7], ['D', 0.6], ['F', 0.5]],
-          pointsPossible: 10
+          gradingScheme: [
+            ['A', 0.9],
+            ['B', 0.8],
+            ['C', 0.7],
+            ['D', 0.6],
+            ['F', 0.5],
+          ],
+          pointsPossible: 10,
         }
       })
 
@@ -917,7 +1045,7 @@ QUnit.module('GradeInputHelper', () => {
           ['3.0', 0.8],
           ['2.0', 0.7],
           ['1.0', 0.6],
-          ['0.0', 0.5]
+          ['0.0', 0.5],
         ]
         strictEqual(parseTextValue('3.0').grade, '3.0')
       })
@@ -928,7 +1056,7 @@ QUnit.module('GradeInputHelper', () => {
           ['85%', 0.8],
           ['75%', 0.7],
           ['65%', 0.6],
-          ['0%', 0.5]
+          ['0%', 0.5],
         ]
         strictEqual(parseTextValue('95%').grade, '95%')
       })
@@ -1033,7 +1161,7 @@ QUnit.module('GradeInputHelper', () => {
           ['3.0', 0.8],
           ['2.0', 0.7],
           ['1.0', 0.6],
-          ['0.0', 0.5]
+          ['0.0', 0.5],
         ]
         strictEqual(parseTextValue('3.0').score, 8.9)
       })
@@ -1044,7 +1172,7 @@ QUnit.module('GradeInputHelper', () => {
           ['85%', 0.8],
           ['75%', 0.7],
           ['65%', 0.6],
-          ['0%', 0.5]
+          ['0%', 0.5],
         ]
         strictEqual(parseTextValue('85%').score, 8.9)
       })
@@ -1106,6 +1234,14 @@ QUnit.module('GradeInputHelper', () => {
         strictEqual(parseTextValue('E X').excused, false)
       })
 
+      test('sets late_policy_status to "missing" when the value is "MI"', () => {
+        strictEqual(parseTextValue('MI').late_policy_status, 'missing')
+      })
+
+      test('sets late_policy_status to null for any other value', () => {
+        strictEqual(parseTextValue('complete').late_policy_status, null)
+      })
+
       test('sets "enteredAs" to "excused" when given "EX"', () => {
         strictEqual(parseTextValue('EX').enteredAs, 'excused')
       })
@@ -1128,7 +1264,7 @@ QUnit.module('GradeInputHelper', () => {
           ['3.0', 0.8],
           ['2.0', 0.7],
           ['1.0', 0.6],
-          ['0.0', 0.5]
+          ['0.0', 0.5],
         ]
         strictEqual(parseTextValue('3.0').enteredAs, 'gradingScheme')
       })
@@ -1139,7 +1275,7 @@ QUnit.module('GradeInputHelper', () => {
           ['85%', 0.8],
           ['75%', 0.7],
           ['65%', 0.6],
-          ['0%', 0.5]
+          ['0%', 0.5],
         ]
         strictEqual(parseTextValue('85%').enteredAs, 'gradingScheme')
       })
@@ -1172,6 +1308,10 @@ QUnit.module('GradeInputHelper', () => {
         strictEqual(parseTextValue('EX').valid, true)
       })
 
+      test('sets "valid" to true when the value is "MI"', () => {
+        strictEqual(parseTextValue('MI').valid, true)
+      })
+
       test('sets "valid" to false when given non-numerical string not in the grading scheme', () => {
         strictEqual(parseTextValue('B-').valid, false)
       })
@@ -1181,7 +1321,7 @@ QUnit.module('GradeInputHelper', () => {
       hooks.beforeEach(() => {
         options = {
           enterGradesAs: 'passFail',
-          pointsPossible: 10
+          pointsPossible: 10,
         }
       })
 
@@ -1263,6 +1403,14 @@ QUnit.module('GradeInputHelper', () => {
         strictEqual(parseTextValue('E X').excused, false)
       })
 
+      test('sets late_policy_status to "missing" when the value is "MI"', () => {
+        strictEqual(parseTextValue('MI').late_policy_status, 'missing')
+      })
+
+      test('sets late_policy_status to null for any other value', () => {
+        strictEqual(parseTextValue('complete').late_policy_status, null)
+      })
+
       test('sets "enteredAs" to "excused" when given "EX"', () => {
         strictEqual(parseTextValue('EX').enteredAs, 'excused')
       })
@@ -1297,6 +1445,10 @@ QUnit.module('GradeInputHelper', () => {
 
       test('sets "valid" to true when given "EX"', () => {
         strictEqual(parseTextValue('EX').valid, true)
+      })
+
+      test('sets "valid" to true when the value is "MI"', () => {
+        strictEqual(parseTextValue('MI').valid, true)
       })
 
       test('sets "valid" to false when given any other value', () => {

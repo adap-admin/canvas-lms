@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -14,11 +16,9 @@
 #
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
-require_relative '../../common'
+require_relative "../../common"
 
 module NewCourseAddCourseModal
-
-
   # ---------------------- Controls ----------------------
   def add_course_modal
     f('[aria-label="Add a New Course"]')
@@ -56,7 +56,7 @@ module NewCourseAddCourseModal
   end
 
   def select_subaccount(subaccount)
-    click_INSTUI_Select_option(subaccount_select, subaccount.to_param, :value)
+    click_INSTUI_Select_option(subaccount_select, subaccount.name)
   end
 
   def select_enrollment_term(term_text)

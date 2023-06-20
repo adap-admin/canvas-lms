@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -17,21 +19,21 @@
 #
 
 module Factories
-  def user_service_model(opts={})
+  def user_service_model(opts = {})
     @user_service = factory_with_protected_attributes(UserService, valid_user_service_attributes.merge(opts))
   end
 
   def valid_user_service_attributes
     {
-      :user_id => User.create!.id,
-      :token => 'value for token',
-      :secret => 'value for secret', 
-      :protocol => 'value for protocol',
-      :service => 'value for service',
-      :service_user_url => 'value for service_user_url',
-      :service_user_id => 'value for service_user_id',
-      :service_user_name => 'value for service_user_name',
-      :service_domain => 'value for service_domain'
+      user_id: User.create!.id,
+      token: "value for token",
+      secret: "value for secret",
+      protocol: "value for protocol",
+      service: "value for service",
+      service_user_url: "value for service_user_url",
+      service_user_id: "value for service_user_id",
+      service_user_name: "value for service_user_name",
+      service_domain: "value for service_domain"
     }
   end
 end

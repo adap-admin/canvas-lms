@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2019 - present Instructure, Inc.
 #
@@ -17,11 +19,41 @@
 #
 
 class ContentShare < ActiveRecord::Base
+  TYPE_TO_CLASS = {
+    "assignment" => Assignment,
+    "attachment" => Attachment,
+    "discussion_topic" => DiscussionTopic,
+    "page" => WikiPage,
+    "quiz" => Quizzes::Quiz,
+    "module" => ContextModule,
+    "module_item" => ContentTag
+  }.freeze
+
+  CLASS_NAME_TO_TYPE = TYPE_TO_CLASS.transform_values(&:to_s).invert.freeze
 
   belongs_to :user
   belongs_to :content_export
-  belongs_to :sender, class_name: 'User', inverse_of: :content_shares
-  has_many :receiver_content_shares, through: :content_export, source: :sent_content_shares
-  has_many :receivers, through: :receiver_content_shares, source: :user
+  has_one :course, through: :content_export, source: :context, source_type: "Course"
+  has_one :group, through: :content_export, source: :context, source_type: "Group"
+  has_one :context_user, through: :content_export, source: :context, source_type: "User"
 
+  belongs_to :sender, class_name: "User"
+  belongs_to :root_account, class_name: "Account"
+
+  validates :read_state, inclusion: { in: %w[read unread] }
+
+  before_create :set_root_account_id
+
+  scope :by_date, -> { order(created_at: :desc) }
+
+  def clone_for(receiver)
+    receiver.received_content_shares.create!(sender: user,
+                                             content_export:,
+                                             name:,
+                                             read_state: "unread")
+  end
+
+  def set_root_account_id
+    self.root_account_id = content_export&.context&.root_account_id if content_export&.context.respond_to?(:root_account_id)
+  end
 end

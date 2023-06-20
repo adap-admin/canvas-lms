@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2011 - present Instructure, Inc.
 #
@@ -26,13 +28,18 @@ class Score < ActiveRecord::Base
   has_one :score_metadata
 
   validates :enrollment, presence: true
-  validates :current_score, :unposted_current_score,
-    :final_score, :unposted_final_score, :override_score,
-    numericality: true, allow_nil: true
+  validates :current_score,
+            :unposted_current_score,
+            :final_score,
+            :unposted_final_score,
+            :override_score,
+            numericality: true,
+            allow_nil: true
 
   validate :scorable_association_check
 
   before_validation :set_course_score, unless: :course_score_changed?
+  before_save :set_root_account_id
 
   set_policy do
     given do |user, _session|
@@ -43,21 +50,21 @@ class Score < ActiveRecord::Base
     can :read
   end
 
-  alias original_destroy destroy
+  alias_method :original_destroy, :destroy
   private :original_destroy
   def destroy
     score_metadata.destroy if score_metadata.present?
     original_destroy
   end
 
-  alias original_destroy_permanently! destroy_permanently!
+  alias_method :original_destroy_permanently!, :destroy_permanently!
   private :original_destroy_permanently!
   def destroy_permanently!
     ScoreMetadata.where(score: self).delete_all
     original_destroy_permanently!
   end
 
-  alias original_undestroy undestroy
+  alias_method :original_undestroy, :undestroy
   private :original_undestroy
   def undestroy
     score_metadata.undestroy if score_metadata.present?
@@ -78,6 +85,10 @@ class Score < ActiveRecord::Base
 
   def unposted_final_grade
     score_to_grade(unposted_final_score)
+  end
+
+  def override_grade
+    override_score.present? ? score_to_grade(override_score) : nil
   end
 
   def effective_final_score
@@ -105,6 +116,10 @@ class Score < ActiveRecord::Base
 
   private
 
+  def set_root_account_id
+    self.root_account_id ||= enrollment&.root_account_id
+  end
+
   def set_course_score
     gpid = read_attribute(:grading_period_id)
     agid = read_attribute(:assignment_group_id)
@@ -121,7 +136,7 @@ class Score < ActiveRecord::Base
     elsif scc > 1
       errors.add(:base, "may not have multiple scorable associations")
     else
-      return true
+      true
     end
   end
 

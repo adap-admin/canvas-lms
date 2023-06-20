@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2013 - present Instructure, Inc.
 #
@@ -15,7 +17,6 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-
 
 # Public: Represents a reply-to address for a message.
 class IncomingMail::ReplyToAddress
@@ -36,21 +37,21 @@ class IncomingMail::ReplyToAddress
   #
   # Returns an email address string.
   def address
-    return nil if message.path_type == 'sms'
-    return message.from if message.context_type == 'ErrorReport'
+    return nil if message.path_type == "sms"
+    return message.from if message.context_type == "ErrorReport"
 
-    address, domain = self.class.address_from_pool(message).split('@')
+    address, domain = self.class.address_from_pool(message).split("@")
     "#{address}+#{secure_id}-#{Shard.short_id_for(message.global_id)}-#{message.created_at.to_i}@#{domain}"
   end
 
-  alias :to_s :address
+  alias_method :to_s, :address
 
   # Public: Generate the unique, secure ID for this address' message.
   #
   # Returns a secure ID string.
   def secure_id
     gid = message.global_id
-    Canvas::Security.hmac_sha1(Shard.short_id_for(gid).to_s)
+    Canvas::Security.hmac_sha1(Shard.short_id_for(gid).to_s)[0..15]
   end
 
   class << self
@@ -66,6 +67,7 @@ class IncomingMail::ReplyToAddress
     # Returns an email address string.
     def address_from_pool(message)
       raise EmptyReplyAddressPool unless address_pool.present?
+
       index = if message.id.present?
                 message.id % address_pool.length
               else
@@ -76,6 +78,7 @@ class IncomingMail::ReplyToAddress
     end
 
     private
+
     # Internal: Array of email addresses to use as Reply-To addresses.
     attr_reader :address_pool
   end

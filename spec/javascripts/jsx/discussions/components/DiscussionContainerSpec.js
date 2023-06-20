@@ -23,8 +23,8 @@ import moment from 'moment'
 import {
   DiscussionsContainer,
   mapState,
-  discussionTarget
-} from 'jsx/discussions/components/DiscussionContainer'
+  discussionTarget,
+} from 'ui/features/discussion_topics_index/react/components/DiscussionContainer'
 
 const defaultProps = () => ({
   title: 'discussions',
@@ -36,7 +36,7 @@ const defaultProps = () => ({
   hasLoadedDiscussions: false,
   getDiscussions: () => {},
   roles: ['student', 'user'],
-  renderContainerBackground: () => {}
+  renderContainerBackground: () => {},
 })
 
 QUnit.module('DiscussionsContainer component')
@@ -47,21 +47,23 @@ test('renders the component', () => {
   ok(node.exists())
 })
 
-QUnit.module('for pinned discussions', function() {
-  test('renders the component Ordered by Recent Activity text', () => {
+QUnit.module('for pinned discussions', () => {
+  test('renders the component Ordered by Recent Activity text when not pinned', () => {
     const props = defaultProps()
+    props.discussions = []
     props.pinned = undefined
-    const tree = shallow(<DiscussionsContainer {...props} />)
+    const tree = mount(<DiscussionsContainer {...props} />)
     const node = tree.find('.recent-activity-text-container')
     ok(node.exists())
   })
 
-  test('will not render the component Ordered by Recent Activity text', () => {
+  test('will not render the component Ordered by Recent Activity text when pinned', () => {
     const props = defaultProps()
+    props.discussions = []
     props.pinned = true
-    const tree = shallow(<DiscussionsContainer {...defaultProps()} />)
+    const tree = mount(<DiscussionsContainer {...props} />)
     const node = tree.find('.recent-activity-text-container')
-    ok(node.exists())
+    notOk(node.exists())
   })
 })
 
@@ -81,7 +83,7 @@ test('renders passed in component when renderContainerBackground is present', ()
 test('renders regular discussion row when user does not have moderate permissions', () => {
   const props = defaultProps()
   const tree = shallow(<DiscussionsContainer {...props} />)
-  const node = tree.find('Connect(DiscussionRow)')
+  const node = tree.find('Connect(WithDateFormat(DiscussionRow))')
   ok(node.exists())
 })
 
@@ -89,13 +91,13 @@ test('renders a draggable discussion row when user has moderate permissions', ()
   const props = defaultProps()
   props.permissions.moderate = true
   const tree = shallow(<DiscussionsContainer {...props} />)
-  const node = tree.find('Connect(DropTarget(DragSource(DiscussionRow)))')
+  const node = tree.find('Connect(DropTarget(DragSource(WithDateFormat(DiscussionRow))))')
   ok(node.exists())
 })
 
 test('discussionTarget canDrop returns false if assignment due_at is in the past', () => {
   const assignment = {due_at: '2017-05-13T00:59:59Z'}
-  const getItem = function() {
+  const getItem = function () {
     return {assignment}
   }
   const mockMonitor = {getItem}
@@ -104,7 +106,7 @@ test('discussionTarget canDrop returns false if assignment due_at is in the past
 
 test('discussionTarget canDrop returns true if not dragging to closed state', () => {
   const assignment = {due_at: '2018-05-13T00:59:59Z'}
-  const getItem = function() {
+  const getItem = function () {
     return {assignment}
   }
   const mockMonitor = {getItem}
@@ -114,7 +116,7 @@ test('discussionTarget canDrop returns true if not dragging to closed state', ()
 test('discussionTarget canDrop returns true if assignment due_at is in the future', () => {
   const dueAt = moment().add(7, 'days')
   const assignment = {due_at: dueAt.format()}
-  const getItem = function() {
+  const getItem = function () {
     return {assignment}
   }
   const mockMonitor = {getItem}
@@ -124,7 +126,10 @@ test('discussionTarget canDrop returns true if assignment due_at is in the futur
 test('connected mapStateToProps filters out filtered discussions', () => {
   const state = {}
   const ownProps = {
-    discussions: [{id: 1, filtered: true}, {id: 2, filtered: false}]
+    discussions: [
+      {id: 1, filtered: true},
+      {id: 2, filtered: false},
+    ],
   }
   const connectedProps = mapState(state, ownProps)
   deepEqual(connectedProps.discussions, [{id: 2, filtered: false}])

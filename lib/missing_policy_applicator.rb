@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -21,10 +23,10 @@ class MissingPolicyApplicator
   end
 
   def apply_missing_deductions
-    Shackles.activate(:slave) do
+    GuardRail.activate(:secondary) do
       recently_missing_submissions.find_in_batches do |submissions|
         filtered_submissions = submissions.reject { |s| s.grading_period&.closed? }
-        filtered_submissions.group_by(&:assignment).each(&method(:apply_missing_deduction))
+        filtered_submissions.group_by(&:assignment).each { |k, v| apply_missing_deduction(k, v) }
       end
     end
   end
@@ -33,13 +35,17 @@ class MissingPolicyApplicator
 
   def recently_missing_submissions
     now = Time.zone.now
-    Submission.active.
-      joins(assignment: {course: :late_policy}).
-      eager_load(:grading_period, assignment: { course: :late_policy }).
-      for_enrollments(Enrollment.all_active_or_pending).
-      missing.
-      where(score: nil, grade: nil, cached_due_date: 1.day.ago(now)..now,
-            late_policies: { missing_submission_deduction_enabled: true })
+    Submission.active
+              .joins(assignment: { course: [:late_policy, :enrollments] })
+              .where("enrollments.user_id = submissions.user_id")
+              .preload(:grading_period, assignment: :post_policy, course: [:late_policy, :default_post_policy])
+              .merge(Assignment.published)
+              .merge(Enrollment.all_active_or_pending)
+              .missing
+              .where(score: nil,
+                     grade: nil,
+                     cached_due_date: 1.day.ago(now)..now,
+                     late_policies: { missing_submission_deduction_enabled: true })
   end
 
   # Given submissions must all be for the same assignment
@@ -48,11 +54,14 @@ class MissingPolicyApplicator
     grade = assignment.score_to_grade(score)
     now = Time.zone.now
 
-    Shackles.activate(:master) do
-      Submission.active.where(id: submissions).update_all(
-        score: score,
-        grade: grade,
+    GuardRail.activate(:primary) do
+      submissions = Submission.active.where(id: submissions)
+
+      submissions.update_all(
+        score:,
+        grade:,
         graded_at: now,
+        grader_id: nil,
         posted_at: assignment.post_manually? ? nil : now,
         published_score: score,
         published_grade: grade,
@@ -60,6 +69,14 @@ class MissingPolicyApplicator
         updated_at: now,
         workflow_state: "graded"
       )
+
+      if assignment.course.root_account.feature_enabled?(:missing_policy_applicator_emits_live_events)
+        Canvas::LiveEvents.delay_if_production.submissions_bulk_updated(submissions)
+      end
+
+      if Account.site_admin.feature_enabled?(:fix_missing_policy_applicator_gradebook_history)
+        Auditors::GradeChange.delay_if_production.bulk_record_submission_events(submissions.reload)
+      end
 
       assignment.course.recompute_student_scores(submissions.map(&:user_id).uniq)
     end

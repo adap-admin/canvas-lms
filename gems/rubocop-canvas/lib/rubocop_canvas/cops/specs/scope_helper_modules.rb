@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -19,9 +21,9 @@ module RuboCop
   module Cop
     module Specs
       class ScopeHelperModules < Cop
-        MSG = "Define all helper and factory methods within modules"\
-              " (or `shared_context`). Otherwise they will live on Object"\
-              " and potentially wreak havoc on other specs."
+        MSG = "Define all helper and factory methods within modules " \
+              "(or `shared_context`). Otherwise they will live on Object " \
+              "and potentially wreak havoc on other specs."
 
         WHITELISTED_BLOCKS = %i[
           class_eval
@@ -34,6 +36,7 @@ module RuboCop
 
         def on_def(node)
           return unless top_level_def?(node)
+
           add_offense node, message: MSG, severity: :warning
         end
 
@@ -43,9 +46,10 @@ module RuboCop
           return false unless node.def_type?
           return false if node.ancestors.any? do |ancestor|
             ancestor.module_type? || ancestor.class_type? ||
-              ancestor.type == :block &&
-                WHITELISTED_BLOCKS.include?(ancestor.method_name)
+            (ancestor.type == :block &&
+            WHITELISTED_BLOCKS.include?(ancestor.method_name))
           end
+
           true
         end
       end

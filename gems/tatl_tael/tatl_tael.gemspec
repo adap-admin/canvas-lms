@@ -1,6 +1,4 @@
-# coding: utf-8
-lib = File.expand_path('../lib', __FILE__)
-$LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
+# frozen_string_literal: true
 
 Gem::Specification.new do |spec|
   spec.name          = "tatl_tael"
@@ -10,10 +8,9 @@ Gem::Specification.new do |spec|
   spec.summary       = "Commit level linting."
 
   spec.files         = Dir.glob("{lib,spec,bin}/**/*")
-  spec.test_files    = spec.files.grep(%r{^spec/})
   spec.require_paths = ["lib"]
 
-  spec.add_development_dependency "rspec", "~> 3.5.0"
-  spec.add_development_dependency "fakefs", "0.11.0"
-  spec.add_development_dependency "timecop", "0.8.1"
+  spec.add_development_dependency "fakefs", "~> 1.2"
+  spec.add_development_dependency "rspec", "~> 3.12"
+  spec.add_development_dependency "timecop", "~> 0.9"
 end

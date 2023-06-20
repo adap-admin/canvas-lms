@@ -16,39 +16,51 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React from "react";
-import { render, unmountComponentAtNode } from "react-dom";
-import RCEWrapper from "./RCEWrapper";
-import tinyRCE from "./tinyRCE";
-import normalizeProps from "./normalizeProps";
-import formatMessage from "../format-message";
-import Bridge from "../bridge";
+import React, {createRef} from 'react'
+import {render, unmountComponentAtNode} from 'react-dom'
+import RCEWrapper from './RCEWrapper'
+import normalizeProps from './normalizeProps'
+import formatMessage from '../format-message'
 
-if (!process.env.BUILD_LOCALE) {
+if (!process?.env?.BUILD_LOCALE) {
   formatMessage.setup({
-    locale: "en",
-    generateId: require("format-message-generate-id/underscored_crc32"),
-    missingTranslation: "ignore"
-  });
+    locale: 'en',
+    generateId: require('format-message-generate-id/underscored_crc32'),
+    missingTranslation: 'ignore',
+  })
 }
 
 export function renderIntoDiv(target, props, renderCallback) {
-  // normalize props
-  props = normalizeProps(props, tinyRCE);
+  import('./tinyRCE')
+    .then(module => {
+      const tinyRCE = module.default
 
-  formatMessage.setup({ locale: props.language });
-  // render the editor to the target element
-  const renderedComponent = render(
-    <RCEWrapper
-      {...props}
-      handleUnmount={() => unmountComponentAtNode(target)}
-    />,
-    target
-  );
+      // normalize props
+      props = normalizeProps(props, tinyRCE)
 
-  // connect the editor to the event bridge if no editor is currently active
-  Bridge.renderEditor(renderedComponent);
-
-  // pass it back
-  renderCallback && renderCallback(renderedComponent);
+      formatMessage.setup({locale: props.language})
+      // render the editor to the target element
+      const renderedComponent = createRef()
+      render(
+        <RCEWrapper
+          ref={renderedComponent}
+          {...props}
+          handleUnmount={() => unmountComponentAtNode(target)}
+        />,
+        target,
+        () => {
+          // pass it back
+          renderCallback && renderCallback(renderedComponent.current)
+        }
+      )
+    })
+    .catch(err => {
+      // eslint-disable-next-line no-console
+      console.error('Failed loading RCE', err)
+    })
 }
+
+// Adding this event listener fixes LA-212. I have no idea why. In Safari it
+// lets the user scroll the iframe via the mouse wheel without having to resize
+// the RCE or the window or something else first.
+if (window) window.addEventListener('wheel', () => {})

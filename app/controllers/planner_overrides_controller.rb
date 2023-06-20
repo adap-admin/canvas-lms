@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2017 - present Instructure, Inc.
 #
@@ -89,7 +91,6 @@ class PlannerOverridesController < ApplicationController
   include Api::V1::PlannerOverride
 
   before_action :require_user
-  before_action :require_planner_enabled
 
   # @API List planner overrides
   #
@@ -98,7 +99,7 @@ class PlannerOverridesController < ApplicationController
   # @returns [PlannerOverride]
   def index
     planner_overrides = Api.paginate(PlannerOverride.for_user(@current_user).active, self, api_v1_planner_overrides_url)
-    render :json => planner_overrides.map { |po| planner_override_json(po, @current_user, session) }
+    render json: planner_overrides.map { |po| planner_override_json(po, @current_user, session) }
   end
 
   # @API Show a planner override
@@ -157,14 +158,26 @@ class PlannerOverridesController < ApplicationController
   def create
     plannable_type = PlannerHelper::PLANNABLE_TYPES[params[:plannable_type]]
     plannable = plannable_type.constantize.find(params[:plannable_id])
-    planner_override = PlannerOverride.new(plannable: plannable, marked_complete: value_to_boolean(params[:marked_complete]),
-      user: @current_user, dismissed: value_to_boolean(params[:dismissed]))
+    planner_override = PlannerOverride.new(plannable:,
+                                           marked_complete: value_to_boolean(params[:marked_complete]),
+                                           user: @current_user,
+                                           dismissed: value_to_boolean(params[:dismissed]))
     sync_module_requirement_done(plannable, @current_user, value_to_boolean(params[:marked_complete]))
 
-    if planner_override.save
-      Rails.cache.delete(planner_meta_cache_key)
-      render json: planner_override_json(planner_override, @current_user, session), status: :created
-    else
+    begin
+      if planner_override.save
+        Rails.cache.delete(planner_meta_cache_key)
+        render json: planner_override_json(planner_override, @current_user, session), status: :created
+      else
+        render json: planner_override.errors, status: :bad_request
+      end
+    rescue ActiveRecord::RecordNotUnique => e
+      # although a callback tries to validate the uniqueness here on the model,
+      # there's a race condition where 2 requests try to create a planner
+      # here at almost the exact same time.  This should fail the second
+      # one gracefully rather than sending a 500.
+      Canvas::Errors.capture_exception(:planner_overrides, e, :info)
+      planner_override.errors.add(:plannable_id, :already_exists, message: "A planner override for this item already exists")
       render json: planner_override.errors, status: :bad_request
     end
   end

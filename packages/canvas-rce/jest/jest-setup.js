@@ -16,9 +16,12 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
- // Several components use aphrodite, which tries to manipulate the dom
- // on a timer which expires after the test completes and the document no longer exists
+// Several components use aphrodite, which tries to manipulate the dom
+// on a timer which expires after the test completes and the document no longer exists
 import {StyleSheetTestUtils} from 'aphrodite'
+import {filterUselessConsoleMessages} from '@instructure/js-utils'
+
+filterUselessConsoleMessages(console)
 StyleSheetTestUtils.suppressStyleInjection()
 
 // because InstUI themeable components need an explicit "dir" attribute on the <html> element
@@ -29,12 +32,29 @@ require('@instructure/ui-themes')
 // set up mocks for native APIs
 if (!('MutationObserver' in window)) {
   Object.defineProperty(window, 'MutationObserver', {
-    value: require('@sheerun/mutationobserver-shim')
+    value: require('@sheerun/mutationobserver-shim'),
+  })
+}
+
+if (!('ResizeObserver' in window)) {
+  Object.defineProperty(window, 'ResizeObserver', {
+    writable: true,
+    configurable: true,
+    value: class IntersectionObserver {
+      observe() {
+        return null
+      }
+
+      unobserve() {
+        return null
+      }
+    },
   })
 }
 
 if (typeof window.URL.createObjectURL === 'undefined') {
-  Object.defineProperty(window.URL, 'createObjectURL', { value: ()=> {}})
+  Object.defineProperty(window.URL, 'createObjectURL', {value: () => 'http://example.com/whatever'})
 }
 
 window.scroll = () => {}
+window.ENV = {}

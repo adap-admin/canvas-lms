@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -15,28 +17,29 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
+require "forwardable"
+
 module DrDiff
   class Manager
-    attr_reader :git
+    attr_reader :git, :git_dir, :campsite, :heavy, :base_dir, :severe_anywhere
+
     private :git
-
-    attr_reader :git_dir
     private :git_dir
-
-    attr_reader :campsite
     private :campsite
-
-    attr_reader :base_dir
+    private :heavy
     private :base_dir
+    private :severe_anywhere
 
     # all levels: %w(error warn info)
-    SEVERE_LEVELS = %w(error warn).freeze
+    SEVERE_LEVELS = %w[error warn].freeze
 
-    def initialize(git: nil, git_dir: nil, sha: nil, campsite: true, base_dir: nil)
+    def initialize(git: nil, git_dir: nil, sha: nil, campsite: true, heavy: false, base_dir: nil, severe_anywhere: true)
       @git_dir = git_dir
-      @git = git || GitProxy.new(git_dir: git_dir, sha: sha)
+      @git = git || GitProxy.new(git_dir:, sha:)
       @campsite = campsite
+      @heavy = heavy
       @base_dir = base_dir || ""
+      @severe_anywhere = severe_anywhere
     end
 
     extend Forwardable
@@ -59,17 +62,21 @@ module DrDiff
                  severe_levels: SEVERE_LEVELS)
 
       command_comments = CommandCapture.run(format, command)
-      diff = DiffParser.new(git.diff, true, campsite)
+      diff = DiffParser.new(git.diff, raw: true, campsite:)
 
       result = []
 
       command_comments.each do |comment|
         path = comment[:path]
-        path = path[git_dir.length..-1] if git_dir
-        if diff.relevant?(path, comment[:position], severe?(comment[:severity], severe_levels))
-          comment[:path] = path unless include_git_dir_in_output
-          result << comment
-        end
+        path = path[git_dir.length..] if git_dir
+        severe = severe?(comment[:severity], severe_levels)
+        next unless heavy ||
+                    (severe && severe_anywhere) ||
+                    diff.relevant?(path, comment[:position], severe:) ||
+                    comment[:corrected]
+
+        comment[:path] = path unless include_git_dir_in_output
+        result << comment
       end
 
       result
@@ -78,11 +85,7 @@ module DrDiff
     private
 
     def severe?(level, severe_levels)
-      if UserConfig.only_report_errors?
-        level == 'error'
-      else
-        severe_levels.include?(level)
-      end
+      severe_levels.include?(level)
     end
   end
 end

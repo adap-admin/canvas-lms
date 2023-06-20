@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2015 - present Instructure, Inc.
 #
@@ -16,7 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 module Factories
-  def grading_standard_for(context, opts={})
+  def grading_standard_for(context, opts = {})
     @standard = context.grading_standards.create!(
       title: opts[:title] || "My Grading Standard",
       standard_data: {

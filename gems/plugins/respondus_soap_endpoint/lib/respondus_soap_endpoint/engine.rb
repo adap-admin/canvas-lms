@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2014 - present Instructure, Inc.
 #
@@ -17,20 +19,23 @@
 
 module RespondusSoapEndpoint
   class Railtie < ::Rails::Engine
-    initializer "respondus_soap_endpoint.canvas_plugin" do |app|
-      require 'respondus_soap_endpoint/plugin_validator'
+    initializer "respondus_soap_endpoint.canvas_plugin" do
+      require "respondus_soap_endpoint/plugin_validator"
+    end
+
+    config.to_prepare do
       Canvas::Plugin.register :respondus_soap_endpoint, nil, {
-        name: ->{ t :name, 'Respondus SOAP Endpoint' },
-        author: 'instructure',
-        author_website: 'http://www.instructure.com',
-        description: ->{ t :description, 'SOAP Endpoint for Respondus QTI uploads' },
+        name: -> { t :name, "Respondus SOAP Endpoint" },
+        author: "instructure",
+        author_website: "http://www.instructure.com",
+        description: -> { t :description, "SOAP Endpoint for Respondus QTI uploads" },
         version: RespondusSoapEndpoint::VERSION,
-        settings_partial: 'respondus_soap_endpoint/plugin_settings',
+        settings_partial: "respondus_soap_endpoint/plugin_settings",
         settings: {
           enabled: false,
-          worker: 'QtiWorker',
+          worker: "QtiWorker",
         },
-        validator: 'RespondusSoapEndpointPluginValidator',
+        validator: "RespondusSoapEndpointPluginValidator",
       }
     end
 

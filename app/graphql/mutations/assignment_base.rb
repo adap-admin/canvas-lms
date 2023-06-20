@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -46,7 +48,6 @@ class Mutations::AssignmentPeerReviewsUpdate < GraphQL::Schema::InputObject
 end
 
 class Mutations::AssignmentBase < Mutations::BaseMutation
-
   # we are required to wrap the update method with a proxy class because
   # we are required to include `Api` for instance methods within the module.
   # the main problem is that including the `Api` module conflicts with the
@@ -88,7 +89,7 @@ class Mutations::AssignmentBase < Mutations::BaseMutation
     end
 
     def load_root_account
-      @domain_root_account = @request.env['canvas.domain_root_account'] || LoadAccount.default_domain_root_account
+      @domain_root_account = @request.env["canvas.domain_root_account"] || LoadAccount.default_domain_root_account
     end
   end
 
@@ -106,16 +107,17 @@ class Mutations::AssignmentBase < Mutations::BaseMutation
   argument :assignment_group_id, ID, required: false
   argument :group_set_id, ID, required: false
   argument :allowed_attempts, Int, required: false
-  argument :muted, Boolean, required: false
   argument :only_visible_to_overrides, Boolean, required: false
-  argument :submission_types, [Types::AssignmentType::AssignmentSubmissionType], required: false
+  argument :submission_types, [Types::AssignmentSubmissionType], required: false
   argument :peer_reviews, Mutations::AssignmentPeerReviewsUpdate, required: false
   argument :moderated_grading, Mutations::AssignmentModeratedGradingUpdate, required: false
   argument :grade_group_students_individually, Boolean, required: false
+  argument :group_category_id, ID, required: false
   argument :omit_from_final_grade, Boolean, required: false
   argument :anonymous_instructor_annotations, Boolean, required: false
   argument :post_to_sis, Boolean, required: false
-  argument :anonymous_grading, Boolean,
+  argument :anonymous_grading,
+           Boolean,
            "requires anonymous_marking course feature to be set to true",
            required: false
   argument :module_ids, [ID], required: false
@@ -166,8 +168,10 @@ class Mutations::AssignmentBase < Mutations::BaseMutation
     if input_hash.key? :moderated_grading
       moderated_grading = input_hash.delete(:moderated_grading)
       input_hash[:moderated_grading] = moderated_grading[:enabled] if moderated_grading.key? :enabled
-      input_hash.merge!(moderated_grading.slice(:grader_count, :grader_comments_visible_to_graders,
-                                                            :grader_names_visible_to_final_grader, :graders_anonymous_to_graders))
+      input_hash.merge!(moderated_grading.slice(:grader_count,
+                                                :grader_comments_visible_to_graders,
+                                                :grader_names_visible_to_final_grader,
+                                                :graders_anonymous_to_graders))
       if moderated_grading.key? :final_grader_id
         input_hash[:final_grader_id] = GraphQLHelpers.parse_relay_or_legacy_id(moderated_grading[:final_grader_id], "User")
       end
@@ -214,7 +218,7 @@ class Mutations::AssignmentBase < Mutations::BaseMutation
     module_ids_to_add = (required_module_ids - current_module_ids).to_a
     unless module_ids_to_add.empty?
       ContextModule.find(module_ids_to_add).each do |context_module|
-        context_module.add_item(:id => @working_assignment.id, :type => 'assignment')
+        context_module.add_item(id: @working_assignment.id, type: "assignment")
       end
     end
 

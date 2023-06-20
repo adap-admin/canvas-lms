@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2018 - present Instructure, Inc.
 #
@@ -15,14 +17,12 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require 'spec_helper'
-
-RSpec.describe ScoreStatistic, type: :model do
-  describe 'relationships' do
+RSpec.describe ScoreStatistic do
+  describe "relationships" do
     it { is_expected.to belong_to(:assignment).required }
   end
 
-  describe 'validations' do
+  describe "validations" do
     it { is_expected.to validate_presence_of(:assignment) }
     it { is_expected.to validate_presence_of(:maximum) }
     it { is_expected.to validate_presence_of(:minimum) }

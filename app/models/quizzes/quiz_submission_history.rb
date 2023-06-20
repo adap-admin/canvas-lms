@@ -1,5 +1,5 @@
-# encoding: UTF-8
-#
+# frozen_string_literal: true
+
 # Copyright (C) 2013 - present Instructure, Inc.
 #
 # This file is part of Canvas.
@@ -42,7 +42,7 @@ class Quizzes::QuizSubmissionHistory
   def version_models
     last_versions.map do |version|
       model = version.model
-      model&.attempt == @submission.attempt ? @submission : model
+      (model&.attempt == @submission.attempt) ? @submission : model
     end
   end
 
@@ -50,27 +50,25 @@ class Quizzes::QuizSubmissionHistory
     if attempt == @submission.attempt
       @submission
     else
-      version_models.detect {|qs| qs.attempt == attempt }
+      version_models.detect { |qs| qs.attempt == attempt }
     end
   end
 
   def kept
-    @kept ||= begin
-      if @submission.score == @submission.kept_score
-        @submission
-      else
-        version_models.detect {|v| v.score == @submission.kept_score }
-      end
-    end
+    @kept ||= if @submission.score == @submission.kept_score
+                @submission
+              else
+                version_models.detect { |v| v.score == @submission.kept_score }
+              end
   end
 
   private
 
   def build_attempts(quiz_submission)
     attempts = quiz_submission_attempts(quiz_submission).map do |num, versions|
-      Quizzes::QuizSubmissionAttempt.new(:number => num, :versions => versions)
+      Quizzes::QuizSubmissionAttempt.new(number: num, versions:)
     end
-    attempts.sort_by { |a| a.number }
+    attempts.sort_by(&:number)
   end
 
   def quiz_submission_attempts(quiz_submission)

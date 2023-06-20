@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # Copyright (C) 2016 - present Instructure, Inc.
 #
@@ -24,8 +26,8 @@
 class AnnouncementsApiController < ApplicationController
   include Api::V1::DiscussionTopics
 
-  before_action :parse_context_codes, :only => [:index]
-  before_action :get_dates, :only => [:index]
+  before_action :parse_context_codes, only: [:index]
+  before_action :get_dates, only: [:index]
 
   # @API List announcements
   #
@@ -50,6 +52,11 @@ class AnnouncementsApiController < ApplicationController
   #   unpublished items.
   #   Defaults to false for users with access to view unpublished items,
   #   otherwise true and unmodifiable.
+  # @argument latest_only [Optional, Boolean]
+  #   Only return the latest announcement for each associated context.
+  #   The response will include at most one announcement for each
+  #   specified context in the context_codes[] parameter.
+  #   Defaults to false.
   #
   # @argument include [Optional, array]
   #   Optional list of resources to include with the response. May include
@@ -81,34 +88,54 @@ class AnnouncementsApiController < ApplicationController
   # @returns [DiscussionTopic]
   def index
     courses = api_find_all(Course, @course_ids)
-    return unless courses.all? { |course| authorized_action(course, @current_user, :read_announcements) }
 
-    scope = Announcement.where(:context_type => 'Course', :context_id => courses)
+    scope = Announcement.where(context_type: "Course", context_id: courses)
 
     include_unpublished = courses.all? { |course| course.grants_right?(@current_user, :view_unpublished_items) }
     scope = if include_unpublished && !value_to_boolean(params[:active_only])
-      scope.where.not(:workflow_state => 'deleted')
-    else
-      # workflow state should be 'post_delayed' if delayed_post_at is in the future, but check because other endpoints do
-      scope.where(:workflow_state => 'active').where('delayed_post_at IS NULL OR delayed_post_at<?', Time.now.utc)
-    end
+              scope.where.not(workflow_state: "deleted")
+            else
+              # workflow state should be 'post_delayed' if delayed_post_at is in the future, but check because other endpoints do
+              scope.where(workflow_state: "active").where("delayed_post_at IS NULL OR delayed_post_at<?", Time.now.utc)
+            end
 
     @start_date ||= 14.days.ago.beginning_of_day
     @end_date ||= @start_date + 28.days
-    scope = scope.where('COALESCE(delayed_post_at, posted_at, created_at) BETWEEN ? AND ?', @start_date, @end_date)
-    scope = scope.order(Arel.sql('COALESCE(delayed_post_at, posted_at, created_at) DESC'))
+    if value_to_boolean(params[:latest_only])
+      scope = scope.ordered_between_by_context(@start_date, @end_date)
+      scope = scope.select("DISTINCT ON (context_id) *")
+    else
+      scope = scope.ordered_between(@start_date, @end_date)
+    end
+
+    # only filter by section visibility if user has no course manage rights
+    skip_section_filtering = courses.all? do |course|
+      course.grants_any_right?(
+        @current_user,
+        :read_as_admin,
+        :manage_grades,
+        *RoleOverride::GRANULAR_MANAGE_ASSIGNMENT_PERMISSIONS,
+        :manage_content,
+        *RoleOverride::GRANULAR_MANAGE_COURSE_CONTENT_PERMISSIONS
+      )
+    end
+    scope = scope.visible_to_student_sections(@current_user) unless skip_section_filtering
 
     @topics = Api.paginate(scope, self, api_v1_announcements_url)
 
     include_params = Array(params[:include])
     text_only = value_to_boolean(params[:text_only])
 
-    render :json => discussion_topics_api_json(@topics, nil, @current_user, session,
-      :user_can_moderate => false, :include_assignment => false,
-      :include_context_code => true, :text_only => text_only,
-      :include_sections => include_params.include?('sections'),
-      :include_sections_user_count => include_params.include?('sections_user_count')
-    )
+    render json: discussion_topics_api_json(@topics,
+                                            nil,
+                                            @current_user,
+                                            session,
+                                            user_can_moderate: false,
+                                            include_assignment: false,
+                                            include_context_code: true,
+                                            text_only:,
+                                            include_sections: include_params.include?("sections"),
+                                            include_sections_user_count: include_params.include?("sections_user_count"))
   end
 
   private
@@ -116,13 +143,14 @@ class AnnouncementsApiController < ApplicationController
   def parse_context_codes
     context_codes = Array(params[:context_codes])
     if context_codes.empty?
-      return render :json => { :message => 'Missing context_codes' }, :status => :bad_request
+      return render json: { message: "Missing context_codes" }, status: :bad_request
     end
+
     @course_ids = context_codes.inject([]) do |ids, context_code|
       klass, id = ActiveRecord::Base.parse_asset_string(context_code)
-      unless klass == 'Course'
-        return render :json => { :message => 'Invalid context_codes; only `course` codes are supported' },
-                      :status => :bad_request
+      unless klass == "Course"
+        return render json: { message: "Invalid context_codes; only `course` codes are supported" },
+                      status: :bad_request
       end
       ids << id
     end
@@ -130,23 +158,23 @@ class AnnouncementsApiController < ApplicationController
 
   def get_dates
     if params[:start_date].present?
-      if params[:start_date] =~ Api::DATE_REGEX
+      if Api::DATE_REGEX.match?(params[:start_date])
         @start_date ||= Time.zone.parse(params[:start_date]).beginning_of_day
-      elsif params[:start_date] =~ Api::ISO8601_REGEX
+      elsif Api::ISO8601_REGEX.match?(params[:start_date])
         @start_date ||= Time.zone.parse(params[:start_date])
       else
-        render :json => { :message => 'Invalid start_date' }, :status => :bad_request
+        render json: { message: "Invalid start_date" }, status: :bad_request
         return false
       end
     end
 
     if params[:end_date].present?
-      if params[:end_date] =~ Api::DATE_REGEX
+      if Api::DATE_REGEX.match?(params[:end_date])
         @end_date ||= Time.zone.parse(params[:end_date]).end_of_day
-      elsif params[:end_date] =~ Api::ISO8601_REGEX
+      elsif Api::ISO8601_REGEX.match?(params[:end_date])
         @end_date ||= Time.zone.parse(params[:end_date])
       else
-        render :json => { :message => 'Invalid end_date' }, :status => :bad_request
+        render json: { message: "Invalid end_date" }, status: :bad_request
         return false
       end
     end
