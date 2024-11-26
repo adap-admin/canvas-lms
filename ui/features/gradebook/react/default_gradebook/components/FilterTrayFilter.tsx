@@ -20,9 +20,9 @@ import React from 'react'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import {SimpleSelect} from '@instructure/ui-simple-select'
 import CanvasDateInput from '@canvas/datetime/react/components/DateInput'
-import moment from 'moment'
-import {MomentInput} from 'moment-timezone'
-import tz from '@canvas/timezone'
+import type {MomentInput} from 'moment-timezone'
+import * as tz from '@instructure/moment-utils'
+import {isoDateFromInput} from '../../../util/DateUtils'
 import type {CamelizedGradingPeriod} from '@canvas/grading/grading.d'
 import type {Filter, FilterType, SubmissionFilterValue} from '../gradebook.d'
 import type {
@@ -104,7 +104,11 @@ export default function ({
       break
     }
     case 'section': {
-      items = [blankItem].concat(sections.map(({id, name}) => [id, name]))
+      items = [blankItem].concat(
+        sections
+          .sort((s1, s2) => natcompare.strings(s1.name, s2.name))
+          .map(({id, name}) => [id, name])
+      )
       break
     }
     case 'student-group': {
@@ -136,7 +140,7 @@ export default function ({
     <>
       {(items.length > 0 || itemGroups.length > 0) && (
         <SimpleSelect
-          data-testid="select-filter"
+          data-testid={`select-filter-${filterTypeLabels.get(filter.type || 'assignment-group')}`}
           key={filter.type} // resets dropdown when filter type is changed
           renderLabel={filterTypeLabels.get(filter.type || 'assignment-group')}
           placeholder="--"
@@ -175,16 +179,20 @@ export default function ({
       {['start-date', 'end-date'].includes(filter.type || '') && (
         <CanvasDateInput
           size="small"
-          dataTestid="date-input"
+          dataTestid={`${filter.type}-input`}
           renderLabel={dateLabels[filter.type as 'start-date' | 'end-date']}
           selectedDate={filter.value}
           formatDate={formatDate}
           interaction="enabled"
           onSelectedDateChange={(value: MomentInput) => {
-            onChange({
-              ...filter,
-              value: value ? moment(value).toISOString() : null,
-            })
+            const type = filter.type as 'start-date' | 'end-date'
+            const newValue = isoDateFromInput(type, value)
+            if (filter.value !== newValue) {
+              onChange({
+                ...filter,
+                value: newValue,
+              })
+            }
           }}
         />
       )}
@@ -193,7 +201,7 @@ export default function ({
           key={filter.type} // resets dropdown when filter type is changed
           renderLabel={I18n.t('Submissions')}
           size="small"
-          data-testid="submissions-input"
+          data-testid="select-filter-Submissions"
           placeholder="--"
           value={filter.value || '_'}
           onChange={(_event, {value}) => {

@@ -18,7 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 require_relative "../common"
-require_relative "./pages/permissions_page"
+require_relative "pages/permissions_page"
 
 describe "permissions index" do
   include_context "in-process server selenium tests"
@@ -72,7 +72,7 @@ describe "permissions index" do
       expect(PermissionsIndex.role_header).to include_text("Student\nbest role name ever\n")
     end
 
-    it "focuses on newly created role when you close out all the things" do
+    it "focuses on newly created role when you close out all the thing" do
       role_name = "no this is the best role name ever"
       PermissionsIndex.add_role(role_name)
       PermissionsIndex.close_role_tray
@@ -207,6 +207,45 @@ describe "permissions index" do
       expect { PermissionsIndex.permissions_tray_viewable_permissions.count }.to become 3
       PermissionsIndex.enter_search("")
       expect { PermissionsIndex.permissions_tray_viewable_permissions.count }.to become > 3
+    end
+  end
+
+  context "differentiation tags permission", :ignore_js_errors do
+    before do
+      @permission_name = "Manage Differentiated Tags"
+    end
+
+    it "shows when differentiation tags feature is enabled" do
+      Account.default.enable_feature!(:differentiation_tags)
+
+      user_session(@admin)
+      PermissionsIndex.visit(@account)
+      PermissionsIndex.enter_search(@permission_name)
+      expect(element_exists?("[data-testid='expand_manage_differentiated_tags']")).to be_truthy
+      expect(PermissionsIndex.permission_link("manage_differentiated_tags")).to be_displayed
+    end
+
+    it "does not show when differentiation tags feature is disabled" do
+      Account.default.disable_feature!(:differentiation_tags)
+
+      user_session(@admin)
+      PermissionsIndex.visit(@account)
+      PermissionsIndex.enter_search(@permission_name)
+      expect(element_exists?("[data-testid='expand_manage_differentiated_tags']")).to be_falsey
+    end
+
+    it "shows when differentiation tags feature is allowed_on but an accounts course is off" do
+      course_with_teacher(name: "First Course", active_all: true)
+      # Account level FF is set to OFF but UNLOCKED
+      @course.account.allow_feature!(:differentiation_tags)
+      # Course level FF is set to OFF
+      @course.disable_feature!(:differentiation_tags)
+
+      user_session(@admin)
+      PermissionsIndex.visit(@account)
+      PermissionsIndex.enter_search(@permission_name)
+      expect(element_exists?("[data-testid='expand_manage_differentiated_tags']")).to be_truthy
+      expect(PermissionsIndex.permission_link("manage_differentiated_tags")).to be_displayed
     end
   end
 end

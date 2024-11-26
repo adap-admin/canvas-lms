@@ -441,7 +441,7 @@ describe "ZipPackage" do
       zip_package = CC::Exporter::WebZip::ZipPackage.new(@exporter, @course, @student, @cache_key)
       module_item_data = zip_package.parse_module_item_data(@module)
       expect(module_item_data[0][:exportId]).to eq create_key(assign)
-      expect(module_item_data[1][:exportId]).to eq "wiki-page-1"
+      expect(module_item_data[1][:exportId]).to eq create_key(wiki)
     end
 
     it "parses content for assignments and quizzes" do
@@ -685,10 +685,10 @@ describe "ZipPackage" do
       end
 
       it "parses non-module wiki pages" do
-        @course.wiki_pages.create!(title: "Page 1", url: "page-1", wiki: @course.wiki)
+        wiki_page = @course.wiki_pages.create!(title: "Page 1", url: "page-1", wiki: @course.wiki)
         zip_package = create_zip_package
         wiki_data = zip_package.parse_non_module_items(:wiki_pages)
-        expect(wiki_data).to eq [{ exportId: "page-1", title: "Page 1", type: "WikiPage", content: "", frontPage: false }]
+        expect(wiki_data).to eq [{ exportId: create_key(wiki_page), title: "Page 1", type: "WikiPage", content: "", frontPage: false }]
       end
 
       it "parses front page" do
@@ -696,7 +696,7 @@ describe "ZipPackage" do
         @course.wiki.set_front_page_url!(wiki_page.url)
         zip_package = create_zip_package
         wiki_data = zip_package.parse_non_module_items(:wiki_pages)
-        expect(wiki_data).to eq [{ exportId: "page-1", title: "Page 1", type: "WikiPage", content: "", frontPage: true }]
+        expect(wiki_data).to eq [{ exportId: create_key(wiki_page), title: "Page 1", type: "WikiPage", content: "", frontPage: true }]
       end
 
       it "does not fail on missing items" do
@@ -705,7 +705,7 @@ describe "ZipPackage" do
         wiki.title = "Wiki Page 2"
         wiki.save!
         wiki_data = zip_package.parse_non_module_items(:wiki_pages)
-        expect(wiki_data).to eq [{ exportId: "page-1",
+        expect(wiki_data).to eq [{ exportId: create_key(wiki),
                                    title: "Page 1",
                                    type: "WikiPage",
                                    content: "<p>Hi</p>",
@@ -802,9 +802,9 @@ describe "ZipPackage" do
         @module.content_tags.create!(content: assign, context: @course, indent: 0)
         course_data = create_zip_package.parse_course_data
         expect(course_data[:assignments][0][:exportId]).to eq create_key(assign)
-        expect(course_data[:assignments][0][:content]).to eq "<a href=\"pages/#{page.url}\">Link</a>"
+        expect(course_data[:assignments][0][:content]).to eq "<a href=\"pages/#{create_key(page)}\">Link</a>"
         expect(course_data[:assignments].length).to eq 1
-        expect(course_data[:pages][0][:exportId]).to eq page.url
+        expect(course_data[:pages][0][:exportId]).to eq create_key(page)
         expect(course_data[:pages].length).to eq 1
       end
 
@@ -848,7 +848,7 @@ describe "ZipPackage" do
         expect(course_data[:assignments][0][:content]).to eq "<a href=\"viewer/files/amazing_file.txt\">Link</a>"
         expect(course_data[:assignments].length).to eq 1
         page_data = course_data[:pages][0]
-        expect(page_data[:exportId]).to eq page.url
+        expect(page_data[:exportId]).to eq create_key(page)
         expect(page_data[:content]).to eq "<a href=\"assignments/#{create_key(assign)}\">Link</a>"
         expect(course_data[:pages].length).to eq 1
         expect(course_data[:files]).to eq [{ type: "file", name: "amazing_file.txt", size: 26, files: nil }]
@@ -880,6 +880,27 @@ describe "ZipPackage" do
           { type: "file", name: "cn_image.jpg", size: 30_339, files: nil },
           { type: "file", name: "amazing_file.txt", size: 26, files: nil }
         )
+      end
+
+      it "doesn't blow up when content is exported with a special reference without a path" do
+        media = add_file(fixture_file_upload("292.mp3", "audio/mpeg"), @course, "292.mp3")
+        page =
+          @course.wiki_pages.create!(
+            title: "Home Page",
+            wiki: @course.wiki,
+            body:
+              "<p>
+                <iframe style=\"width: 320px; height: 14.25rem; display: inline-block;\"
+                        title=\"Audio player for 292.mp3\" data-media-type=\"audio\"
+                        src=\"/media_objects_iframe?mediahref=/files/#{media.id}/download&amp;type=audio?type=audio\"
+                        data-media-id=\"maybe\"></iframe>
+                <img src=\"$BAD-FILEBASE$/\" alt=\"bad_image.jpg\"></img>
+              </p>"
+          )
+        @module.content_tags.create!(content: page, context: @course, indent: 0)
+        course_data = create_zip_package.parse_course_data
+        expect(course_data[:pages].length).to eq 1
+        expect(course_data[:files]).to include({ type: "file", name: "292.mp3", size: 123_716, files: nil })
       end
 
       it "does not blow up when exporting linked recorded media files" do
@@ -937,29 +958,6 @@ describe "ZipPackage" do
         expect(course_data[:files]).to include(file_data)
       end
 
-      it "doesn't blow up when content is exported with a special reference without a path" do
-        media = add_file(fixture_file_upload("292.mp3", "audio/mpeg"), @course, "292.mp3")
-        page =
-          @course.wiki_pages.create!(
-            title: "Home Page",
-            wiki: @course.wiki,
-            body:
-              "<p>
-                <iframe style=\"width: 320px; height: 14.25rem; display: inline-block;\"
-                        title=\"Audio player for 292.mp3\" data-media-type=\"audio\"
-                        src=\"/media_objects_iframe?mediahref=/files/#{media.id}/download&amp;type=audio?type=audio\"
-                        data-media-id=\"maybe\"></iframe>
-                <img src=\"$BAD-FILEBASE$/\" alt=\"bad_image.jpg\"></img>
-              </p>"
-          )
-        @module.content_tags.create!(content: page, context: @course, indent: 0)
-        course_data = create_zip_package.parse_course_data
-        expect(course_data[:pages].length).to eq 1
-        expect(course_data[:files]).to include(
-          { type: "file", name: "292.mp3", size: 123_716, files: nil }
-        )
-      end
-
       it "handles circle-linked items" do
         assign = @course.assignments.create!(title: "Assignment 1",
                                              description: "<a href=\"/courses/#{@course.id}/pages/page-1\">Link</a>")
@@ -972,7 +970,7 @@ describe "ZipPackage" do
           exportId: create_key(assign),
           title: "Assignment 1",
           type: "Assignment",
-          content: "<a href=\"pages/page-1\">Link</a>",
+          content: "<a href=\"pages/#{create_key(page)}\">Link</a>",
           submissionTypes: nil,
           graded: true,
           pointsPossible: nil,
@@ -980,7 +978,7 @@ describe "ZipPackage" do
           lockAt: nil,
           unlockAt: nil
         }]
-        expect(course_data[:pages]).to eq [{ exportId: "page-1",
+        expect(course_data[:pages]).to eq [{ exportId: create_key(page),
                                              title: "Page 1",
                                              type: "WikiPage",
                                              content: "<a href=\"assignments/#{create_key(assign)}\">Link</a>",
@@ -1090,7 +1088,7 @@ describe "ZipPackage" do
                                                 "<a href=\"/courses/#{@course.id}/wiki\">Link</a>")
         @module.content_tags.create!(content: page, context: @course, indent: 0)
         course_data = create_zip_package.parse_course_data
-        expect(course_data[:pages]).to eq [{ exportId: "page-1",
+        expect(course_data[:pages]).to eq [{ exportId: create_key(page),
                                              title: "Page 1",
                                              type: "WikiPage",
                                              content: "<a href=\"announcements\">Link</a><a href=\"wiki/\">Link</a>",

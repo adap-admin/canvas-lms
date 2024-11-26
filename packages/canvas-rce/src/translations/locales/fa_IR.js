@@ -21,6 +21,7 @@ import '../tinymce/fa_IR'
 
 const locale = {
   "add_8523c19b": { "message": "افزودن" },
+  "add_one_9e34a6f8": { "message": "افزودن یک مورد!" },
   "additional_considerations_f3801683": { "message": "ملاحظات اضافی" },
   "all_4321c3a1": { "message": "همه" },
   "alpha_15d59033": { "message": "آلفا" },
@@ -69,6 +70,7 @@ const locale = {
   "computer_1d7dfa6f": { "message": "کامپیوتر" },
   "content_1440204b": { "message": "محتوا" },
   "content_type_2cf90d95": { "message": "نوع محتوا" },
+  "copy_9748f9f": { "message": "کپی کردن" },
   "copyright_holder_66ee111": { "message": "دارنده حق نشر:" },
   "count_40eced3b": { "message": "تعداد" },
   "count_plural_one_item_loaded_other_items_loaded_857023b7": {
@@ -105,6 +107,7 @@ const locale = {
   "file_name_8fd421ff": { "message": "نام فایل" },
   "files_c300e900": { "message": "فایل ها" },
   "files_index_af7c662b": { "message": "فهرست فایل ها" },
+  "find_8d605019": { "message": "یافتن" },
   "finish_bc343002": { "message": "پایان" },
   "folder_tree_fbab0726": { "message": "درخت پوشه" },
   "format_4247a9c5": { "message": "قالب" },
@@ -160,10 +163,14 @@ const locale = {
   "new_quiz_34aacba6": { "message": "آزمون جدید" },
   "next_40e12421": { "message": "بعدی" },
   "no_e16d9132": { "message": "خیر" },
+  "no_pages_created_yet_c379fa6e": {
+    "message": "هنوز هیچ صفحه ای ایجاد نشده است"
+  },
   "no_preview_is_available_for_this_file_f940114a": {
     "message": "هیچ پیش نمایشی برای این فایل موجود نیست."
   },
   "no_results_940393cf": { "message": "No results." },
+  "no_results_found_58717065": { "message": "نتیجه ای یافت نشد" },
   "no_video_1ed00b26": { "message": "بدون تصویر" },
   "none_3b5e34d2": { "message": "هیچ کدام" },
   "olive_6a3e4d6b": { "message": "زیتون" },
@@ -187,6 +194,7 @@ const locale = {
   "prev_f82cbc48": { "message": "قبلی" },
   "preview_53003fd2": { "message": "پیش‌نمایش" },
   "preview_a3f8f854": { "message": "پیش نمایش" },
+  "previous_bd2ac015": { "message": "Previous" },
   "published_c944a23d": { "message": "منتشر شده" },
   "pumpkin_904428d5": { "message": "کدوتنبل" },
   "purple_7678a9fc": { "message": "ارغوانی" },
@@ -198,10 +206,12 @@ const locale = {
   "relationships_6602af70": { "message": "روابط" },
   "replace_e61834a7": { "message": "جایگزین کردن" },
   "reset_95a81614": { "message": "بازنشانی" },
+  "retry_ebd5f8ba": { "message": "تلاش دوباره" },
   "rich_content_editor_2708ef21": { "message": "ویرایشگر محتوای غنی" },
   "save_11a80ec3": { "message": "ذخیره سازی" },
   "search_280d00bd": { "message": "جستجو" },
   "select_language_7c93a900": { "message": "انتخاب زبان" },
+  "selected_274ce24f": { "message": "انتخاب شده" },
   "size_b30e1077": { "message": "اندازه" },
   "something_went_wrong_89195131": { "message": "اشکالی رخ داده است." },
   "something_went_wrong_d238c551": { "message": "مشکلی پیش آمد" },
@@ -210,6 +220,7 @@ const locale = {
   "start_over_f7552aa9": { "message": "شروع دوباره" },
   "start_recording_9a65141a": { "message": "شروع ضبط" },
   "submit_a3cc6859": { "message": "ارسال" },
+  "submitting_b90fac62": { "message": "در حال ارسال..." },
   "syllabus_f191f65b": { "message": "سرفصل" },
   "teal_f729a294": { "message": "سبز مایل به آبی" },
   "text_7f4593da": { "message": "متن" },

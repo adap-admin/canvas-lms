@@ -59,8 +59,8 @@ module Canvas::Security
         model.where("#{definition[:encrypted_column]} IS NOT NULL")
              .select([:id, definition[:encrypted_column], definition[:salt_column]])
              .find_each do |instance|
-          cleartext = Canvas::Security.decrypt_password(instance.read_attribute(definition[:encrypted_column]),
-                                                        instance.read_attribute(definition[:salt_column]),
+          cleartext = Canvas::Security.decrypt_password(instance[definition[:encrypted_column]],
+                                                        instance[definition[:salt_column]],
                                                         definition[:key],
                                                         encryption_key)
           new_crypted_data, new_salt = Canvas::Security.encrypt_password(cleartext, definition[:key])
@@ -76,13 +76,13 @@ module Canvas::Security
           next
         end
         Array(settings.plugin.encrypted_settings).each do |setting|
-          cleartext = Canvas::Security.decrypt_password(settings.settings["#{setting}_enc".to_sym],
-                                                        settings.settings["#{setting}_salt".to_sym],
+          cleartext = Canvas::Security.decrypt_password(settings.settings[:"#{setting}_enc"],
+                                                        settings.settings[:"#{setting}_salt"],
                                                         "instructure_plugin_setting",
                                                         encryption_key)
           new_crypted_data, new_salt = Canvas::Security.encrypt_password(cleartext, "instructure_plugin_setting")
-          settings.settings["#{setting}_enc".to_sym] = new_crypted_data
-          settings.settings["#{setting}_salt".to_sym] = new_salt
+          settings.settings[:"#{setting}_enc"] = new_crypted_data
+          settings.settings[:"#{setting}_salt"] = new_salt
           settings.settings_will_change!
         end
         settings.save! if settings.changed?

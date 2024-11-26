@@ -16,6 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+import {z} from 'zod'
 import type {
   Assignment,
   AssignmentGroup,
@@ -26,6 +27,7 @@ import type {
   SubmissionType,
   WorkflowState,
 } from '../../api.d'
+import {GradingStandard} from '@instructure/grading-utils'
 
 export type OriginalityData = {
   reportUrl: string
@@ -51,6 +53,7 @@ export type PartialStudent = {
     submittedAt: null | Date
     workflowState: WorkflowState
   }
+  currentScore?: string
 }
 
 // TODO: remove the need for this type
@@ -80,6 +83,7 @@ export type SubmissionData = {
   pointsDeducted?: number | null
   resubmitted: boolean
   score: number | null
+  customGradeStatusId?: string | null
 }
 
 // TODO: remove the need for this
@@ -89,6 +93,7 @@ export type CamelizedSubmission = {
   assignmentVisible?: boolean
   attempt: number | null
   cachedDueDate: null | string
+  customGradeStatusId?: null | string
   drop?: boolean
   enteredGrade: null | string
   enteredScore: null | number
@@ -122,6 +127,7 @@ export type CamelizedSubmission = {
   url: null | string
   userId: string
   workflowState: WorkflowState
+  subAssignmentTag?: string
 }
 
 export type CamelizedGradingPeriod = {
@@ -180,16 +186,33 @@ export type CamelizedAssignment = {
   postManually: boolean
   published: boolean
   submissionTypes: string[]
+  checkpoints?: {
+    tag: string
+    points_possible: number
+  }[]
 }
 
-export type SubmissionOriginalityData = {
-  status: string
-  provider: string
-  similarity_score: number
-  state?: string
-  public_error_message?: string
-  report_url?: string
-}
+export const ZSubmissionOriginalityData = z
+  .object({
+    error_message: z.string().optional(),
+    status: z.string().optional(),
+    provider: z.string().optional(),
+    similarity_score: z.number().optional(),
+    state: z.string().optional(),
+    public_error_message: z.string().optional(),
+    report_url: z.string().optional(),
+  })
+  .extend(z.record(z.unknown()).shape) // TODO: expand
+
+export type SubmissionOriginalityData = z.infer<typeof ZSubmissionOriginalityData>
+
+export const ZVericiteOriginalityData = ZSubmissionOriginalityData.extend(
+  z.object({
+    provider: z.literal('vericite'),
+  }).shape
+)
+
+export type VericiteOriginalityData = z.infer<typeof ZVericiteOriginalityData>
 
 export type SimilarityEntry = {
   id: string
@@ -226,9 +249,17 @@ export type CamelizedSubmissionWithOriginalityReport = CamelizedSubmission & {
 }
 
 export type FinalGradeOverride = {
-  courseGrade?: string
+  courseGrade?: {
+    percentage?: number | null
+    schemeKey?: string | null
+    customGradeStatusId?: string | null
+  }
   gradingPeriodGrades?: {
-    [gradingPeriodId: string]: string
+    [gradingPeriodId: string]: {
+      percentage?: number | null
+      schemeKey?: string | null
+      customGradeStatusId?: string | null
+    }
   }
 }
 
@@ -254,6 +285,7 @@ export type GradeResult = {
   late_policy_status: null | LatePolicyStatus
   score: null | number
   valid: boolean
+  subAssignmentTag?: string
 }
 
 export type AssignmentGroupGradeMap = {
@@ -312,17 +344,26 @@ export type FormatGradeOptions = {
   delocalize?: boolean
   precision?: number
   pointsPossible?: number
-  score?: number
+  score?: number | null
   restrict_quantitative_data?: boolean
-  grading_scheme?: GradingScheme[]
+  grading_scheme?: DeprecatedGradingScheme[]
+  points_based_grading_scheme?: boolean
+  scaling_factor?: number
 }
 
-export type GradingStandard = [string, number]
-
-export type GradingScheme = {
+/**
+ * @deprecated
+ */
+export type DeprecatedGradingScheme = {
   id?: string
   title?: string
+  pointsBased: boolean
+  scalingFactor: number
   data: GradingStandard[]
+}
+
+export type GradeEntryOptions = {
+  gradingScheme?: {data: GradingStandard[]; pointsBased: boolean; scalingFactor: number} | null
 }
 
 export type ProvisionalGrade = {
@@ -369,5 +410,18 @@ export type SubmissionGradeCriteria = Pick<
 export type AssignmentGroupCriteriaMap = {
   [id: string]: Omit<AssignmentGroup, 'assignments'> & {
     assignments: AssignmentGradeCriteria[]
+    invalid?: boolean
+    gradingPeriodsIds?: string[]
   }
+}
+
+export type Progress = {
+  id: string
+  workflow_state: string
+  message?: string
+  updated_at?: string
+}
+
+export type ProgressData = {
+  progress: Progress
 }

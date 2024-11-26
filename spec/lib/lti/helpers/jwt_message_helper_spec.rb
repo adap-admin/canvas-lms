@@ -21,23 +21,24 @@ describe Lti::Helpers::JwtMessageHelper do
   # This set of tests uses data directly from the spec, to ensure our signature generation algorithm
   # follows it precisely
   describe "generate_oauth_consumer_key_sign" do
-    subject { Lti::Helpers::JwtMessageHelper.generate_oauth_consumer_key_sign(associated_1_1_tool, message) }
+    subject { Lti::Helpers::JwtMessageHelper.generate_oauth_consumer_key_sign(assoc_tool_data, message, nonce) }
 
-    let(:associated_1_1_tool) do
-      t = double("associated_1_1_tool")
-      allow(t).to receive(:consumer_key).and_return("179248902")
-      allow(t).to receive(:shared_secret).and_return("my-lti11-secret")
-      t
+    let(:assoc_tool_data) do
+      {
+        "shared_secret" => "my-lti11-secret",
+        "consumer_key" => "179248902"
+      }
     end
     let(:message) do
-      m = double("message")
-      allow(m).to receive(:deployment_id).and_return("689302")
-      allow(m).to receive(:iss).and_return("https://lmsvendor.com")
-      allow(m).to receive(:aud).and_return("PM48OJSfGDTAzAo")
-      allow(m).to receive(:exp).and_return(1_551_290_856)
-      allow(m).to receive(:nonce).and_return("172we8671fd8z")
-      m
+      {
+        "https://purl.imsglobal.org/spec/lti/claim/deployment_id" => "689302",
+        "iss" => "https://lmsvendor.com",
+        "aud" => "PM48OJSfGDTAzAo",
+        "exp" => 1_551_290_856,
+        "nonce" => "fake_nonce"
+      }
     end
+    let(:nonce) { "172we8671fd8z" }
 
     it "generates the appropriate signature according to the IMS spec" do
       expect(subject).to eq("lWd54kFo5qU7xshAna6v8BwoBm6tmUjc6GTax6+12ps=")

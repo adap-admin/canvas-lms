@@ -16,49 +16,41 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React, {useState} from 'react'
+import React from 'react'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import doFetchApi from '@canvas/do-fetch-api-effect'
+import type {HandleCheckboxChange} from '../../../types'
+import CheckboxTemplate from './CheckboxTemplate'
 
 const I18n = useI18nScope('enhanced_individual_gradebook')
 type Props = {
-  showTotalGradeAsPoints?: boolean | null
   settingUpdateUrl?: string | null
+  showTotalGradeAsPoints: boolean
+  handleCheckboxChange: HandleCheckboxChange
 }
 export default function ShowTotalGradesAsPointsCheckbox({
   showTotalGradeAsPoints,
   settingUpdateUrl,
+  handleCheckboxChange,
 }: Props) {
-  const [showTotalGradeAsPointsChecked, setShowTotalGradeAsPointsChecked] = useState(
-    showTotalGradeAsPoints ?? false
-  )
-
   const handleShowTotalGradeAsPointsChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const checked = event.target.checked
     doFetchApi({
       method: 'PUT',
       path: settingUpdateUrl,
       body: {
-        show_total_grade_as_points: event.target.checked,
+        show_total_grade_as_points: checked,
       },
     })
-    setShowTotalGradeAsPointsChecked(event.target.checked)
+    handleCheckboxChange('showTotalGradeAsPoints', checked)
   }
 
   return (
-    <div
-      className="checkbox"
-      style={{padding: 12, margin: '10px 0px', background: '#eee', borderRadius: 5}}
-    >
-      <label className="checkbox" htmlFor="show_total_as_points">
-        <input
-          type="checkbox"
-          id="show_total_as_points"
-          name="show_total_as_points"
-          checked={showTotalGradeAsPointsChecked}
-          onChange={handleShowTotalGradeAsPointsChange}
-        />
-        {I18n.t('Show Totals as Points on Student Grade Page')}
-      </label>
-    </div>
+    <CheckboxTemplate
+      label={I18n.t('Show Totals as Points on Student Grade Page')}
+      checked={showTotalGradeAsPoints}
+      onChange={handleShowTotalGradeAsPointsChange}
+      dataTestId="show-total-grade-as-points-checkbox"
+    />
   )
 }

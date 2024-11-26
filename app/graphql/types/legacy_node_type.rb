@@ -31,6 +31,7 @@ class Types::LegacyNodeType < Types::BaseEnum
   value "Enrollment"
   value "File"
   value "GradingPeriod"
+  value "GradingPeriodGroup"
   value "Group"
   value "GroupSet"
   value "InternalSetting"
@@ -47,6 +48,7 @@ class Types::LegacyNodeType < Types::BaseEnum
   value "Section"
   value "Submission"
   value "Term"
+  value "UsageRights"
   value "User"
 
   #   # TODO: seems like we should be able to dynamically generate the types that

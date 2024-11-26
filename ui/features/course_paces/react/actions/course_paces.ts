@@ -21,6 +21,7 @@ import {Action} from 'redux'
 import {ThunkAction} from 'redux-thunk'
 import {showFlashAlert, showFlashSuccess} from '@canvas/alerts/react/FlashAlert'
 import {useScope as useI18nScope} from '@canvas/i18n'
+import {captureException} from '@sentry/browser'
 
 import {
   CoursePaceItemDueDates,
@@ -162,7 +163,8 @@ const thunkActions = {
                 updatedProgress.workflow_state !== 'completed' ? updatedProgress : undefined
               )
             )
-            dispatch(uiActions.clearCategoryError('checkPublishStatus'))
+            if (uiActions.clearCategoryError instanceof Function)
+              dispatch(uiActions.clearCategoryError('checkPublishStatus'))
             if (updatedProgress.workflow_state === 'completed') {
               showFlashAlert({
                 message: isUnpublishedNewPace
@@ -213,6 +215,7 @@ const thunkActions = {
           dispatch(uiActions.hideLoadingOverlay())
           dispatch(uiActions.setCategoryError('resetToLastPublished', error?.toString()))
           console.error(error) // eslint-disable-line no-console
+          captureException(error)
         })
     }
   },
@@ -247,6 +250,7 @@ const thunkActions = {
           dispatch(uiActions.hideLoadingOverlay())
           dispatch(uiActions.setCategoryError('loading', error?.toString()))
           console.error(error) // eslint-disable-line no-console
+          captureException(error)
         })
     }
   },
@@ -270,6 +274,7 @@ const thunkActions = {
           dispatch(uiActions.hideLoadingOverlay())
           dispatch(uiActions.setCategoryError('relinkToParent', error?.toString()))
           console.error(error) // eslint-disable-line no-console
+          captureException(error)
         })
     }
   },

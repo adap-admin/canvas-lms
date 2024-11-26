@@ -21,6 +21,7 @@ import '../tinymce/he_IL'
 
 const locale = {
   "add_8523c19b": { "message": "הוספה" },
+  "add_one_9e34a6f8": { "message": "הוספת אחד!" },
   "all_4321c3a1": { "message": "כל" },
   "alpha_15d59033": { "message": "אלפא" },
   "an_error_occurred_making_a_network_request_d1bda348": {
@@ -60,9 +61,10 @@ const locale = {
   "collaborations_5c56c15f": { "message": "שיתופי פעולה" },
   "content_1440204b": { "message": "תוכן" },
   "content_type_2cf90d95": { "message": "סוג תוכן" },
+  "copy_9748f9f": { "message": "העתקה" },
   "copyright_holder_66ee111": { "message": "בעלים של זכויות יוצרים:" },
   "count_plural_one_item_loaded_other_items_loaded_857023b7": {
-    "message": "{ count, plural,\n    one {}\n    two {}\n   many {}\n  other {}\n}"
+    "message": "{ count, plural,\n    one {}\n    two {}\n  other {}\n}"
   },
   "course_files_62deb8f8": { "message": "קובצי קורס" },
   "course_files_a31f97fc": { "message": "קבצי קורס" },
@@ -90,6 +92,7 @@ const locale = {
   "external_tools_6e77821": { "message": "כלים חיצוניים" },
   "files_c300e900": { "message": "קבצים " },
   "files_index_af7c662b": { "message": "אינדקס קבצים" },
+  "find_8d605019": { "message": "חיפוש" },
   "format_4247a9c5": { "message": "פורמט" },
   "generating_preview_45b53be0": { "message": "מכין תצוגה מקדימה..." },
   "grades_a61eba0a": { "message": "הערכות" },
@@ -139,10 +142,12 @@ const locale = {
   "new_quiz_34aacba6": { "message": "בוחן חדש" },
   "next_40e12421": { "message": "הבא" },
   "no_e16d9132": { "message": "לא" },
+  "no_pages_created_yet_c379fa6e": { "message": "לא נוצרו עדיין דפים" },
   "no_preview_is_available_for_this_file_f940114a": {
     "message": "אין תצוגה מקדימה לקובץ זה"
   },
   "no_results_940393cf": { "message": "אין תוצאות" },
+  "no_results_found_58717065": { "message": "לא נמצאו תוצאות" },
   "none_3b5e34d2": { "message": "אף אחד" },
   "open_this_keyboard_shortcuts_dialog_9658b83a": {
     "message": "פתיחת חלון דיאלוג של מקשי קיצור"
@@ -156,6 +161,7 @@ const locale = {
   "pink_68ad45cb": { "message": "ורוד" },
   "prev_f82cbc48": { "message": "הקודם" },
   "preview_53003fd2": { "message": "תצוגה מקדימה" },
+  "previous_bd2ac015": { "message": "קודם" },
   "published_c944a23d": { "message": "פורסם" },
   "purple_7678a9fc": { "message": "סגול" },
   "quiz_e0dcce8f": { "message": "בוחן" },
@@ -166,14 +172,17 @@ const locale = {
   "relationships_6602af70": { "message": "יחסים" },
   "replace_e61834a7": { "message": "החלפה" },
   "reset_95a81614": { "message": "חזרה למצב ברירת מחדל" },
+  "retry_ebd5f8ba": { "message": "נסה/י שוב" },
   "rich_content_editor_2708ef21": { "message": "עורך תוכן עשיר" },
   "save_11a80ec3": { "message": "שמירה " },
   "search_280d00bd": { "message": "חיפוש" },
+  "selected_274ce24f": { "message": "נבחר" },
   "selection_b52c4c5e": { "message": "בחירה" },
   "size_b30e1077": { "message": "גודל" },
   "star_8d156e09": { "message": "הוספת כוכבית" },
   "start_over_f7552aa9": { "message": "התחל/י מהתחלה" },
   "submit_a3cc6859": { "message": "הגשה" },
+  "submitting_b90fac62": { "message": "מבצע..." },
   "syllabus_f191f65b": { "message": "תכנית לימודים" },
   "teal_f729a294": { "message": "ירוק-כחלחל" },
   "the_document_preview_is_currently_being_processed__7d9ea135": {

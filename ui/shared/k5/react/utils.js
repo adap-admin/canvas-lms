@@ -20,11 +20,11 @@ import {useScope as useI18nScope} from '@canvas/i18n'
 import moment from 'moment-timezone'
 import PropTypes from 'prop-types'
 
-import {asJson, defaultFetchOptions} from '@instructure/js-utils'
+import {asJson, defaultFetchOptions} from '@canvas/util/xhr'
 
 import doFetchApi from '@canvas/do-fetch-api-effect'
 import AssignmentGroupGradeCalculator from '@canvas/grading/AssignmentGroupGradeCalculator'
-import {scoreToGrade} from '@canvas/grading/GradingSchemeHelper'
+import {scoreToGrade} from '@instructure/grading-utils'
 import GradeFormatHelper from '@canvas/grading/GradeFormatHelper'
 
 const I18n = useI18nScope('k5_utils')
@@ -52,7 +52,9 @@ export const transformGrades = courses =>
       isHomeroom: course.homeroom_course,
       enrollments: course.enrollments,
       gradingScheme: course.grading_scheme,
+      pointsBasedGradingScheme: course.points_based_grading_scheme,
       restrictQuantitativeData: course.restrict_quantitative_data,
+      scalingFactor: course.scaling_factor,
     }
     return getCourseGrades(basicCourseInfo)
   })
@@ -94,7 +96,7 @@ export const fetchGradesForGradingPeriod = (gradingPeriodId, userId = 'self') =>
   asJson(
     window.fetch(
       `/api/v1/users/${userId}/enrollments?state[]=active&&type[]=StudentEnrollment&grading_period_id=${gradingPeriodId}`,
-      defaultFetchOptions
+      defaultFetchOptions()
     )
   ).then(enrollments =>
     enrollments.map(({course_id, grades}) => ({
@@ -108,7 +110,7 @@ export const fetchLatestAnnouncement = courseId =>
   asJson(
     window.fetch(
       `/api/v1/announcements?context_codes=course_${courseId}&active_only=true&per_page=1`,
-      defaultFetchOptions
+      defaultFetchOptions()
     )
   ).then(data => {
     if (data?.length > 0) {
@@ -123,7 +125,7 @@ export const fetchCourseInstructors = courseId =>
   asJson(
     window.fetch(
       `/api/v1/courses/${courseId}/users?enrollment_type[]=teacher&enrollment_type[]=ta&include[]=avatar_url&include[]=bio&include[]=enrollments`,
-      defaultFetchOptions
+      defaultFetchOptions()
     )
   )
 
@@ -133,12 +135,12 @@ export const fetchCourseApps = courseIds =>
       `/api/v1/external_tools/visible_course_nav_tools?${courseIds
         .map(id => `context_codes[]=course_${id}`)
         .join('&')}`,
-      defaultFetchOptions
+      defaultFetchOptions()
     )
   )
 
 export const fetchCourseTabs = courseId =>
-  asJson(window.fetch(`/api/v1/courses/${courseId}/tabs`, defaultFetchOptions))
+  asJson(window.fetch(`/api/v1/courses/${courseId}/tabs`, defaultFetchOptions()))
 
 export const readableRoleName = role => {
   const ROLES = {
@@ -173,7 +175,9 @@ export const getAssignmentGroupTotals = (
   gradingPeriodId,
   observedUserId,
   restrictQuantitativeData = false,
-  gradingScheme = []
+  gradingScheme = [],
+  pointsBasedGradingScheme = false,
+  scalingFactor = null
 ) => {
   if (gradingPeriodId) {
     data = data.filter(group =>
@@ -207,7 +211,7 @@ export const getAssignmentGroupTotals = (
     } else {
       const tempScore = (groupScores.current.score / groupScores.current.possible) * 100
       score = restrictQuantitativeData
-        ? scoreToGrade(tempScore, gradingScheme)
+        ? scoreToGrade(tempScore, gradingScheme, pointsBasedGradingScheme, scalingFactor)
         : I18n.n(tempScore, {percentage: true, precision: 2})
     }
 
@@ -232,6 +236,8 @@ const formatGradeToRQD = (assignment, submission) => {
       score: submission?.score,
       restrict_quantitative_data: ENV.RESTRICT_QUANTITATIVE_DATA,
       grading_scheme: ENV.GRADING_SCHEME,
+      points_based_grading_scheme: ENV.POINTS_BASED,
+      scaling_factor: ENV.SCALING_FACTOR,
     })
   }
 
@@ -243,13 +249,15 @@ const formatGradeToRQD = (assignment, submission) => {
 export const getAssignmentGrades = (data, observedUserId) => {
   return data
     .map(group =>
-      group.assignments.map(a => {
+      group.assignments.reduce((assignments, a) => {
+        if (a.hide_in_gradebook) return assignments
+
         const submission = getSubmission(a, observedUserId)
         const rqd_grading_type = !['not_graded', 'pass_fail', 'gpa_scale'].includes(a.grading_type)
           ? 'letter_grade'
           : a.grading_type
         const rqdFormattedGrade = formatGradeToRQD(a, submission)
-        return {
+        assignments.push({
           id: a.id,
           assignmentName: a.name,
           url: a.html_url,
@@ -267,8 +275,9 @@ export const getAssignmentGrades = (data, observedUserId) => {
           excused: submission?.excused,
           missing: submission?.missing,
           hasComments: !!submission?.submission_comments?.length,
-        }
-      })
+        })
+        return assignments
+      }, [])
     )
     .flat(1)
     .sort((a, b) => {
@@ -285,7 +294,9 @@ export const getTotalGradeStringFromEnrollments = (
   userId,
   observedUserId,
   restrictQuantitativeData = false,
-  gradingScheme = []
+  gradingScheme = [],
+  pointsBasedGradingScheme,
+  scalingFactor
 ) => {
   let grades
   if (observedUserId) {
@@ -300,7 +311,12 @@ export const getTotalGradeStringFromEnrollments = (
     return I18n.t('n/a')
   }
   if (restrictQuantitativeData) {
-    return scoreToGrade(grades.current_score, gradingScheme)
+    return scoreToGrade(
+      grades.current_score,
+      gradingScheme,
+      pointsBasedGradingScheme,
+      scalingFactor
+    )
   }
   const score = I18n.n(grades.current_score, {percentage: true, precision: 2})
   return grades.current_grade == null

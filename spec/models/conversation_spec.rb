@@ -460,12 +460,10 @@ describe Conversation do
     end
 
     it "broadcasts conversation created", priority: "1" do
-      n2 = Notification.create(name: "Conversation Created", category: "TestImmediately")
+      Notification.create(name: "Conversation Created", category: "TestImmediately")
 
       [sender].each do |user|
-        channel = communication_channel(user, { username: "test_channel_email_#{user.id}@test.com", active_cc: true })
-
-        NotificationPolicy.create(notification: n2, communication_channel: channel, frequency: "immediately")
+        communication_channel(user, { username: "test_channel_email_#{user.id}@test.com", active_cc: true })
       end
 
       recipients = create_users(5, return_type: :record)
@@ -602,11 +600,11 @@ describe Conversation do
         u1 = student_in_course.user
         u2 = student_in_course(course: @course).user
         conversation = Conversation.initiate([u1, u2], true)
-        expect(conversation.read_attribute(:tags)).not_to be_nil
+        expect(conversation["tags"]).not_to be_nil
         expect(conversation.tags).to eql []
-        expect(u1.all_conversations.first.read_attribute(:tags)).not_to be_nil
+        expect(u1.all_conversations.first["tags"]).not_to be_nil
         expect(u1.all_conversations.first.tags).to eql []
-        expect(u2.all_conversations.first.read_attribute(:tags)).not_to be_nil
+        expect(u2.all_conversations.first["tags"]).not_to be_nil
         expect(u2.all_conversations.first.tags).to eql []
       end
 

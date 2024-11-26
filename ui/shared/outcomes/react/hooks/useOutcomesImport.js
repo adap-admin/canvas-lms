@@ -19,10 +19,10 @@
 import {useState, useCallback, useEffect} from 'react'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import resolveProgress from '@canvas/progress/resolve_progress'
-import {IMPORT_OUTCOMES} from '@canvas/outcomes/graphql/Management'
-import {useMutation} from 'react-apollo'
+import {IMPORT_OUTCOMES} from '../../graphql/Management'
+import {useMutation} from '@apollo/react-hooks'
 import {showFlashAlert} from '@canvas/alerts/react/FlashAlert'
-import useCanvasContext from '@canvas/outcomes/react/hooks/useCanvasContext'
+import useCanvasContext from './useCanvasContext'
 
 const I18n = useI18nScope('FindOutcomesModal')
 

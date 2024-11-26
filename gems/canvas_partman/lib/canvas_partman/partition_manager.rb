@@ -87,19 +87,21 @@ module CanvasPartman
       constraint_check = generate_check_constraint(value)
 
       with_statement_timeout do
-        execute(<<SQL.squish)
-        CREATE TABLE #{base_class.connection.quote_table_name(partition_table)} (
-          LIKE #{base_class.quoted_table_name} INCLUDING ALL,
-          CHECK (#{constraint_check})
-        ) INHERITS (#{base_class.quoted_table_name})
-SQL
+        base_class.connection.transaction do
+          execute(<<~SQL.squish)
+            CREATE TABLE #{base_class.connection.quote_table_name(partition_table)} (
+              LIKE #{base_class.quoted_table_name} INCLUDING ALL,
+              CHECK (#{constraint_check})
+            ) INHERITS (#{base_class.quoted_table_name})
+          SQL
 
-        # copy foreign keys, since INCLUDING ALL won't bring them along
-        base_class.connection.foreign_keys(base_class.table_name).each do |foreign_key|
-          base_class.connection.add_foreign_key partition_table, foreign_key.to_table, **foreign_key.options.except(:name)
+          # copy foreign keys, since INCLUDING ALL won't bring them along
+          base_class.connection.foreign_keys(base_class.table_name).each do |foreign_key|
+            base_class.connection.add_foreign_key partition_table, foreign_key.to_table, **foreign_key.options.except(:name)
+          end
+
+          CanvasPartman.after_create_callback.call(base_class, partition_table)
         end
-
-        CanvasPartman.after_create_callback.call(base_class, partition_table)
       end
 
       partition_table
@@ -118,9 +120,9 @@ SQL
       drop_partition_table(partition_table)
     end
 
-    def with_statement_timeout(timeout_override: nil, &block)
+    def with_statement_timeout(timeout_override: nil, &)
       tv = timeout_override || ::CanvasPartman.timeout_value
-      base_class.connection.with_statement_timeout(tv.to_f, &block)
+      base_class.connection.with_statement_timeout(tv.to_f, &)
     end
 
     protected
@@ -163,8 +165,8 @@ SQL
       base_class.infer_partition_table_name(attributes)
     end
 
-    def execute(*args)
-      base_class.connection.execute(*args)
+    def execute(*)
+      base_class.connection.execute(*)
     end
   end
 end

@@ -29,6 +29,7 @@ describe Announcement do
   describe "locking" do
     it "locks if its course has the lock_all_announcements setting" do
       course_with_student(active_all: true)
+      teacher_in_course(active_all: true)
 
       @course.lock_all_announcements = true
       @course.save!
@@ -39,6 +40,7 @@ describe Announcement do
 
       expect(announcement).to be_locked
       expect(announcement.grants_right?(@student, :reply)).to be_falsey
+      expect(announcement.grants_right?(@teacher, :reply)).to be_falsey
     end
 
     it "does not lock if its course does not have the lock_all_announcements setting" do
@@ -54,7 +56,7 @@ describe Announcement do
       course = Course.new
       course.lock_all_announcements = true
       course.save!
-      announcement = course.announcements.build(valid_announcement_attributes.merge(delayed_post_at: Time.now + 1.week))
+      announcement = course.announcements.build(valid_announcement_attributes.merge(delayed_post_at: 1.week.from_now))
       announcement.workflow_state = "post_delayed"
       announcement.save!
 
@@ -74,7 +76,7 @@ describe Announcement do
       course_factory(active_all: true)
       att = attachment_model(context: @course)
       announcement = @course.announcements.create!(valid_announcement_attributes
-        .merge(delayed_post_at: Time.now + 1.week, workflow_state: "post_delayed", attachment: att))
+        .merge(delayed_post_at: 1.week.from_now, workflow_state: "post_delayed", attachment: att))
       att.reload
       expect(att).to be_locked
 
@@ -197,14 +199,10 @@ describe Announcement do
       course_with_observer(course: @course, active_all: true)
 
       notification_name = "New Announcement"
-      n = Notification.create(name: notification_name, category: "TestImmediately")
-      n2 = Notification.create(name: "Announcement Created By You", category: "TestImmediately")
+      Notification.create(name: notification_name, category: "TestImmediately")
+      Notification.create(name: "Announcement Created By You", category: "TestImmediately")
 
-      channel = communication_channel(@teacher, { username: "test_channel_email_#{@teacher.id}@test.com", active_cc: true })
-
-      NotificationPolicy.create(notification: n, communication_channel: @student.communication_channel, frequency: "immediately")
-      NotificationPolicy.create(notification: n, communication_channel: @observer.communication_channel, frequency: "immediately")
-      NotificationPolicy.create(notification: n2, communication_channel: channel, frequency: "immediately")
+      communication_channel(@teacher, { username: "test_channel_email_#{@teacher.id}@test.com", active_cc: true })
 
       @context = @course
       announcement_model(user: @teacher)
@@ -244,6 +242,69 @@ describe Announcement do
       to_users = @a.messages_sent[notification_name].map(&:user)
       expect(to_users).to include(@student)
       expect(to_users).to_not include(other_student)
+    end
+
+    it "does not broadcast if it just got edited to active, if notify_users is false" do
+      course_with_student(active_all: true)
+      notification_name = "New Announcement"
+      Notification.create(name: notification_name, category: "TestImmediately")
+
+      announcement_model(user: @teacher, workflow_state: :post_delayed, notify_users: false, context: @course)
+
+      expect do
+        @a.publish!
+      end.not_to change { @a.messages_sent[notification_name] }
+    end
+
+    it "still broadcasts if it just got edited to active, if notify_users is true" do
+      course_with_student(active_all: true)
+      notification_name = "New Announcement"
+      Notification.create(name: notification_name, category: "TestImmediately")
+
+      announcement_model(user: @teacher, workflow_state: :post_delayed, notify_users: true, context: @course)
+
+      expect do
+        @a.publish!
+      end.to change { @a.messages_sent[notification_name] }
+    end
+
+    it "still broadcasts on delayed_post event even if notify_users was false" do
+      course_with_student(active_all: true)
+      notification_name = "New Announcement"
+      Notification.create(name: notification_name, category: "TestImmediately")
+
+      announcement_model(user: @teacher, workflow_state: :post_delayed, notify_users: false, context: @course)
+
+      expect do
+        @a.delayed_post
+      end.to change { @a.messages_sent[notification_name] }
+    end
+  end
+
+  describe "show_in_search_for_user?" do
+    shared_examples_for "expected_values_for_teacher_student" do |teacher_expected, student_expected|
+      it "returns #{teacher_expected} for teacher" do
+        expect(announcement.show_in_search_for_user?(@teacher)).to eq(teacher_expected)
+      end
+
+      it "returns #{student_expected} for student" do
+        expect(announcement.show_in_search_for_user?(@student)).to eq(student_expected)
+      end
+    end
+
+    let(:announcement) { @course.announcements.create!(message: "announcement") }
+
+    before(:once) do
+      course_with_teacher(active_all: true)
+      student_in_course(active_all: true)
+    end
+
+    include_examples "expected_values_for_teacher_student", true, true
+
+    context "when locked" do
+      let(:announcement) { @course.announcements.create!(message: "announcement", locked: true) }
+
+      include_examples "expected_values_for_teacher_student", true, false
     end
   end
 end

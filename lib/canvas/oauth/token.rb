@@ -94,8 +94,7 @@ module Canvas::OAuth
                                                })
         @access_token.real_user = real_user if real_user && real_user != user
 
-        expires_in = key.tokens_expire_in
-        @access_token.permanent_expires_at = Time.now.utc + expires_in if expires_in
+        @access_token.set_permanent_expiration
 
         @access_token.save!
 
@@ -153,12 +152,13 @@ module Canvas::OAuth
     end
 
     def self.find_access_token(user, developer_key, scopes, purpose, conditions = {}, real_user: nil)
-      user.shard.activate do
-        real_user = nil if real_user == user
-        user.access_tokens.active.where({ developer_key_id: developer_key, purpose:, real_user: }.merge(conditions)).detect do |token|
-          token.scoped_to?(scopes)
-        end
-      end
+      real_user = nil if real_user == user
+      # Issue query against the user's home shard.
+      # User access_tokens association has a multi shard scope
+      # so lookups have the potential to get expensive.
+      user.access_tokens.shard(user.shard).active
+          .where({ developer_key_id: developer_key, purpose:, real_user: }.merge(conditions))
+          .detect { |token| token.scoped_to?(scopes) }
     end
 
     def self.generate_code_for(user_id, real_user_id, client_id, options = {})
@@ -171,7 +171,12 @@ module Canvas::OAuth
         PURPOSE_KEY => options[:purpose],
         REMEMBER_ACCESS => options[:remember_access]
       }
-      Canvas.redis.setex("#{REDIS_PREFIX}#{code}", Setting.get("oath_token_request_timeout", 10.minutes.to_s).to_i, code_data.to_json)
+      Canvas.redis.setex("#{REDIS_PREFIX}#{code}", 10.minutes.to_i, code_data.to_json)
+
+      if Canvas::OAuth::PKCE.use_pkce_in_authorization?(options)
+        Canvas::OAuth::PKCE.store_code_challenge(options[:code_challenge], code)
+      end
+
       code
     end
 

@@ -20,7 +20,7 @@ import {useGradingSchemeUpdate} from '../useGradingSchemeUpdate'
 import doFetchApi from '@canvas/do-fetch-api-effect'
 
 import {renderHook} from '@testing-library/react-hooks/dom'
-import {GradingScheme, GradingSchemeUpdateRequest} from '../../../gradingSchemeApiModel'
+import type {GradingScheme, GradingSchemeUpdateRequest} from '../../../gradingSchemeApiModel'
 import {ApiCallStatus} from '../ApiCallStatus'
 
 const courseId = '11'
@@ -56,6 +56,8 @@ describe('useGradingSchemeUpdateHook', () => {
       id: 'some-id',
       data,
       title: 'My Course Grading Scheme',
+      points_based: false,
+      scaling_factor: 1.0,
     }
 
     const gradingScheme: GradingScheme = {
@@ -65,6 +67,7 @@ describe('useGradingSchemeUpdateHook', () => {
       context_name: 'A Course Name',
       context_type: 'Course',
       permissions: {manage: true},
+      workflow_state: 'active',
     }
 
     doFetchApi.mockResolvedValue({
@@ -97,6 +100,8 @@ describe('useGradingSchemeUpdateHook', () => {
       id: 'some-id',
       data,
       title: 'My Account Grading Scheme',
+      points_based: false,
+      scaling_factor: 1.0,
     }
     const gradingScheme: GradingScheme = {
       ...gradingSchemeUpdateRequest,
@@ -105,6 +110,7 @@ describe('useGradingSchemeUpdateHook', () => {
       context_name: 'An Account Name',
       context_type: 'Account',
       permissions: {manage: true},
+      workflow_state: 'active',
     }
     doFetchApi.mockResolvedValue({
       response: {ok: true},

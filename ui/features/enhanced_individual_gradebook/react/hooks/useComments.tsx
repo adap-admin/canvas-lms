@@ -17,19 +17,13 @@
  */
 
 import {useCallback, useEffect, useState} from 'react'
-import {useQuery} from 'react-apollo'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import {executeApiRequest} from '@canvas/util/apiRequest'
+import {executeApiRequest} from '@canvas/do-fetch-api-effect/apiRequest'
 
-import {GRADEBOOK_SUBMISSION_COMMENTS} from '../../queries/Queries'
-import {
-  ApiCallStatus,
-  AssignmentConnection,
-  CommentConnection,
-  GradebookSubmissionCommentsResponse,
-  GradebookUserSubmissionDetails,
-} from '../../types'
-import {Submission} from '../../../../api.d'
+import {fetchStudentSubmissionComments} from '../../queries/Queries'
+import {ApiCallStatus, type CommentConnection} from '../../types'
+import type {Submission} from '../../../../api.d'
+import {useQuery} from '@canvas/query'
 
 const I18n = useI18nScope('enhanced_individual_gradebook_submit_score')
 
@@ -39,15 +33,13 @@ type UseCommentsProps = {
 }
 export const useGetComments = ({courseId, submissionId}: UseCommentsProps) => {
   const [submissionComments, setSubmissionComments] = useState<CommentConnection[]>([])
+  const queryKey = ['individual-gradebook-student-comments', courseId ?? '', submissionId ?? '']
 
-  const {data, error, loading, refetch} = useQuery<GradebookSubmissionCommentsResponse>(
-    GRADEBOOK_SUBMISSION_COMMENTS,
-    {
-      variables: {courseId, submissionId},
-      fetchPolicy: 'cache-and-network',
-      skip: !submissionId || !courseId,
-    }
-  )
+  const {data, error, isLoading, refetch} = useQuery({
+    queryKey,
+    queryFn: fetchStudentSubmissionComments,
+    enabled: !!submissionId && !!courseId,
+  })
 
   useEffect(() => {
     if (error) {
@@ -59,7 +51,7 @@ export const useGetComments = ({courseId, submissionId}: UseCommentsProps) => {
     }
   }, [data, error])
 
-  return {submissionComments, loadingComments: loading, refetchComments: refetch}
+  return {submissionComments, loadingComments: isLoading, refetchComments: refetch}
 }
 
 export const usePostComment = () => {
@@ -68,18 +60,13 @@ export const usePostComment = () => {
   )
   const [postCommentError, setpostCommentError] = useState<string>('')
 
-  const gradeChangeUrl = ENV.GRADEBOOK_OPTIONS?.change_grade_url || ''
-
   const submit = useCallback(
-    async (
-      assignment: AssignmentConnection,
-      submission: GradebookUserSubmissionDetails,
-      comment: string,
-      groupComment?: boolean
-    ) => {
-      const path = gradeChangeUrl
-        .replace(':assignment', assignment.id)
-        .replace(':submission', submission.userId)
+    async (comment: string, groupComment?: boolean, submitScoreUrl?: string | null) => {
+      if (!submitScoreUrl) {
+        setpostCommentError(I18n.t('Unable to post comment'))
+        setpostCommentStatus(ApiCallStatus.FAILED)
+        return
+      }
 
       setpostCommentStatus(ApiCallStatus.PENDING)
 
@@ -90,20 +77,24 @@ export const usePostComment = () => {
         },
       }
 
-      const {status} = await executeApiRequest<Submission>({
-        path,
-        body: requestBody,
-        method: 'PUT',
-      })
+      try {
+        const {status} = await executeApiRequest<Submission>({
+          path: submitScoreUrl,
+          body: requestBody,
+          method: 'PUT',
+        })
 
-      if (status === 200) {
-        setpostCommentStatus(ApiCallStatus.COMPLETED)
-      } else {
+        if (status === 200) {
+          setpostCommentStatus(ApiCallStatus.COMPLETED)
+        } else {
+          throw new Error()
+        }
+      } catch (error) {
         setpostCommentError(I18n.t('Something went wrong'))
         setpostCommentStatus(ApiCallStatus.FAILED)
       }
     },
-    [gradeChangeUrl]
+    []
   )
 
   return {

@@ -54,7 +54,6 @@ describe "Student Gradebook - Assignment Details" do
     before do
       init_course_with_students 3
       user_session(@teacher)
-
       means = []
       [0, 3, 6].each do |i|
         # the format below ensures that 18.0 is displayed as 18.
@@ -112,7 +111,7 @@ describe "Student Gradebook - Assignment Details" do
         # nor submission comments to show
         # there is no grade distribution implementation for quantitative data restricted users
         # so expecting the table row's text to be exactly like below makes sure no grade distribution is showing
-        expect(ff("#grade-summary-react tr")[1].text).to eq "Assignment 1\nAssignments\nGRADED\nF\nYour grade has been updated"
+        expect(ff("#grade-summary-react tr")[1].text).to eq "Assignment 1\nAssignments\nGraded\nF\nYour grade has been updated"
       end
     end
   end
@@ -131,7 +130,7 @@ describe "Student Gradebook - Assignment Details" do
         user_session @students[0]
         get "/courses/#{@course.id}/grades"
         f("a[aria-label='Read comments']").click
-        expect(f(".score_details_table").text).to include "good job"
+        expect(StudentGradesPage.submission_comments.first).to include_text "good job"
       end
 
       it "does not show submission comments if assignment is muted" do
@@ -153,9 +152,11 @@ describe "Student Gradebook - Assignment Details" do
         # truthy setting
         Account.default.settings[:restrict_quantitative_data] = { value: true, locked: true }
         Account.default.save!
+        @course.restrict_quantitative_data = true
+        @course.save!
       end
 
-      it "shows submission comments", ignore_js_errors: true do
+      it "shows submission comments", :ignore_js_errors do
         @asn.grade_student(@students[0], grade: "10", grader: @teacher)
         @sub.submission_comments.create!(comment: "good job")
         user_session @students[0]
@@ -171,6 +172,30 @@ describe "Student Gradebook - Assignment Details" do
         get "/courses/#{@course.id}/grades"
         expect(f("body")).not_to contain_jqcss("tr button:contains('Submission Comments')")
         expect(f("svg[name='IconMuted']")).to be_present
+      end
+    end
+
+    context "discussion Checkpoints" do
+      before do
+        @course.enroll_student(@students[0], enrollment_state: "active")
+        @course.root_account.enable_feature!(:discussion_checkpoints)
+        @reply_to_topic, @reply_to_entry = graded_discussion_topic_with_checkpoints(context: @course)
+      end
+
+      it "expands sub assignments on print" do
+        user_session @students[0]
+        get "/courses/#{@course.id}/grades"
+
+        cmd_ctrl = driver.capabilities.platform_name.include?("mac") ? :command : :control
+        driver.action
+              .key_down(cmd_ctrl)
+              .send_keys("p")
+              .key_up(cmd_ctrl)
+              .perform
+
+        expect(fj("tr.parent_assignment_id_#{@reply_to_topic.parent_assignment.id}")).to be_present
+        expect(fj("tr#sub_assignment_#{@reply_to_topic.id}")).to be_present
+        expect(fj("tr#sub_assignment_#{@reply_to_entry.id}")).to be_present
       end
     end
   end

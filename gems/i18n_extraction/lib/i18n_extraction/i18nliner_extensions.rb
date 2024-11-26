@@ -70,7 +70,7 @@ module I18nExtraction::Extensions
       def pattern
         @pattern ||= begin
           calls = (I18nliner::Extractors::RubyExtractor::TRANSLATE_CALLS + LABEL_CALLS).map { |c| Regexp.escape(c.to_s) }
-          /(^|\W)(#{calls.join('|')})(\W|$)/
+          /(^|\W)(#{calls.join("|")})(\W|$)/
         end
       end
     end
@@ -108,7 +108,7 @@ module I18nExtraction::Extensions
       return false unless ALL_CALLS.include?(method)
       return false if ALL_CALLS.include?(current_defn)
 
-      (receiver.nil? || receiver == :I18n || LABEL_CALLS.include?(method))
+      receiver.nil? || receiver == :I18n || LABEL_CALLS.include?(method)
     end
 
     # add support for:

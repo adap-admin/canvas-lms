@@ -24,12 +24,92 @@ describe ContentExportsController do
   include K5Common
 
   describe "POST 'create'" do
-    it "exports everything explicitly" do
+    before do
       course_with_teacher_logged_in(active_all: true)
+      allow_any_instance_of(Course).to receive(:feature_enabled?).with(:quizzes_next).and_return(true)
+    end
+
+    it "exports everything explicitly" do
       post "create", params: { course_id: @course.id }
       expect(response).to be_successful
 
       expect(ContentExport.last.selected_content[:everything]).to be_present
+    end
+
+    context "new_quizzes_common_cartridge FF is disabled" do
+      before do
+        allow(@course).to receive(:feature_enabled?).and_call_original
+        Account.site_admin.disable_feature!(:new_quizzes_common_cartridge)
+      end
+
+      context "common cartridge export type" do
+        before do
+          assignment_model(submission_types: "external_tool", course: @course)
+          tool = @c.context_external_tools.create!(
+            name: "Quizzes.Next",
+            consumer_key: "test_key",
+            shared_secret: "test_secret",
+            tool_id: "Quizzes 2",
+            url: "http://example.com/launch"
+          )
+          @a.external_tool_tag_attributes = { content: tool }
+          @a.save!
+        end
+
+        it "sets worflow_state to waiting_for_external_tool" do
+          post "create", params: { course_id: @course.id, export_type: "common_cartridge" }
+          expect(response).to be_successful
+
+          expect(ContentExport.last.workflow_state).to eq "created"
+        end
+      end
+
+      context "any other export type" do
+        it "does not interfere with other export types" do
+          post "create", params: { course_id: @course.id }
+          expect(response).to be_successful
+
+          expect(ContentExport.last.workflow_state).to eq "created"
+        end
+      end
+    end
+
+    context "new_quizzes_common_cartridge FF is enabled" do
+      before do
+        allow(@course).to receive(:feature_enabled?).and_call_original
+        Account.site_admin.enable_feature!(:new_quizzes_common_cartridge)
+      end
+
+      context "common cartridge export type" do
+        before do
+          assignment_model(submission_types: "external_tool", course: @course)
+          tool = @c.context_external_tools.create!(
+            name: "Quizzes.Next",
+            consumer_key: "test_key",
+            shared_secret: "test_secret",
+            tool_id: "Quizzes 2",
+            url: "http://example.com/launch"
+          )
+          @a.external_tool_tag_attributes = { content: tool }
+          @a.save!
+        end
+
+        it "sets worflow_state to waiting_for_external_tool" do
+          post "create", params: { course_id: @course.id, export_type: "common_cartridge" }
+          expect(response).to be_successful
+
+          expect(ContentExport.last.workflow_state).to eq "waiting_for_external_tool"
+        end
+      end
+
+      context "any other export type" do
+        it "does not interfere with other export types" do
+          post "create", params: { course_id: @course.id }
+          expect(response).to be_successful
+
+          expect(ContentExport.last.workflow_state).to eq "created"
+        end
+      end
     end
   end
 
@@ -91,10 +171,10 @@ describe ContentExportsController do
         course_factory active_all: true
         course_with_ta(course: @course, active_all: true)
         student_in_course(course: @course, active_all: true)
-        @acx = factory_with_protected_attributes(@course.content_exports, user: @ta, export_type: "common_cartridge")
-        @tcx = factory_with_protected_attributes(@course.content_exports, user: @teacher, export_type: "common_cartridge")
-        @tzx = factory_with_protected_attributes(@course.content_exports, user: @teacher, export_type: "zip")
-        @szx = factory_with_protected_attributes(@course.content_exports, user: @student, export_type: "zip")
+        @acx = @course.content_exports.create!(user: @ta, export_type: "common_cartridge")
+        @tcx = @course.content_exports.create!(user: @teacher, export_type: "common_cartridge")
+        @tzx = @course.content_exports.create!(user: @teacher, export_type: "zip")
+        @szx = @course.content_exports.create!(user: @student, export_type: "zip")
       end
 
       describe "index" do
@@ -131,9 +211,9 @@ describe ContentExportsController do
       before(:once) do
         course_factory active_all: true
         student_in_course(course: @course, active_all: true)
-        @tzx = factory_with_protected_attributes(@student.content_exports, user: @teacher, export_type: "zip")
-        @sdx = factory_with_protected_attributes(@student.content_exports, user: @student, export_type: "user_data")
-        @szx = factory_with_protected_attributes(@student.content_exports, user: @student, export_type: "zip")
+        @tzx = @student.content_exports.create!(user: @teacher, export_type: "zip")
+        @sdx = @student.content_exports.create!(user: @student, export_type: "user_data")
+        @szx = @student.content_exports.create!(user: @student, export_type: "zip")
       end
 
       describe "index" do

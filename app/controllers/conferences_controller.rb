@@ -101,6 +101,18 @@
 #           "type": "array",
 #           "items": { "type": "integer"}
 #         },
+#         "invitees": {
+#           "description": "Array of user ids that are invitees in the conference",
+#           "example": [1, 7, 8, 9, 10],
+#           "type": "array",
+#           "items": { "type": "integer"}
+#         },
+#         "attendees": {
+#           "description": "Array of user ids that are attendees in the conference",
+#           "example": [1, 7, 8, 9, 10],
+#           "type": "array",
+#           "items": { "type": "integer"}
+#         },
 #         "has_advanced_settings": {
 #           "description": "True if the conference type has advanced settings.",
 #           "example": false,
@@ -177,6 +189,7 @@ class ConferencesController < ApplicationController
     return unless tab_enabled?(@context.class::TAB_CONFERENCES)
     return unless @current_user
 
+    page_has_instui_topnav
     log_api_asset_access(["conferences", @context], "conferences", "other")
     conferences = if @context.grants_any_right?(@current_user, :manage_content, *RoleOverride::GRANULAR_MANAGE_COURSE_CONTENT_PERMISSIONS)
                     @context.web_conferences.active

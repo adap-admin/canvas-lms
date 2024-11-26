@@ -656,8 +656,15 @@ describe "Canvas Cartridge importing" do
   end
 
   it "translates attachment links on import" do
-    attachment = Attachment.create!(filename: "ohai there.txt", uploaded_data: StringIO.new("ohai"), folder: Folder.unfiled_folder(@copy_from), context: @copy_from)
-    attachment_import = factory_with_protected_attributes(Attachment, filename: "ohai there.txt", uploaded_data: StringIO.new("ohai"), folder: Folder.unfiled_folder(@copy_to), context: @copy_to, migration_id: "ohai")
+    attachment = Attachment.create!(filename: "ohai there.txt",
+                                    uploaded_data: StringIO.new("ohai"),
+                                    folder: Folder.unfiled_folder(@copy_from),
+                                    context: @copy_from)
+    attachment_import = Attachment.create!(filename: "ohai there.txt",
+                                           uploaded_data: StringIO.new("ohai"),
+                                           folder: Folder.unfiled_folder(@copy_to),
+                                           context: @copy_to,
+                                           migration_id: "ohai")
     body_with_link = %{<p>Watup? <strong>eh?</strong>
       <a href="/courses/%s/files/%s/preview">Preview File</a>
       <a href="/courses/%s/files/%s/download">Download File</a>
@@ -694,9 +701,6 @@ describe "Canvas Cartridge importing" do
     att.content_type = "video/mp4"
     att.save!
 
-    media_id = "m_mystiry"
-    allow_any_instance_of(Attachment).to receive(:media_object).and_return(double(media_id:))
-
     path = CGI.escape(att.full_path)
     body_with_links = <<~HTML
       <p>Watup? <strong>eh?</strong>
@@ -710,6 +714,10 @@ describe "Canvas Cartridge importing" do
       title: "title",
       text: body_with_links
     }.with_indifferent_access
+
+    media_id = "m_mystiry"
+    @copy_to.attachments.find_by(filename: att.filename).update(media_entry_id: media_id)
+
     # import into new course
     @migration.attachment_path_id_lookup = { att.full_path => att.migration_id }
     Importers::WikiPageImporter.import_from_migration(hash, @copy_to, @migration)
@@ -718,7 +726,7 @@ describe "Canvas Cartridge importing" do
     page_2 = @copy_to.wiki_pages.where(migration_id: hash[:migration_id]).first
     links = Nokogiri::HTML5.fragment(page_2.body).css("a")
     expect(links.count).to eq 2
-    expect(links.first["href"]).to eq "/media_objects/#{media_id}"
+    expect(links.first["href"]).to eq "/media_attachments_iframe/#{att.id}?embedded=true"
     expect(links.last["href"]).to eq "/courses/#{@copy_to.id}/files/#{att.id}/preview"
   end
 
@@ -731,9 +739,6 @@ describe "Canvas Cartridge importing" do
     att.content_type = "video/mp4"
     att.save!
 
-    media_id = "m_new-media-id"
-    allow_any_instance_of(Attachment).to receive(:media_object).and_return(double(media_id:))
-
     path = CGI.escape(att.full_path)
     body = %(<p>WHAT<iframe style="width: 400px; height: 225px; display: inline-block;" title="Video player for video.mp4" data-media-type="video" src="%24IMS-CC-FILEBASE%24/#{path}" allowfullscreen="allowfullscreen" allow="fullscreen" data-media-id="m-old-mediaid"></iframe></p>)
 
@@ -743,6 +748,10 @@ describe "Canvas Cartridge importing" do
       text: body
     }.with_indifferent_access
 
+    media_id = "m_new-media-id"
+    att_to = @copy_to.attachments.find_by(filename: att.filename)
+    att_to.update(media_entry_id: media_id)
+
     @migration.attachment_path_id_lookup = { att.full_path => att.migration_id }
     Importers::WikiPageImporter.import_from_migration(hash, @copy_to, @migration)
     @migration.resolve_content_links!
@@ -750,7 +759,7 @@ describe "Canvas Cartridge importing" do
     page_2 = @copy_to.wiki_pages.where(migration_id: hash[:migration_id]).first
     expect(page_2.body).to include "</iframe>"
     frame = Nokogiri::HTML5.fragment(page_2.body).at_css("iframe")
-    expect(frame["src"]).to eq "/media_objects_iframe/#{media_id}?type=video"
+    expect(frame["src"]).to eq "/media_attachments_iframe/#{att_to.id}?embedded=true&type=video"
   end
 
   it "translates media sources on import" do
@@ -762,9 +771,6 @@ describe "Canvas Cartridge importing" do
     att.content_type = "video/mp4"
     att.save!
 
-    media_id = "m_new-media-id"
-    allow_any_instance_of(Attachment).to receive(:media_object).and_return(double(media_id:))
-
     path = CGI.escape(att.full_path)
     body = %(<p>WHAT<video style="width: 400px; height: 225px; display: inline-block;" title="Video player for video.mp4" data-media-type="video" allowfullscreen="allowfullscreen" allow="fullscreen" data-media-id="m-old-mediaid"><source src="%24IMS-CC-FILEBASE%24/#{path}" data-media-type="video" data-media-id="m-old-mediaid"></video></p>)
 
@@ -774,6 +780,10 @@ describe "Canvas Cartridge importing" do
       text: body
     }.with_indifferent_access
 
+    media_id = "m_new-media-id"
+    att_to = @copy_to.attachments.find_by(filename: att.filename)
+    att_to.update(media_entry_id: media_id)
+
     @migration.attachment_path_id_lookup = { att.full_path => att.migration_id }
     Importers::WikiPageImporter.import_from_migration(hash, @copy_to, @migration)
     @migration.resolve_content_links!
@@ -781,69 +791,97 @@ describe "Canvas Cartridge importing" do
     page_2 = @copy_to.wiki_pages.where(migration_id: hash[:migration_id]).first
     expect(page_2.body).to include "</iframe>"
     frame = Nokogiri::HTML5.fragment(page_2.body).at_css("iframe")
-    expect(frame["src"]).to eq "/media_objects_iframe/#{media_id}?type=video"
+    expect(frame["src"]).to eq "/media_attachments_iframe/#{att_to.id}?embedded=true&type=video"
   end
 
-  it "imports wiki pages" do
-    # make sure that the wiki page we're linking to in the test below exists
-    @copy_from.wiki_pages.create!(title: "assignments", body: "ohai")
-    @copy_to.wiki_pages.create!(title: "assignments", body: "ohai")
-    mod = @copy_from.context_modules.create!(name: "some module")
-    mod2 = @copy_to.context_modules.create(name: "some module")
-    mod2.migration_id = CC::CCHelper.create_key(mod)
-    mod2.save!
-    # Create files for the wiki text to reference
-    from_root = Folder.root_folders(@copy_from).first
-    from_dir = Folder.create!(name: "sub & folder", parent_folder: from_root, context: @copy_from)
-    from_att = Attachment.create!(filename: "picture+%2B+cropped.png", display_name: "picture + cropped.png", uploaded_data: StringIO.new("pretend .png data"), folder: from_dir, context: @copy_from)
+  context "Wiki page importing" do
+    before do
+      # make sure that the wiki page we're linking to in the test below exists
+      @page = @copy_from.wiki_pages.create!(title: "assignments", body: "ohai")
+      @copy_to.wiki_pages.create!(title: "assignments", body: "ohai")
+      @mod = @copy_from.context_modules.create!(name: "some module")
+      @mod2 = @copy_to.context_modules.create(name: "some module")
+      @mod2.migration_id = CC::CCHelper.create_key(@mod)
+      @mod2.save!
+      # Create files for the wiki text to reference
+      from_root = Folder.root_folders(@copy_from).first
+      from_dir = Folder.create!(name: "sub & folder", parent_folder: from_root, context: @copy_from)
+      from_att = Attachment.create!(filename: "picture+%2B+cropped.png", display_name: "picture + cropped.png", uploaded_data: StringIO.new("pretend .png data"), folder: from_dir, context: @copy_from)
 
-    to_root = Folder.root_folders(@copy_to).first
-    to_dir = Folder.create!(name: "sub & folder", parent_folder: to_root, context: @copy_to)
-    to_att = Attachment.create!(filename: "picture+%2B+cropped.png", display_name: "picture + cropped.png", uploaded_data: StringIO.new("pretend .png data"), folder: to_dir, context: @copy_to)
-    to_att.migration_id = CC::CCHelper.create_key(from_att)
-    to_att.save
-    path = to_att.full_display_path.gsub("course files/", "")
-    @migration.attachment_path_id_lookup = { path => to_att.migration_id }
+      to_root = Folder.root_folders(@copy_to).first
+      to_dir = Folder.create!(name: "sub & folder", parent_folder: to_root, context: @copy_to)
+      @to_att = Attachment.create!(filename: "picture+%2B+cropped.png", display_name: "picture + cropped.png", uploaded_data: StringIO.new("pretend .png data"), folder: to_dir, context: @copy_to)
+      @to_att.migration_id = CC::CCHelper.create_key(from_att)
+      @to_att.save
+      path = @to_att.full_display_path.gsub("course files/", "")
+      @migration.attachment_path_id_lookup = { path => @to_att.migration_id }
 
-    body_with_link = %(<p>Watup? <strong>eh?</strong>
-      <a href="/courses/%s/assignments">Assignments</a>
-      <a href="/courses/%s/file_contents/course%%20files/tbe_banner.jpg">Some file</a>
-      <a href="/courses/%s/#{@copy_to.wiki.path}/assignments">Assignments wiki link</a>
-      <a href="/courses/%s/modules">Modules</a>
-      <a href="/courses/%s/modules/%s">some module</a>
-      <img src="/courses/%s/files/%s/preview" alt="picture.png" /></p>
-      <div>
-        <div><img src="http://www.instructure.com/images/header-logo.png"></div>
-        <div><img src="http://www.instructure.com/images/header-logo.png"></div>
-      </div>)
-    page = @copy_from.wiki_pages.create!(title: "some page", body: body_with_link % [@copy_from.id, @copy_from.id, @copy_from.id, @copy_from.id, @copy_from.id, mod.id, @copy_from.id, from_att.id], editing_roles: "teachers", notify_of_update: true)
-    page.workflow_state = "unpublished"
-    @copy_from.save!
+      @body_with_link = %(<p>Watup? <strong>eh?</strong>
+        <a href="/courses/%s/assignments">Assignments</a>
+        <a href="/courses/%s/file_contents/course%%20files/tbe_banner.jpg">Some file</a>
+        <a href="/courses/%s/pages/#{CC::CCHelper.create_key(@page)}">Assignments wiki link</a>
+        <a href="/courses/%s/modules">Modules</a>
+        <a href="/courses/%s/modules/%s">some module</a>
+        <img src="/courses/%s/files/%s/preview" alt="picture.png" /></p>
+        <div>
+          <div><img src="http://www.instructure.com/images/header-logo.png"></div>
+          <div><img src="http://www.instructure.com/images/header-logo.png"></div>
+        </div>)
+      @page = @copy_from.wiki_pages.create!(title: "some page", body: @body_with_link % [@copy_from.id, @copy_from.id, @copy_from.id, @copy_from.id, @copy_from.id, @mod.id, @copy_from.id, from_att.id], editing_roles: "teachers", notify_of_update: true)
+      @page.workflow_state = "unpublished"
+      @copy_from.save!
 
-    # export to html file
-    migration_id = CC::CCHelper.create_key(page)
-    meta_fields = { identifier: migration_id }
-    meta_fields[:editing_roles] = page.editing_roles
-    meta_fields[:notify_of_update] = page.notify_of_update
-    meta_fields[:workflow_state] = page.workflow_state
-    exported_html = CC::CCHelper::HtmlContentExporter.new(@copy_from, @from_teacher).html_page(page.body, page.title, meta_fields)
-    # convert to json
-    doc = Nokogiri::HTML5(exported_html)
-    hash = @converter.convert_wiki(doc, "some-page")
-    hash = hash.with_indifferent_access
-    # import into new course
-    Importers::WikiPageImporter.process_migration({ "wikis" => [hash, nil] }, @migration)
-    @migration.resolve_content_links!
+      # export to html file
+      @migration_id = CC::CCHelper.create_key(@page)
+      @meta_fields = { identifier: @migration_id }
+      @meta_fields[:editing_roles] = @page.editing_roles
+      @meta_fields[:notify_of_update] = @page.notify_of_update
+      @meta_fields[:workflow_state] = @page.workflow_state
+    end
 
-    expect(ErrorReport.last.message).to match(/nil wiki/)
+    it "works with the precise_link_replacements FF OFF" do
+      Account.site_admin.disable_feature! :precise_link_replacements
+      exported_html = CC::CCHelper::HtmlContentExporter.new(@copy_from, @from_teacher).html_page(@page.body, @page.title, @meta_fields)
+      # convert to json
+      doc = Nokogiri::HTML5(exported_html)
+      hash = @converter.convert_wiki(doc, "some-page")
+      hash = hash.with_indifferent_access
+      # import into new course
+      Importers::WikiPageImporter.process_migration({ "wikis" => [hash, nil] }, @migration)
+      @migration.resolve_content_links!
 
-    page_2 = @copy_to.wiki_pages.where(migration_id:).first
-    expect(page_2.title).to eq page.title
-    expect(page_2.url).to eq page.url
-    expect(page_2.editing_roles).to eq page.editing_roles
-    expect(page_2.notify_of_update).to eq page.notify_of_update
-    expect(page_2.body).to eq (body_with_link % [@copy_to.id, @copy_to.id, @copy_to.id, @copy_to.id, @copy_to.id, mod2.id, @copy_to.id, to_att.id]).gsub(%r{png" />}, 'png">')
-    expect(page_2.unpublished?).to be true
+      expect(ErrorReport.last.message).to match(/nil wiki/)
+
+      page_2 = @copy_to.wiki_pages.where(migration_id: @migration_id).first
+      expect(page_2.title).to eq @page.title
+      expect(page_2.url).to eq @page.url
+      expect(page_2.editing_roles).to eq @page.editing_roles
+      expect(page_2.notify_of_update).to eq @page.notify_of_update
+      expect(page_2.body).to eq (@body_with_link % [@copy_to.id, @copy_to.id, @copy_to.id, @copy_to.id, @copy_to.id, @mod2.id, @copy_to.id, @to_att.id]).gsub(%r{png" />}, 'png">')
+      expect(page_2.unpublished?).to be true
+    end
+
+    it "works with the precise_link_replacements FF ON" do
+      Account.site_admin.enable_feature! :precise_link_replacements
+      exported_html = CC::CCHelper::HtmlContentExporter.new(@copy_from, @from_teacher).html_page(@page.body, @page.title, @meta_fields)
+      # convert to json
+      doc = Nokogiri::HTML5(exported_html)
+      hash = @converter.convert_wiki(doc, "some-page")
+      hash = hash.with_indifferent_access
+      # import into new course
+      Importers::WikiPageImporter.process_migration({ "wikis" => [hash, nil] }, @migration)
+      @migration.resolve_content_links!
+
+      expect(ErrorReport.last.message).to match(/nil wiki/)
+
+      page_2 = @copy_to.wiki_pages.where(migration_id: @migration_id).first
+      expect(page_2.title).to eq @page.title
+      expect(page_2.url).to eq @page.url
+      expect(page_2.editing_roles).to eq @page.editing_roles
+      expect(page_2.notify_of_update).to eq @page.notify_of_update
+      expect(page_2.body).to eq (@body_with_link % [@copy_to.id, @copy_to.id, @copy_to.id, @copy_to.id, @copy_to.id, @mod2.id, @copy_to.id, @to_att.id]).gsub(%r{png" />}, 'png">')
+      expect(page_2.unpublished?).to be true
+    end
   end
 
   it "imports migrate inline external tool URLs in wiki pages" do
@@ -900,6 +938,7 @@ describe "Canvas Cartridge importing" do
     asmnt.anonymous_peer_reviews = true
     asmnt.peer_review_count = 37
     asmnt.freeze_on_copy = true
+    asmnt.time_zone_edited = "Mountain Time (US & Canada)"
     asmnt.save!
 
     # export to xml/html
@@ -935,6 +974,7 @@ describe "Canvas Cartridge importing" do
     expect(asmnt_2.peer_review_count).to eq asmnt.peer_review_count
     expect(asmnt_2.freeze_on_copy).to be true
     expect(asmnt_2.copied).to be true
+    expect(asmnt_2.time_zone_edited).to eq asmnt.time_zone_edited
   end
 
   it "imports external tool assignments" do
@@ -1251,8 +1291,8 @@ describe "Canvas Cartridge importing" do
       </media_tracks>
     XML
     expect(@converter.convert_media_tracks(doc)).to eql({
-                                                          "xyz" => [{ "migration_id" => "abc", "kind" => "subtitles", "locale" => "en" },
-                                                                    { "migration_id" => "def", "kind" => "subtitles", "locale" => "tlh" }]
+                                                          "xyz" => [{ "content" => "", "migration_id" => "abc", "kind" => "subtitles", "locale" => "en" },
+                                                                    { "content" => "", "migration_id" => "def", "kind" => "subtitles", "locale" => "tlh" }]
                                                         })
   end
 
@@ -1292,7 +1332,7 @@ describe "Canvas Cartridge importing" do
     expect(mo.media_tracks.where(locale: "tlh").first.content).to eql("Qapla'")
     expect(mo.media_tracks.where(locale: "bad").first).to be_nil
 
-    expect(migration.migration_issues.map(&:description)).to include "Subtitles could not be imported from media.flv.bad.subtitles"
+    expect(migration.migration_issues.map(&:description)).to include "Subtitles (bad) could not be imported for media.flv"
 
     expect(@copy_to.attachments.where(migration_id: "abc").first).to be_deleted
     expect(@copy_to.attachments.where(migration_id: "def").first).to be_deleted

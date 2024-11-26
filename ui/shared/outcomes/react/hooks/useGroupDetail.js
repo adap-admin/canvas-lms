@@ -17,11 +17,11 @@
  */
 
 import {useEffect, useRef} from 'react'
-import {useApolloClient, useQuery} from 'react-apollo'
+import {useApolloClient, useQuery} from '@apollo/react-hooks'
 import useCanvasContext from './useCanvasContext'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import {showFlashAlert} from '@canvas/alerts/react/FlashAlert'
-import {SEARCH_GROUP_OUTCOMES} from '@canvas/outcomes/graphql/Management'
+import {SEARCH_GROUP_OUTCOMES} from '../../graphql/Management'
 import {uniqWith, uniqBy, uniq, isEqual} from 'lodash'
 import {gql} from '@canvas/apollo'
 

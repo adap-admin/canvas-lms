@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {GradingType, WorkflowState} from '../../../api'
+import type {GradingType, WorkflowState} from '../../../api.d'
 
 export type UserConnection = {
   enrollments: {
@@ -35,10 +35,17 @@ export type UserConnection = {
 export type EnrollmentConnection = {
   user: UserConnection
   courseSectionId: string
+  state: string
+}
+
+type AssignmentCheckpoint = {
+  tag: string
+  pointsPossible: number
 }
 
 export type AssignmentConnection = {
   id: string
+  assignmentGroupId: string
   name: string
   pointsPossible: number
   submissionTypes: string[]
@@ -57,6 +64,10 @@ export type AssignmentConnection = {
   moderatedGrading: boolean
   postManually: boolean
   published: boolean
+  gradingPeriodId?: string | null
+  hasSubmittedSubmissions: boolean
+  inClosedGradingPeriod: boolean | null
+  checkpoints?: AssignmentCheckpoint[]
 }
 
 export type AssignmentGroupConnection = {
@@ -64,10 +75,11 @@ export type AssignmentGroupConnection = {
   name: string
   groupWeight: number
   rules: {
-    drop_lowest?: number
-    drop_highest?: number
-    never_drop?: string[]
+    dropLowest?: number
+    dropHighest?: number
+    neverDrop?: string[]
   }
+  sisId: string | null
   state: string
   position: number
   assignmentsConnection: {
@@ -80,6 +92,23 @@ export type SectionConnection = {
   name: string
 }
 
+export type Outcome = {
+  id: string
+  assessed?: boolean
+  calculationInt?: number | null
+  calculationMethod?: string | null
+  description?: string | null
+  displayName?: string | null
+  masteryPoints?: number | null
+  pointsPossible?: number | null
+  title: string
+  ratings: {
+    color: string | null
+    description?: string | null
+    mastery?: boolean | null
+    points?: number | null
+  }[]
+}
 export type SubmissionConnection = {
   assignmentId: string
   id: string
@@ -88,6 +117,9 @@ export type SubmissionConnection = {
   redoRequest: boolean
   submittedAt: Date | null
   userId: string
+  gradingPeriodId?: string
+  excused?: boolean
+  state: string
 }
 
 export type Attachment = {
@@ -99,7 +131,7 @@ export type Attachment = {
 
 export type CommentConnection = {
   id: string
-  comment: string
+  htmlComment: string
   mediaObject?: {
     id: string
     mediaDownloadUrl: string
@@ -125,6 +157,11 @@ export type GradebookQueryResponse = {
     submissionsConnection: {
       nodes: SubmissionConnection[]
     }
+    rootOutcomeGroup: {
+      outcomes: {
+        nodes: Outcome[]
+      }
+    }
     assignmentGroupsConnection: {
       nodes: AssignmentGroupConnection[]
     }
@@ -139,26 +176,50 @@ export type GradebookStudentDetails = {
       name: string
     }
   }[]
+  id: string
   loginId: string
   name: string
+  hiddenName: string
+  sortableName: string
+}
+
+export type GradebookUserSubSubmissionDetails = {
+  grade: string | null
+  score: number | null
+  publishedGrade: string | null
+  publishedScore: string | null
+  assignmentId: string
+  gradeMatchesCurrentSubmission: boolean
+  subAssignmentTag: string
+  enteredGrade: string | null
+  enteredScore?: number | null
+  excused: boolean
 }
 
 export type GradebookUserSubmissionDetails = {
-  grade: string | null
-  id: string
-  score: number | null
-  enteredScore?: number | null
   assignmentId: string
-  submissionType?: string | null
-  proxySubmitter?: string | null
-  submittedAt: Date | null
-  state: string
+  cachedDueDate: string | null
+  customGradeStatus?: string | null
+  deductedPoints: null | string | number
+  enteredGrade: string | null
+  enteredScore?: number | null
   excused: boolean
+  grade: string | null
+  gradeMatchesCurrentSubmission: boolean | null
+  gradingPeriodId?: string
+  id: string
   late: boolean
   latePolicyStatus?: string
   missing: boolean
-  userId: string
+  proxySubmitter?: string | null
   redoRequest: boolean
+  score: null | number
+  state: string
+  sticker: string | null
+  submissionType?: string | null
+  submittedAt: Date | null
+  userId: string
+  subAssignmentSubmissions?: GradebookUserSubSubmissionDetails[]
 }
 
 export type GradebookStudentQueryResponse = {

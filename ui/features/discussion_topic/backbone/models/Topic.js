@@ -21,9 +21,9 @@
 import {extend as extend1} from '@canvas/backbone/utils'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import {each, extend} from 'underscore'
+import {each, extend} from 'lodash'
 import Backbone from '@canvas/backbone'
-import {asJson, getPrefetchedXHR} from '@instructure/js-utils'
+import {asJson, getPrefetchedXHR} from '@canvas/util/xhr'
 import BackoffPoller from '@canvas/backoff-poller'
 import walk from '../../array-walk'
 import erase from '@canvas/array-erase'
@@ -126,8 +126,8 @@ MaterializedDiscussionTopic.prototype.markAllAsUnread = function () {
 }
 
 MaterializedDiscussionTopic.prototype.setAllReadState = function (newReadState) {
-  return each(this.flattened, function (entry) {
-    return (entry.read_state = newReadState)
+  each(this.flattened, function (entry) {
+    entry.read_state = newReadState
   })
 }
 

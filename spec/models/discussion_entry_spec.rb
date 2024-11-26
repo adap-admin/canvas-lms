@@ -58,24 +58,6 @@ describe DiscussionEntry do
     expect(topic.discussion_entries.active.length).to eq 1
   end
 
-  it "checks both feature flags for the legacy boolean" do
-    @course = course_model
-    Account.site_admin.enable_feature!(:react_discussions_post)
-    expect(topic.discussion_entries.create(user: user_model).legacy?).to be true
-    Account.site_admin.enable_feature!(:isolated_view)
-    expect(topic.discussion_entries.create(user: user_model).legacy?).to be false
-    @course.disable_feature!(:react_discussions_post)
-    expect(topic.discussion_entries.create(user: user_model).legacy?).to be true
-
-    # Verify that course overrules split_screen_view as well
-    Account.site_admin.disable_feature!(:isolated_view)
-    Account.site_admin.enable_feature!(:split_screen_view)
-    expect(topic.discussion_entries.create(user: user_model).legacy?).to be true
-    # Verify that split_screen_view also returns discussion_entries.legacy as true
-    @course.enable_feature!(:react_discussions_post)
-    expect(topic.discussion_entries.create(user: user_model).legacy?).to be true
-  end
-
   it "preserves parent_id if valid" do
     course_factory
     entry = topic.discussion_entries.create!
@@ -181,13 +163,13 @@ describe DiscussionEntry do
       topic = @course.discussion_topics.create!(user: @teacher, message: "Hi there")
       entry = topic.discussion_entries.create!(user: @student, message: "Hi I'm a student")
 
-      to_users = entry.messages_sent[@notification_name].map(&:user).map(&:id)
+      to_users = entry.messages_sent[@notification_name].map(&:user_id)
       expect(to_users).to include(@teacher.id) # teacher is auto-subscribed
       expect(to_users).not_to include(@student.id) # posters are auto-subscribed, but student is not notified of his own post
       expect(to_users).not_to include(@non_posting_student.id)
 
       entry = topic.discussion_entries.create!(user: @teacher, message: "Nice to meet you")
-      to_users = entry.messages_sent[@notification_name].map(&:user).map(&:id)
+      to_users = entry.messages_sent[@notification_name].map(&:user_id)
       expect(to_users).not_to include(@teacher.id) # author
       expect(to_users).to include(@student.id)
       expect(to_users).not_to include(@non_posting_student.id)
@@ -195,7 +177,7 @@ describe DiscussionEntry do
       topic.subscribe(@non_posting_student)
       entry = topic.discussion_entries.create!(user: @teacher, message: "Welcome to the class")
       # now that the non_posting_student is subscribed, he should get notified of posts
-      to_users = entry.messages_sent[@notification_name].map(&:user).map(&:id)
+      to_users = entry.messages_sent[@notification_name].map(&:user_id)
       expect(to_users).not_to include(@teacher.id)
       expect(to_users).to include(@student.id)
       expect(to_users).to include(@non_posting_student.id)
@@ -276,7 +258,7 @@ describe DiscussionEntry do
     end
 
     it "sends notification to teacher when a reply is reported" do
-      @course.enable_feature!(:react_discussions_post)
+      @course.root_account.enable_feature!(:discussions_reporting)
       topic = @course.discussion_topics.create!(user: @teacher, message: "This is an important announcement")
       topic.subscribe(@student)
       entry = topic.discussion_entries.create!(user: @teacher, message: "Oh, and another thing...")
@@ -451,23 +433,20 @@ describe DiscussionEntry do
       # scenario: you visit a page for unread entries;
       # as you scroll the page you read entries at (later times, then you go to next page and entries are now read AFTER your initial QUERY time.
 
-      Timecop.safe_mode = false
-      Timecop.freeze(Time.utc(2013, 3, 13, 9, 12))
-      @entry1 = @topic.discussion_entries.create!(message: "entry 1 outside", user: @teacher)
-      @entry1.change_read_state("read", @student)
+      Timecop.freeze(Time.utc(2013, 3, 13, 9, 12)) do
+        @entry1 = @topic.discussion_entries.create!(message: "entry 1 outside", user: @teacher)
+        @entry1.change_read_state("read", @student)
+      end
 
-      Timecop.freeze(Time.utc(2013, 3, 13, 10, 12))
-      @entry2 = @topic.discussion_entries.create!(message: "entry 2", user: @teacher)
-      @entry3 = @topic.discussion_entries.create!(message: "entry 3", user: @teacher)
+      Timecop.freeze(Time.utc(2013, 3, 13, 10, 12)) do
+        @entry2 = @topic.discussion_entries.create!(message: "entry 2", user: @teacher)
+        @entry3 = @topic.discussion_entries.create!(message: "entry 3", user: @teacher)
 
-      @entry2.change_read_state("read", @student)
+        @entry2.change_read_state("read", @student)
 
-      # Notice we read the entries 1 min after the the query issues
-      expect(DiscussionEntry.unread_for_user_before(@student, Time.utc(2013, 3, 13, 10, 11)).order("id").map(&:message)).to eq(["entry 2", "entry 3"])
-
-    ensure
-      Timecop.return
-      Timecop.safe_mode = true
+        # Notice we read the entries 1 min after the the query issues
+        expect(DiscussionEntry.unread_for_user_before(@student, Time.utc(2013, 3, 13, 10, 11)).order("id").map(&:message)).to eq(["entry 2", "entry 3"])
+      end
     end
   end
 
@@ -617,18 +596,7 @@ describe DiscussionEntry do
       course_with_teacher
     end
 
-    it "forces a root entry as parent if the discussion isn't threaded" do
-      discussion_topic_model
-      root = @topic.reply_from(user: @teacher, text: "root entry")
-      sub1 = root.reply_from(user: @teacher, html: "sub entry")
-      expect(sub1.parent_entry).to eq root
-      expect(sub1.root_entry).to eq root
-      sub2 = sub1.reply_from(user: @teacher, html: "sub-sub entry")
-      expect(sub2.parent_entry).to eq root
-      expect(sub2.root_entry).to eq root
-    end
-
-    it "allows a sub-entry as parent if the discussion is threaded" do
+    it "allows a sub-entry as parent" do
       discussion_topic_model(threaded: true)
       root = @topic.reply_from(user: @teacher, text: "root entry")
       sub1 = root.reply_from(user: @teacher, html: "sub entry")
@@ -657,7 +625,7 @@ describe DiscussionEntry do
       topic_with_nested_replies
     end
 
-    context ".read_entry_ids" do
+    describe ".read_entry_ids" do
       it "returns the ids of the read entries" do
         @root2.change_read_state("read", @teacher)
         @reply_reply1.change_read_state("read", @teacher)
@@ -670,7 +638,7 @@ describe DiscussionEntry do
       end
     end
 
-    context ".forced_read_state_entry_ids" do
+    describe ".forced_read_state_entry_ids" do
       it "returns the ids of entries that have been marked as force_read_state" do
         marked_entries = [@root2, @reply_reply1, @reply_reply2, @reply3]
         marked_entries.each do |e|
@@ -687,7 +655,7 @@ describe DiscussionEntry do
       end
     end
 
-    context ".find_existing_participant" do
+    describe ".find_existing_participant" do
       it "returns existing data" do
         @root2.change_read_state("read", @teacher, forced: true)
         participant = @root2.find_existing_participant(@teacher)
@@ -758,7 +726,7 @@ describe DiscussionEntry do
 
     it "does not allow replies from students to topics locked based on date" do
       @entry = @topic.reply_from(user: @teacher, text: "topic")
-      @topic.unlock_at = 1.day.from_now
+      @topic.delayed_post_at = 1.day.from_now
       @topic.save!
       @entry.reply_from(user: @teacher, text: "reply") # should not raise error
       student_in_course(course: @course)
@@ -878,6 +846,24 @@ describe DiscussionEntry do
     let(:entry) { topic.discussion_entries.create!(message: "Hello!", user:) }
 
     describe "reply" do
+      context "reply permission" do
+        before :once do
+          course_with_teacher active_all: true
+        end
+
+        it "reply permission is true if the discussion is threaded" do
+          discussion_topic_model(discussion_type: "threaded")
+          entry = @topic.discussion_entries.create!(message: "entry", user: @teacher)
+          expect(entry.grants_right?(@teacher, :reply)).to be true
+        end
+
+        it "reply permission is false if the discussion is not threaded" do
+          discussion_topic_model(discussion_type: "not_threaded")
+          entry = @topic.discussion_entries.create!(message: "entry", user: @teacher)
+          expect(entry.grants_right?(@teacher, :reply)).to be false
+        end
+      end
+
       context "when a user is no longer enrolled in the course" do
         before do
           create_enrollment(topic.course, user, { enrollment_state: "completed" })
@@ -885,6 +871,26 @@ describe DiscussionEntry do
 
         it "returns false for their own posts" do
           expect(entry.grants_right?(user, :reply)).to be false
+        end
+      end
+
+      context "when course has announcement comments disabled" do
+        before do
+          create_enrollment(topic.course, user, { enrollment_state: "active" })
+          topic.course.lock_all_announcements = true
+          topic.course.save!
+        end
+
+        it "returns false when comments is locked for announcements" do
+          announcement = topic.course.announcements.create!(title: "announcement", message: "message")
+          announcement_entry = announcement.discussion_entries.create!(message: "Hello!", user:)
+          expect(announcement_entry.grants_right?(user, :reply)).to be false
+        end
+
+        it "returns true for non-announcement discussions" do
+          topic.discussion_type = "threaded"
+          topic.save!
+          expect(entry.grants_right?(user, :reply)).to be true
         end
       end
     end
@@ -942,6 +948,23 @@ describe DiscussionEntry do
           announcement.lock!
           entry = announcement.discussion_entries.build(user: @student, message: "message")
           expect(entry.grants_right?(@student, :create)).to be false
+        end
+
+        context "when context.lock_all_announcements is true" do
+          before do
+            @course.lock_all_announcements = true
+            @course.save!
+          end
+
+          it "does not allow replies from students on announcements" do
+            entry = announcement.discussion_entries.build(user: @student, message: "message")
+            expect(entry.grants_right?(@student, :create)).to be false
+          end
+
+          it "allows replies for non-announcement topics" do
+            entry = topic.discussion_entries.build(user: @student, message: "message")
+            expect(entry.grants_right?(@student, :create)).to be true
+          end
         end
       end
     end
@@ -1041,10 +1064,30 @@ describe DiscussionEntry do
     reply3 = reply1.reply_from(user: @teacher, html: "sub-sub sibling entry")
     reply4 = reply2.reply_from(user: @teacher, html: "sub-sub-sub entry")
 
-    expect(root.depth).to eq 1
-    expect(reply1.depth).to eq 2
-    expect(reply2.depth).to eq 3
-    expect(reply3.depth).to eq 3
-    expect(reply4.depth).to eq 4
+    expect(root.depth).to be 1
+    expect(reply1.depth).to be 2
+    expect(reply2.depth).to be 3
+    expect(reply3.depth).to be 3
+    expect(reply4.depth).to be 4
+  end
+
+  describe "edited_at" do
+    it "returns null if no change to the title or message occurred" do
+      topic = discussion_topic_model
+      root = topic.reply_from(user: @teacher, text: "root entry")
+      expect(root.edited_at).to be_nil
+      root.depth = 3
+      root.save!
+      expect(root.edited_at).to be_nil
+    end
+
+    it "returns not null if a change to the message occured" do
+      topic = discussion_topic_model
+      root = topic.reply_from(user: @teacher, text: "root entry")
+      expect(root.edited_at).to be_nil
+      root.message = "Brand new shinny message"
+      root.save!
+      expect(root.edited_at).not_to be_nil
+    end
   end
 end

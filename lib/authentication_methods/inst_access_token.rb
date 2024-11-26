@@ -50,7 +50,7 @@ module AuthenticationMethods
     end
 
     # functionally encapsulates mapping an InstAccess token and a domain root account
-    # to a user/pseudonym.  This is out on it's own because there are some db-state
+    # to a user/pseudonym.  This is out on its own because there are some db-state
     # edge cases (like multiple users with the same UUID due to user merges, etc)
     # that are convenient to test close to the implementation.
     #
@@ -85,6 +85,21 @@ module AuthenticationMethods
       auth_context
     end
 
+    def self.usable_developer_key?(token, domain_root_account)
+      # The token is not associated with a specific developer key
+      return true if token.client_id.blank?
+
+      DeveloperKey.find_cached(token.client_id).usable_in_context?(domain_root_account)
+    rescue ActiveRecord::RecordNotFound
+      # The developer key associated with the 'client_id' claim
+      # does not exist or was deleted.
+      false
+    end
+
+    def self.blocked?(request)
+      blocked_token?(verified_token_for(request))
+    end
+
     # generally users should not share uuids.
     # this is just to make sure that when a shadow
     # user or similar exists, the local user
@@ -92,6 +107,48 @@ module AuthenticationMethods
     def self.find_user_by_uuid_prefer_local(uuid)
       User.active.where(uuid:).order(:id).first
     end
-    private_class_method :find_user_by_uuid_prefer_local
+
+    class Authentication
+      def initialize(request)
+        @request = request
+        @verified_token = verified_token_for(request)
+      end
+
+      def blocked?
+        return false unless Account.site_admin.feature_enabled?(:site_admin_service_auth)
+        return false unless verified_token.try(:jti).present?
+
+        RequestThrottle.blocklist.include? verified_token.jti
+      end
+
+      def tag_identifier
+        return unless Account.site_admin.feature_enabled?(:site_admin_service_auth)
+        return unless request.present?
+
+        return unless RequestThrottle::SERVICE_HEADER_EXPRESSION.match?(request.user_agent)
+        return unless verified_token.present?
+
+        # Validate the request is for an Instructure service
+        return unless verified_token.client_id.present?
+        return unless verified_token.instructure_service?
+
+        verified_token.client_id.to_s
+      end
+
+      private
+
+      attr_reader :verified_token, :request
+
+      def verified_token_for(request)
+        return unless request.present?
+
+        token_string = AuthenticationMethods.access_token(request, :GET)
+        return unless token_string.present?
+
+        AuthenticationMethods::InstAccessToken.parse(token_string)
+      rescue JSON::JWT::Exception, InstAccess::Error, AccessTokenError
+        nil
+      end
+    end
   end
 end

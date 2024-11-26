@@ -224,24 +224,6 @@ module Alerts
         end
       end
 
-      context "user notes" do
-        it "alerts" do
-          course_with_teacher(active_all: 1)
-          root_account = @course.root_account
-          root_account.enable_user_notes = true
-          root_account.save!
-
-          student_in_course(active_all: 1)
-          alert = @course.alerts.build(recipients: [:student])
-          alert.criteria.build(criterion_type: "UserNote", threshold: 7)
-          alert.save!
-          @course.start_at = 30.days.ago
-          expect(@mock_notification).to receive(:create_message).with(anything, [@user.id], anything)
-
-          DelayedAlertSender.evaluate_for_course(@course, nil)
-        end
-      end
-
       context "notification alert info" do
         before :once do
           Notification.create!(name: "Alert")
@@ -285,23 +267,6 @@ module Alerts
           DelayedAlertSender.evaluate_for_course(@course, nil)
         end
 
-        it "tells you what the alert is about note" do
-          root_account = @course.root_account
-          root_account.enable_user_notes = true
-          root_account.save!
-
-          ::UserNote.create!(creator: @teacher, user: @user, root_account_id: root_account.id) { |un| un.created_at = 30.days.ago }
-          alert = @course.alerts.build(recipients: [:student])
-          alert.criteria.build(criterion_type: "UserNote", threshold: 7)
-          alert.save!
-          @course.start_at = 30.days.ago
-          expect(@mock_notification).to receive(:create_message) do |alert_in, _, _|
-            expect(alert_in.criteria.first.criterion_type).to eq "UserNote"
-          end
-
-          DelayedAlertSender.evaluate_for_course(@course, nil)
-        end
-
         it "tells you what the alert is about interaction" do
           alert = @course.alerts.build(recipients: [:student])
           alert.criteria.build(criterion_type: "Interaction", threshold: 7)
@@ -330,6 +295,23 @@ module Alerts
       expect do
         DelayedAlertSender.evaluate_for_course(@course, nil)
       end.to change(DelayedMessage, :count).by(1)
+    end
+
+    it "does not create delayed messages when suppress_notifications = true" do
+      Account.default.settings[:suppress_notifications] = true
+      Account.default.save!
+      Notification.create(name: "Alert")
+
+      course_with_teacher(active_all: 1)
+      student_in_course(active_all: 1)
+      communication_channel(@student, { username: "student@example.com", active_cc: true })
+      alert = @course.alerts.build(recipients: [:student])
+      alert.criteria.build(criterion_type: "Interaction", threshold: 7)
+      alert.save!
+      @course.start_at = 30.days.ago
+      expect do
+        DelayedAlertSender.evaluate_for_course(@course, nil)
+      end.not_to change(DelayedMessage, :count)
     end
   end
 end

@@ -19,18 +19,23 @@
 
 require_relative "../common"
 require_relative "../helpers/scheduler_common"
+require_relative "pages/calendar_page"
 
 describe "scheduler" do
   include_context "in-process server selenium tests"
   include SchedulerCommon
+  include CalendarPage
+
+  before :once do
+    Account.default.tap do |a|
+      a.settings[:show_scheduler]   = true
+      a.settings[:agenda_view]      = true
+      a.save!
+    end
+  end
 
   context "find appointment mode as a student" do
     before :once do
-      Account.default.tap do |a|
-        a.settings[:show_scheduler]   = true
-        a.settings[:agenda_view]      = true
-        a.save!
-      end
       scheduler_setup
     end
 
@@ -99,9 +104,10 @@ describe "scheduler" do
       get "/calendar2"
       wait_for_ajaximations
       open_select_courses_modal(@course1.name)
-      f(".fc-content").click
+      ff(".fc-content")[0].click
       wait_for_ajaximations
-      move_to_click(".reserve_event_link")
+      scroll_into_view(".reserve_event_link")
+      f(".reserve_event_link").click
       refresh_page
       expected_time = calendar_time_string(@app1.new_appointments.first.start_at)
       wait_for_ajaximations
@@ -116,8 +122,8 @@ describe "scheduler" do
       f(".fc-event.scheduler-event").click
       wait_for_ajaximations
       f(".unreserve_event_link").click
-      expect(f("#delete_event_dialog")).to be_present
-      f(".ui-dialog-buttonset .btn-primary").click
+
+      click_delete_confirm_button
       # save the changes so the appointment object is updated
       @app1.save!
       expect(@app1.appointments.first.workflow_state).to eq("active")
@@ -127,20 +133,67 @@ describe "scheduler" do
       reserve_appointment_for(@student1, @student1, @app1)
       get "/calendar2"
       open_select_courses_modal(@course1.name)
-      expect(f(".fc-content .icon-calendar-add")).to be
+      wait_for_ajaximations
+      expect(f(".fc-content .icon-calendar-add")).to be_displayed
       scroll_into_view(".fc-content .icon-calendar-add")
-      f(".fc-content .icon-calendar-add").click
+      ff(".fc-content .icon-calendar-add")[0].click
       wait_for_ajaximations
       f(".reserve_event_link").click
       wait_for_ajaximations
       visible_dialog_element = fj(".ui-dialog:contains('You are already signed up for')")
       title = visible_dialog_element.find_element(:css, ".ui-dialog-titlebar")
       expect(title.text).to include("Cancel existing reservation and sign up for this one?")
-      f(".ui-dialog-buttonset .ui-button").click
+      ff(".ui-dialog-buttonset .ui-button")[0].click
       scroll_to(f('span[class="navigation_title_text"]'))
       ff(".fc-content .fc-title")[1].click
       wait_for_ajaximations
       expect(f(".event-details")).to contain_css(".reserve_event_link")
+    end
+  end
+
+  context "find appointment mode as an observer" do
+    before :once do
+      account = Account.default
+      account.settings[:allow_observers_in_appointment_groups] = { value: true }
+      account.save!
+
+      course_factory(active_all: true)
+      @observer = user_factory(active_all: true)
+      @course.enroll_user(@user, "ObserverEnrollment", enrollment_state: "active")
+
+      time = Time.zone.now
+      time += 1.hour if time.hour == 23
+      @ag1 = AppointmentGroup.create!(title: "Appointment 1",
+                                      contexts: [@course],
+                                      allow_observer_signup: false,
+                                      new_appointments: [[time, time + 30.minutes]])
+      @ag1.publish!
+      @ag2 = AppointmentGroup.create!(title: "Appointment 2",
+                                      contexts: [@course],
+                                      allow_observer_signup: true,
+                                      new_appointments: [[time, time + 30.minutes]])
+      @ag2.publish!
+    end
+
+    before do
+      user_session(@observer)
+    end
+
+    it "reserves appointment slots in find appointment mode" do
+      get "/calendar2"
+      wait_for_ajaximations
+      open_select_courses_modal(@course.name)
+      events = ff(".fc-content")
+      expect(events.count).to be 1
+      expect(events.first).to include_text("Appointment 2")
+      events.first.click
+      wait_for_ajaximations
+      move_to_click(".reserve_event_link")
+      refresh_page
+      expected_time = calendar_time_string(@ag2.new_appointments.first.start_at)
+      wait_for_ajaximations
+      expect(f(".fc-content .fc-title")).to include_text("Appointment 2")
+      expect(f(".fc-time")).to include_text expected_time
     end
   end
 end

@@ -18,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require "atom"
-
 class ObserverAlertsApiController < ApplicationController
   include Api::V1::ObserverAlert
 
@@ -33,11 +31,16 @@ class ObserverAlertsApiController < ApplicationController
                  .order(id: :desc)
                  .preload(:context)
 
-    # avoid n+1, all alerts are for the same student, we don't need to check each one.
-    all_alerts = [] unless all_alerts.first&.users_are_still_linked?
+    if all_alerts.first&.users_are_still_linked?
+      account_notification_ids = all_alerts.where(context_type: "AccountNotification").select(:context_id)
+      expired_account_notifications = AccountNotification.where(id: account_notification_ids).where(end_at: ...Time.zone.now).select(:id)
+      all_alerts = all_alerts.where.not(context_id: expired_account_notifications, context_type: "AccountNotification")
+    else
+      # avoid n+1, all alerts are for the same student, we don't need to check each one.
+      all_alerts = []
+    end
 
     alerts = Api.paginate(all_alerts, self, api_v1_observer_alerts_by_student_url)
-
     render json: alerts.map { |alert| observer_alert_json(alert, @current_user, session) }
   end
 

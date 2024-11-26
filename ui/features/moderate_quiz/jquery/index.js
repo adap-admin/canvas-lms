@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-shadow */
+/* eslint-disable eqeqeq */
 /*
  * Copyright (C) 2011 - present Instructure, Inc.
  *
@@ -21,15 +23,16 @@ import $ from 'jquery'
 import timing from './quiz_timing'
 import openModerateStudentDialog from './openModerateStudentDialog'
 import '@canvas/jquery/jquery.ajaxJSON'
-import '@canvas/datetime' /* datetimeString */
-import '@canvas/forms/jquery/jquery.instructure_forms' /* fillFormData, getFormData */
+import {datetimeString} from '@canvas/datetime/date-functions'
+import '@canvas/jquery/jquery.instructure_forms' /* fillFormData, getFormData */
 import 'jqueryui/dialog'
 import '@canvas/util/jquery/fixDialogButtons'
 import '@canvas/jquery/jquery.instructure_misc_helpers' /* replaceTags */
 import '@canvas/jquery/jquery.instructure_misc_plugins' /* showIf */
 import '@canvas/rails-flash-notifications'
 import '@canvas/util/templateData' /* fillTemplateData */
-import 'date-js'
+import '@instructure/date-js'
+import replaceTags from '@canvas/util/replaceTags'
 
 const I18n = useI18nScope('quizzes.moderate')
 /* Date.parse */
@@ -178,7 +181,7 @@ $(document).ready(function (_event) {
     const last_updated_at = moderation.lastUpdatedAt && moderation.lastUpdatedAt.toISOString()
 
     $.ajaxJSON(
-      $.replaceTags(moderate_url, 'update', last_updated_at),
+      replaceTags(moderate_url, 'update', last_updated_at),
       'GET',
       {},
       data => {
@@ -238,8 +241,8 @@ $(document).ready(function (_event) {
     checkChange()
   })
   $('.student_check').change(function () {
-    if (!$(this).attr('checked')) {
-      $('#check_all').attr('checked', false)
+    if (!$(this).prop('checked')) {
+      $('#check_all').prop('checked', false)
     }
     checkChange()
   })
@@ -277,6 +280,8 @@ $(document).ready(function (_event) {
       .dialog({
         title: I18n.t('titles.student_extensions', 'Student Extensions'),
         width: DIALOG_WIDTH,
+        modal: true,
+        zIndex: 1000,
       })
       .fixDialogButtons()
   })
@@ -293,7 +298,7 @@ $(document).ready(function (_event) {
     const name = $student.find('.student_name').text()
     $('#moderate_student_form').fillFormData(data)
     $('#moderate_student_form').data('ids', [$student.attr('data-user-id')])
-    $('#moderate_student_form').find('button').attr('disabled', false)
+    $('#moderate_student_form').find('button').prop('disabled', false)
     $('#moderate_student_dialog h2').text(
       I18n.t('extensions_for_student', 'Extensions for %{student}', {student: name})
     )
@@ -362,7 +367,7 @@ $(document).ready(function (_event) {
     const $form = $(this)
     $form
       .find('button')
-      .attr('disabled', true)
+      .prop('disabled', true)
       .filter('.save_button')
       .text(I18n.t('buttons.saving', 'Saving...'))
     let finished = 0,
@@ -401,7 +406,7 @@ $(document).ready(function (_event) {
     if (!valid(formData)) {
       $form
         .find('button')
-        .attr('disabled', false)
+        .prop('disabled', false)
         .filter('.save_button')
         .text(I18n.t('buttons.save', 'Save'))
       return
@@ -413,13 +418,13 @@ $(document).ready(function (_event) {
           if (ids.length == 1) {
             $form
               .find('button')
-              .attr('disabled', false)
+              .prop('disabled', false)
               .filter('.save_button')
               .text(I18n.t('buttons.save_failed', 'Save Failed, please try again'))
           } else {
             $form
               .find('button')
-              .attr('disabled', false)
+              .prop('disabled', false)
               .filter('.save_button')
               .text(
                 I18n.t(
@@ -432,7 +437,7 @@ $(document).ready(function (_event) {
         } else {
           $form
             .find('button')
-            .attr('disabled', false)
+            .prop('disabled', false)
             .filter('.save_button')
             .text(I18n.t('buttons.save', 'Save'))
           $('#moderate_student_dialog').dialog('close')
@@ -441,7 +446,7 @@ $(document).ready(function (_event) {
     }
     for (const idx in ids) {
       const id = ids[idx]
-      const url = $.replaceTags($('.extension_url').attr('href'), 'user_id', id)
+      const url = replaceTags($('.extension_url').attr('href'), 'user_id', id)
       $.ajaxJSON(
         url,
         'POST',
@@ -469,8 +474,8 @@ $(document).ready(function (_event) {
   $(document).on('click', '.extend_time_link', event => {
     event.preventDefault()
     const $row = $(event.target).parents('.student')
-    const end_at = $.datetimeString($row.attr('data-end-at'))
-    const started_at = $.datetimeString($row.attr('data-started-at'))
+    const end_at = datetimeString($row.attr('data-end-at'))
+    const started_at = datetimeString($row.attr('data-started-at'))
     const $dialog = $('#extend_time_dialog')
     $dialog.data('row', $row)
     $dialog.fillTemplateData({
@@ -479,11 +484,13 @@ $(document).ready(function (_event) {
         started_at,
       },
     })
-    $dialog.find('button').attr('disabled', false)
+    $dialog.find('button').prop('disabled', false)
     $dialog
       .dialog({
         title: I18n.t('titles.extend_quiz_time', 'Extend Quiz Time'),
         width: DIALOG_WIDTH,
+        modal: true,
+        zIndex: 1000,
       })
       .fixDialogButtons()
   })
@@ -506,6 +513,7 @@ $(document).ready(function (_event) {
         data.time_type === 'extend_from_now' &&
         data.time < $dialog.data('row').data('minutes_left')
       ) {
+        // eslint-disable-next-line no-alert
         const result = window.confirm(
           I18n.t(
             'confirms.taking_time_away',
@@ -519,10 +527,10 @@ $(document).ready(function (_event) {
       params[data.time_type] = data.time
       $dialog
         .find('button')
-        .attr('disabled', true)
+        .prop('disabled', true)
         .filter('.save_button')
         .text(I18n.t('buttons.extending_time', 'Extending Time...'))
-      const url = $.replaceTags(
+      const url = replaceTags(
         $('.extension_url').attr('href'),
         'user_id',
         $dialog.data('row').attr('data-user-id')
@@ -534,7 +542,7 @@ $(document).ready(function (_event) {
         data => {
           $dialog
             .find('button')
-            .attr('disabled', false)
+            .prop('disabled', false)
             .filter('.save_button')
             .text(I18n.t('buttons.extend_time', 'Extend Time'))
           moderation.updateSubmission(data)
@@ -543,7 +551,7 @@ $(document).ready(function (_event) {
         _data => {
           $dialog
             .find('button')
-            .attr('disabled', false)
+            .prop('disabled', false)
             .filter('.save_button')
             .text(I18n.t('buttons.time_extension_failed', 'Extend Time Failed, please try again'))
         }
@@ -652,6 +660,7 @@ $(document).ready(function (_event) {
           width: DIALOG_WIDTH,
           height: 200,
           close: this.closeDialog.bind(this),
+          zIndex: 1000,
         })
         .dialog('open')
         .fixDialogButtons()

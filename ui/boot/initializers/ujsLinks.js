@@ -19,7 +19,8 @@
 // https://github.com/rails/jquery-ujs
 
 import $ from 'jquery'
-import htmlEscape from 'html-escape'
+import htmlEscape from '@instructure/html-escape'
+import authenticityToken from '@canvas/authenticity-token'
 
 // #
 // Handles "data-method" on links such as:
@@ -29,10 +30,11 @@ function handleMethod(link) {
   const href = link.data('url') || link.attr('href')
   const method = link.data('method')
   const target = link.attr('target')
+  const token = authenticityToken() || 'tokenWasEmpty'
   const form = $(`<form method="post" action="${htmlEscape(href)}"></form>`)
   const metadataInputHtml = `
     <input name="_method" value="${htmlEscape(method)}" type="hidden" />
-    <input name="authenticity_token" type="hidden" />
+    <input name="authenticity_token" value="${htmlEscape(token)}" type="hidden" />
   `
 
   if (target) form.attr('target', target)
@@ -49,7 +51,7 @@ function allowAction(element) {
   return window.confirm(message)
 }
 
-$(document).delegate('a[data-confirm], a[data-method], a[data-remove]', 'click', function (_event) {
+$(document).on('click', 'a[data-confirm], a[data-method], a[data-remove]', function (_event) {
   const $link = $(this)
 
   if ($link.data('handled') || !allowAction($link)) return false

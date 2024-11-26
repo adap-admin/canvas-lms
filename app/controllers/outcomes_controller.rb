@@ -48,7 +48,7 @@ class OutcomesController < ApplicationController
       PERMISSIONS: {
         manage_outcomes: @context.grants_right?(@current_user, session, :manage_outcomes),
         manage_rubrics: @context.grants_right?(@current_user, session, :manage_rubrics),
-        can_manage_courses: @context.grants_any_right?(@current_user, session, :manage_courses, :manage_courses_admin),
+        can_manage_courses: @context.grants_right?(@current_user, session, :manage_courses_admin),
         import_outcomes: @context.grants_right?(@current_user, session, :import_outcomes),
         manage_proficiency_scales:
           @context.grants_right?(@current_user, session, :manage_proficiency_scales),
@@ -56,7 +56,11 @@ class OutcomesController < ApplicationController
           @context.grants_right?(@current_user, session, :manage_proficiency_calculations)
       },
       OUTCOMES_FRIENDLY_DESCRIPTION: Account.site_admin.feature_enabled?(:outcomes_friendly_description),
-      OUTCOME_AVERAGE_CALCULATION: @context.root_account.feature_enabled?(:outcome_average_calculation)
+      OUTCOME_AVERAGE_CALCULATION: @context.root_account.feature_enabled?(:outcome_average_calculation),
+      MENU_OPTION_FOR_OUTCOME_DETAILS_PAGE: Account.site_admin.feature_enabled?(:menu_option_for_outcome_details_page),
+      OUTCOMES_NEW_DECAYING_AVERAGE_CALCULATION: @context.root_account.feature_enabled?(:outcomes_new_decaying_average_calculation),
+      ARCHIVE_OUTCOMES: Account.site_admin.feature_enabled?(:archive_outcomes),
+      PREVENT_DELETION_OUTCOMES_WITH_OS_ALIGNMENTS: Account.site_admin.feature_enabled?(:prevent_deletion_outcomes_with_os_alignments)
     )
 
     set_tutorial_js_env
@@ -131,7 +135,7 @@ class OutcomesController < ApplicationController
             when Course
               @context.users.find(user_id)
             else
-              @context.all_users.find_by!(id: user_id)
+              @context.all_users.find(user_id)
             end
 
     return unless authorized_action(@context, @current_user, :manage)
@@ -156,7 +160,7 @@ class OutcomesController < ApplicationController
   def list
     return unless authorized_action(@context, @current_user, :manage_outcomes)
 
-    @account_contexts = @context.associated_accounts rescue []
+    @account_contexts = @context.associated_accounts
     @current_outcomes = @context.linked_learning_outcomes
     @outcomes = Canvas::ICU.collate_by(@context.available_outcomes, &:title)
     if params[:unused]
@@ -169,7 +173,7 @@ class OutcomesController < ApplicationController
   def add_outcome
     return unless authorized_action(@context, @current_user, :manage_outcomes)
 
-    @account_contexts = @context.associated_accounts.uniq rescue []
+    @account_contexts = @context.associated_accounts.uniq
     codes = @account_contexts.map(&:asset_string)
     @outcome = LearningOutcome.for_context_codes(codes).find(params[:learning_outcome_id])
     @group = @context.learning_outcome_groups.find(params[:learning_outcome_group_id])

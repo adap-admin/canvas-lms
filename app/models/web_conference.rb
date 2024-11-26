@@ -48,13 +48,13 @@ class WebConference < ActiveRecord::Base
 
   scope :for_context_codes, ->(context_codes) { where(context_code: context_codes) }
 
-  scope :with_config_for, ->(context:) { where(conference_type: WebConference.conference_types(context).pluck("conference_type")) }
+  scope :with_config_for, ->(context:) { where(conference_type: WebConference.conference_types(context).pluck("conference_type")) } # rubocop:disable Rails/PluckInWhere
 
   scope :live, -> { where("web_conferences.started_at BETWEEN (NOW() - interval '1 day') AND NOW() AND (web_conferences.ended_at IS NULL OR web_conferences.ended_at > NOW())") }
 
   serialize :settings
   def settings
-    read_or_initialize_attribute(:settings, {})
+    self["settings"] ||= {}
   end
 
   # whether they replace the whole hash or just update some values, make sure
@@ -177,8 +177,8 @@ class WebConference < ActiveRecord::Base
   # regenerated)
   def external_url_for(key, user, url_id = nil)
     (external_urls[key.to_sym] &&
-      respond_to?("#{key}_external_url") &&
-      send("#{key}_external_url", user, url_id)) || []
+      respond_to?(:"#{key}_external_url") &&
+      send(:"#{key}_external_url", user, url_id)) || []
   end
 
   def self.external_urls
@@ -287,7 +287,7 @@ class WebConference < ActiveRecord::Base
   end
 
   def context_code
-    read_attribute(:context_code) || "#{context_type.underscore}_#{context_id}" rescue nil
+    super || "#{context_type.underscore}_#{context_id}" rescue nil
   end
 
   def infer_conference_settings; end
@@ -299,9 +299,8 @@ class WebConference < ActiveRecord::Base
                   WebConference.conference_types(context).detect { |t| t[:conference_type] == val }
                 end
     if conf_type
-      write_attribute(:conference_type, conf_type[:conference_type])
-      write_attribute(:type, conf_type[:class_name])
-      conf_type[:conference_type]
+      self.type = conf_type[:class_name]
+      super(conf_type[:conference_type])
     else
       nil
     end
@@ -439,10 +438,10 @@ class WebConference < ActiveRecord::Base
     []
   end
 
-  def craft_url(user = nil, session = nil, return_to = "http://www.instructure.com")
+  def craft_url(user = nil, session = nil, return_to = "https://www.instructure.com")
     user ||= self.user
     (initiate_conference and touch) or return nil
-    if user == self.user || grants_right?(user, session, :initiate)
+    if user.present? && (user == self.user || grants_right?(user, session, :initiate))
       admin_join_url(user, return_to)
     else
       participant_join_url(user, return_to)
@@ -543,7 +542,7 @@ class WebConference < ActiveRecord::Base
     url = options.delete(:url)
     join_url = options.delete(:join_url)
     options.reverse_merge!(only: %w[id title description conference_type duration started_at ended_at user_ids context_id context_type context_code start_at end_at])
-    result = super(options.merge(include_root: false, methods: %i[has_advanced_settings has_calendar_event long_running user_settings recordings]))
+    result = super(options.merge(include_root: false, methods: %i[has_advanced_settings invitees_ids attendees_ids has_calendar_event long_running user_settings recordings]))
     result["url"] = url
     result["join_url"] = join_url
     result
@@ -551,6 +550,14 @@ class WebConference < ActiveRecord::Base
 
   def user_ids
     web_conference_participants.pluck(:user_id)
+  end
+
+  def invitees_ids
+    invitees.pluck(:id)
+  end
+
+  def attendees_ids
+    attendees.pluck(:id)
   end
 
   def self.conference_types(context)
@@ -599,7 +606,7 @@ class WebConference < ActiveRecord::Base
 
       plugin.settings.merge(
         conference_type: plugin.id.classify,
-        class_name: (plugin.base || "#{plugin.id.classify}Conference"),
+        class_name: plugin.base || "#{plugin.id.classify}Conference",
         user_setting_fields: klass.user_setting_fields,
         name: plugin.name,
         plugin:

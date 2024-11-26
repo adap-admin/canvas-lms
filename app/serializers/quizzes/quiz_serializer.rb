@@ -79,6 +79,7 @@ module Quizzes
                :assignment_id,
                :one_time_results,
                :only_visible_to_overrides,
+               :visible_to_everyone,
                :assignment_group_id,
                :show_correct_answers_last_attempt,
                :version_number,
@@ -244,7 +245,7 @@ module Quizzes
     end
 
     def filter(keys)
-      super(keys).select do |key|
+      super.select do |key|
         case key
         when :all_dates
           include_all_dates?
@@ -315,7 +316,7 @@ module Quizzes
 
     delegate lockdown_browser_monitor_data: :quiz
 
-    def serializable_object(**)
+    def serializable_object(...)
       hash = super
       # legacy v1 api
       if accepts_jsonapi?
@@ -354,6 +355,10 @@ module Quizzes
 
     def only_visible_to_overrides
       quiz.only_visible_to_overrides || false
+    end
+
+    def visible_to_everyone
+      quiz.visible_to_everyone || false
     end
 
     def stringify_ids?
@@ -447,7 +452,7 @@ module Quizzes
     end
 
     def in_paced_course
-      context.try(:enable_course_paces)
+      context.account.feature_enabled?(:course_paces) && context.try(:enable_course_paces)
     end
   end
 end

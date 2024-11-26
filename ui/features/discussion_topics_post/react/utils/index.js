@@ -17,18 +17,26 @@
  */
 
 import {CURRENT_USER} from './constants'
-import {DISCUSSION_SUBENTRIES_QUERY} from '../../graphql/Queries'
+import {
+  DISCUSSION_ENTRY_ALL_ROOT_ENTRIES_QUERY,
+  DISCUSSION_SUBENTRIES_QUERY,
+} from '../../graphql/Queries'
 import {Discussion} from '../../graphql/Discussion'
 import {DiscussionEntry} from '../../graphql/DiscussionEntry'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from '@canvas/rails-flash-notifications'
+import doFetchApi from '@canvas/do-fetch-api-effect'
 
 const I18n = useI18nScope('discussion_topics_post')
 
-export const getSpeedGraderUrl = (authorId = null) => {
+export const getSpeedGraderUrl = (authorId = null, entryId = null) => {
   let speedGraderUrl = ENV.SPEEDGRADER_URL_TEMPLATE
   if (authorId !== null) {
     speedGraderUrl = speedGraderUrl.replace(/%3Astudent_id/, authorId)
+  }
+
+  if (entryId !== null) {
+    speedGraderUrl = speedGraderUrl.concat(`&entry_id=${entryId}`)
   }
 
   return speedGraderUrl
@@ -70,11 +78,9 @@ export const updateDiscussionTopicEntryCounts = (
   }
 }
 
-export const updateDiscussionEntryRootEntryCounts = (cache, result, unreadCountChange) => {
+export const updateDiscussionEntryRootEntryCounts = (cache, discussionEntry, unreadCountChange) => {
   const discussionEntryOptions = {
-    id: btoa(
-      'DiscussionEntry-' + result.data.updateDiscussionEntryParticipant.discussionEntry.rootEntryId
-    ),
+    id: btoa('DiscussionEntry-' + discussionEntry.rootEntryId),
     fragment: DiscussionEntry.fragment,
     fragmentName: 'DiscussionEntry',
   }
@@ -118,12 +124,7 @@ export const addReplyToDiscussionEntry = (cache, variables, newDiscussionEntry) 
     // The writeQuery creates a subentry query shape using the data from the new discussion entry
     // Using that query object it tries to find the cached subentry query for that reply and add the new reply to the cache
     const parentEntryOptions = {
-      id: btoa(
-        'DiscussionEntry-' +
-          (ENV.split_screen_view || ENV.isolated_view
-            ? newDiscussionEntry.rootEntryId
-            : newDiscussionEntry.parentId)
-      ),
+      id: btoa('DiscussionEntry-' + newDiscussionEntry.rootEntryId),
       fragment: DiscussionEntry.fragment,
       fragmentName: 'DiscussionEntry',
     }
@@ -148,6 +149,28 @@ export const addReplyToDiscussionEntry = (cache, variables, newDiscussionEntry) 
 
         cache.writeQuery({...subEntriesOptions, data: currentSubentriesQueryData})
       }
+
+      const parentQueryOptions = {
+        query: DISCUSSION_SUBENTRIES_QUERY,
+        variables: {
+          ...variables,
+          discussionEntryID:
+            parentEntryData.parentId || parentEntryData.rootEntryId || parentEntryData._id,
+        },
+      }
+
+      const parentQueryData = JSON.parse(JSON.stringify(cache.readQuery(parentQueryOptions)))
+
+      if (parentQueryData) {
+        const nodes = parentQueryData.legacyNode.discussionSubentriesConnection.nodes
+        const entryIndex = nodes.findIndex(entry => entry._id === newDiscussionEntry.parentId)
+        const currentEntry = nodes[entryIndex]
+
+        currentEntry.subentriesCount = (currentEntry.subentriesCount || 0) + 1
+
+        cache.writeQuery({...parentQueryOptions, data: parentQueryData})
+      }
+
       return true
     } else {
       return false
@@ -157,6 +180,64 @@ export const addReplyToDiscussionEntry = (cache, variables, newDiscussionEntry) 
     // This doesn't matter functionally because the expansion button will be visible and upon clicking it the
     // subentry query will be called, getting the new reply
     // Future new replies to the thread will not throw an exception because the subentry query is now in the cache
+  }
+}
+
+export const addReplyToAllRootEntries = (cache, newDiscussionEntry) => {
+  try {
+    const options = {
+      query: DISCUSSION_ENTRY_ALL_ROOT_ENTRIES_QUERY,
+      variables: {
+        discussionEntryID: newDiscussionEntry.rootEntryId,
+      },
+    }
+    const rootEntry = JSON.parse(JSON.stringify(cache.readQuery(options)))
+    if (rootEntry) {
+      if (
+        rootEntry.legacyNode.allRootEntries &&
+        Array.isArray(rootEntry.legacyNode.allRootEntries)
+      ) {
+        rootEntry.legacyNode.allRootEntries.push(newDiscussionEntry)
+      } else {
+        rootEntry.legacyNode.allRootEntries = [newDiscussionEntry]
+      }
+    }
+
+    cache.writeQuery({...options, data: rootEntry})
+  } catch (e) {
+    // do nothing for errors updating the cache on all root entries. This will happen when the thread hasn't been expanded.
+  }
+}
+
+export const addSubentriesCountToParentEntry = (cache, newDiscussionEntry) => {
+  // If the new discussion entry is a reply to a reply, update the subentries count on the parent entry.
+  // Otherwise, it already happens correctly in the root entry level.
+  if (newDiscussionEntry.parentId !== newDiscussionEntry.rootEntryId) {
+    const discussionEntryOptions = {
+      id: btoa('DiscussionEntry-' + newDiscussionEntry.parentId),
+      fragment: DiscussionEntry.fragment,
+      fragmentName: 'DiscussionEntry',
+    }
+    const data = JSON.parse(JSON.stringify(cache.readFragment(discussionEntryOptions)))
+    if (data) {
+      if (data.rootEntryParticipantCounts) {
+        data.lastReply = {
+          createdAt: newDiscussionEntry.createdAt,
+          __typename: 'DiscussionEntry',
+        }
+      }
+
+      if (data.subentriesCount) {
+        data.subentriesCount += 1
+      } else {
+        data.subentriesCount = 1
+      }
+
+      cache.writeFragment({
+        ...discussionEntryOptions,
+        data,
+      })
+    }
   }
 }
 
@@ -193,7 +274,6 @@ export const getOptimisticResponse = ({
   message = '',
   parentId = 'PLACEHOLDER',
   rootEntryId = null,
-  isolatedEntryId = null,
   quotedEntry = null,
   isAnonymous = false,
   depth = null,
@@ -202,7 +282,7 @@ export const getOptimisticResponse = ({
   if (quotedEntry && Object.keys(quotedEntry).length !== 0) {
     quotedEntry = {
       createdAt: quotedEntry.createdAt,
-      previewMessage: quotedEntry.previewMessage,
+      message: quotedEntry.message,
       author: {
         shortName: quotedEntry.author.shortName,
         __typename: 'User',
@@ -244,8 +324,10 @@ export const getOptimisticResponse = ({
               id: 'USER_PLACEHOLDER',
               _id: ENV.current_user.id,
               avatarUrl: ENV.current_user.avatar_image_url,
+              htmlUrl: ENV.current_user.html_url,
               displayName: ENV.current_user.display_name,
               courseRoles: [],
+              pronouns: null,
               __typename: 'User',
             }
           : null,
@@ -254,6 +336,7 @@ export const getOptimisticResponse = ({
               id: null,
               avatarUrl: null,
               shortName: CURRENT_USER,
+              pronouns: null,
               __typename: 'AnonymousUser',
             }
           : null,
@@ -272,15 +355,11 @@ export const getOptimisticResponse = ({
         },
         parentId,
         rootEntryId,
-        isolatedEntryId,
         quotedEntry,
         attachment: attachment
           ? {...attachment, id: 'ATTACHMENT_PLACEHOLDER', __typename: 'File'}
           : null,
-        discussionEntryVersionsConnection: {
-          nodes: [],
-          __typename: 'DiscussionEntryVersionConnection',
-        },
+        discussionEntryVersions: [],
         reportTypeCounts: {
           inappropriateCount: 0,
           offensiveCount: 0,
@@ -291,10 +370,20 @@ export const getOptimisticResponse = ({
         depth,
         __typename: 'DiscussionEntry',
       },
+      mySubAssignmentSubmissions: [],
       errors: null,
       __typename: 'CreateDiscussionEntryPayload',
     },
   }
+}
+
+// data must contain data response to create discussion entry mutation
+export const getCheckpointSubmission = (data, subAssignmentTag) => {
+  return (
+    data.createDiscussionEntry.mySubAssignmentSubmissions?.find(
+      sub => sub.subAssignmentTag === subAssignmentTag
+    ) || {}
+  )
 }
 
 export const buildQuotedReply = (nodes, previewId) => {
@@ -303,10 +392,10 @@ export const buildQuotedReply = (nodes, previewId) => {
   nodes.every(reply => {
     if (reply._id === previewId) {
       preview = {
-        id: previewId,
+        _id: previewId,
         author: {shortName: getDisplayName(reply)},
         createdAt: reply.createdAt,
-        previewMessage: reply.message.replace(/<[^>]*>?/gm, ''),
+        message: reply.message,
       }
       return false
     }
@@ -320,6 +409,17 @@ export const isAnonymous = discussionEntry =>
   discussionEntry.anonymousAuthor !== null &&
   discussionEntry.author === null
 
+const urlParams = new URLSearchParams(window.location.search)
+const hiddenUserId = urlParams.get('hidden_user_id')
+export const hideStudentNames = !!hiddenUserId
+
+export const userNameToShow = (originalName, authorId, course_roles) => {
+  if (hideStudentNames && course_roles?.includes('StudentEnrollment')) {
+    return hiddenUserId === authorId ? I18n.t('This Student') : I18n.t('Discussion Participant')
+  }
+  return originalName
+}
+
 export const getDisplayName = discussionEntry => {
   if (isAnonymous(discussionEntry)) {
     if (discussionEntry.anonymousAuthor.shortName === CURRENT_USER) {
@@ -330,7 +430,10 @@ export const getDisplayName = discussionEntry => {
     }
     return I18n.t('Anonymous %{id}', {id: discussionEntry.anonymousAuthor.id})
   }
-  return discussionEntry.author?.displayName || discussionEntry.author?.shortName
+
+  const author = discussionEntry.author
+  const name = author?.displayName || author?.shortName
+  return userNameToShow(name, author?._id, author?.courseRoles)
 }
 
 export const showErrorWhenMessageTooLong = message => {
@@ -351,3 +454,31 @@ export const showErrorWhenMessageTooLong = message => {
   }
   return false
 }
+
+export const getTranslation = async (text, translateTargetLanguage, setter) => {
+  if (text === undefined || text == null) {
+    return // Do nothing, there is no text to translate
+  }
+
+  const apiPath = `/courses/${ENV.course_id}/translate`
+
+  try {
+    const {json} = await doFetchApi({
+      method: 'POST',
+      path: apiPath,
+      body: {
+        inputs: {
+          src_lang: 'en', // TODO: detect source language.
+          tgt_lang: translateTargetLanguage,
+          text,
+        },
+      },
+    })
+    // Join together all the text with a separator, so that the original text remains separate
+    setter([text, translationSeparator, json.translated_text].join(''))
+  } catch (e) {
+    // TODO: Do something with the error message.
+  }
+}
+
+export const translationSeparator = '\n\n----------\n\n\n'

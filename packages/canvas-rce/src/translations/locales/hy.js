@@ -21,6 +21,7 @@ import '../tinymce/hy'
 
 const locale = {
   "add_8523c19b": { "message": "Ավելացնել" },
+  "add_one_9e34a6f8": { "message": "Մեկն ավելացնել" },
   "all_4321c3a1": { "message": "Բոլորը" },
   "alpha_15d59033": { "message": "Alpha" },
   "announcement_fb4cb645": { "message": "Հայտարարություն" },
@@ -53,6 +54,7 @@ const locale = {
   "collaborations_5c56c15f": { "message": "Համատեղ աշխատանքներ" },
   "content_1440204b": { "message": "Բովանդակություն" },
   "content_type_2cf90d95": { "message": "Բովանդակության տեսակ" },
+  "copy_9748f9f": { "message": "Պատճենել" },
   "copyright_holder_66ee111": {
     "message": "Հեղինակային իրավունք ունեցող անձը՝"
   },
@@ -83,6 +85,7 @@ const locale = {
   "external_tools_6e77821": { "message": "Արտաքին գործիքներ" },
   "files_c300e900": { "message": "Ֆայլեր" },
   "files_index_af7c662b": { "message": "Ֆայլերի ցուցիչ" },
+  "find_8d605019": { "message": "Գտնել" },
   "format_4247a9c5": { "message": "Ֆորմատ" },
   "generating_preview_45b53be0": { "message": "Կարծիքը գեներացվում է ..." },
   "grades_a61eba0a": { "message": "Գնահատականներ" },
@@ -135,10 +138,12 @@ const locale = {
   "new_quiz_34aacba6": { "message": "Նոր թեստ" },
   "next_40e12421": { "message": "Հաջորդը" },
   "no_e16d9132": { "message": "Ոչ" },
+  "no_pages_created_yet_c379fa6e": { "message": "Դեռևս ոչ մի էջ չի ստեղծվել:" },
   "no_preview_is_available_for_this_file_f940114a": {
     "message": "Այս ֆայլի նախնական դիտումը հասանելի չէ:"
   },
   "no_results_940393cf": { "message": "No results." },
+  "no_results_found_58717065": { "message": "Արդյունքներ չեն ստացվել" },
   "none_3b5e34d2": { "message": "Ոչինչ չկա" },
   "operators_a2ef9a93": { "message": "Օպերատորներ" },
   "orange_81386a62": { "message": "Նարնջագույն" },
@@ -149,6 +154,7 @@ const locale = {
   "pink_68ad45cb": { "message": "Վարդագույն" },
   "prev_f82cbc48": { "message": "Նախորդը" },
   "preview_53003fd2": { "message": "Նախնական դիտում" },
+  "previous_bd2ac015": { "message": "Նախորդը" },
   "published_c944a23d": { "message": "հրապարակված" },
   "purple_7678a9fc": { "message": "Մանուշակագույն" },
   "quiz_e0dcce8f": { "message": "Թեստ" },
@@ -159,6 +165,7 @@ const locale = {
   "relationships_6602af70": { "message": "Հարաբերություններ" },
   "replace_e61834a7": { "message": "Փոխարինել" },
   "reset_95a81614": { "message": "Սկզբնական Վիճակին Բերել" },
+  "retry_ebd5f8ba": { "message": "Փորձել կրկին" },
   "rich_content_editor_2708ef21": { "message": "Ֆորմատավորված տեքստի խմբագիր" },
   "save_11a80ec3": { "message": "Պահպանել" },
   "search_280d00bd": { "message": "Որոնել" },
@@ -166,6 +173,7 @@ const locale = {
   "star_8d156e09": { "message": "Նշել աստղիկով" },
   "start_over_f7552aa9": { "message": "Սկսել նորից" },
   "submit_a3cc6859": { "message": "Ուղարկել" },
+  "submitting_b90fac62": { "message": "Ուղարկվում է..." },
   "syllabus_f191f65b": { "message": "Դասընթացի ծրագիր" },
   "teal_f729a294": { "message": "Փիրուզագույն" },
   "the_document_preview_is_currently_being_processed__7d9ea135": {

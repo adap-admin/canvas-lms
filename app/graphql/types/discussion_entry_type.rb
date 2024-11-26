@@ -28,24 +28,39 @@ module Types
     global_id_field :id
 
     field :discussion_topic_id, ID, null: false
+    field :edited_at, Types::DateTimeType, null: true
     field :parent_id, ID, null: true
-    field :root_entry_id, ID, null: true
     field :rating_count, Integer, null: true
     field :rating_sum, Integer, null: true
-
-    field :isolated_entry_id, ID, null: true
-    def isolated_entry_id
-      object.legacy? ? object.parent_id : object.root_entry_id
-    end
+    field :root_entry_id, ID, null: true
 
     field :message, String, null: true
     def message
-      if object.deleted?
-        nil
-      elsif object.message&.include?("instructure_inline_media_comment")
+      return nil if object.deleted?
+
+      if object.message&.include?("<span class=\"mceNonEditable mention\"")
+        doc = Nokogiri::HTML::DocumentFragment.parse(object.message)
+        mentioned_spans = doc.css("span[data-mention]")
+        mentioned_user_ids = mentioned_spans.pluck("data-mention").map(&:to_i)
+
+        users = GraphQL::Batch.batch do
+          Loaders::DiscussionEntryUserLoader.load_many(mentioned_user_ids).sync
+        end
+
+        mentioned_spans.each do |span|
+          user = users.find { |u| u.id == span["data-mention"].to_i }
+          if user
+            mention_node = span.children.find { |node| node.text? && node.content.start_with?("@") }
+            mention_node.content = "@" + user.name if mention_node
+          end
+        end
+        object.message = doc.to_html
+      end
+
+      if object.message&.include?("instructure_inline_media_comment")
         load_association(:discussion_topic).then do |topic|
           Loaders::ApiContentAttachmentLoader.for(topic.context).load(object.message).then do |preloaded_attachments|
-            GraphQLHelpers::UserContent.process(
+            object.message = GraphQLHelpers::UserContent.process(
               object.message,
               context: topic.context,
               in_app: true,
@@ -56,8 +71,23 @@ module Types
             )
           end
         end
-      else
-        object.message
+      end
+
+      object.message
+    end
+
+    field :root_entry_page_number, Integer, null: true do
+      argument :per_page, Integer, required: false
+      argument :sort_order, Types::DiscussionSortOrderType, required: false
+    end
+    def root_entry_page_number(per_page: 20, sort_order: "desc")
+      load_association(:discussion_topic).then do |topic|
+        # we display deleted entries in discussions
+        topic_root_entries_ids = topic.discussion_entries.where(parent_id: nil).reorder("created_at #{sort_order}").map(&:id)
+        entry_root_id = object.root_entry_id || object.id
+        # we can have erroneous entries, if so at least we don't break
+        root_entry_index = topic_root_entries_ids.find_index(entry_root_id) || 0
+        (root_entry_index / per_page).floor
       end
     end
 
@@ -72,18 +102,19 @@ module Types
         nil
       elsif object.quoted_entry_id
         load_association(:quoted_entry)
-      elsif object.include_reply_preview
-        load_association(:parent_entry)
       end
     end
 
     field :author, Types::UserType, null: true do
+      argument :built_in_only, Boolean, "Only return default/built_in roles", required: false
       argument :course_id, String, required: false
       argument :role_types, [String], "Return only requested base role types", required: false
-      argument :built_in_only, Boolean, "Only return default/built_in roles", required: false
     end
     def author(course_id: nil, role_types: nil, built_in_only: false)
       load_association(:discussion_topic).then do |topic|
+        course_id = topic&.course&.id if course_id.nil?
+        # Set the graphql context so it can be used downstream
+        context[:course_id] = course_id
         if topic.anonymous? && object.is_anonymous_author
           nil
         else
@@ -91,7 +122,6 @@ module Types
             if !topic.anonymous? || !user
               user
             else
-              course_id = topic.course.id if course_id.nil?
               Loaders::CourseRoleLoader.for(course_id:, role_types:, built_in_only:).load(user).then do |roles|
                 if roles&.include?("TeacherEnrollment") || roles&.include?("TaEnrollment") || roles&.include?("DesignerEnrollment") || (topic.anonymous_state == "partial_anonymity" && !object.is_anonymous_author)
                   user
@@ -108,11 +138,15 @@ module Types
       load_association(:discussion_topic).then do |topic|
         if topic.anonymous_state == "full_anonymity" || (topic.anonymous_state == "partial_anonymity" && object.is_anonymous_author)
           Loaders::DiscussionTopicParticipantLoader.for(topic.id).load(object.user_id).then do |participant|
-            {
-              id: participant.id.to_s(36),
-              short_name: (object.user_id == current_user.id) ? "current_user" : participant.id.to_s(36),
-              avatar_url: nil
-            }
+            if participant.nil?
+              nil
+            else
+              {
+                id: participant.id.to_s(36),
+                short_name: (object.user_id == current_user.id) ? "current_user" : participant.id.to_s(36),
+                avatar_url: nil
+              }
+            end
           end
         end
       end
@@ -124,12 +158,15 @@ module Types
     end
 
     field :editor, Types::UserType, null: true do
+      argument :built_in_only, Boolean, "Only return default/built_in roles", required: false
       argument :course_id, String, required: false
       argument :role_types, [String], "Return only requested base role types", required: false
-      argument :built_in_only, Boolean, "Only return default/built_in roles", required: false
     end
     def editor(course_id: nil, role_types: nil, built_in_only: false)
       load_association(:discussion_topic).then do |topic|
+        course_id = topic&.course&.id if course_id.nil?
+        # Set the graphql context so it can be used downstream
+        context[:course_id] = course_id
         if topic.anonymous? && !course_id
           nil
         else
@@ -161,10 +198,10 @@ module Types
     end
 
     field :discussion_subentries_connection, Types::DiscussionEntryType.connection_type, null: true do
-      argument :sort_order, DiscussionSortOrderType, required: false
-      argument :relative_entry_id, ID, required: false
       argument :before_relative_entry, Boolean, required: false
       argument :include_relative_entry, Boolean, required: false
+      argument :relative_entry_id, ID, required: false
+      argument :sort_order, DiscussionSortOrderType, required: false
     end
     def discussion_subentries_connection(sort_order: :asc, relative_entry_id: nil, before_relative_entry: true, include_relative_entry: true)
       Loaders::DiscussionEntryLoader.for(
@@ -174,6 +211,13 @@ module Types
         before_relative_entry:,
         include_relative_entry:
       ).load(object)
+    end
+
+    field :all_root_entries, [Types::DiscussionEntryType], null: true
+    def all_root_entries
+      return nil unless object.root_entry_id.nil?
+
+      load_association(:flattened_discussion_subentries)
     end
 
     field :entry_participant, Types::EntryParticipantType, null: true
@@ -197,9 +241,6 @@ module Types
 
     field :subentries_count, Integer, null: true
     def subentries_count
-      # don't try to count subentries if isolated view is active
-      return nil if Account.site_admin.feature_enabled?(:isolated_view)
-
       Loaders::AssociationCountLoader.for(DiscussionEntry, :discussion_subentries).load(object)
     end
 
@@ -218,8 +259,10 @@ module Types
       load_association(:root_entry)
     end
 
-    field :discussion_entry_versions_connection, Types::DiscussionEntryVersionType.connection_type, null: true
-    def discussion_entry_versions_connection
+    # Temporary fix, it should be properly paginated
+    field :discussion_entry_versions, [Types::DiscussionEntryVersionType], null: true
+
+    def discussion_entry_versions
       is_course_teacher = object.context.is_a?(Course) && object.context.user_is_instructor?(current_user)
       is_group_teacher = object.context.is_a?(Group) && object.context&.course&.user_is_instructor?(current_user)
       return nil unless is_course_teacher || is_group_teacher || object.user == current_user

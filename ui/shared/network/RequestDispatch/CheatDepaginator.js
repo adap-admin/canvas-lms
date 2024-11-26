@@ -17,9 +17,8 @@
  */
 
 import {find, isArray} from 'lodash'
-import parseLinkHeader from 'parse-link-header'
-
-import {deferPromise} from 'defer-promise'
+import parseLinkHeader from '@canvas/parse-link-header'
+import deferPromise from '@instructure/defer-promise'
 
 /*
  * Fires callback for paginated APIs in order

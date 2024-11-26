@@ -209,6 +209,62 @@ class RubricAssessmentsController < ApplicationController
     end
   end
 
+  def export
+    return unless authorized_action(@context, @current_user, [:manage_grades, :view_all_grades])
+
+    rubric_association = Assignment.find(params[:assignment_id]).rubric_association
+
+    options = { filter: params[:filter] }
+
+    send_data(
+      RubricAssessmentExport.new(rubric_association:, user: @current_user, options:).generate_file,
+      type: "text/csv",
+      filename: "export_rubric_assessments.csv",
+      disposition: "attachment"
+    )
+  end
+
+  def import
+    file_obj = params[:attachment]
+    if file_obj.nil?
+      render json: { message: I18n.t("No file attached") }, status: :bad_request
+    end
+
+    assignment = Assignment.find(params[:assignment_id])
+
+    if !assignment || !assignment.rubric_association
+      render json: { message: I18n.t("Assignment not found or does not have a rubric association") }, status: :bad_request
+    end
+
+    return unless authorized_action(assignment.rubric_association, @current_user, :view_rubric_assessments)
+
+    if assignment.anonymous_grading?
+      render json: { message: I18n.t("Rubric import is not supported for assignments with anonymous grading") }, status: :bad_request
+    end
+
+    begin
+      grading_role = grading_role(assignment)
+
+      provisional = ["moderator", "provisional_grader"].include?(grading_role)
+
+      ensure_adjudication_possible(provisional:) do
+        import = RubricAssessmentImport.create_with_attachment(
+          assignment, file_obj, @current_user
+        )
+
+        import.schedule
+
+        import_response = api_json(import, @current_user, session)
+        import_response[:user] = user_json(import.user, @current_user, session) if import.user
+        import_response[:attachment] = import.attachment.slice(:id, :filename, :size)
+        render json: import_response
+      end
+    rescue Assignment::GradeError => e
+      json = { errors: { base: e.to_s, error_code: e.error_code } }
+      render json:, status: e.status_code || :bad_request
+    end
+  end
+
   private
 
   def resolve_user_id
@@ -227,7 +283,7 @@ class RubricAssessmentsController < ApplicationController
     value_to_boolean(params[:final]) && @association_object.permits_moderation?(@current_user)
   end
 
-  def ensure_adjudication_possible(provisional:, &block)
+  def ensure_adjudication_possible(provisional:, &)
     # Non-assignment association objects crash if they're passed into this
     # controller, since find_asset_for_assessment only exists on assignments.
     # The check here thus serves only to make sure the crash doesn't happen on
@@ -238,7 +294,23 @@ class RubricAssessmentsController < ApplicationController
       grader: @current_user,
       provisional:,
       occupy_slot: true,
-&block
+      &
     )
+  end
+
+  def moderated_grading_enabled_and_no_grades_published?(assignment)
+    assignment.moderated_grading? && !assignment.grades_published?
+  end
+
+  def grading_role(assignment)
+    if moderated_grading_enabled_and_no_grades_published?(assignment)
+      if assignment.permits_moderation?(@current_user)
+        :moderator
+      else
+        :provisional_grader
+      end
+    else
+      :grader
+    end
   end
 end

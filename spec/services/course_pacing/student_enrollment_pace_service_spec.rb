@@ -47,10 +47,10 @@ describe CoursePacing::StudentEnrollmentPaceService do
       ).to eq pace
     end
 
-    it "raises RecordNotFound when the pace is not found" do
-      expect do
+    it "returns nil" do
+      expect(
         CoursePacing::StudentEnrollmentPaceService.pace_in_context(extra_enrollment)
-      end.to raise_error ActiveRecord::RecordNotFound
+      ).to be_nil
     end
   end
 
@@ -177,6 +177,13 @@ describe CoursePacing::StudentEnrollmentPaceService do
       expect(
         CoursePacing::StudentEnrollmentPaceService.valid_context?(@last_student_enrollment)
       ).to be true
+    end
+
+    it "returns false if there is no active student enrollment for the given student enrollment" do
+      extra_enrollment = course.enroll_student(user_model, enrollment_state: "deleted")
+      expect(
+        CoursePacing::StudentEnrollmentPaceService.valid_context?(extra_enrollment)
+      ).to be false
     end
   end
 end

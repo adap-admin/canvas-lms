@@ -247,6 +247,11 @@ describe CanvadocSessionsController do
       assert_status(401)
     end
 
+    it "needs an HMAC and blob" do
+      get :show
+      assert_status(400)
+    end
+
     it "sends o365 as a preferred plugin when the 'Prefer Office 365 file viewer' account setting is enabled" do
       Account.default.settings[:canvadocs_prefer_office_online] = true
       Account.default.save!
@@ -546,6 +551,24 @@ describe CanvadocSessionsController do
           get :show, params: { blob: custom_blob, hmac: custom_hmac }
         end
 
+        context "when on a test environment named 'foo'" do
+          before do
+            allow(ApplicationController).to receive_messages(test_cluster?: true, test_cluster_name: "foo")
+          end
+
+          # this check is important to ensure test envs that share the prod DocViewer environment don't affect prod annotations. see CAS-1551
+          it "appends the test environment to the annotation context given to docviewer" do
+            custom_blob = blob.merge(annotation_context: annotation_context.launch_id).to_json
+            custom_hmac = Canvas::Security.hmac_sha1(custom_blob)
+
+            expect(@attachment.canvadoc)
+              .to receive(:session_url)
+              .with(hash_including(annotation_context: annotation_context.launch_id.to_s + "-foo"))
+
+            get :show, params: { blob: custom_blob, hmac: custom_hmac }
+          end
+        end
+
         it "shows all annotations for past attempts when the most recent attempt is not an annotation" do
           Timecop.freeze(10.minutes.from_now(@submission.submitted_at)) do
             @assignment.submit_homework(@student, submission_type: "online_text_entry", body: "hi")
@@ -683,7 +706,7 @@ describe CanvadocSessionsController do
         get :show, params: { blob: blob.to_json, hmac: }
       end
 
-      it "passes user information based on the submission (if past submission / missing attachment assocation)" do
+      it "passes user information based on the submission (if past submission / missing attachment association)" do
         @submission.attachment_associations.destroy_all
         expect(@attachment.canvadoc).to receive(:session_url).with(hash_including(user_id: @student.global_id.to_s))
 

@@ -23,7 +23,7 @@ class ErrorReport < ActiveRecord::Base
   belongs_to :account
   serialize :http_env
   # misc key/value pairs with more details on the error
-  serialize :data, Hash
+  serialize :data, type: Hash
 
   before_save :guess_email
   before_save :truncate_enormous_fields
@@ -41,11 +41,7 @@ class ErrorReport < ActiveRecord::Base
   end
 
   class Reporter
-    IGNORED_CATEGORIES = "404,ActionDispatch::RemoteIp::IpSpoofAttackError,Turnitin::Errors::SubmissionNotScoredError"
-
-    def ignored_categories
-      Setting.get("ignored_error_report_categories", IGNORED_CATEGORIES).split(",")
-    end
+    IGNORED_CATEGORIES = %w[404 ActionDispatch::RemoteIp::IpSpoofAttackError Turnitin::Errors::SubmissionNotScoredError PG::ConnectionBad].freeze
 
     include ActiveSupport::Callbacks
     define_callbacks :on_log_error
@@ -58,7 +54,7 @@ class ErrorReport < ActiveRecord::Base
 
     def log_error(category, opts)
       opts[:category] = category.to_s.presence || "default"
-      return if ignored_categories.include? category
+      return if IGNORED_CATEGORIES.include? category
 
       @opts = opts
       # sanitize invalid encodings
@@ -101,6 +97,11 @@ class ErrorReport < ActiveRecord::Base
         begin
           report = ErrorReport.new
           report.assign_data(opts)
+          unless Shard.current.in_current_region?
+            report = nil
+            raise "Out of region error report received"
+          end
+
           report.save!
           Rails.logger.info("Created ErrorReport ID #{report.global_id}")
         rescue => e
@@ -184,22 +185,22 @@ class ErrorReport < ActiveRecord::Base
 
   def backtrace=(val)
     if !val || val.length < self.class.maximum_text_length
-      write_attribute(:backtrace, val)
+      super
     else
-      write_attribute(:backtrace, val[0, self.class.maximum_text_length])
+      super(val[0, self.class.maximum_text_length])
     end
   end
 
   def comments=(val)
     if !val || val.length < self.class.maximum_text_length
-      write_attribute(:comments, val)
+      super
     else
-      write_attribute(:comments, val[0, self.class.maximum_text_length])
+      super(val[0, self.class.maximum_text_length])
     end
   end
 
   def url=(val)
-    write_attribute(:url, LoggingFilter.filter_uri(val))
+    super(LoggingFilter.filter_uri(val))
   end
 
   def safe_url?

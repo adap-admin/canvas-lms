@@ -28,7 +28,7 @@ module CC
       scope = WikiPages::ScopedToUser.new(@course, @user, scope).scope if @user
       scope.each do |page|
         next unless export_object?(page)
-        next if @user && page.locked_for?(@user)
+        next if @user && page.locked_for?(@user, check_policies: true)
 
         begin
           add_exported_asset(page)
@@ -58,6 +58,8 @@ module CC
           end
           meta_fields[:todo_date] = page.todo_date
           meta_fields[:publish_at] = page.publish_at
+          meta_fields[:unlock_at] = page.unlock_at
+          meta_fields[:lock_at] = page.lock_at
 
           File.open(path, "w") do |file|
             file << @html_exporter.html_page(page.body, page.title, meta_fields)

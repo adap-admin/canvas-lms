@@ -134,7 +134,11 @@ class CspSettingsController < ApplicationController
   def add_multiple_domains
     domains = params.require(:domains)
 
-    invalid_domains = domains.reject { |domain| URI.parse(domain) rescue nil }
+    invalid_domains = domains.reject do |domain|
+      URI.parse(domain)
+    rescue URI::InvalidURIError
+      false
+    end
     unless invalid_domains.empty?
       render json: { message: "invalid domains: #{invalid_domains.join(", ")}" }, status: :bad_request
       return false
@@ -150,16 +154,6 @@ class CspSettingsController < ApplicationController
     else
       render json: { message: "failed adding some domains: #{unsuccessful_domains.join(", ")}" }, status: :bad_request
     end
-  end
-
-  # @API Retrieve reported CSP Violations for account
-  #
-  # Must be called on a root account.
-  def csp_log
-    return render status: :bad_request, json: { message: "must be called on a root account" } unless @context.root_account?
-    return render status: :service_unavailable, json: { message: "CSP logging is not configured on the server" } unless (ss = @context.csp_logging_config["shared_secret"])
-
-    render json: CanvasHttp.get("#{@context.csp_logging_config["host"]}report/#{@context.global_id}", { "Authorization" => "Bearer #{ss}" }).body
   end
 
   # @API Remove a domain from account

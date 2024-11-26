@@ -18,6 +18,8 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
+require "feedjira"
+
 describe GroupsController do
   before :once do
     course_with_teacher(active_all: true)
@@ -334,6 +336,54 @@ describe GroupsController do
         end
       end
     end
+
+    context "self_signup_deadline_enabled ENV variable" do
+      it "set to true if enabled at account level" do
+        @course.account.enable_feature!(:self_signup_deadline)
+        user_session(@teacher)
+        get "index", params: { course_id: @course.id }
+        expect(assigns[:js_env][:self_signup_deadline_enabled]).to be_truthy
+      end
+
+      it "set to false if not enabled at account level" do
+        user_session(@teacher)
+        get "index", params: { course_id: @course.id }
+        expect(assigns[:js_env][:self_signup_deadline_enabled]).to be_falsey
+      end
+    end
+  end
+
+  describe "group_json" do
+    it "should include context_name for group" do
+      group_with_user(group_context: @course, user: @student, active_all: true)
+      user_session(@student)
+
+      get "index", format: "json"
+      expect(response).to be_successful
+      parsed_json = json_parse(response.body)
+      expect(parsed_json.length).to eq 1
+      expect(parsed_json[0]["context_name"]).to eq @group.context.name
+    end
+
+    it "should include course_id and not account_id if group's context is course'" do
+      group_with_user(group_context: @course, user: @student, active_all: true)
+      user_session(@student)
+      get "index", format: "json"
+      parsed_json = json_parse(response.body)
+      expect(parsed_json.length).to eq 1
+      expect(parsed_json[0]["course_id"]).to eq @group.context.id
+      expect(parsed_json[0]["account_id"]).to be_nil
+    end
+
+    it "should include account_id and not course_id if group's context is account" do
+      group_with_user(group_context: @account, user: @student, active_all: true)
+      user_session(@student)
+      get "index", format: "json"
+      parsed_json = json_parse(response.body)
+      expect(parsed_json.length).to eq 1
+      expect(parsed_json[0]["account_id"]).to eq @group.context.id
+      expect(parsed_json[0]["course_id"]).to be_nil
+    end
   end
 
   describe "GET index" do
@@ -564,17 +614,7 @@ describe GroupsController do
       expect(assigns[:group].name).to eql("some group")
     end
 
-    it "creates new group (granular permissions)" do
-      @course.root_account.enable_feature!(:granular_permissions_manage_groups)
-      user_session(@teacher)
-      post "create", params: { course_id: @course.id, group: { name: "some group" } }
-      expect(response).to be_redirect
-      expect(assigns[:group]).not_to be_nil
-      expect(assigns[:group].name).to eql("some group")
-    end
-
-    it "does not create new group if :manage_groups_add is not enabled (granular permissions)" do
-      @course.root_account.enable_feature!(:granular_permissions_manage_groups)
+    it "does not create new group if :manage_groups_add is not enabled" do
       @course.account.role_overrides.create!(
         permission: "manage_groups_add",
         role: teacher_role,
@@ -612,7 +652,7 @@ describe GroupsController do
 
     describe "quota" do
       before do
-        Setting.set("group_default_quota", 11.megabytes)
+        Setting.set("group_default_quota", 11.decimal_megabytes)
       end
 
       context "teacher" do
@@ -656,18 +696,7 @@ describe GroupsController do
       expect(assigns[:group].name).to eql("new name")
     end
 
-    it "updates group (granular permissions)" do
-      @course.root_account.enable_feature!(:granular_permissions_manage_groups)
-      user_session(@teacher)
-      @group = @course.groups.create!(name: "some group")
-      put "update", params: { course_id: @course.id, id: @group.id, group: { name: "new name" } }
-      expect(response).to be_redirect
-      expect(assigns[:group]).to eql(@group)
-      expect(assigns[:group].name).to eql("new name")
-    end
-
-    it "does not update group if :manage_groups_manage is not enabled (granular permissions)" do
-      @course.root_account.enable_feature!(:granular_permissions_manage_groups)
+    it "does not update group if :manage_groups_manage is not enabled" do
       @course.account.role_overrides.create!(
         permission: "manage_groups_manage",
         role: teacher_role,
@@ -767,24 +796,11 @@ describe GroupsController do
       expect(assigns[:group]).to eql(@group)
       expect(assigns[:group]).not_to be_frozen
       expect(assigns[:group]).to be_deleted
-      expect(@course.groups).to be_include(@group)
-      expect(@course.groups.active).not_to be_include(@group)
+      expect(@course.groups).to include(@group)
+      expect(@course.groups.active).not_to include(@group)
     end
 
-    it "deletes group (granular permissions)" do
-      @course.root_account.enable_feature!(:granular_permissions_manage_groups)
-      user_session(@teacher)
-      @group = @course.groups.create!(name: "some group")
-      delete "destroy", params: { course_id: @course.id, id: @group.id }
-      expect(assigns[:group]).to eql(@group)
-      expect(assigns[:group]).not_to be_frozen
-      expect(assigns[:group]).to be_deleted
-      expect(@course.groups).to be_include(@group)
-      expect(@course.groups.active).not_to be_include(@group)
-    end
-
-    it "does not delete group if :manage_groups_delete is not enabled (granular permissions)" do
-      @course.root_account.enable_feature!(:granular_permissions_manage_groups)
+    it "does not delete group if :manage_groups_delete is not enabled" do
       @course.account.role_overrides.create!(
         permission: "manage_groups_delete",
         role: teacher_role,
@@ -918,30 +934,29 @@ describe GroupsController do
 
     it "includes absolute path for rel='self' link" do
       get "public_feed", params: { feed_code: @group.feed_code }, format: "atom"
-      feed = Atom::Feed.load_feed(response.body) rescue nil
+      feed = Feedjira.parse(response.body)
       expect(feed).not_to be_nil
-      expect(feed.links.first.rel).to match(/self/)
-      expect(feed.links.first.href).to match(%r{http://})
+      expect(feed.feed_url).to match(%r{http://})
     end
 
     it "includes an author for each entry" do
       get "public_feed", params: { feed_code: @group.feed_code }, format: "atom"
-      feed = Atom::Feed.load_feed(response.body) rescue nil
+      feed = Feedjira.parse(response.body)
       expect(feed).not_to be_nil
       expect(feed.entries).not_to be_empty
-      expect(feed.entries.all? { |e| e.authors.present? }).to be_truthy
+      expect(feed.entries.all? { |e| e.author.present? }).to be_truthy
     end
 
     it "excludes unpublished things" do
       get "public_feed", params: { feed_code: @group.feed_code }, format: "atom"
-      feed = Atom::Feed.load_feed(response.body) rescue nil
+      feed = Feedjira.parse(response.body)
       expect(feed.entries.size).to eq 2
 
       @wp.unpublish
       @dt.unpublish! # yes, you really have to shout to unpublish a discussion topic :(
 
       get "public_feed", params: { feed_code: @group.feed_code }, format: "atom"
-      feed = Atom::Feed.load_feed(response.body) rescue nil
+      feed = Feedjira.parse(response.body)
       expect(feed.entries.size).to eq 0
     end
   end
@@ -993,8 +1008,8 @@ describe GroupsController do
       json = json_parse(response.body)
 
       expect(response).to be_successful
-      expect(json.count).to be_equal 1
-      expect(json[0]["group_submissions"][0]).to be_equal @sub.id
+      expect(json.count).to equal 1
+      expect(json[0]["group_submissions"][0]).to equal @sub.id
     end
 
     it "does not include group submissions if param is absent" do
@@ -1003,8 +1018,8 @@ describe GroupsController do
       json = json_parse(response.body)
 
       expect(response).to be_successful
-      expect(json.count).to be_equal 1
-      expect(json[0]["group_submissions"]).to be_equal nil
+      expect(json.count).to equal 1
+      expect(json[0]["group_submissions"]).to equal nil
     end
 
     describe "inactive students" do
@@ -1089,6 +1104,24 @@ describe GroupsController do
       it "uses the default folder for non-submissions" do
         put "create_file", params: request_params
         expect(created_attachment.folder).to eq Folder.unfiled_folder(group)
+      end
+
+      it "does not check quota if submit_assignment is true" do
+        put "create_file", params: request_params.merge(submit_assignment: true)
+        expect_any_instance_of(Attachment).not_to receive(:get_quota)
+      end
+
+      context "in a limited access account" do
+        before do
+          course.root_account.enable_feature!(:allow_limited_access_for_students)
+          course.account.settings[:enable_limited_access_for_students] = true
+          course.account.save!
+        end
+
+        it "renders unauthorized" do
+          put "create_file", params: request_params.merge(submit_assignment: true)
+          expect(response.code.to_i).to be 401
+        end
       end
     end
   end

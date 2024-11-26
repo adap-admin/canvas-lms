@@ -16,48 +16,44 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React, {useState} from 'react'
+import React from 'react'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import doFetchApi from '@canvas/do-fetch-api-effect'
-import {GradebookSettings} from '../../../../gradebook/react/default_gradebook/gradebook.d'
+import type {HandleCheckboxChange} from '../../../types'
+import CheckboxTemplate from './CheckboxTemplate'
 
 const I18n = useI18nScope('enhanced_individual_gradebook')
 type Props = {
-  settings?: GradebookSettings | null
   settingsUpdateUrl?: string | null
+  handleCheckboxChange: HandleCheckboxChange
+  showConcludedEnrollments: boolean
 }
-export default function ShowConcludedEnrollmentsCheckbox({settings, settingsUpdateUrl}: Props) {
-  const [showConcludedEnrollments, setShowConcludedEnrollments] = useState(
-    settings?.show_concluded_enrollments ? settings.show_concluded_enrollments === 'true' : false
-  )
+
+export default function ShowConcludedEnrollmentsCheckbox({
+  settingsUpdateUrl,
+  handleCheckboxChange,
+  showConcludedEnrollments,
+}: Props) {
   const handleShowConcludedEnrollmentsChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const checked = event.target.checked
     doFetchApi({
       method: 'PUT',
       path: settingsUpdateUrl,
       body: {
         gradebook_settings: {
-          show_concluded_enrollments: String(event.target.checked),
+          show_concluded_enrollments: checked ? 'true' : 'false',
         },
       },
     })
-    setShowConcludedEnrollments(event.target.checked)
+    handleCheckboxChange('showConcludedEnrollments', checked)
   }
 
   return (
-    <div
-      className="checkbox"
-      style={{padding: 12, margin: '10px 0px', background: '#eee', borderRadius: 5}}
-    >
-      <label className="checkbox" htmlFor="concluded_enrollments_checkbox">
-        <input
-          type="checkbox"
-          id="concluded_enrollments_checkbox"
-          name="concluded_enrollments_checkbox"
-          checked={showConcludedEnrollments}
-          onChange={handleShowConcludedEnrollmentsChange}
-        />
-        {I18n.t('Show Concluded Enrollments')}
-      </label>
-    </div>
+    <CheckboxTemplate
+      label={I18n.t('Show Concluded Enrollments')}
+      checked={showConcludedEnrollments}
+      onChange={handleShowConcludedEnrollmentsChange}
+      dataTestId="show-concluded-enrollments-checkbox"
+    />
   )
 }

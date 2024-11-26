@@ -60,6 +60,11 @@ module RCENextPage
     menu_item_by_name("Exit Fullscreen")
   end
 
+  def find_and_replace_menu_item
+    menubar_open_menu("Tools")
+    menu_item_by_name("Find and Replace")
+  end
+
   def keyboard_shortcut_modal
     f('[role="dialog"][aria-label="Keyboard Shortcuts"]')
   end
@@ -299,7 +304,7 @@ module RCENextPage
   def change_content_tray_content_type(which)
     content_type = content_tray_content_type
     content_type.click
-    options_id = content_type.attribute("aria-owns")
+    options_id = content_type.attribute("aria-controls")
     options = f("##{options_id}")
     option = fj(":contains(#{which})", options)
     option.click
@@ -308,7 +313,7 @@ module RCENextPage
   def change_content_tray_content_subtype(subtype)
     content_subtype = content_tray_content_subtype
     content_subtype.click
-    options_id = content_subtype.attribute("aria-owns")
+    options_id = content_subtype.attribute("aria-controls")
     options = f("##{options_id}")
     option = fj(":contains(#{subtype})", options)
     option.click
@@ -503,6 +508,7 @@ module RCENextPage
   end
 
   def click_course_item_link(title)
+    scroll_into_view(course_item_link(title))
     course_item_link(title).click
   end
 
@@ -520,6 +526,18 @@ module RCENextPage
 
   def display_text_link_option
     fj('label:contains("Display Text Link (Opens in a new tab)")')
+  end
+
+  def current_link_label
+    f('[data-testid="selected-link-name"]')
+  end
+
+  def click_replace_link_button
+    f('[data-testid="replace-link-button"]').click
+  end
+
+  def click_cancel_replace_button
+    f('[data-testid="cancel-replace-button"]').click
   end
 
   def click_display_text_link_option
@@ -567,6 +585,23 @@ module RCENextPage
 
   def sidebar_link(title)
     fj("aside li:contains('#{title}')")
+  end
+
+  def create_wiki_page_link(title)
+    click_course_links_toolbar_menuitem
+    click_pages_accordion
+    click_course_item_link(title)
+  end
+
+  def open_edit_link_tray
+    click_link_for_options
+    click_link_options_button
+  end
+
+  def change_link_text_input(new_text)
+    input = f('[data-testid="link-text-input"]')
+    input.send_keys(:backspace) until input.property("value").empty?
+    input.send_keys(new_text)
   end
 
   #=====================================================================================================================
@@ -1208,5 +1243,23 @@ module RCENextPage
       "return document.querySelector('#wiki_page_body_ifr').contentDocument.getSelection().removeAllRanges()"
     )
     # rubocop:enable Specs/NoExecuteScript
+  end
+  #=====================================================================================================================
+  # Find and Replace Tray
+
+  def find_and_replace_tray_header
+    f('[role="dialog"][aria-label="Find and Replace"]')
+  end
+
+  def find_and_replace_tray_find_input
+    f('input[name="findtext"]')
+  end
+
+  def find_and_replace_tray_replace_input
+    f('input[name="replacetext"]')
+  end
+
+  def find_and_replace_tray_replace_button
+    f('button[data-testid="replace-button"]')
   end
 end

@@ -16,8 +16,11 @@
 #
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
+require_relative "../../lti2_spec_helper"
 
 describe MasterCourses::MasterMigration do
+  include_context "lti2_spec_helper"
+
   before :once do
     course_factory
     @template = MasterCourses::MasterTemplate.set_as_master_course(@course)
@@ -37,6 +40,19 @@ describe MasterCourses::MasterMigration do
     @migration = MasterCourses::MasterMigration.start_new_migration!(@template, @admin, opts)
     run_jobs
     @migration.reload
+  end
+
+  def run_course_copy(copy_from, copy_to)
+    @cm = ContentMigration.new(context: copy_to,
+                               user: @user,
+                               source_course: copy_from,
+                               migration_type: "course_copy_importer",
+                               copy_options: { everything: "1" })
+    @cm.migration_settings[:import_immediately] = true
+    @cm.set_default_settings
+    @cm.save!
+    worker = Canvas::Migration::Worker::CourseCopyWorker.new
+    worker.perform(@cm)
   end
 
   describe "start_new_migration!" do
@@ -223,7 +239,7 @@ describe MasterCourses::MasterMigration do
         @original_assignment.touch
         run_master_migration
 
-        # The one line item downstream change stops assignment synch as a whole
+        # The one line item downstream change stops assignment sync as a whole
         expect(@assignment_copy.reload.title).to eq("updated assignment title")
         expect(@line_item_copy.reload.label).to eq("updated assignment title")
         expect(@line_item_copy.reload.resource_id).to eq("downstream_resource_id")
@@ -235,10 +251,18 @@ describe MasterCourses::MasterMigration do
         expect(@line_item_copy.reload.label).to eq("updated assignment title AGAIN")
         expect(@line_item_copy.reload.resource_id).to eq("updated_resource_id AGAIN")
       end
+
+      it "does not cause errors for regular course copies" do
+        fresh_course = course_factory
+        Account.site_admin.enable_feature! :blueprint_line_item_support
+        run_course_copy(@copy_from, fresh_course)
+        expect(fresh_course.assignments.count).to eq(@copy_from.assignments.count)
+        expect(@cm.migration_issues).to be_empty
+      end
     end
 
     context "with blueprint_line_item_support OFF" do
-      it "respects line item downstream editing and assignment locking" do
+      it "ignores downstream editing" do
         Account.site_admin.disable_feature! :blueprint_line_item_support
 
         expect(@original_line_item.resource_id).to eq("some_resource_id")
@@ -252,11 +276,120 @@ describe MasterCourses::MasterMigration do
         @original_line_item.update!(resource_id: "updated_resource_id AGAIN")
         @original_assignment.update!(title: "updated assignment title AGAIN")
         @original_assignment.touch
-        run_master_migration
-
+        Timecop.freeze(1.minute.from_now) { run_master_migration }
         expect(@assignment_copy.reload.title).to eq("updated assignment title AGAIN")
         expect(@line_item_copy.reload.label).to eq("updated assignment title AGAIN")
         expect(@line_item_copy.reload.resource_id).to eq("updated_resource_id AGAIN")
+      end
+
+      it "ignores assignment locking" do
+        Account.site_admin.disable_feature! :blueprint_line_item_support
+        expect(@original_line_item.resource_id).to eq("some_resource_id")
+
+        @template.content_tag_for(@original_assignment).update_attribute(:restrictions, { content: true })
+        @original_line_item.update!(resource_id: "updated_resource_id")
+        @original_assignment.update!(title: "updated assignment title")
+
+        Timecop.freeze(1.minute.from_now) { run_master_migration }
+        expect(@line_item_copy.reload.label).to eq("updated assignment title")
+        expect(@line_item_copy.reload.resource_id).to eq("updated_resource_id")
+      end
+    end
+  end
+
+  describe "Assignment Configuration Tool Lookup migration" do
+    before :once do
+      account_admin_user(active_all: true)
+      @copy_from = @course
+      @copy_to = course_factory
+      @sub = @template.add_child_course!(@copy_to)
+      @assignment_original = @copy_from.assignments.create!(title: "some assignment", submission_types: "external_tool", points_possible: 10)
+      @assignment_original.assignment_configuration_tool_lookups.create!(
+        context_type: "Account",
+        tool_id: message_handler.id,
+        tool_type: "Lti::MessageHandler"
+      )
+    end
+
+    before do
+      allow(Lti::ToolProxy).to receive(:find_active_proxies_for_context_by_vendor_code_and_product_code).and_return([true])
+      run_master_migration
+      @assignment_copy = @copy_to.assignments.where(migration_id: mig_id(@assignment_original)).first
+    end
+
+    context "when there is an ACTL on original assignment" do
+      it "migrates the ACTL over" do
+        expect(@assignment_copy.assignment_configuration_tool_lookups.last.tool_vendor_code).to eq("com.instructure.test")
+      end
+    end
+
+    context "when there is no ACTL on original assignment" do
+      before do
+        @assignment_original.assignment_configuration_tool_lookups.destroy_all
+        @assignment_original.touch
+      end
+
+      it "clears out the child ACTL" do
+        Timecop.travel(1.minute.from_now) { run_master_migration }
+        expect(@assignment_copy.assignment_configuration_tool_lookups.count).to eq(0)
+      end
+    end
+
+    context "when there is an extra ACTL on copied assignment" do
+      before do
+        @assignment_copy.assignment_configuration_tool_lookups.create!(context_type: "Course", tool_id: message_handler.id, tool_type: "Lti::MessageHandler", tool_vendor_code: "remove_me")
+        @assignment_original.touch
+      end
+
+      it "clears out the extra ACTL" do
+        expect(@assignment_copy.assignment_configuration_tool_lookups.count).to eq(2)
+        Timecop.travel(1.minute.from_now) { run_master_migration }
+        expect(@assignment_copy.assignment_configuration_tool_lookups.count).to eq(1)
+        expect(@assignment_copy.assignment_configuration_tool_lookups.last.tool_vendor_code).to eq("com.instructure.test")
+      end
+    end
+
+    context "with downstream changes" do
+      before do
+        @assignment_copy.assignment_configuration_tool_lookups.last.update! tool_vendor_code: "altered"
+      end
+
+      context "when there is no ACTL on original assignment" do
+        before do
+          @assignment_original.assignment_configuration_tool_lookups.destroy_all
+          @assignment_original.touch
+        end
+
+        it "clears out the child ACTL" do
+          Timecop.travel(1.minute.from_now) { run_master_migration }
+          expect(@assignment_copy.assignment_configuration_tool_lookups.count).to eq 0
+        end
+      end
+
+      context "when there is an ACTL on original assignment" do
+        before do
+          @assignment_original.tool_settings_tool.resource_handler.tool_proxy.product_family.update! vendor_code: "BP change"
+          @assignment_original.touch
+        end
+
+        it "overwrites child assignment's ACTL" do
+          Timecop.travel(1.minute.from_now) { run_master_migration }
+          expect(@assignment_copy.assignment_configuration_tool_lookups.count).to eq(1)
+          expect(@assignment_copy.assignment_configuration_tool_lookups.last.tool_vendor_code).to eq "BP change"
+        end
+      end
+
+      context "when downstream removes ACTL" do
+        before do
+          @assignment_copy.assignment_configuration_tool_lookups.last.destroy
+          @assignment_original.touch
+        end
+
+        it "recreates downstream assignment's ACTL" do
+          Timecop.travel(1.minute.from_now) { run_master_migration }
+          expect(@assignment_copy.assignment_configuration_tool_lookups.count).to eq(1)
+          expect(@assignment_copy.assignment_configuration_tool_lookups.last.tool_vendor_code).to eq("com.instructure.test")
+        end
       end
     end
   end
@@ -405,6 +538,32 @@ describe MasterCourses::MasterMigration do
       expect(cm2.migration_settings[:imported_assets]["DiscussionTopic"]).to be_blank # should have excluded it from the selective export
       expect(cm2.migration_settings[:imported_assets]["Attachment"]).to be_blank
       expect(cm2.migration_settings[:imported_assets]["WikiPage"]).to eq page_to.id.to_s
+    end
+
+    describe "send_item_notifications" do
+      it "does not perform imports with send_item_notifications by default" do
+        @copy_to = course_factory
+        @sub = @template.add_child_course!(@copy_to)
+
+        run_master_migration
+
+        expect(@sub.child_course.content_migrations
+                   .where(migration_type: "master_course_import")
+                   .last
+                   .send_item_notifications?).to be false
+      end
+
+      it "performs imports with send_item_notifications if the option is provided" do
+        @copy_to = course_factory
+        @sub = @template.add_child_course!(@copy_to)
+
+        run_master_migration(send_item_notifications: true)
+
+        expect(@sub.child_course.content_migrations
+                   .where(migration_type: "master_course_import")
+                   .last
+                   .send_item_notifications?).to be true
+      end
     end
 
     it "syncs deletions in incremental updates (except items modified downstream, unless locked)" do
@@ -1297,6 +1456,10 @@ describe MasterCourses::MasterMigration do
     end
 
     context "media_links_use_attachment_id feature flag off" do
+      before do
+        Account.site_admin.disable_feature!(:media_links_use_attachment_id)
+      end
+
       it "does not copy media tracks" do
         @copy_to = course_factory
         @template.add_child_course!(@copy_to)
@@ -1313,137 +1476,131 @@ describe MasterCourses::MasterMigration do
       end
     end
 
-    context "media_links_use_attachment_id feature flag" do
-      before do
-        allow(Account.site_admin).to receive(:feature_enabled?).with(:media_links_use_attachment_id).and_return true
-      end
+    it "copies media tracks" do
+      @copy_to = course_factory
+      @template.add_child_course!(@copy_to)
 
-      it "copies media tracks" do
-        @copy_to = course_factory
-        @template.add_child_course!(@copy_to)
+      media_id = "m-you_know_what_you_did"
+      media_object = @copy_from.media_objects.create!(title: "video.mp4", media_id:)
+      copy_from_track = media_object.media_tracks.create!(kind: "subtitles", locale: "en", content: "en subs")
 
-        media_id = "m-you_know_what_you_did"
-        media_object = @copy_from.media_objects.create!(title: "video.mp4", media_id:)
-        copy_from_track = media_object.media_tracks.create!(kind: "subtitles", locale: "en", content: "en subs")
+      run_master_migration
 
-        run_master_migration
+      att_to = @copy_to.attachments.where(migration_id: mig_id(media_object.attachment)).first
+      expect(att_to.media_tracks.length).to eq 1
+      expect(att_to.media_entry_id).to eq media_id
+      copy_to_track = att_to.media_tracks.first
+      expect(copy_to_track.id).not_to eq copy_from_track.id
+      expect(copy_to_track.slice(:locale, :content)).to match({ locale: "en", content: "en subs" })
+    end
 
-        att_to = @copy_to.attachments.where(migration_id: mig_id(media_object.attachment)).first
-        expect(att_to.media_tracks.length).to eq 1
-        expect(att_to.media_entry_id).to eq media_id
-        copy_to_track = att_to.media_tracks.first
-        expect(copy_to_track.id).not_to eq copy_from_track.id
-        expect(copy_to_track.slice(:locale, :content)).to match({ locale: "en", content: "en subs" })
-      end
+    it "overwrites media tracks with new parent changes" do
+      @copy_to = course_factory
+      @template.add_child_course!(@copy_to)
 
-      it "overwrites media tracks with new parent changes" do
-        @copy_to = course_factory
-        @template.add_child_course!(@copy_to)
+      media_id = "m-you_know_what_you_did"
+      media_object = @copy_from.media_objects.create!(title: "video.mp4", media_id:)
+      copy_from_track = media_object.media_tracks.create!(kind: "subtitles", locale: "en", content: "en subs")
 
-        media_id = "m-you_know_what_you_did"
-        media_object = @copy_from.media_objects.create!(title: "video.mp4", media_id:)
-        copy_from_track = media_object.media_tracks.create!(kind: "subtitles", locale: "en", content: "en subs")
+      run_master_migration
 
-        run_master_migration
+      att_to = @copy_to.attachments.where(migration_id: mig_id(media_object.attachment)).first
+      copy_to_track = att_to.media_tracks.first
+      expect(copy_to_track).to be_present
 
-        att_to = @copy_to.attachments.where(migration_id: mig_id(media_object.attachment)).first
-        copy_to_track = att_to.media_tracks.first
-        expect(copy_to_track).to be_present
-
-        Timecop.freeze(1.minute.from_now) do
-          copy_from_track.destroy
-          media_object.media_tracks.create!(kind: "subtitles", locale: "en", content: "orig subs")
-        end
-        run_master_migration
-
-        expect(att_to.reload.media_tracks.length).to eq 1
-        copy_to_track = att_to.media_tracks.first
-        expect(copy_to_track.content).to eq "orig subs"
-      end
-
-      it "doesn't overwrite media tracks with downstream changes" do
-        @copy_to = course_factory
-        @template.add_child_course!(@copy_to)
-
-        media_id = "m-you_know_what_you_did"
-        media_object = @copy_from.media_objects.create!(title: "video.mp4", media_id:)
-        copy_from_track = media_object.media_tracks.create!(kind: "subtitles", locale: "en", content: "en subs")
-
-        run_master_migration
-
-        att_to = @copy_to.attachments.where(migration_id: mig_id(media_object.attachment)).first
-        copy_to_track = att_to.media_tracks.first
-        expect(copy_to_track).to be_present
-
-        Timecop.freeze(1.minute.from_now) do
-          copy_to_track.destroy
-          att_to.media_tracks.create!(kind: "subtitles", locale: "en", content: "new subs")
-          copy_from_track.destroy
-          media_object.media_tracks.create!(kind: "subtitles", locale: "en", content: "orig subs")
-        end
-        run_master_migration
-
-        expect(att_to.media_tracks.length).to eq 1
-        copy_to_track = att_to.media_tracks.first
-        expect(copy_to_track.content).to eq "new subs"
-      end
-
-      it "overwrites media tracks with downstream changes if the attachment has been updated" do
-        @copy_to = course_factory
-        @template.add_child_course!(@copy_to)
-
-        media_id = "m-you_know_what_you_did"
-        media_object = @copy_from.media_objects.create!(title: "video.mp4", media_id:)
-        media_object.media_tracks.create!(kind: "subtitles", locale: "en", content: "en subs")
-
-        run_master_migration
-
-        att_to = @copy_to.attachments.where(migration_id: mig_id(media_object.attachment)).first
-        copy_to_track = att_to.media_tracks.first
-        expect(copy_to_track).to be_present
-
-        Timecop.freeze(1.minute.from_now) do
-          copy_to_track.destroy
-          att_to.media_tracks.create!(kind: "subtitles", locale: "en", content: "new subs")
-          @new_att = @copy_from.attachments.create!(filename: "video.mp4", uploaded_data: StringIO.new("ohai"), folder: media_object.attachment.folder, media_entry_id: media_id)
-          @new_att.handle_duplicates(:overwrite)
-          @new_att.media_tracks.create!(kind: "subtitles", locale: "en", content: "orig subs")
-        end
-        run_master_migration
-
-        expect(@new_att.media_tracks.length).to eq 1
-        copy_to_track = @new_att.media_tracks.first
-        expect(copy_to_track.content).to eq "orig subs"
-      end
-
-      it "overwrites media tracks when pushing a locked attachment" do
-        @copy_to = course_factory
-        @template.add_child_course!(@copy_to)
-
-        media_id = "m-you_know_what_you_did"
-        media_object = @copy_from.media_objects.create!(title: "video.mp4", media_id:)
+      Timecop.freeze(1.minute.from_now) do
+        copy_from_track.destroy
         media_object.media_tracks.create!(kind: "subtitles", locale: "en", content: "orig subs")
-        att_from = media_object.attachment
-
-        run_master_migration
-
-        att_to = @copy_to.attachments.where(migration_id: mig_id(media_object.attachment)).first
-        copy_to_track = att_to.media_tracks.first
-        expect(copy_to_track).to be_present
-
-        Timecop.freeze(1.minute.from_now) do
-          copy_to_track.destroy
-          att_to.media_tracks.create!(kind: "subtitles", locale: "en", content: "new subs")
-          att_to.media_tracks.create!(kind: "subtitles", locale: "fr", content: "fr subs")
-        end
-
-        @template.content_tag_for(att_from).update(restrictions: { content: true }) # should touch the content
-        run_master_migration
-
-        expect(att_to.media_tracks.length).to eq 1
-        copy_to_track = att_to.media_tracks.first
-        expect(copy_to_track.content).to eq "orig subs"
       end
+      run_master_migration
+
+      expect(att_to.reload.media_tracks.length).to eq 1
+      copy_to_track = att_to.media_tracks.first
+      expect(copy_to_track.content).to eq "orig subs"
+    end
+
+    it "doesn't overwrite media tracks with downstream changes" do
+      @copy_to = course_factory
+      @template.add_child_course!(@copy_to)
+
+      media_id = "m-you_know_what_you_did"
+      media_object = @copy_from.media_objects.create!(title: "video.mp4", media_id:)
+      copy_from_track = media_object.media_tracks.create!(kind: "subtitles", locale: "en", content: "en subs")
+
+      run_master_migration
+
+      att_to = @copy_to.attachments.where(migration_id: mig_id(media_object.attachment)).first
+      copy_to_track = att_to.media_tracks.first
+      expect(copy_to_track).to be_present
+
+      Timecop.freeze(1.minute.from_now) do
+        copy_to_track.destroy
+        att_to.media_tracks.create!(kind: "subtitles", locale: "en", content: "new subs")
+        copy_from_track.destroy
+        media_object.media_tracks.create!(kind: "subtitles", locale: "en", content: "orig subs")
+      end
+      run_master_migration
+
+      expect(att_to.media_tracks.length).to eq 1
+      copy_to_track = att_to.media_tracks.first
+      expect(copy_to_track.content).to eq "new subs"
+    end
+
+    it "overwrites media tracks with downstream changes if the attachment has been updated" do
+      @copy_to = course_factory
+      @template.add_child_course!(@copy_to)
+
+      media_id = "m-you_know_what_you_did"
+      media_object = @copy_from.media_objects.create!(title: "video.mp4", media_id:)
+      media_object.media_tracks.create!(kind: "subtitles", locale: "en", content: "en subs")
+
+      run_master_migration
+
+      att_to = @copy_to.attachments.where(migration_id: mig_id(media_object.attachment)).first
+      copy_to_track = att_to.media_tracks.first
+      expect(copy_to_track).to be_present
+
+      Timecop.freeze(1.minute.from_now) do
+        copy_to_track.destroy
+        att_to.media_tracks.create!(kind: "subtitles", locale: "en", content: "new subs")
+        @new_att = @copy_from.attachments.create!(filename: "video.mp4", uploaded_data: StringIO.new("ohai"), folder: media_object.attachment.folder, media_entry_id: media_id)
+        @new_att.handle_duplicates(:overwrite)
+        @new_att.media_tracks.create!(kind: "subtitles", locale: "en", content: "orig subs")
+      end
+      run_master_migration
+
+      expect(@new_att.media_tracks.length).to eq 1
+      copy_to_track = @new_att.media_tracks.first
+      expect(copy_to_track.content).to eq "orig subs"
+    end
+
+    it "overwrites media tracks when pushing a locked attachment" do
+      @copy_to = course_factory
+      @template.add_child_course!(@copy_to)
+
+      media_id = "m-you_know_what_you_did"
+      media_object = @copy_from.media_objects.create!(title: "video.mp4", media_id:)
+      media_object.media_tracks.create!(kind: "subtitles", locale: "en", content: "orig subs")
+      att_from = media_object.attachment
+
+      run_master_migration
+
+      att_to = @copy_to.attachments.where(migration_id: mig_id(media_object.attachment)).first
+      copy_to_track = att_to.media_tracks.first
+      expect(copy_to_track).to be_present
+
+      Timecop.freeze(1.minute.from_now) do
+        copy_to_track.destroy
+        att_to.media_tracks.create!(kind: "subtitles", locale: "en", content: "new subs")
+        att_to.media_tracks.create!(kind: "subtitles", locale: "fr", content: "fr subs")
+      end
+
+      @template.content_tag_for(att_from).update(restrictions: { content: true }) # should touch the content
+      run_master_migration
+
+      expect(att_to.media_tracks.length).to eq 1
+      copy_to_track = att_to.media_tracks.first
+      expect(copy_to_track.content).to eq "orig subs"
     end
 
     it "limits the number of items to track" do
@@ -1812,6 +1969,29 @@ describe MasterCourses::MasterMigration do
       expect(assmt_to.unlock_at).to be_nil
     end
 
+    it "removes available dates from locked wiki pages in sync" do
+      @copy_to = course_factory
+      @template.add_child_course!(@copy_to)
+      assmt = @copy_from.wiki_pages.create!(title: "page 1", unlock_at: 1.day.ago, lock_at: 1.day.from_now)
+      run_master_migration
+
+      page_to = @copy_to.wiki_pages.where(migration_id: mig_id(assmt)).first
+      expect(page_to.lock_at).not_to be_nil
+
+      Timecop.travel(5.minutes.from_now) do
+        @template.content_tag_for(assmt).update_attribute(:restrictions, { availability_dates: true })
+        assmt.update(unlock_at: nil, lock_at: nil)
+      end
+
+      Timecop.travel(10.minutes.from_now) do
+        run_master_migration
+      end
+
+      page_to.reload
+      expect(page_to.lock_at).to be_nil
+      expect(page_to.unlock_at).to be_nil
+    end
+
     it "counts downstream changes to quiz/assessment questions as changes in quiz/bank content" do
       @copy_to = course_factory
       sub = @template.add_child_course!(@copy_to)
@@ -2019,15 +2199,15 @@ describe MasterCourses::MasterMigration do
       topic.save!
       run_master_migration
 
-      topic_to = @copy_to.discussion_topics.where(migration_id: mig_id(topic)).take
+      topic_to = @copy_to.discussion_topics.find_by(migration_id: mig_id(topic))
       assignment_to = topic_to.assignment
       topic_to.assignment = nil
       topic_to.save!
 
       expect(assignment_to.reload).to be_deleted
-      topic_tag = MasterCourses::ChildContentTag.where(content_type: "DiscussionTopic", content_id: topic_to.id).take
+      topic_tag = MasterCourses::ChildContentTag.find_by(content_type: "DiscussionTopic", content_id: topic_to.id)
       expect(topic_tag.downstream_changes).to include "assignment_id"
-      assign_tag = MasterCourses::ChildContentTag.where(content_type: "Assignment", content_id: assignment_to.id).take
+      assign_tag = MasterCourses::ChildContentTag.find_by(content_type: "Assignment", content_id: assignment_to.id)
       expect(assign_tag.downstream_changes).to include "workflow_state"
 
       Timecop.travel(1.hour.from_now) do
@@ -2048,11 +2228,11 @@ describe MasterCourses::MasterMigration do
       topic = @copy_from.discussion_topics.create!
       run_master_migration
 
-      topic_to = @copy_to.discussion_topics.where(migration_id: mig_id(topic)).take
+      topic_to = @copy_to.discussion_topics.find_by(migration_id: mig_id(topic))
       topic_to.assignment = @copy_to.assignments.build(due_at: 1.month.from_now)
       topic_to.save!
 
-      topic_tag = MasterCourses::ChildContentTag.where(content_type: "DiscussionTopic", content_id: topic_to.id).take
+      topic_tag = MasterCourses::ChildContentTag.find_by(content_type: "DiscussionTopic", content_id: topic_to.id)
       expect(topic_tag.downstream_changes).to include "assignment_id"
 
       Timecop.travel(1.hour.from_now) do
@@ -2312,7 +2492,7 @@ describe MasterCourses::MasterMigration do
 
       att2_tag = nil
       Timecop.travel(5.minutes.ago) do
-        associated_folder = @copy_to.folders.where(cloned_item_id: blueprint_folder.cloned_item_id).take
+        associated_folder = @copy_to.folders.find_by(cloned_item_id: blueprint_folder.cloned_item_id)
         associated_folder.destroy
 
         blueprint_folder.update(name: "folder RENAMED", locked: true)
@@ -2762,7 +2942,7 @@ describe MasterCourses::MasterMigration do
       mm = run_master_migration
       expect(mm.migration_results.first.content_migration.warnings).to be_empty
 
-      quiz_to = @copy_to.quizzes.where(migration_id: mig_id(quiz)).take
+      quiz_to = @copy_to.quizzes.find_by(migration_id: mig_id(quiz))
       qg_to = quiz_to.quiz_groups.first # NOTE: it's migration_id isn't mig_id(group) because qti_generator is an oddball. oh well.
 
       expect(qg_to.question_points).to eq 2.0
@@ -2996,9 +3176,9 @@ describe MasterCourses::MasterMigration do
       tag = mod2.add_item type: "assignment", id: assmt.id
       run_master_migration
 
-      mod1_to = @copy_to.context_modules.where(migration_id: mig_id(mod1)).take
-      mod2_to = @copy_to.context_modules.where(migration_id: mig_id(mod2)).take
-      tag_to = @copy_to.context_module_tags.where(migration_id: mig_id(tag)).take
+      mod1_to = @copy_to.context_modules.find_by(migration_id: mig_id(mod1))
+      mod2_to = @copy_to.context_modules.find_by(migration_id: mig_id(mod2))
+      tag_to = @copy_to.context_module_tags.find_by(migration_id: mig_id(tag))
       mod2_to.prerequisites = mod1_to.asset_string
       mod2_to.completion_requirements = [{ id: tag_to.id, type: "must_submit" }]
       mod2_to.requirement_count = 1
@@ -3191,10 +3371,10 @@ describe MasterCourses::MasterMigration do
       sub = @template.add_child_course!(copy_to)
       topic = @copy_from.discussion_topics.create!(lock_at: date1)
       run_master_migration
-      topic_to = copy_to.discussion_topics.where(migration_id: mig_id(topic)).take
+      topic_to = copy_to.discussion_topics.find_by(migration_id: mig_id(topic))
 
       # ensure schedule_delayed_transitions does not cause a spurious downstream change record
-      expect(sub.child_content_tags.where(content: topic_to).take.downstream_changes).to eq([])
+      expect(sub.child_content_tags.find_by(content: topic_to).downstream_changes).to eq([])
 
       Timecop.travel(5.minutes.from_now) do
         # now actually make a downstream change
@@ -3203,7 +3383,7 @@ describe MasterCourses::MasterMigration do
         topic_to.save!
         run_master_migration
         expect(topic_to.reload.lock_at).to eq date2
-        expect(sub.child_content_tags.where(content: topic_to).take.downstream_changes).to eq(["lock_at"])
+        expect(sub.child_content_tags.find_by(content: topic_to).downstream_changes).to eq(["lock_at"])
       end
 
       # lock the availability dates and ensure the downstream change is overwritten
@@ -3211,25 +3391,12 @@ describe MasterCourses::MasterMigration do
         @template.content_tag_for(topic).update_attribute(:restrictions, { availability_dates: true })
         topic.touch
         run_master_migration
-        expect(sub.child_content_tags.where(content: topic_to).take.downstream_changes).to eq([])
+        expect(sub.child_content_tags.find_by(content: topic_to).downstream_changes).to eq([])
         expect(topic_to.reload.lock_at).to eq date1
       end
     end
 
     context "attachment migration id preservation" do
-      def run_course_copy(copy_from, copy_to)
-        @cm = ContentMigration.new(context: copy_to,
-                                   user: @user,
-                                   source_course: copy_from,
-                                   migration_type: "course_copy_importer",
-                                   copy_options: { everything: "1" })
-        @cm.migration_settings[:import_immediately] = true
-        @cm.set_default_settings
-        @cm.save!
-        worker = Canvas::Migration::Worker::CourseCopyWorker.new
-        worker.perform(@cm)
-      end
-
       it "does not overwrite blueprint attachment migration ids from other course copies" do
         att = Attachment.create!(filename: "first.txt", uploaded_data: StringIO.new("ohai"), folder: Folder.unfiled_folder(@copy_from), context: @copy_from)
 
@@ -3238,7 +3405,7 @@ describe MasterCourses::MasterMigration do
 
         run_master_migration
 
-        att_to = @copy_to.attachments.where(migration_id: mig_id(att)).take
+        att_to = @copy_to.attachments.find_by(migration_id: mig_id(att))
 
         @other_copy_from = course_factory(active_all: true)
         run_course_copy(@copy_from, @other_copy_from)
@@ -3276,7 +3443,7 @@ describe MasterCourses::MasterMigration do
 
         run_master_migration
 
-        att_to = @copy_to.attachments.where(migration_id: mig_id(att)).take
+        att_to = @copy_to.attachments.find_by(migration_id: mig_id(att))
 
         import_package(@copy_to)
         expect(att_to.reload.migration_id).to eq mig_id(att) # should not have changed
@@ -3397,9 +3564,6 @@ describe MasterCourses::MasterMigration do
         page = @copy_from.wiki_pages.create!(title: "wiki", body: "ohai")
         quiz = @copy_from.quizzes.create!
 
-        allow(klass).to receive(:applies_to_course?).and_return(true)
-        allow(klass).to receive(:begin_export).and_return(true)
-
         data = {
           "$canvas_assignment_id" => assmt.id,
           "$canvas_discussion_topic_id" => topic.id,
@@ -3410,8 +3574,11 @@ describe MasterCourses::MasterMigration do
           "$canvas_page_id" => page.id,
           "$canvas_quiz_id" => quiz.id
         }
-        allow(klass).to receive(:export_completed?).and_return(true)
-        allow(klass).to receive(:retrieve_export).and_return(data)
+
+        allow(klass).to receive_messages(applies_to_course?: true,
+                                         begin_export: true,
+                                         export_completed?: true,
+                                         retrieve_export: data)
 
         run_master_migration
 

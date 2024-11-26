@@ -19,7 +19,7 @@
 import React from 'react'
 import {Text} from '@instructure/ui-text'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import {SubmissionData} from '@canvas/grading/grading.d'
+import type {SubmissionData} from '@canvas/grading/grading.d'
 import GradeFormatHelper from '@canvas/grading/GradeFormatHelper'
 
 const I18n = useI18nScope('gradebook')
@@ -30,6 +30,8 @@ type Props = {
   }
   enterGradesAs: 'points' | 'percent' | 'passFail' | 'gradingScheme'
   gradingScheme: Array<Array<string | number>>
+  pointsBasedGradingScheme: boolean
+  scalingFactor: number | null
   submission: SubmissionData
 }
 
@@ -40,6 +42,8 @@ export default function LatePolicyGrade(props: Props) {
     formatType: props.enterGradesAs,
     pointsPossible: props.assignment.pointsPossible,
     gradingScheme: props.gradingScheme,
+    pointsBasedGradingScheme: props.pointsBasedGradingScheme,
+    scalingFactor: props.scalingFactor,
     version: 'final',
   }
   const finalGrade = GradeFormatHelper.formatSubmissionGrade(props.submission, formatOptions)

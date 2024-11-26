@@ -17,9 +17,9 @@
  */
 
 import _ from 'lodash'
-import timezone from '@canvas/timezone'
+import * as timezone from '@instructure/moment-utils'
 import GradingPeriodsHelper from './GradingPeriodsHelper'
-import type {CamelizedGradingPeriod} from '@canvas/grading/grading.d'
+import type {CamelizedGradingPeriod} from './grading.d'
 import type {Submission, DueDate, UserDueDateMap, AssignmentUserDueDateMap} from '../../api.d'
 
 export function scopeToUser(
@@ -42,9 +42,9 @@ export function scopeToUser(
 
 export function updateWithSubmissions(
   effectiveDueDates: AssignmentUserDueDateMap,
-  submissions: Submission[],
+  submissions: Pick<Submission, 'cached_due_date' | 'assignment_id' | 'user_id'>[],
   gradingPeriods: CamelizedGradingPeriod[] = []
-): void {
+): AssignmentUserDueDateMap {
   const helper = new GradingPeriodsHelper(gradingPeriods)
   const sortedPeriods: CamelizedGradingPeriod[] = _.sortBy<CamelizedGradingPeriod>(
     gradingPeriods,
@@ -72,4 +72,6 @@ export function updateWithSubmissions(
 
     effectiveDueDates[submission.assignment_id] = assignmentDueDates
   })
+
+  return effectiveDueDates
 }

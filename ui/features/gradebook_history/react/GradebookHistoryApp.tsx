@@ -17,7 +17,6 @@
  */
 
 import React from 'react'
-// @ts-expect-error
 import {Provider} from 'react-redux'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import GradebookMenu from '@canvas/gradebook-menu'
@@ -32,24 +31,21 @@ const I18n = useI18nScope('gradebook_history')
 type Props = {
   courseUrl: string
   learningMasteryEnabled?: boolean
-  enhancedIndividualGradebookEnabled?: boolean
 }
 
-const GradebookHistoryApp = ({
-  courseUrl,
-  learningMasteryEnabled,
-  enhancedIndividualGradebookEnabled,
-}: Props) => (
+const GradebookHistoryApp = ({courseUrl, learningMasteryEnabled}: Props) => (
   <Provider store={GradebookHistoryStore}>
     <div>
       <h1 className="screenreader-only">{I18n.t('Gradebook History')}</h1>
 
       {/* ugly negative left margin to cancel out unmodifiable InstUI button
       padding and get the menu to line up with the search form */}
-      <div style={{margin: '0 0 1.5em -0.75rem'}}>
+      {/* EVAL-3711 Remove ICE Feature Flag */}
+      <div
+        style={window.ENV.FEATURES?.instui_nav ? {margin: '0 0 2.25em 0'} : {margin: '0 0 1.5em 0'}}
+      >
         <GradebookMenu
           courseUrl={courseUrl}
-          enhancedIndividualGradebookEnabled={enhancedIndividualGradebookEnabled}
           learningMasteryEnabled={learningMasteryEnabled}
           variant="GradebookHistory"
         />

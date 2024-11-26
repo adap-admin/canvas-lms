@@ -40,6 +40,7 @@ class MasterCourses::ChildContentTag < ActiveRecord::Base
                                      :learning_outcome_group,
                                      :media_track,
                                      :rubric,
+                                     :sub_assignment,
                                      :wiki,
                                      :wiki_page,
                                      quiz: "Quizzes::Quiz"]
@@ -47,7 +48,7 @@ class MasterCourses::ChildContentTag < ActiveRecord::Base
 
   validates_with MasterCourses::TagValidator
 
-  serialize :downstream_changes, Array # an array of changed columns
+  serialize :downstream_changes, type: Array # an array of changed columns
 
   before_create :set_migration_id
   before_create :set_root_account_id

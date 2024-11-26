@@ -47,7 +47,6 @@ module SpeedGrader
         score
         points_deducted
         assignment_id
-        submission_comments
         grading_period_id
         excused
         updated_at
@@ -56,6 +55,7 @@ module SpeedGrader
         resource_link_lookup_uuid
         redo_request
         cached_due_date
+        sticker
       ]
 
       submission_json_fields <<
@@ -64,6 +64,13 @@ module SpeedGrader
             :anonymous_id
           else
             :user_id
+          end
+        )
+
+      submission_json_fields <<
+        (
+          if Account.site_admin.feature_enabled?(:custom_gradebook_statuses)
+            :custom_grade_status_id
           end
         )
 
@@ -112,12 +119,17 @@ module SpeedGrader
           user: current_user,
           includes:,
           group_id: group_id_filter,
-          section_id: section_id_filter
+          section_id: section_id_filter,
+          ignore_student_visibility: true
         ) { |rep, others| others.each { |s| res[:context][:rep_for_student][s.id] = rep.id } }
 
       unless assignment.anonymize_students?
-        # Ensure that any test students are sorted last
-        students = students.sort_by { |r| (r.preferences[:fake_student] == true) ? 1 : 0 }
+        num_students = students.length
+        students = students.sort_by.with_index do |student, idx|
+          # Ensure that any test students are sorted last. sort_by is not stable,
+          # so return idx for real students to preserve their original order.
+          (student.preferences[:fake_student] == true) ? num_students + idx : idx
+        end
       end
 
       enrollments =
@@ -152,17 +164,9 @@ module SpeedGrader
         :user,
         :attachment_associations,
         :assignment,
-        :originality_reports
+        { originality_reports: :lti_link }
       ]
-      includes << {
-        all_submission_comments: {
-          submission: {
-            assignment: {
-              context: :root_account
-            }
-          }
-        }
-      }
+      includes << (assignment.grade_as_group? ? :all_submission_comments_for_groups : :all_submission_comments)
       submissions = assignment.submissions.where(user_id: students).preload(*includes)
 
       student_json_fields =
@@ -171,6 +175,11 @@ module SpeedGrader
         else
           %i[name id sortable_name]
         end
+
+      # yes, this will arbitrarily pick the first enrollment in the course for the user,
+      # but it mirrors what CoursesHelper#user_type does, which we're now passing this value to
+      # in order to avoid an N+1 query problem
+      current_user_enrollments = { current_user.id => course.enrollments.find_by(user: current_user) }
 
       res[:context][:students] =
         students.map do |student|
@@ -205,6 +214,7 @@ module SpeedGrader
                 end,
               submissions:
             )
+          json[:fake_student] = !!student.preferences[:fake_student]
           json
         end
 
@@ -281,6 +291,7 @@ module SpeedGrader
             missing
             late_policy_status
             word_count
+            partially_submitted?
           ]
           json =
             sub
@@ -297,20 +308,19 @@ module SpeedGrader
             json.merge! provisional_grade_to_json(provisional_grade)
           end
 
-          json[:has_postable_comments] =
-            sub.all_submission_comments.any?(&:allows_posting_submission?)
-
+          submission_comments = sub.visible_submission_comments_for(current_user)
           json[:submission_comments] =
             anonymous_moderated_submission_comments_json(
               assignment:,
               course:,
               current_user:,
               avatars: display_avatars?,
-              submission_comments: sub.visible_submission_comments_for(current_user),
+              submission_comments:,
               submissions:
             )
-
+          json[:has_postable_comments] = submission_comments.any?(&:allows_posting_submission?)
           json[:proxy_submitter] = sub.proxy_submitter&.short_name
+          json[:proxy_submitter_id] = sub.proxy_submitter_id
 
           # We get the attachments this way to avoid loading the
           # attachments again via the submission method that creates a
@@ -336,7 +346,7 @@ module SpeedGrader
 
           if url_opts[:enable_annotations]
             url_opts[:disable_annotation_notifications] = assignment.post_manually? && !sub.posted?
-            url_opts[:enrollment_type] = canvadocs_user_role(course, current_user)
+            url_opts[:enrollment_type] = canvadocs_user_role(course, current_user, current_user_enrollments)
           end
 
           if quizzes_next_submission?
@@ -370,6 +380,7 @@ module SpeedGrader
                     version_json["submission"]["turnitin_data"].merge!(version.originality_data)
                     version_json["submission"]["proxy_submitter"] =
                       version.proxy_submitter&.short_name
+                    version_json["submission"]["proxy_submitter_id"] = version.proxy_submitter_id
 
                     # Fill in the parent's anonymous ID if this version was serialized
                     # without it
@@ -595,7 +606,7 @@ module SpeedGrader
       group_id =
         current_user
         .get_preference(:gradebook_settings, course.global_id)
-          &.dig("filter_rows_by", "student_group_id")
+        &.dig("filter_rows_by", "student_group_id")
 
       # If we selected a group that is now deleted, don't use it
       Group.active.where(id: group_id).exists? ? group_id : nil

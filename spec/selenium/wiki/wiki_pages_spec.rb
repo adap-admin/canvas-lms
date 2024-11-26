@@ -59,7 +59,7 @@ describe "Wiki Pages" do
       f(".pages").click
       expect(driver.current_url).not_to include("/courses/#{@course.id}/pages")
       expect(driver.current_url).to include("/courses/#{@course.id}/wiki")
-      expect(f("div.front-page")).to include_text "FRONT PAGE"
+      expect(f("div.front-page")).to include_text "Front Page"
       get "/courses/#{@course.id}/pages"
       expect(driver.current_url).to include("/courses/#{@course.id}/pages")
       expect(driver.current_url).not_to include("/courses/#{@course.id}/wiki")
@@ -137,6 +137,69 @@ describe "Wiki Pages" do
       course_with_teacher_logged_in
     end
 
+    context "infinite scrolling" do
+      before do
+        90.times do |i|
+          @course.wiki_pages.create!(title: "Page#{i}")
+        end
+      end
+
+      def wait_for_index_page_load
+        wait_for(method: nil, timeout: 5) { f(".paginatedLoadingIndicator").attribute("style").include?("display: none") == true }
+        wait_for(method: nil, timeout: 5) { f(".paginatedLoadingIndicator").attribute("style").include?("display: none") == false }
+      end
+
+      context "top_navigation_placement feature flag is enabled" do
+        before do
+          Account.default.enable_feature!(:top_navigation_placement)
+        end
+
+        it "can scroll down to bottom of page to load more pages" do
+          get "/courses/#{@course.id}/pages"
+          wait_for_index_page_load
+          expect(ff(".wiki-page-link").size).to eq 60
+          scroll_page_to_bottom
+          wait_for_index_page_load
+          expect(ff(".wiki-page-link").size).to eq 90
+        end
+
+        it "can scroll and more pages after refreshing the page" do
+          get "/courses/#{@course.id}/pages"
+          refresh_page
+          wait_for_index_page_load
+          expect(ff(".wiki-page-link").size).to eq 60
+          scroll_page_to_bottom
+          wait_for_index_page_load
+          expect(ff(".wiki-page-link").size).to eq 90
+        end
+      end
+
+      context "top_navigation_placement feature flag is disabled" do
+        before do
+          Account.default.disable_feature!(:top_navigation_placement)
+        end
+
+        it "can scroll down to bottom of page to load more pages" do
+          get "/courses/#{@course.id}/pages"
+          wait_for_index_page_load
+          expect(ff(".wiki-page-link").size).to eq 60
+          scroll_page_to_bottom
+          wait_for_index_page_load
+          expect(ff(".wiki-page-link").size).to eq 90
+        end
+
+        it "can scroll and more pages after refreshing the page" do
+          get "/courses/#{@course.id}/pages"
+          refresh_page
+          wait_for_index_page_load
+          expect(ff(".wiki-page-link").size).to eq 60
+          scroll_page_to_bottom
+          wait_for_index_page_load
+          expect(ff(".wiki-page-link").size).to eq 90
+        end
+      end
+    end
+
     it "edits page title from pages index", priority: "1" do
       @course.wiki_pages.create!(title: "B-Team")
       get "/courses/#{@course.id}/pages"
@@ -158,6 +221,30 @@ describe "Wiki Pages" do
       wait_for_ajaximations
       get "/courses/#{@course.id}/pages/deleted"
       expect_flash_message :info
+    end
+
+    it "shows notification once after deleting a page" do
+      page = @course.wiki_pages.create!(title: "hello")
+      get "/courses/#{@course.id}/pages/#{page.url}"
+      f(".page-toolbar .al-trigger").click
+      f(".delete_page").click
+      expect_new_page_load { fj('button:contains("Delete")').click }
+      expect_flash_message :success, 'The page "hello" has been deleted.'
+      get "/courses/#{@course.id}/pages"
+      expect(f("#flash_message_holder").property("innerHTML")).to eq ""
+    end
+
+    it "keeps the calendar icon after hover and moving away" do
+      Account.site_admin.enable_feature!(:scheduled_page_publication)
+      @course.wiki_pages.create!(title: "hello", workflow_state: "unpublished", editing_roles: "teachers", publish_at: 3.days.from_now)
+      get "/courses/#{@course.id}/pages/"
+
+      element_selector = ".icon-calendar-month"
+      expect(element_exists?(element_selector)).to be_truthy
+      hover(f(element_selector))
+
+      driver.action.move_by(10, 10).perform
+      expect(element_exists?(element_selector)).to be_truthy
     end
   end
 
@@ -197,7 +284,7 @@ describe "Wiki Pages" do
       wait_for_ajaximations
       # validation
       lock_explanation = f(".lock_explanation").text
-      expect(lock_explanation).to include "This page is locked until"
+      expect(lock_explanation).to include "This page is part of the module #{mod2.name} and hasn't been unlocked yet."
       expect(lock_explanation).to include "The following requirements need to be completed before this page will be unlocked:"
     end
 

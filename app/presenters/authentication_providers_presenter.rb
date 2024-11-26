@@ -21,20 +21,21 @@ class AuthenticationProvidersPresenter
   include ActionView::Helpers::FormTagHelper
   include ActionView::Helpers::FormOptionsHelper
 
-  attr_reader :account
+  attr_reader :account, :user
 
-  def initialize(acc)
-    @account = acc
+  def initialize(account = nil, user = nil)
+    @account = account
+    @user = user
   end
 
   def configs
-    @configs ||= account.authentication_providers.active.to_a
+    @configs ||= account.authentication_providers.active.select { |ap| ap.visible_to?(user) }
   end
 
   def new_auth_types
     AuthenticationProvider.valid_auth_types.filter_map do |auth_type|
       klass = AuthenticationProvider.find_sti_class(auth_type)
-      next unless klass.enabled?(account)
+      next unless klass.enabled?(account, user)
       next if klass.singleton? && configs.any?(klass)
 
       klass
@@ -90,16 +91,6 @@ class AuthenticationProvidersPresenter
   def position_options(config)
     position_options = (1..configs.length).map { |i| [i, i] }
     config.new_record? ? [["Last", nil]] + position_options : position_options
-  end
-
-  def ips_configured?
-    !!ip_addresses_setting.presence
-  end
-
-  def ip_list
-    return "" unless ips_configured?
-
-    ip_addresses_setting.split(",").map(&:strip).join("\n")
   end
 
   def saml_identifiers
@@ -160,11 +151,5 @@ class AuthenticationProvidersPresenter
     suf = aac.class.sti_name
     suf += "_#{aac.id}" unless aac.new_record?
     suf
-  end
-
-  private
-
-  def ip_addresses_setting
-    Setting.get("account_authorization_config_ip_addresses", nil)
   end
 end

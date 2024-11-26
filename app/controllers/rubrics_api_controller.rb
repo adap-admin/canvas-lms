@@ -261,9 +261,10 @@
 class RubricsApiController < ApplicationController
   include Api::V1::Rubric
   include Api::V1::RubricAssessment
+  include Api::V1::Attachment
 
   before_action :require_user
-  before_action :require_context
+  before_action :require_context, except: [:upload_template]
   before_action :validate_args
 
   VALID_ASSESSMENT_SCOPES = %w[assessments graded_assessments peer_assessments].freeze
@@ -309,7 +310,158 @@ class RubricsApiController < ApplicationController
     end
   end
 
+  # @API Get the courses and assignments for
+  # Returns the rubric with the given id.
+  # @returns UsedLocations
+  def used_locations
+    rubric = @context.rubric_associations.bookmarked.find_by(rubric_id: params[:id])&.rubric
+    return unless authorized_action(@context, @current_user, :manage_rubrics)
+
+    render json: used_locations_for(rubric)
+  end
+
+  # @API Creates a rubric using a CSV file
+  # Returns the rubric import object that was created
+  # @returns RubricImport
+  def upload
+    return unless authorized_action(@context, @current_user, :manage_rubrics)
+
+    file_obj = params[:attachment]
+    if file_obj.nil?
+      render json: { message: "No file attached" }, status: :bad_request
+    end
+
+    import = RubricImport.create_with_attachment(
+      @context, file_obj, @current_user
+    )
+
+    import.schedule
+
+    import_response = api_json(import, @current_user, session)
+    import_response[:user] = user_json(import.user, @current_user, session) if import.user
+    import_response[:attachment] = import.attachment.slice(:id, :filename, :size)
+    render json: import_response
+  end
+
+  # @API Templated file for importing a rubric
+  # @returns a CSV file in the format that can be imported
+  def upload_template
+    send_data(
+      RubricImport.template_file,
+      type: "text/csv",
+      filename: "import_rubric_template.csv",
+      disposition: "attachment"
+    )
+  end
+
+  # @API Get the status of a rubric import
+  # Can return the latest rubric import for an account or course, or a specific import by id
+  # @returns RubricImport
+  def upload_status
+    return unless authorized_action(@context, @current_user, :manage_rubrics)
+
+    begin
+      import = if params[:id] == "latest"
+                 RubricImport.find_latest_rubric_import(@context) or raise ActiveRecord::RecordNotFound
+               else
+                 RubricImport.find_specific_rubric_import(@context, params[:id]) or raise ActiveRecord::RecordNotFound
+               end
+      import_response = api_json(import, @current_user, session)
+      import_response[:user] = user_json(import.user, import.user, session) if import.user
+      import_response[:attachment] = import.attachment.slice(:id, :filename, :size) if import.attachment
+      render json: import_response
+    rescue ActiveRecord::RecordNotFound => e
+      render json: { message: e.message }, status: :not_found
+    end
+  end
+
+  def rubrics_by_import_id
+    return unless authorized_action(@context, @current_user, :manage_rubrics)
+
+    rubrics = Rubric.where(rubric_imports_id: params[:id], context: @context)
+    render json: rubrics_json(rubrics, @current_user, session)
+  end
+
+  def download_rubrics
+    return unless authorized_action(@context, @current_user, :manage_rubrics)
+
+    rubric_ids = params[:rubric_ids]
+    if rubric_ids.blank?
+      render json: { error: I18.t("No rubric IDs provided") }, status: :bad_request
+      return
+    end
+
+    rubrics = Rubric.where(id: rubric_ids, context: @context)
+
+    if rubrics.empty?
+      render json: { error: I18.t("No rubrics found") }, status: :not_found
+      return
+    end
+
+    csv_content = generate_rubrics_csv(rubrics)
+
+    send_data(
+      csv_content,
+      type: "text/csv",
+      filename: "rubrics_export.csv",
+      disposition: "attachment"
+    )
+  end
+
   private
+
+  def generate_rubrics_csv(rubrics)
+    max_ratings = 0
+    rubrics.each do |rubric|
+      rubric.data.each do |criterion|
+        ratings_count = criterion[:ratings].length
+        max_ratings = ratings_count if ratings_count > max_ratings
+      end
+    end
+
+    column_headers = [
+      "Rubric Name",
+      "Criteria Name",
+      "Criteria Description",
+      "Criteria Enable Range"
+    ]
+
+    max_ratings.times do
+      column_headers += [
+        "Rating Name",
+        "Rating Description",
+        "Rating Points"
+      ]
+    end
+
+    CSV.generate(headers: true) do |csv|
+      csv << column_headers
+
+      rubrics.each do |rubric|
+        rubric_name = rubric.title
+        criteria = rubric.data
+
+        criteria.each do |criterion|
+          row = [
+            rubric_name,
+            criterion[:description],
+            criterion[:long_description],
+            criterion[:criterion_use_range]
+          ]
+
+          criterion[:ratings].each do |rating|
+            row += [
+              rating[:description],
+              rating[:long_description],
+              rating[:points]
+            ]
+          end
+
+          csv << row
+        end
+      end
+    end
+  end
 
   def rubric_assessments(rubric)
     scope = if @context.is_a? Course
@@ -338,6 +490,31 @@ class RubricsApiController < ApplicationController
       scope.where(association_type: "Course")
     when "account_associations"
       scope.where(association_type: "Account")
+    end
+  end
+
+  def used_locations_to_json(used_locations)
+    used_locations.group_by(&:context).map do |course, assignments|
+      course_json = course.as_json(only: [:id, :name], methods: [:concluded?], include_root: false)
+      course_json[:assignments] = assignments.as_json(only: [:id, :title], include_root: false)
+      course_json
+    end
+  end
+
+  def used_locations_for(rubric)
+    GuardRail.activate(:secondary) do
+      scope = rubric.used_locations
+                    .joins("INNER JOIN #{Course.quoted_table_name} ON assignments.context_type = 'Course' AND assignments.context_id = courses.id")
+                    .order("courses.name ASC, title ASC")
+
+      used_locations = Api.paginate(
+        scope,
+        self,
+        rubric_used_locations_pagination_url(rubric),
+        per_page: 100
+      )
+
+      used_locations_to_json(used_locations)
     end
   end
 

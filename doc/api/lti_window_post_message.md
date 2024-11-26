@@ -51,12 +51,6 @@ Messages sent by a tool that has been launched from a Canvas mobile app will not
 
 ## lti.capabilities
 
-**Note: the LTI Platform Storage spec is still under final review before publishing**
-**as of January 2023, and so the specifics of this message are subject to change.**
-
-**At one point, this message type was named 'org.imsglobal.lti.capabilities', but the prefix**
-**was dropped before finalizing the spec. Canvas will support both formats until August 19, 2023 (July 17 for Beta).**
-
 Responds with a list of subjects that Canvas will respond to, and if necessary the named
 frame to address each subject to. Part of the LTI Platform Storage spec, defined
 [here](https://www.imsglobal.org/spec/lti-cs-pm/v0p1#capabilities-request-postmessage).
@@ -76,13 +70,66 @@ Returning postMessage includes the following properties:
 window.parent.postMessage({subject: 'lti.capabilities'}, '*')
 ```
 
+## lti.getPageContent
+
+Responds with an html object containing page content. This will contain all markup and children elements of the main content area of the page. Some content may be filtered from this response. The scope `https://canvas.instructure.com/lti/page_content/show` is required to use this functionality. Currently, only `Assignments` and `Wiki Pages` are supported by getPageContent, but support for additional pages is planned.
+
+**Required properties:**
+
+- subject: "lti.getPageContent"
+
+```js
+window.parent.postMessage({subject: 'lti.getPageContent'}, '*')
+```
+
+Returning postMessage includes the following properties:
+
+- subject: "lti.getPageContent"
+- pageContent: a string containing HTML
+
+```js
+{
+  subject: 'lti.getPageContent.response',
+  content: '<div>...</div>'
+}
+```
+
+## lti.getPageSettings
+
+Responds with an object containing page settings. This includes the current locale, time zome, contrast settings, url to the active branding configuration file, and the width of the parent (Canvas) window.
+This is the same json file url provided by the [Brand Configs API](brand_configs.html).
+
+**Required properties:**
+
+- subject: "lti.getPageSettings"
+
+```js
+window.parent.postMessage({subject: 'lti.getPageSettings'}, '*')
+```
+
+Returning postMessage includes the following properties:
+
+- subject: "lti.getPageSettings"
+- pageSettings: an object containing the following keys:
+  - locale
+  - time_zone
+  - use_high_contrast
+  - active_brand_config_json_url
+  - window_width
+
+```js
+{
+  pageSettings: {
+    locale: 'en',
+    time_zone: 'Etc/UTC',
+    use_high_contrast: false,
+    active_brand_config_json_url: 'https://du11hjcvx0uqb.cloudfront.net/dist/brandable_css/default/variables-7dd4b80918af0e0218ec0229e4bd5873.json',
+    window_width: 1024
+  }
+}
+```
+
 ## lti.put_data
-
-**Note: the LTI Platform Storage spec is still under final review before publishing**
-**as of January 2023, and so the specifics of this message are subject to change.**
-
-**At one point, this message type was named 'org.imsglobal.lti.put_data', but the prefix**
-**was dropped before finalizing the spec. Canvas will support both formats until August 19, 2023 (July 17 for Beta).**
 
 Stores the provided `value` at the provided `key` in Canvas's [localstorage](https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage),
 partitioned by tool. Data stored by one tool cannot be accessed by another, is
@@ -90,9 +137,21 @@ only stored in the user's browser, and is short-lived. Part of the LTI Platform 
 defined [here](https://www.imsglobal.org/spec/lti-pm-s/v0p1).
 
 The spec requires that this message's target origin be set to the platform's OIDC Authorization url
-as defined [here](file.lti_dev_key_config.html#step-2). Currently, Canvas does not yet
-support this use case, and the wildcard origin `*` should still be used. Full support for the target
-origin will be enabled on August 19, 2023 (July 17 for Beta), as described in [this Canvas Community article](https://community.canvaslms.com/t5/The-Product-Blog/Minor-LTI-1-3-Changes-New-OIDC-Auth-Endpoint-Support-for/ba-p/551677).
+as defined [here](file.lti_launch_overview.html#step-2), so that the tool can be certain that Canvas
+is the entity receiving the message. To enable this feature, Canvas also requires that messages
+with this target origin are sent to the `post_message_forwarding` frame, which is a sibling frame to the tool.
+For now, tools are also still allowed to send this message directly to the parent window and use the wildcard `*` origin, although this does not conform to the spec.
+
+Support for this API is signalled using the `lti_storage_target` parameter, which is included in
+the LTI 1.3 login and launch requests. If this parameter absent, tools should use cookies instead
+of trying to use this postMessage. The default value for this parameter is `_parent`, which means
+messages should be sent to `window.parent`. When the value is something else (like `post_message_forwarding`),
+the tool should send message to the frame with that name present at `window.parent.frames[lti_storage_target]`.
+
+**Note:** When a tool is launched from within an active RCE (Rich Content Editor) this sibling
+frame may not be available, since the RCE uses an iframe to represent the editor box. If the
+message sent to this frame using this origin doesn't receive a timely response, the tool should
+fall back to sending the message to the parent window using the wildcard `*` origin.
 
 **Required properties:**
 
@@ -109,6 +168,16 @@ Returned postMessage includes the following properties:
 - message_id: the same message_id provided in the initial message
 
 ```js
+window.parent.frames['post_message_forwarding'].postMessage(
+  {
+    subject: 'lti.put_data',
+    key: 'hello',
+    value: 'world',
+    message_id: '14556a4f-e9af-43f7-bd1f-d3e260d05a9f',
+  },
+  'http://sso.canvaslms.com'
+)
+
 window.parent.postMessage(
   {
     subject: 'lti.put_data',
@@ -122,21 +191,27 @@ window.parent.postMessage(
 
 ## lti.get_data
 
-**Note: the LTI Platform Storage spec is still under final review before publishing**
-**as of January 2023, and so the specifics of this message are subject to change.**
-
-**At one point, this message type was named 'org.imsglobal.lti.get_data', but the prefix**
-**was dropped before finalizing the spec. Canvas will support both formats until August 19, 2023 (July 17 for Beta).**
-
 Fetches the value stored at the provided `key` in Canvas's [localstorage](https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage),
 partitioned by tool. Data stored by one tool cannot be accessed by another, is
 only stored in the user's browser, and is short-lived. Part of the LTI Platform Storage spec,
 defined [here](https://www.imsglobal.org/spec/lti-pm-s/v0p1).
 
 The spec requires that this message's target origin be set to the platform's OIDC Authorization url
-as defined [here](file.lti_dev_key_config.html#step-2). Currently, Canvas does not yet
-support this use case, and the wildcard origin `*` should still be used. Full support for the target
-origin will be enabled on August 19, 2023 (July 17 for Beta), as described in [this Canvas Community article](https://community.canvaslms.com/t5/The-Product-Blog/Minor-LTI-1-3-Changes-New-OIDC-Auth-Endpoint-Support-for/ba-p/551677).
+as defined [here](file.lti_launch_overview.html#step-2), so that the tool can be certain that Canvas
+is the entity receiving the message. To enable this feature, Canvas also requires that messages
+with this target origin are sent to the `post_message_forwarding` frame, which is a sibling frame to the tool.
+For now, tools are also still allowed to send this message directly to the parent window and use the wildcard `*` origin, although this does not conform to the spec.
+
+Support for this API is signalled using the `lti_storage_target` parameter, which is included in
+the LTI 1.3 login and launch requests. If this parameter absent, tools should use cookies instead
+of trying to use this postMessage. The default value for this parameter is `_parent`, which means
+messages should be sent to `window.parent`. When the value is something else (like `post_message_forwarding`),
+the tool should send message to the frame with that name present at `window.parent.frames[lti_storage_target]`.
+
+**Note:** When a tool is launched from within an active RCE (Rich Content Editor) this sibling
+frame may not be available, since the RCE uses an iframe to represent the editor box. If the
+message sent to this frame using this origin doesn't receive a timely response, the tool should
+fall back to sending the message to the parent window using the wildcard `*` origin.
 
 **Required properties:**
 
@@ -152,6 +227,15 @@ Returning postMessage includes the following properties:
 - message_id: the same message_id provided in the initial message
 
 ```js
+window.parent.frames['post_message_forwarding'].postMessage(
+  {
+    subject: 'lti.get_data',
+    key: 'hello',
+    message_id: '14556a4f-e9af-43f7-bd1f-d3e260d05a9f',
+  },
+  'http://sso.canvaslms.com'
+)
+
 window.parent.postMessage(
   {
     subject: 'lti.get_data',
@@ -175,6 +259,8 @@ Launches the tool that sent the event in a full-window context (ie not inside a 
 - data.url: a url for relaunching the tool
 - data.placement: the Canvas placement that the tool was launched in. Provided in the 1.3 id token
   under the custom claim section (`https://www.instructure.com/placement`).
+- data.resource_link_id: the Canvas resource_link_id for the resource launched. Provided in the 1.3
+  id token under the `resource_link` claim (`https://purl.imsglobal.org/spec/lti/claim/resource_link#id`).
 
 **Optional properties:**
 
@@ -201,18 +287,6 @@ window.parent.postMessage(
   },
   '*'
 )
-```
-
-## toggleCourseNavigationMenu
-
-Opens and closes the course navigation sidebar, giving more space for the tool to display.
-
-**Required properties:**
-
-- subject: "toggleCourseNavigationMenu"
-
-```js
-window.parent.postMessage({subject: 'toggleCourseNavigationMenu'}, '*')
 ```
 
 ## lti.resourceImported
@@ -330,7 +404,12 @@ Sets a message to be shown in a browser dialog before page closes (ie
 **Required properties:**
 
 - subject: "lti.setUnloadMessage"
-- message: The message to be shown in the dialog
+
+**Optional properties:**
+
+- message: The message to be shown in the dialog. Most browser no longer
+  support a custom message here, so a generic (built-in to the browser) message
+  will be shown.
 
 ```js
 window.parent.postMessage(
@@ -417,4 +496,48 @@ Returning postMessage includes the following properties:
 
 ```js
 window.parent.postMessage({subject: 'lti.enableScrollEvents'}, '*')
+```
+
+## showNavigationMenu
+
+Opens the navigation sidebar, a replacement for toggleCourseNavigationMenu.
+Can be used on course, account or group page.
+
+**Required properties:**
+
+- subject: "showNavigationMenu"
+
+```js
+window.parent.postMessage({subject: 'showNavigationMenu'}, '*')
+```
+
+## hideNavigationMenu
+
+Closes the navigation sidebar, a replacement for toggleCourseNavigationMenu.
+Can be used on course, account or group page.
+
+**Required properties:**
+
+- subject: "hideNavigationMenu"
+
+```js
+window.parent.postMessage({subject: 'hideNavigationMenu'}, '*')
+```
+
+<div class="warning-message">
+    Deprecated Message Types
+</div>
+
+## toggleCourseNavigationMenu <span title="this message type is deprecated!">⚠️</span>
+
+**Use show or hideNavigationMenu instead!**
+
+Opens and closes the course navigation sidebar, giving more space for the tool to display.
+
+**Required properties:**
+
+- subject: "toggleCourseNavigationMenu"
+
+```js
+window.parent.postMessage({subject: 'toggleCourseNavigationMenu'}, '*')
 ```

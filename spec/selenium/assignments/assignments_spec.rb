@@ -23,15 +23,22 @@ require_relative "../helpers/public_courses_context"
 require_relative "../helpers/files_common"
 require_relative "../helpers/admin_settings_common"
 require_relative "../../helpers/k5_common"
+require_relative "../helpers/context_modules_common"
+require_relative "../helpers/items_assign_to_tray"
+require_relative "page_objects/assignment_create_edit_page"
+require_relative "../../helpers/selective_release_common"
 
 describe "assignments" do
   include_context "in-process server selenium tests"
   include FilesCommon
   include AssignmentsCommon
   include AdminSettingsCommon
+  include ContextModulesCommon
   include CustomScreenActions
   include CustomSeleniumActions
   include K5Common
+  include ItemsAssignToTray
+  include SelectiveReleaseCommon
 
   # NOTE: due date testing can be found in assignments_overrides_spec
 
@@ -127,17 +134,106 @@ describe "assignments" do
       end
     end
 
-    it "shows speed grader link when published" do
+    it "shows SpeedGrader link when published" do
       @assignment = @course.assignments.create({ name: "Test Moderated Assignment" })
       get "/courses/#{@course.id}/assignments/#{@assignment.id}"
       expect(f("#speed-grader-link-container")).to be_present
     end
 
-    it "hides speed grader link when unpublished" do
+    it "hides SpeedGrader link when unpublished" do
       @assignment = @course.assignments.create({ name: "Test Moderated Assignment" })
       @assignment.unpublish
       get "/courses/#{@course.id}/assignments/#{@assignment.id}"
       expect(f("#speed-grader-link-container").attribute("class")).to include("hidden")
+    end
+
+    context "archived grading schemes enabled" do
+      before do
+        Account.site_admin.enable_feature!(:grading_scheme_updates)
+        Account.site_admin.enable_feature!(:archived_grading_schemes)
+        @account = @course.account
+        @active_grading_standard = @course.grading_standards.create!(title: "Active Grading Scheme", data: { "A" => 0.9, "F" => 0 }, scaling_factor: 1.0, points_based: false, workflow_state: "active")
+        @archived_grading_standard = @course.grading_standards.create!(title: "Archived Grading Scheme", data: { "A" => 0.9, "F" => 0 }, scaling_factor: 1.0, points_based: false, workflow_state: "archived")
+        @account_grading_standard = @account.grading_standards.create!(title: "Account Grading Scheme", data: { "A" => 0.9, "F" => 0 }, scaling_factor: 1.0, points_based: false, workflow_state: "active")
+        assignment_name = "first test assignment"
+        due_date = Time.now.utc + 2.days
+        group = @course.assignment_groups.create!(name: "default")
+        @course.assignment_groups.create!(name: "second default")
+        @assignment = @course.assignments.create!(
+          name: assignment_name,
+          due_at: due_date,
+          assignment_group: group,
+          unlock_at: due_date - 1.day,
+          grading_type: "letter_grade"
+        )
+      end
+
+      it "shows archived grading scheme if it is the course default twice, once to follow course default scheme and once to choose that scheme to use" do
+        @course.update!(grading_standard_id: @archived_grading_standard.id)
+        @course.reload
+        get "/courses/#{@course.id}/assignments/#{@assignment.id}/edit"
+        wait_for_ajaximations
+        expect(f("[data-testid='grading-schemes-selector-dropdown']").attribute("title")).to eq(@archived_grading_standard.title + " (course default)")
+        f("[data-testid='grading-schemes-selector-dropdown']").click
+        expect(f("[data-testid='grading-schemes-selector-option-#{@course.grading_standard.id}']")).to include_text(@course.grading_standard.title)
+      end
+
+      it "shows archived grading scheme if it is the current assignment grading standard" do
+        @assignment.update!(grading_standard_id: @archived_grading_standard.id)
+        @assignment.reload
+        get "/courses/#{@course.id}/assignments/#{@assignment.id}/edit"
+        wait_for_ajaximations
+        expect(f("[data-testid='grading-schemes-selector-dropdown']").attribute("title")).to eq(@archived_grading_standard.title)
+      end
+
+      it "removes grading schemes from dropdown after archiving them but still shows them upon reopening the modal" do
+        get "/courses/#{@course.id}/assignments/#{@assignment.id}/edit"
+        wait_for_ajaximations
+        f("[data-testid='grading-schemes-selector-dropdown']").click
+        expect(f("[data-testid='grading-schemes-selector-option-#{@active_grading_standard.id}']")).to be_present
+        f("[data-testid='manage-all-grading-schemes-button']").click
+        wait_for_ajaximations
+        f("[data-testid='grading-scheme-#{@active_grading_standard.id}-archive-button']").click
+        wait_for_ajaximations
+        f("[data-testid='manage-all-grading-schemes-close-button']").click
+        wait_for_ajaximations
+        f("[data-testid='grading-schemes-selector-dropdown']").click
+        expect(f("[data-testid='grading-schemes-selector-dropdown-form']")).not_to contain_css("[data-testid='grading-schemes-selector-option-#{@active_grading_standard.id}']")
+        f("[data-testid='manage-all-grading-schemes-button']").click
+        wait_for_ajaximations
+        expect(f("[data-testid='grading-scheme-row-#{@active_grading_standard.id}']").text).to be_present
+      end
+
+      it "shows all archived schemes in the manage grading schemes modal" do
+        archived_gs1 = @course.grading_standards.create!(title: "Archived Grading Scheme 1", data: { "A" => 0.9, "F" => 0 }, scaling_factor: 1.0, points_based: false, workflow_state: "archived")
+        archived_gs2 = @course.grading_standards.create!(title: "Archived Grading Scheme 2", data: { "A" => 0.9, "F" => 0 }, scaling_factor: 1.0, points_based: false, workflow_state: "archived")
+        archived_gs3 = @course.grading_standards.create!(title: "Archived Grading Scheme 3", data: { "A" => 0.9, "F" => 0 }, scaling_factor: 1.0, points_based: false, workflow_state: "archived")
+        get "/courses/#{@course.id}/assignments/#{@assignment.id}/edit"
+        wait_for_ajaximations
+        f("[data-testid='manage-all-grading-schemes-button']").click
+        wait_for_ajaximations
+        expect(f("[data-testid='grading-scheme-#{archived_gs1.id}-name']")).to include_text(archived_gs1.title)
+        expect(f("[data-testid='grading-scheme-#{archived_gs2.id}-name']")).to include_text(archived_gs2.title)
+        expect(f("[data-testid='grading-scheme-#{archived_gs3.id}-name']")).to include_text(archived_gs3.title)
+      end
+
+      it "will still show the assignment grading scheme if you archive it on the edit page in the management modal and persist on reload" do
+        @assignment.update!(grading_standard_id: @active_grading_standard.id)
+        @assignment.reload
+        get "/courses/#{@course.id}/assignments/#{@assignment.id}/edit"
+        wait_for_ajaximations
+        expect(f("[data-testid='grading-schemes-selector-dropdown']").attribute("title")).to eq(@active_grading_standard.title)
+        f("[data-testid='manage-all-grading-schemes-button']").click
+        wait_for_ajaximations
+        f("[data-testid='grading-scheme-#{@active_grading_standard.id}-archive-button']").click
+        wait_for_ajaximations
+        f("[data-testid='manage-all-grading-schemes-close-button']").click
+        wait_for_ajaximations
+        expect(f("[data-testid='grading-schemes-selector-dropdown']").attribute("title")).to eq(@active_grading_standard.title)
+        get "/courses/#{@course.id}/assignments/#{@assignment.id}/edit"
+        wait_for_ajaximations
+        expect(f("[data-testid='grading-schemes-selector-dropdown']").attribute("title")).to eq(@active_grading_standard.title)
+      end
     end
 
     it "edits an assignment", priority: "1" do
@@ -186,6 +282,7 @@ describe "assignments" do
       expect(driver.title).to include(assignment_name + " edit")
     end
 
+    # EVAL-3711 Remove this test when instui_nav feature flag is removed
     it "creates an assignment using main add button", :xbrowser, priority: "1" do
       assignment_name = "first assignment"
       # freeze for a certain time, so we don't get unexpected ui complications
@@ -202,7 +299,43 @@ describe "assignments" do
         ["#assignment_text_entry", "#assignment_online_url", "#assignment_online_upload"].each do |element|
           f(element).click
         end
-        replace_content(f(".DueDateInput"), due_at)
+        unless Account.site_admin.feature_enabled?(:selective_release_ui_api)
+          replace_content(f(".DueDateInput"), due_at)
+        end
+
+        submit_assignment_form
+        wait_for_ajaximations
+        # confirm all our settings were saved and are now displayed
+        expect(f("h1.title")).to include_text(assignment_name)
+        expect(f("#assignment_show .points_possible")).to include_text("10")
+
+        expect(f("#assignment_show fieldset")).to include_text("a text entry box, a website url, or a file upload")
+        unless Account.site_admin.feature_enabled?(:selective_release_ui_api)
+          expect(f(".assignment_dates")).to include_text(due_at)
+        end
+      end
+    end
+
+    it "creates an assignment using main add button with the instui nav feature flag on", :xbrowser, priority: "1" do
+      @course.root_account.enable_feature!(:instui_nav)
+      assignment_name = "first assignment"
+      # freeze for a certain time, so we don't get unexpected ui complications
+      time = DateTime.new(Time.now.year, 1, 7, 2, 13)
+      Timecop.freeze(time) do
+        due_at = format_time_for_view(time)
+
+        get "/courses/#{@course.id}/assignments"
+        # create assignment
+        wait_for_new_page_load { f("[data-testid='new_assignment_button']").click }
+        f("#assignment_name").send_keys(assignment_name)
+        replace_content(f("#assignment_points_possible"), "10")
+        click_option("#assignment_submission_type", "Online")
+        ["#assignment_text_entry", "#assignment_online_url", "#assignment_online_upload"].each do |element|
+          f(element).click
+        end
+        unless Account.site_admin.feature_enabled?(:selective_release_ui_api)
+          replace_content(f(".DueDateInput"), due_at)
+        end
 
         submit_assignment_form
         wait_for_ajaximations
@@ -211,15 +344,15 @@ describe "assignments" do
         expect(f("#assignment_show .points_possible")).to include_text("10")
         expect(f("#assignment_show fieldset")).to include_text("a text entry box, a website url, or a file upload")
 
-        expect(f(".assignment_dates")).to include_text(due_at)
+        unless Account.site_admin.feature_enabled?(:selective_release_ui_api)
+          expect(f(".assignment_dates")).to include_text(due_at)
+        end
       end
     end
 
-    it "only allows an assignment editor to edit points and title if assignment if assignment has multiple due dates", priority: "2" do
-      skip "DEMO-25 (8/21/20)"
-
+    it "only allows an assignment editor to edit points and title if assignment has multiple due dates" do
       middle_number = "15"
-      expected_date = (Time.now - 1.month).strftime("%b #{middle_number}")
+      expected_date = 1.month.ago.strftime("%b #{middle_number}")
       @assignment = @course.assignments.create!(
         title: "VDD Test Assignment",
         due_at: expected_date
@@ -233,18 +366,16 @@ describe "assignments" do
       end
       get "/courses/#{@course.id}/assignments"
       wait_for_ajaximations
-      fj("#assignment_#{@assignment.id} a.al-trigger").click
+      fj("#assign_#{@assignment.id}_manage_link").click
       wait_for_ajaximations
       f("#assignment_#{@assignment.id} .edit_assignment").click
       expect(f("#content")).not_to contain_jqcss(".form-dialog .ui-datepicker-trigger:visible")
       # be_disabled
-      expect(f(".multiple_due_dates input")).to be_disabled
-      assignment_title = f("#assign_#{@assignment.id}_assignment_name")
-      assignment_points_possible = f("#assign_#{@assignment.id}_assignment_points")
-      replace_content(assignment_title, "VDD Test Assignment Updated")
-      replace_content(assignment_points_possible, "100")
-      submit_form(fj(".form-dialog:visible"))
-      wait_for_ajaximations
+      expect(f("[data-testid='multiple-due-dates-message']")).to be_disabled
+
+      f("[data-testid='close-button']").click
+      edit_assignment(@assignment.id, name: "VDD Test Assignment Updated", points: 100, submit: true)
+
       expect(@assignment.reload.points_possible).to eq 100
       expect(@assignment.title).to eq "VDD Test Assignment Updated"
       # Assert the time didn't change
@@ -258,9 +389,7 @@ describe "assignments" do
       assignment_name = "test_assignment_thing_#{rand(10_000)}"
       get "/courses/#{@course.id}/assignments"
       group = @course.assignment_groups.first
-      f(".add_assignment").click
-      replace_content(f("#ag_#{group.id}_assignment_name"), assignment_name)
-      f(".create_assignment").click
+      build_assignment_with_type("Assignment", assignment_group_id: group.id, name: assignment_name, points: "10", submit: true)
       wait_for_ajaximations
       assignment = @course.assignments.where(title: assignment_name).last
       expect(assignment).not_to be_nil
@@ -280,16 +409,27 @@ describe "assignments" do
           group = @course.assignment_groups.first
           AssignmentGroup.where(id: group).update_all(updated_at: 1.hour.ago)
           first_stamp = group.reload.updated_at.to_i
-          f(".add_assignment").click
-          wait_for_ajaximations
-          replace_content(f("#ag_#{group.id}_assignment_name"), expected_text)
-          replace_content(f("#ag_#{group.id}_assignment_due_at"), due_at)
-          replace_content(f("#ag_#{group.id}_assignment_points"), points)
-          expect_new_page_load { f(".more_options").click }
+          build_assignment_with_type("Assignment", assignment_group_id: group.id, name: expected_text, points:, due_at:, due_time: "2:13 AM")
+
+          expect_new_page_load { f("[data-testid='more-options-button']").click }
+
           expect(f("#assignment_name").attribute(:value)).to include(expected_text)
           expect(f("#assignment_points_possible").attribute(:value)).to include(points)
-          due_at_field = fj(".date_field:first[data-date-type='due_at']")
-          expect(due_at_field).to have_value due_at
+
+          if Account.site_admin.feature_enabled?(:selective_release_ui_api)
+            unless Account.site_admin.feature_enabled?(:selective_release_edit_page)
+              AssignmentCreateEditPage.click_manage_assign_to_button
+            end
+
+            expect(element_value_for_attr(assign_to_due_date, "value") + ", " + element_value_for_attr(assign_to_due_time, "value")).to eq due_at
+            unless Account.site_admin.feature_enabled?(:selective_release_edit_page)
+              click_cancel_button
+            end
+          else
+            due_at_field = fj(".date_field[data-date-type='due_at']:first")
+            expect(due_at_field).to have_value due_at
+          end
+
           click_option("#assignment_submission_type", "No Submission")
           submit_assignment_form
           expect(@course.assignments.count).to eq 1
@@ -304,7 +444,7 @@ describe "assignments" do
     it "keeps erased field on more options click", priority: "2" do
       enable_cache do
         middle_number = "15"
-        expected_date = (Time.now - 1.month).strftime("%b #{middle_number}")
+        expected_date = 1.month.ago.strftime("%b #{middle_number}")
         @assignment = @course.assignments.create!(
           title: "Test Assignment",
           points_possible: 10,
@@ -317,21 +457,27 @@ describe "assignments" do
         end
 
         get "/courses/#{@course.id}/assignments"
-        wait_for_ajaximations
-        driver.execute_script "$('.edit_assignment').first().hover().click()"
-        assignment_title = f("#assign_#{@assignment.id}_assignment_name")
-        assignment_points_possible = f("#assign_#{@assignment.id}_assignment_points")
-        replace_content(assignment_title, "")
-        replace_content(assignment_points_possible, "")
-        wait_for_ajaximations
-        expect_new_page_load { fj(".more_options:eq(1)").click }
+        edit_assignment(@assignment.id, name: "", points: 0)
+
+        expect_new_page_load { f("[data-testid='more-options-button']").click }
         expect(f("#assignment_name").text).to match ""
         expect(f("#assignment_points_possible").text).to match ""
 
-        first_input_val = driver.execute_script("return $('.DueDateInput__Container:first input').val();")
-        expect(first_input_val).to match expected_date
-        second_input_val = driver.execute_script("return $('.DueDateInput__Container:last input').val();")
-        expect(second_input_val).to match ""
+        if Account.site_admin.feature_enabled?(:selective_release_ui_api)
+          unless Account.site_admin.feature_enabled?(:selective_release_edit_page)
+            AssignmentCreateEditPage.click_manage_assign_to_button
+            expect(element_value_for_attr(assign_to_due_date, "value")).to match expected_date
+            expect(element_value_for_attr(assign_to_due_date(1), "value")).to eq("")
+          end
+
+          expect(element_value_for_attr(assign_to_due_date(0), "value")).to match expected_date
+          expect(element_value_for_attr(assign_to_due_date(1), "value")).to eq("")
+        else
+          first_input_val = driver.execute_script("return $('.DueDateInput__Container:first input').val();")
+          expect(first_input_val).to match expected_date
+          second_input_val = driver.execute_script("return $('.DueDateInput__Container:last input').val();")
+          expect(second_input_val).to match ""
+        end
       end
     end
 
@@ -451,10 +597,42 @@ describe "assignments" do
         @assignment = @course.assignments.create(name: "Student Annotation", submission_types: "student_annotation,online_text_entry", annotatable_attachment_id: attachment.id)
       end
 
+      # EVAL-3711 Remove this test when instui_nav feature flag is removed
       it "creates a student annotation assignment with annotatable attachment with usage rights" do
         get "/courses/#{@course.id}/assignments"
-
         wait_for_new_page_load { f(".new_assignment").click }
+        f("#assignment_name").send_keys("Annotated Test")
+
+        replace_content(f("#assignment_points_possible"), "10")
+        click_option("#assignment_submission_type", "Online")
+
+        ["#assignment_annotated_document", "#assignment_text_entry"].each do |element|
+          f(element).click
+        end
+
+        wait_for_ajaximations
+
+        expect(f("#assignment_annotated_document_info")).to be_displayed
+
+        # select attachment from file explorer
+        fxpath('//*[@id="annotated_document_chooser_container"]/div/div[1]/ul/li[1]/button').click
+        fxpath('//*[@id="annotated_document_chooser_container"]/div/div[1]/ul/li[1]/ul/li/button').click
+
+        # set usage rights
+        f("#usageRightSelector").click
+        fxpath('//*[@id="usageRightSelector"]/option[2]').click
+        f("#copyrightHolder").send_keys("Me")
+
+        submit_assignment_form
+        wait_for_ajaximations
+
+        expect(f("#assignment_show fieldset")).to include_text("a text entry box or a student annotation")
+      end
+
+      it "creates a student annotation assignment with annotatable attachment with usage rights with the instui nav feature flag on" do
+        @course.root_account.enable_feature!(:instui_nav)
+        get "/courses/#{@course.id}/assignments"
+        wait_for_new_page_load { f("[data-testid='new_assignment_button']").click }
         f("#assignment_name").send_keys("Annotated Test")
 
         replace_content(f("#assignment_points_possible"), "10")
@@ -521,9 +699,28 @@ describe "assignments" do
       end
 
       it "allows editing the due date even if completely frozen", priority: "2" do
+        differentiated_modules_off
         old_due_at = @frozen_assign.due_at
         run_assignment_edit(@frozen_assign) do
           replace_and_proceed(f(".datePickerDateField[data-date-type='due_at']"), "Sep 20, 2012")
+        end
+
+        expect(f(".assignment_dates").text).to match(/Sep 20, 2012/)
+        # some sort of time zone issue is occurring with Sep 20, 2012 - it rolls back a day and an hour locally.
+        expect(@frozen_assign.reload.due_at.to_i).not_to eq old_due_at.to_i
+      end
+
+      it "allows editing the due date even if completely frozen with SR on", :ignore_js_errors do
+        old_due_at = @frozen_assign.due_at
+        run_assignment_edit(@frozen_assign) do
+          unless Account.site_admin.feature_enabled?(:selective_release_edit_page)
+            AssignmentCreateEditPage.click_manage_assign_to_button
+          end
+          assign_to_due_date.send_keys(:control, "a", :backspace)
+          update_due_date(0, "Sep 20, 2012")
+          unless Account.site_admin.feature_enabled?(:selective_release_edit_page)
+            click_save_button("Apply")
+          end
         end
 
         expect(f(".assignment_dates").text).to match(/Sep 20, 2012/)
@@ -632,12 +829,8 @@ describe "assignments" do
         assignment
         get "/courses/#{@course.id}/assignments"
         wait_for_ajaximations
-        f("#assign_#{assignment.id}_manage_link").click
-        wait_for_ajaximations
-        f("#assignment_#{assignment.id} .edit_assignment").click
-        f("#assign_#{assignment.id}_assignment_points").send_keys("5")
 
-        submit_form(fj(".form-dialog:visible"))
+        edit_assignment(assignment.id, points: 5, submit: true)
 
         expect(assignment.reload.primary_resource_link.custom).to eq(custom_params)
       end
@@ -774,11 +967,20 @@ describe "assignments" do
       end
     end
 
+    # EVAL-3711 Remove this test when instui_nav feature flag is removed
     it "goes to the assignment index page from left nav", priority: "1" do
       get "/courses/#{@course.id}"
       f("#wrapper .assignments").click
       wait_for_ajaximations
       expect(f(".header-bar-right .new_assignment")).to include_text("Assignment")
+    end
+
+    it "goes to the assignment index page from left nav with the instui nav feature flag on", priority: "1" do
+      @course.root_account.enable_feature!(:instui_nav)
+      get "/courses/#{@course.id}"
+      f("#wrapper .assignments").click
+      wait_for_ajaximations
+      expect(f("[data-testid='new_assignment_button']")).to include_text("Assignment")
     end
   end
 
@@ -866,7 +1068,7 @@ describe "assignments" do
     end
 
     it "cancels adding new assignment group via the x button", priority: "2" do
-      fj("button.ui-dialog-titlebar-close:visible").click
+      fj(".ui-dialog-titlebar-close:visible").click
       wait_for_ajaximations
 
       expect(f("#assignment_group_id")).not_to include_text(@new_group)
@@ -1007,7 +1209,8 @@ describe "assignments" do
         Account.default.enable_feature! :restrict_quantitative_data
         Account.default.settings[:restrict_quantitative_data] = { value: true, locked: true }
         Account.default.save!
-        Account.default.reload
+        @course.restrict_quantitative_data = true
+        @course.save!
       end
 
       context "index" do
@@ -1162,6 +1365,21 @@ describe "assignments" do
           expect(f("#assignment_#{@assignment.id} .js-score .non-screenreader").text).to match "A"
           expect(f("#assignment_#{@assignment.id} .js-score .screenreader-only").text).to match "Grade: A"
         end
+
+        it "shows the course scheme letter grade if letter grade type, pointsPossible is > 0 and score is less than pointsPossible" do
+          @course_standard = @course.grading_standards.create!(title: "course standard", standard_data: { f: { name: "F", value: "" } })
+          @assignment = @course.assignments.create! context: @course, title: "to publish", grading_standard_id: @course_standard.id
+          @assignment.update(points_possible: 100, grading_type: "letter_grade")
+          @assignment.publish
+          course_with_student_logged_in(active_all: true, course: @course)
+          @assignment.grade_student(@student, grade: 90, grader: @teacher)
+
+          get "/courses/#{@course.id}/assignments"
+          wait_for_ajaximations
+
+          expect(f("#assignment_#{@assignment.id} .js-score .non-screenreader").text).to match "F"
+          expect(f("#assignment_#{@assignment.id} .js-score .screenreader-only").text).to match "Grade: F"
+        end
       end
 
       context "creation and edit" do
@@ -1239,6 +1457,57 @@ describe "assignments" do
           end
         end
       end
+    end
+  end
+
+  context "with discussion_checkpoints" do
+    before :once do
+      course_with_teacher({ user: @teacher, active_course: true, active_enrollment: true })
+
+      Account.site_admin.enable_feature! :discussion_checkpoints
+      @checkpointed_discussion = DiscussionTopic.create_graded_topic!(course: @course, title: "checkpointed discussion")
+      Checkpoints::DiscussionCheckpointCreatorService.call(
+        discussion_topic: @checkpointed_discussion,
+        checkpoint_label: CheckpointLabels::REPLY_TO_TOPIC,
+        dates: [{ type: "everyone", due_at: 2.days.from_now }],
+        points_possible: 6
+      )
+      Checkpoints::DiscussionCheckpointCreatorService.call(
+        discussion_topic: @checkpointed_discussion,
+        checkpoint_label: CheckpointLabels::REPLY_TO_ENTRY,
+        dates: [{ type: "everyone", due_at: 3.days.from_now }],
+        points_possible: 7,
+        replies_required: 2
+      )
+    end
+
+    it "does not show points possible and due date fields for checkpointed assignments" do
+      user_session(@teacher)
+
+      get "/courses/#{@course.id}/assignments"
+      f("div#assignment_#{@checkpointed_discussion.assignment.id} button.al-trigger").click
+      f("li a.edit_assignment").click
+      expect(f("[data-testid='assignment-name-input']")).not_to be_disabled
+      expect(f("[data-testid='points-input']")).to be_disabled
+      # Date
+      expect(f("#Selectable_0")).to be_disabled
+      # Time
+      expect(f("#Select_0")).to be_disabled
+    end
+
+    it "displays the correct date input fields in the assign to tray" do
+      user_session(@teacher)
+      get "/courses/#{@course.id}/assignments"
+
+      fj("#assign_#{@checkpointed_discussion.assignment.id}_manage_link").click
+      wait_for_ajaximations
+
+      f("#assignment_#{@checkpointed_discussion.assignment.id} .assign-to-link").click
+      wait_for_assign_to_tray_spinner
+
+      expect(module_item_assign_to_card.first).not_to contain_css(due_date_input_selector)
+      expect(module_item_assign_to_card.first).to contain_css(reply_to_topic_due_date_input_selector)
+      expect(module_item_assign_to_card.first).to contain_css(required_replies_due_date_input_selector)
     end
   end
 end

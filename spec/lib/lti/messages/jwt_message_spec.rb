@@ -36,8 +36,12 @@ describe Lti::Messages::JwtMessage do
       }
     )
   end
+  let(:nonce) { SecureRandom.uuid }
+  let(:post_payload) do
+    jwt_message.to_cached_hash.to_json
+  end
   let(:decoded_jwt) do
-    jws = Lti::Messages::JwtMessage.generate_id_token(jwt_message.generate_post_payload)
+    jws = Lti::Messages::JwtMessage.generate_id_token(Lti::Messages::JwtMessage.cached_hash_to_launch(JSON.parse(post_payload), nonce))
     JSON::JWT.decode(jws[:id_token], pub_key)
   end
   let(:pub_key) do
@@ -87,7 +91,7 @@ describe Lti::Messages::JwtMessage do
 
   describe "signing" do
     it "signs the id token with the current canvas private key" do
-      jws = Lti::Messages::JwtMessage.generate_id_token(jwt_message.generate_post_payload)
+      jws = Lti::Messages::JwtMessage.generate_id_token(jwt_message.to_cached_hash)
 
       expect do
         JSON::JWT.decode(jws[:id_token], pub_key)
@@ -124,7 +128,7 @@ describe Lti::Messages::JwtMessage do
 
     it 'sets the "nonce" claim to a unique ID' do
       first_nonce = decoded_jwt["nonce"]
-      jws = Lti::Messages::JwtMessage.generate_id_token(jwt_message.generate_post_payload)
+      jws = Lti::Messages::JwtMessage.generate_id_token(jwt_message.to_cached_hash)
       second_nonce = JSON::JWT.decode(jws[:id_token], pub_key)["nonce"]
 
       expect(first_nonce).not_to eq second_nonce
@@ -159,6 +163,14 @@ describe Lti::Messages::JwtMessage do
 
       it 'sets the "target_link_uri" claim' do
         expect(decoded_jwt["https://purl.imsglobal.org/spec/lti/claim/target_link_uri"]).to eq target_link_uri
+      end
+    end
+
+    context "when target_link_uri is disabled" do
+      let(:opts) { super().merge({ claim_group_blacklist: [:target_link_uri] }) }
+
+      it "does not set target_link_uri claim" do
+        expect(decoded_jwt["https://purl.imsglobal.org/spec/lti/claim/target_link_uri"]).to be_nil
       end
     end
 
@@ -203,10 +215,6 @@ describe Lti::Messages::JwtMessage do
 
       it 'does not set the "iss" claim' do
         expect(decoded_jwt).not_to include "iss"
-      end
-
-      it 'does not set the "nonce" claim' do
-        expect(decoded_jwt).not_to include "nonce"
       end
 
       it 'does not set the "sub" claim' do
@@ -521,6 +529,7 @@ describe Lti::Messages::JwtMessage do
       ]
     end
     let_once(:nrps_scopes) { ["https://purl.imsglobal.org/spec/lti-nrps/scope/contextmembership.readonly"] }
+    let_once(:pns_scopes) { ["https://purl.imsglobal.org/spec/lti/scope/noticehandlers"] }
     let(:lti_advantage_tool) do
       tool = course.context_external_tools.new(
         name: "bob",
@@ -555,16 +564,13 @@ describe Lti::Messages::JwtMessage do
     end
     let(:controller) do
       controller = double("controller")
-      allow(controller).to receive(:polymorphic_url).and_return("polymorphic_url")
-      allow(controller).to receive(:request).and_return(request)
+      allow(controller).to receive_messages(polymorphic_url: "polymorphic_url", request:)
       controller
     end
     # All this setup just so we can stub out controller.polymorphic_url
     let(:request) do
       request = double("request")
-      allow(request).to receive(:url).and_return("https://localhost")
-      allow(request).to receive(:host).and_return("/my/url")
-      allow(request).to receive(:scheme).and_return("https")
+      allow(request).to receive_messages(url: "https://localhost", host: "/my/url", scheme: "https")
       request
     end
     # override b/c all the rest of the tests fail if a Controller is injected into the 'top-level' expander def
@@ -616,23 +622,12 @@ describe Lti::Messages::JwtMessage do
     let(:lti_advantage_service_claim_group) { :names_and_roles_service }
 
     shared_examples "names and roles claim check" do
-      context "when the consistent_ags_ids_based_on_account_principal_domain feature flag is on" do
-        it "sets the NRPS url using the Account#domain" do
-          context.root_account.enable_feature! :consistent_ags_ids_based_on_account_principal_domain
-          allow_any_instance_of(Account).to receive(:domain).and_return("account_host")
-          expect(lti_advantage_service_claim["context_memberships_url"]).to eq "polymorphic_url"
-          expect(controller).to have_received(:polymorphic_url).with(
-            [anything, :names_and_roles], host: "account_host"
-          )
-        end
-      end
-
-      context "when the consistent_ags_ids_based_on_account_principal_domain feature flag is off" do
-        it "sets the NRPS url using the request host" do
-          context.root_account.disable_feature! :consistent_ags_ids_based_on_account_principal_domain
-          expect(lti_advantage_service_claim["context_memberships_url"]).to eq "polymorphic_url"
-          expect(controller).to have_received(:polymorphic_url).with([anything, :names_and_roles])
-        end
+      it "sets the NRPS url using the Account#domain" do
+        expect_any_instance_of(Account).to receive(:environment_specific_domain).and_return("account_host")
+        expect(lti_advantage_service_claim["context_memberships_url"]).to eq "polymorphic_url"
+        expect(controller).to have_received(:polymorphic_url).with(
+          [anything, :names_and_roles], host: "account_host"
+        )
       end
 
       it "sets the NRPS version" do
@@ -668,8 +663,7 @@ describe Lti::Messages::JwtMessage do
     let(:lti_advantage_service_claim_group) { :assignment_and_grade_service }
 
     before do
-      course.account.enable_feature!(:consistent_ags_ids_based_on_account_principal_domain)
-      allow_any_instance_of(Account).to receive(:domain).and_return("canonical_domain")
+      allow_any_instance_of(Account).to receive(:environment_specific_domain).and_return("canonical_domain")
       allow(controller).to receive(:lti_line_item_index_url)
         .with({ host: "canonical_domain", course_id: course.id })
         .and_return("lti_line_item_index_url")
@@ -708,6 +702,82 @@ describe Lti::Messages::JwtMessage do
     end
   end
 
+  describe "platform notification service" do
+    include_context "lti advantage service claims context"
+    let(:lti_advantage_developer_key_scopes) { pns_scopes }
+    let(:lti_advantage_service_claim) { decoded_jwt["https://purl.imsglobal.org/spec/lti/claim/platformnotificationservice"] }
+    let(:lti_advantage_service_claim_group) { :platform_notification_service }
+
+    before do
+      allow_any_instance_of(Account).to receive(:environment_specific_domain).and_return("canonical_domain")
+      allow(controller).to receive(:lti_notice_handlers_url)
+        .with({ host: "canonical_domain", context_external_tool_id: lti_advantage_tool.id })
+        .and_return("lti_notice_handlers_url")
+    end
+
+    shared_examples "all PNS claim presence and absence checks" do
+      it_behaves_like "lti advantage service claim group disabled check"
+      it_behaves_like "lti advantage scopes missing from developer key"
+
+      it "sets the PNS url using the Account#domain" do
+        expect(
+          lti_advantage_service_claim["platform_notification_service_url"]
+        ).to eq("lti_notice_handlers_url")
+      end
+
+      it "sets the PNS version and notice_types_supported" do
+        expect(lti_advantage_service_claim["service_versions"]).to eq ["1.0"]
+        expect(lti_advantage_service_claim["notice_types_supported"]).to eq Lti::Pns::NoticeTypes::ALL
+      end
+    end
+
+    context "when expander and controller is not present (called for pns notify)" do
+      let(:expander) { nil }
+      let(:opts) { super().merge({ claim_group_whitelist: [:platform_notification_service] }) }
+      let(:lti_advantage_service_claim) { decoded_jwt["https://purl.imsglobal.org/spec/lti/claim/platformnotificationservice"] }
+
+      before do
+        allow(Rails.application.routes.url_helpers).to receive(:lti_notice_handlers_url)
+          .with({ host: "canonical_domain", context_external_tool_id: lti_advantage_tool.id })
+          .and_return("lti_notice_handlers_url")
+      end
+
+      it "sets the PNS url using the Account#domain" do
+        expect(lti_advantage_service_claim["platform_notification_service_url"]).to eq("lti_notice_handlers_url")
+      end
+    end
+
+    context "when context is a course" do
+      it_behaves_like "all PNS claim presence and absence checks"
+    end
+
+    context "when context is an account" do
+      include_context "with lti advantage account context"
+      it_behaves_like "all PNS claim presence and absence checks"
+    end
+
+    context "when context is a group" do
+      include_context "with lti advantage group context"
+      it_behaves_like "all PNS claim presence and absence checks"
+    end
+
+    context "when the platform_notification_service feature flag is disabled" do
+      before do
+        context.root_account.disable_feature!(:platform_notification_service)
+      end
+
+      %w[course account group].each do |context_type|
+        context "when context is a #{context_type}" do
+          unless context_type == "course"
+            include_context "with lti advantage #{context_type} context"
+          end
+
+          it_behaves_like "absent lti advantage service claim check"
+        end
+      end
+    end
+  end
+
   describe "custom parameters" do
     let(:message_custom) { decoded_jwt["https://purl.imsglobal.org/spec/lti/claim/custom"] }
 
@@ -718,13 +788,13 @@ describe Lti::Messages::JwtMessage do
     end
 
     it "adds placement-specific custom parameters" do
-      Lti::Messages::JwtMessage.generate_id_token(jwt_message.generate_post_payload)
+      Lti::Messages::JwtMessage.generate_id_token(jwt_message.to_cached_hash)
       expect(message_custom["no_expansion"]).to eq "foo"
     end
 
     it "expands variable expansions" do
-      Lti::Messages::JwtMessage.generate_id_token(jwt_message.generate_post_payload)
-      expect(message_custom["has_expansion"]).to eq user.id
+      Lti::Messages::JwtMessage.generate_id_token(jwt_message.to_cached_hash)
+      expect(message_custom["has_expansion"]).to eq user.id.to_s
     end
 
     context "when custom parameters claim group disabled" do
@@ -811,7 +881,7 @@ describe Lti::Messages::JwtMessage do
       expect(decoded_jwt.dig("https://purl.imsglobal.org/spec/lti/claim/lis", "person_sourcedid")).to eq "$Person.sourcedId"
     end
 
-    it "adds the coures offering sourcedid" do
+    it "adds the courses offering sourcedid" do
       course.update!(sis_source_id: SecureRandom.uuid)
       expect(decoded_jwt.dig("https://purl.imsglobal.org/spec/lti/claim/lis", "course_offering_sourcedid")).to eq course.sis_source_id
     end
@@ -903,7 +973,7 @@ describe Lti::Messages::JwtMessage do
       end
 
       let(:account_jwt) do
-        jws = Lti::Messages::JwtMessage.generate_id_token(account_jwt_message.generate_post_payload)
+        jws = Lti::Messages::JwtMessage.generate_id_token(account_jwt_message.to_cached_hash)
         JSON::JWT.decode(jws[:id_token], pub_key)
       end
     end
@@ -1008,6 +1078,12 @@ describe Lti::Messages::JwtMessage do
 
       it { is_expected.to be_empty }
     end
+
+    context "when lti11_legacy_user_id is disabled" do
+      let(:opts) { super().merge({ claim_group_blacklist: [:lti11_legacy_user_id] }) }
+
+      it { is_expected.to be_nil }
+    end
   end
 
   describe "lti1p1 claims" do
@@ -1035,29 +1111,12 @@ describe Lti::Messages::JwtMessage do
       let!(:associated_1_1_tool) { external_tool_model(context: course, opts: { url: "http://www.example.com/basic_lti" }) }
 
       before do
-        allow(Lti::Helpers::JwtMessageHelper).to receive(:generate_oauth_consumer_key_sign).and_return("avalidsignature")
+        allow(Lti::Helpers::JwtMessageHelper).to receive(:generate_oauth_consumer_key_sign).and_return("a_valid_signature")
       end
 
-      context "the include_oauth_consumer_key_in_lti_launch flag is enabled" do
-        before do
-          Account.site_admin.enable_feature!(:include_oauth_consumer_key_in_lti_launch)
-        end
-
-        it "includes the oauth_consumer_key related claims" do
-          expect(subject["oauth_consumer_key"]).to eq associated_1_1_tool.consumer_key
-          expect(subject["oauth_consumer_key_sign"]).to eq "avalidsignature"
-        end
-      end
-
-      context "the include_oauth_consumer_key_in_lti_launch flag is disabled" do
-        before do
-          Account.site_admin.disable_feature!(:include_oauth_consumer_key_in_lti_launch)
-        end
-
-        it "doesn't include the oauth_consumer_key related claims" do
-          expect(subject).not_to include "oauth_consumer_key"
-          expect(subject).not_to include "oauth_consumer_key_sign"
-        end
+      it "includes the oauth_consumer_key related claims" do
+        expect(subject["oauth_consumer_key"]).to eq associated_1_1_tool.consumer_key
+        expect(subject["oauth_consumer_key_sign"]).to eq "a_valid_signature"
       end
     end
 
@@ -1066,6 +1125,47 @@ describe Lti::Messages::JwtMessage do
         expect(subject).not_to include "oauth_consumer_key"
         expect(subject).not_to include "oauth_consumer_key_sign"
       end
+    end
+  end
+
+  describe "inst-specific extension claims" do
+    subject { decoded_jwt["https://www.instructure.com/#{claim}"] }
+
+    context "placement claim" do
+      let(:claim) { "placement" }
+
+      it "matches the resource_type" do
+        expect(subject).to eq opts[:resource_type]
+      end
+    end
+
+    context "lti_student_id claim" do
+      let(:claim) { "lti_student_id" }
+      let(:student_id) { "123" }
+      let(:opts) { { student_id: } }
+
+      it "uses student_id from opts" do
+        expect(subject).to eq student_id
+      end
+    end
+
+    context "student_context claim" do
+      let(:claim) { "student_context" }
+      let(:student_lti_id) { "222" }
+      let(:opts) { { student_lti_id: } }
+
+      it "uses student_id from opts" do
+        expect(subject).to eq({ "id" => student_lti_id })
+      end
+    end
+  end
+
+  context "when the expander is not provided and only security claims are needed" do
+    let(:expander) { nil }
+    let(:opts) { super().merge({ claim_group_whitelist: [:security] }) }
+
+    it "generate_post_payload_message does not raise an error" do
+      expect { jwt_message.generate_post_payload_message }.not_to raise_error
     end
   end
 end

@@ -47,6 +47,7 @@ export function reportCatch(error) {
 }
 
 export const submissionsParams = {
+  include: ['sub_assignment_submissions'],
   exclude_response_fields: ['preview_url', 'external_tool_url', 'url'],
   grouped: 1,
   response_fields: [
@@ -54,6 +55,7 @@ export const submissionsParams = {
     'attachments',
     'attempt',
     'cached_due_date',
+    'custom_grade_status_id',
     'entered_grade',
     'entered_score',
     'excused',
@@ -67,9 +69,11 @@ export const submissionsParams = {
     'points_deducted',
     'posted_at',
     'proxy_submitter',
+    'proxy_submitter_id',
     'redo_request',
     'score',
     'seconds_late',
+    'sticker',
     'submission_type',
     'submitted_at',
     'user_id',

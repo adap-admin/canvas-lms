@@ -68,14 +68,6 @@ describe UsersController do
       expect(response.body).not_to match(/studentname2/)
     end
 
-    it "shows user notes if enabled" do
-      get user_course_teacher_activity_url(@teacher, @course)
-      expect(response.body).not_to match(/journal entry/i)
-      @course.root_account.update_attribute(:enable_user_notes, true)
-      get user_course_teacher_activity_url(@teacher, @course)
-      expect(response.body).to match(/journal entry/i)
-    end
-
     it "shows individual user info across courses" do
       @course1 = @course
       @course2 = course_factory(active_course: true)
@@ -367,16 +359,13 @@ describe UsersController do
       kaltura_client
     end
 
-    let(:media_source_fetcher) do
-      media_source_fetcher = instance_double("MediaSourceFetcher")
-      expect(MediaSourceFetcher).to receive(:new).with(kaltura_client).and_return(media_source_fetcher)
-      media_source_fetcher
-    end
+    let(:media_source_fetcher) { instance_double("MediaSourceFetcher") }
 
     before do
       account = Account.create!
       course_with_student(active_all: true, account:)
       user_session(@student)
+      expect(MediaSourceFetcher).to receive(:new).with(kaltura_client).and_return(media_source_fetcher)
     end
 
     it "passes the type down to the media fetcher even with a malformed url" do

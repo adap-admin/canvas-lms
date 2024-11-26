@@ -326,9 +326,9 @@ module Lti
       end
 
       it "updates error_message" do
-        put @endpoints[:update], params: { originality_report: { error_message: "An error occured." } }, headers: request_headers
+        put @endpoints[:update], params: { originality_report: { error_message: "An error occurred." } }, headers: request_headers
         expect(response).to be_successful
-        expect(OriginalityReport.find(@report.id).error_message).to eq "An error occured."
+        expect(OriginalityReport.find(@report.id).error_message).to eq "An error occurred."
       end
 
       it "updates the associated resource_url" do
@@ -400,11 +400,6 @@ module Lti
             headers: request_headers
 
         expect(Lti::Link.find_by(id: lti_link_id)).to be_nil
-      end
-
-      it "requires the plagiarism feature flag" do
-        put @endpoints[:udpate], params: { originality_report: { originality_report_lti_url: "http://www.lti-test.com" } }, headers: request_headers
-        expect(response).not_to be_successful
       end
 
       it "verifies the report is in the same context as the assignment" do
@@ -542,11 +537,6 @@ module Lti
           expect(response).to be_successful
           lti_link = OriginalityReport.find(@report.id).lti_link
           expect(lti_link.resource_url).to eq "http://www.lti-test.com"
-        end
-
-        it "requires the plagiarism feature flag" do
-          put @endpoints[:udpate], params: { originality_report: { originality_report_lti_url: "http://www.lti-test.com" } }, headers: request_headers
-          expect(response).not_to be_successful
         end
 
         it "verifies the report is in the same context as the assignment" do
@@ -712,7 +702,7 @@ module Lti
         expect(assigns[:report].originality_score).to eq score
       end
 
-      it "does not requre an attachment if submission type does not include online text entry" do
+      it "does not require an attachment if submission type does not include online text entry" do
         @submission.update!(body: "some text")
         score = 0.25
         post @endpoints[:create], params: { originality_report: { originality_score: score } }, headers: request_headers
@@ -858,6 +848,33 @@ module Lti
           response_body = JSON.parse(response.body)
           expect(response_body["workflow_state"]).to eq "pending"
           expect(response_body["error_message"]).to be_nil
+        end
+
+        context "and the new score is the same as before" do
+          let(:existing_report) do
+            OriginalityReport.create!(
+              attachment: @attachment,
+              workflow_state: "scored",
+              originality_score: 50.0,
+              submission:
+            )
+          end
+
+          it "updates only the updated_at field to show the report was updated" do
+            post @endpoints[:create],
+                 params: {
+                   originality_report: {
+                     file_id: @attachment.id,
+                     originality_score: "50"
+                   }
+                 },
+                 headers: request_headers
+
+            response_body = JSON.parse(response.body)
+            expect(response_body["originality_score"]).to eq existing_report.originality_score
+            expect(response_body["workflow_state"]).to eq existing_report.workflow_state
+            expect(response_body["updated_at"]).not_to eq existing_report.updated_at
+          end
         end
 
         context "when the attachment matches, but the submission does not" do

@@ -22,18 +22,24 @@ class SubmissionsBaseController < ApplicationController
   include GradebookSettingsHelpers
   include AssignmentsHelper
   include AssessmentRequestHelper
+  include SubmissionsHelper
 
   include Api::V1::Rubric
   include Api::V1::SubmissionComment
 
   def show
-    return render_unauthorized_action unless @submission.context.grants_right?(@current_user, session, :read)
+    return unless authorized_action(@submission.context, @current_user, :read)
 
     @visible_rubric_assessments = @submission.visible_rubric_assessments_for(@current_user)
     @assessment_request = @submission.assessment_requests.where(assessor_id: @current_user).first
 
     if @submission&.user_id == @current_user.id
       @submission&.mark_read(@current_user)
+      if @submission.assignment.checkpoints_parent?
+        @submission.assignment.sub_assignment_submissions.where(user: @current_user).find_each do |s|
+          s&.mark_read(@current_user)
+        end
+      end
     end
 
     respond_to do |format|
@@ -65,7 +71,9 @@ class SubmissionsBaseController < ApplicationController
 
         set_active_tab "assignments"
 
-        render "submissions/show", stream: can_stream_template?
+        render "submissions/show",
+               stream: can_stream_template?,
+               layout: (params[:embed] == "true") ? "mobile_embed" : true
       end
 
       format.json do
@@ -175,6 +183,7 @@ class SubmissionsBaseController < ApplicationController
                                                                       except: [:quiz_submission, :submission_history]
                                                                     }).merge(except: submission_json_exclusions, permissions:)
           json_args[:methods] << :provisional_grade_id if provisional
+          json_args[:methods].delete(:submission_comments)
 
           submissions_json = @submissions.map do |submission|
             submission_json = submission.as_json(json_args)
@@ -196,8 +205,9 @@ class SubmissionsBaseController < ApplicationController
           flash[:error] = @error_message
 
           error_json = { base: @error_message }
-          error_json[:error_code] = error.error_code if error
-          error_status = error&.status_code || :bad_request
+
+          error_json[:error_code] = error.error_code if error.respond_to?(:error_code)
+          error_status = (error.respond_to?(:status_code) && error.status_code) || :bad_request
 
           format.html { render :show, id: @assignment.context.id }
           format.json { render json: { errors: error_json }, status: error_status }
@@ -247,7 +257,7 @@ class SubmissionsBaseController < ApplicationController
   private
 
   def update_student_entered_score(score)
-    new_score = (score.present? && score != "null") ? score.to_f.round(2) : nil
+    new_score = sanitize_student_entered_score(score)
     # TODO: fix this by making the callback optional
     # intentionally skipping callbacks here to fix a bug where entering a
     # what-if grade for a quiz can put the submission back in a 'pending review' state
@@ -264,7 +274,14 @@ class SubmissionsBaseController < ApplicationController
     plag_data = (type == "vericite") ? submission.vericite_data : submission.turnitin_data
 
     if plag_data.dig(asset_string, :report_url).present?
-      polymorphic_url([:retrieve, @context, :external_tools], url: plag_data[asset_string][:report_url], display: "borderless")
+      polymorphic_url(
+        [:retrieve, @context, :external_tools],
+        url: plag_data[asset_string][:report_url],
+        # Hack because turnitin supports only 1.1 here, but they have 1.3 tools
+        # with the same domain that we will find because we prefer 1.3 tools:
+        prefer_1_1: type == "turnitin",
+        display: "borderless"
+      )
     elsif type == "vericite"
       # VeriCite URL
       submission.vericite_report_url(asset_string, @current_user, session)

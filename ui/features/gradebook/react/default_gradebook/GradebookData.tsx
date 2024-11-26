@@ -116,7 +116,11 @@ export default function GradebookData(props: Props) {
     })
     initializeAppliedFilters(
       props.gradebookEnv.settings.filter_rows_by || {},
-      props.gradebookEnv.settings.filter_columns_by || {}
+      props.gradebookEnv.settings.filter_columns_by || {},
+      props.gradebookEnv.custom_grade_statuses_enabled
+        ? props.gradebookEnv.custom_grade_statuses
+        : [],
+      props.gradebookEnv.multiselect_gradebook_filters_enabled
     )
   }, [
     courseId,
@@ -127,6 +131,9 @@ export default function GradebookData(props: Props) {
     props.gradebookEnv.course_settings.allow_final_grade_override,
     props.gradebookEnv.reorder_custom_columns_url,
     initializeAppliedFilters,
+    props.gradebookEnv.custom_grade_statuses_enabled,
+    props.gradebookEnv.custom_grade_statuses,
+    props.gradebookEnv.multiselect_gradebook_filters_enabled,
   ])
 
   // Data loading logic goes here
@@ -165,9 +172,7 @@ export default function GradebookData(props: Props) {
     if (gradingPeriodSet) {
       // eslint-disable-next-line promise/catch-or-return
       fetchGradingPeriodAssignments().then(() => {
-        if (currentGradingPeriodId !== '0') {
-          loadAssignmentGroups(props.gradebookEnv.hide_zero_point_quizzes, currentGradingPeriodId)
-        }
+        loadAssignmentGroups(props.gradebookEnv.hide_zero_point_quizzes, currentGradingPeriodId)
       })
     } else {
       loadAssignmentGroups(props.gradebookEnv.hide_zero_point_quizzes)

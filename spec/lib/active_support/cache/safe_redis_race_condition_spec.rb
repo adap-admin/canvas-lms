@@ -27,7 +27,6 @@ describe ActiveSupport::Cache::SafeRedisRaceCondition do
 
   let(:store) do
     Class.new(ActiveSupport::Cache::RedisCacheStore) do
-      include ActiveSupport::Cache::SafeRedisRaceCondition
       def self.name
         "TestCache"
       end
@@ -51,11 +50,13 @@ describe ActiveSupport::Cache::SafeRedisRaceCondition do
     end
 
     it "doesn't populate for a stale key that someone else is populating" do
-      store.write("bob", 42, expires_in: -1)
+      store.write("bob", 42, expires_in: 0)
       expect(store).to receive(:lock).and_return(false)
       expect(store).not_to receive(:unlock)
 
-      expect(store.fetch("bob") { raise "not reached" }).to eq 42
+      Timecop.travel(1.second) do
+        expect(store.fetch("bob") { raise "not reached" }).to eq 42
+      end
     end
 
     it "waits to get a lock for a non-existent key" do

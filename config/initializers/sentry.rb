@@ -43,6 +43,9 @@ Rails.configuration.to_prepare do
         SentryExtensions::Settings.get("sentry_backend_traces_sample_rate", "0.0").to_f
       end
 
+      # Note that this sample rate is relative to the traces sample rate
+      config.profiles_sample_rate = SentryExtensions::Settings.get("sentry_backend_profiles_sample_rate", "0.0").to_f
+
       # Override the Sentry-provided ActiveRecord subscriber with our own (to normalize SQL queries)
       config.rails.tracing_subscribers.delete(Sentry::Rails::Tracing::ActiveRecordSubscriber)
       config.rails.tracing_subscribers.add(SentryExtensions::Tracing::ActiveRecordSubscriber)
@@ -60,10 +63,13 @@ Rails.configuration.to_prepare do
       # are login/auth exceptions.  Exceptions that are simply noisy/inconvenient
       # should probably be caught and solved...
       config.excluded_exceptions += %w[
+        AuthenticationMethods::RevokedAccessTokenError
+        AuthenticationMethods::ExpiredAccessTokenError
         AuthenticationMethods::AccessTokenError
         AuthenticationMethods::AccessTokenScopeError
         AuthenticationMethods::LoggedOutError
         ActionController::InvalidAuthenticityToken
+        Delayed::Backend::JobExpired
         Folio::InvalidPage
         Turnitin::Errors::SubmissionNotScoredError
         Rack::QueryParser::InvalidParameterError
@@ -85,11 +91,12 @@ Rails.configuration.to_prepare do
     SentryProxy.register_ignorable_error(error)
   end
 
-  # This error can be caused by LTI tools.
+  # These errors can be caused by LTI tools.
   SentryProxy.register_ignorable_error("Grade pass back failure")
+  SentryProxy.register_ignorable_error("Grade pass back unsupported")
 
   CanvasErrors.register!(:sentry_notification) do |exception, data, level|
-    setting = SentryExtensions::Settings.get("sentry_error_logging_enabled", "true")
+    setting = SentryExtensions::Settings.get("sentry_error_logging_enabled", "true", skip_cache: data[:skip_setting_cache])
     SentryProxy.capture(exception, data, level) if setting == "true"
   end
 end

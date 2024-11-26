@@ -167,7 +167,7 @@ describe CanvasSanitize do
   end
 
   it "removes and not escape contents of style tags" do
-    str = %(<p><style type="text/css">pleaseignoreme: blahblahblah</style>but not me</p>)
+    str = %(<p><style>button { color: white !important; }</style>but not me</p>)
     res = Sanitize.clean(str, CanvasSanitize::SANITIZE)
     expect(res).to eq "<p>but not me</p>"
   end
@@ -198,6 +198,24 @@ describe CanvasSanitize do
 
   it "allows data sources for track tags" do
     str = %(<track kind="subtitles" srclang="en" label="English" src="data:audio/mp3;base64,aHR0cHM6Ly93d3cueW91dHViZS5jb20vd2F0Y2g/dj1kUXc0dzlXZ1hjUQ==">)
+    res = Sanitize.clean(str, CanvasSanitize::SANITIZE)
+    expect(res).to eq str
+  end
+
+  it "strips spaces from ids" do
+    str = %(<div class="mini_month"><div class="day_wrapper" id="mini_day_2023_10_31_1"><div class="mini_calendar_day" id="mini_day_2023_10_31_1, id=[<img src=x onerror='alert(`${document.domain}:${document.cookie}`)' />]">Click me to trigger XSS</div></div></div>)
+    res = Sanitize.clean(str, CanvasSanitize::SANITIZE)
+    expect(res).to eq(%(<div class="mini_month"><div class="day_wrapper" id="mini_day_2023_10_31_1"><div class="mini_calendar_day" id="mini_day_2023_10_31_1,id=[<imgsrc=xonerror='alert(`${document.domain}:${document.cookie}`)'/>]">Click me to trigger XSS</div></div></div>))
+  end
+
+  it "strips tabs and long whitespace from ids" do
+    str = %(<div id="my id    with      tabs    and  spaces"></div>)
+    res = Sanitize.clean(str, CanvasSanitize::SANITIZE)
+    expect(res).to eq %(<div id="myidwithtabsandspaces"></div>)
+  end
+
+  it "does not affect ids without whitespace" do
+    str = %(<div id="my-id-5"></div>)
     res = Sanitize.clean(str, CanvasSanitize::SANITIZE)
     expect(res).to eq str
   end

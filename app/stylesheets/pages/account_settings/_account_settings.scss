@@ -53,11 +53,6 @@
 
 .admins_list .remove_account_user_link {
   float: direction(right);
-  opacity: 0.5;
-}
-
-.admins_list li:hover .remove_account_user_link {
-  opacity: 1;
 }
 
 #account_notification_icon {
@@ -275,4 +270,19 @@ textarea#account_notification_message, .edit_notification_form textarea {
   .announcement-details-post-info__datetime {
     padding-#{direction(right)}: 0px;
   }
+}
+
+#personal_pronouns_options {
+  margin-left: 1.5rem;
+  margin-bottom: 1.0rem;
+}
+
+#name_pronunciation_options {
+  margin-left: 1.5rem;
+  margin-bottom: 1.0rem;
+}
+
+#change_personal_pronouns {
+  margin-top: 0.45rem;
+  margin-bottom: 0.35rem;
 }

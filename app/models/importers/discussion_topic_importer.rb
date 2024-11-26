@@ -110,15 +110,15 @@ module Importers
          is_anonymous_author].each do |attr|
         next if options[attr].nil? && item.class.columns_hash[attr.to_s].type == :boolean
 
-        item.send("#{attr}=", options[attr])
+        item.send(:"#{attr}=", options[attr])
       end
+
+      item.reply_to_entry_required_count = options[:reply_to_entry_required_count] || 0
 
       type = item.is_a?(Announcement) ? :announcement : :discussion_topic
       item.locked = options[:locked] if !options[:locked].nil? && type == :announcement
       item.message = if options.message
                        migration.convert_html(options.message, type, options[:migration_id], :message)
-                     else
-                       I18n.t("#discussion_topic.empty_message", "No message")
                      end
 
       item.delayed_post_at = Canvas::Migration::MigratorHelper.get_utc_time_from_timestamp(options.delayed_post_at)
@@ -174,7 +174,11 @@ module Importers
         item.group_category = nil
       end
 
-      item.save_without_broadcasting!
+      if migration.send_item_notifications?
+        item.save!
+      else
+        item.save_without_broadcasting!
+      end
       import_migration_item
       item.saved_by = nil
       item
@@ -186,6 +190,10 @@ module Importers
       return nil unless context.respond_to?(:assignments)
 
       if options[:assignment]
+        assignment_hash = options[:assignment]
+        assignment_hash[:sub_assignments]&.each do |sub_assignment|
+          sub_assignment[:description] = item.message
+        end
         Importers::AssignmentImporter.import_from_migration(options[:assignment], context, migration)
       elsif options[:grading]
         Importers::AssignmentImporter.import_from_migration({
@@ -229,7 +237,8 @@ module Importers
 
       def message
         return options[:description] if options[:description].present?
-        return options[:text] if options[:text].present?
+
+        options[:text].presence
       end
 
       def delayed_post_at

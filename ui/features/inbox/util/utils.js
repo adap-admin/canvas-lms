@@ -29,12 +29,16 @@ export const responsiveQuerySizes = ({mobile = false, tablet = false, desktop = 
     querySizes.tablet = {minWidth: mobile ? '768px' : '0px'}
   }
   if (desktop) {
-    querySizes.desktop = {minWidth: tablet ? '1024px' : '768px'}
+    querySizes.desktop = {minWidth: tablet ? '1024px' : '769px'}
   }
   return querySizes
 }
 
-const DEFAULT_USER_PROPERTIES = {_id: null, name: I18n.t('DELETED USER')}
+const DEFAULT_USER_PROPERTIES = {
+  _id: null,
+  name: I18n.t('DELETED USER'),
+  shortName: I18n.t('DELETED USER'),
+}
 
 // Takes in data from either a VIEWABLE_SUBMISSIONS_QUERY or CONVERSATIONS_QUERY
 // Outputs an inbox conversation wrapper
@@ -59,6 +63,7 @@ export const inboxConversationsWrapper = (data, isSubmissionComments = false) =>
           isSubmissionComments
         )
         inboxConversation.messages = conversation?.commentsConnection.nodes
+        inboxConversation.count = conversation?.commentsConnection.nodes.length || 0
       } else {
         inboxConversation.id = conversation?.id
         inboxConversation._id = conversation?.conversation?._id
@@ -71,12 +76,13 @@ export const inboxConversationsWrapper = (data, isSubmissionComments = false) =>
         inboxConversation.label = conversation?.label
         inboxConversation.messages =
           conversation?.conversation?.conversationMessagesConnection.nodes
+        inboxConversation.count = conversation?.conversation?.conversationMessagesCount || 0
         inboxConversation.participants =
           conversation.conversation.conversationParticipantsConnection.nodes
         inboxConversation.participantString = getParticipantsString(
           inboxConversation?.participants,
           isSubmissionComments,
-          inboxConversation?.messages[inboxConversation.messages.length - 1]?.author?.name ||
+          inboxConversation?.messages[inboxConversation.messages.length - 1]?.author?.shortName ||
             DEFAULT_USER_PROPERTIES.name
         )
         inboxConversation.isPrivate = conversation?.conversation?.isPrivate
@@ -108,9 +114,12 @@ export const inboxMessagesWrapper = (data, isSubmissionComments = false) => {
         inboxMessage.author = message?.author || User.mock(DEFAULT_USER_PROPERTIES)
         inboxMessage.recipients = []
         inboxMessage.body = message?.comment
+        inboxMessage.htmlBody = message?.htmlComment
         inboxMessage.attachmentsConnection = null
+        inboxMessage.attachments = null
         inboxMessage.mediaComment = null
         contextName = message?.course?.contextName
+        canReply = canReply && message?.canReply
       } else {
         inboxMessage.id = message?.id
         inboxMessage._id = message?._id
@@ -119,7 +128,9 @@ export const inboxMessagesWrapper = (data, isSubmissionComments = false) => {
         inboxMessage.author = message?.author || User.mock(DEFAULT_USER_PROPERTIES)
         inboxMessage.recipients = message?.recipients
         inboxMessage.body = message?.body
+        inboxMessage.htmlBody = message?.htmlComment
         inboxMessage.attachmentsConnection = message?.attachmentsConnection
+        inboxMessage.attachments = message?.attachments
         inboxMessage.mediaComment = message?.mediaComment
         contextName = data?.contextName
         canReply = data?.canReply
@@ -143,10 +154,11 @@ const getSubmissionCommentsParticipantString = messages => {
 }
 const getConversationParticipantString = (participants, conversationOwnerName) => {
   const participantString = participants
-    .filter(p => p?.user?.name !== conversationOwnerName)
+    .filter(p => p?.user?.shortName !== conversationOwnerName)
     .reduce((prev, curr) => {
-      if (!curr?.user?.name && DEFAULT_USER_PROPERTIES.name === conversationOwnerName) return prev
-      return prev + ', ' + (curr?.user?.name || DEFAULT_USER_PROPERTIES.name)
+      if (!curr?.user?.shortName && DEFAULT_USER_PROPERTIES.name === conversationOwnerName)
+        return prev
+      return prev + ', ' + (curr?.user?.shortName || DEFAULT_USER_PROPERTIES.name)
     }, '')
   return conversationOwnerName + participantString
 }

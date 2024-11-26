@@ -17,9 +17,10 @@
  */
 
 import React from 'react'
+import {MockedProvider} from '@apollo/react-testing'
 import {render, waitFor} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import ProxyUploadModal, {ProxyUploadModalProps} from '../ProxyUploadModal'
+import ProxyUploadModal, {type ProxyUploadModalProps} from '../ProxyUploadModal'
 
 const defaultProps: ProxyUploadModalProps = {
   student: {
@@ -40,19 +41,24 @@ const defaultProps: ProxyUploadModalProps = {
 
 function renderComponent(overrideProps = {}) {
   const props = {...defaultProps, ...overrideProps}
-  return render(<ProxyUploadModal {...props} />)
+  return render(<MockedProvider><ProxyUploadModal {...props} /></MockedProvider>)
 }
 
 describe('ProxyUploadModal', () => {
+  beforeAll(() => {
+    global.DataTransferItem = global.DataTransferItem || class DataTransferItem {}
+  })
+
   it('renders', () => {
     const {getByText} = renderComponent()
     expect(getByText('Upload File')).toBeInTheDocument()
   })
   it('indicates files are being uploaded once added to input', async () => {
+    const user = userEvent.setup({delay: null})
     const {getByTestId, getAllByText} = renderComponent()
     const input = await waitFor(() => getByTestId('proxyInputFileDrop'))
     const file = new File(['my-image'], 'my-image.png', {type: 'image/png'})
-    userEvent.upload(input, file)
+    await user.upload(input, file)
     expect(getAllByText('Uploading files')[0]).toBeInTheDocument()
   })
 })

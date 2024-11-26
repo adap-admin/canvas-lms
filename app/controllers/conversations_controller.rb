@@ -18,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require "atom"
-
 # @API Conversations
 #
 # API for creating, accessing and updating user conversations.
@@ -264,60 +262,62 @@ class ConversationsController < ApplicationController
   # @returns [Conversation]
   #
   def index
-    if request.format == :json
-      @conversations_scope = @conversations_scope.where("message_count > 0")
-      conversations = Api.paginate(@conversations_scope, self, api_v1_conversations_url)
-      # OPTIMIZE: loading the most recent messages for each conversation into a single query
-      ConversationParticipant.preload_latest_messages(conversations, @current_user)
-      @conversations_json = conversations_json(conversations,
-                                               @current_user,
-                                               session,
-                                               include_participant_avatars: (Array(params[:include]).include? "participant_avatars"),
-                                               include_participant_contexts: false,
-                                               visible: true,
-                                               include_context_name: true,
-                                               include_beta: params[:include_beta])
+    page_has_instui_topnav
+    respond_to do |format|
+      format.json do
+        @conversations_scope = @conversations_scope.where("message_count > 0")
+        conversations = Api.paginate(@conversations_scope, self, api_v1_conversations_url)
+        # OPTIMIZE: loading the most recent messages for each conversation into a single query
+        ConversationParticipant.preload_latest_messages(conversations, @current_user)
+        @conversations_json = conversations_json(conversations,
+                                                 @current_user,
+                                                 session,
+                                                 include_participant_avatars: (Array(params[:include]).include? "participant_avatars"),
+                                                 include_participant_contexts: false,
+                                                 visible: true,
+                                                 include_context_name: true,
+                                                 include_beta: params[:include_beta])
 
-      if params[:include_all_conversation_ids]
-        @conversations_json = { conversations: @conversations_json, conversation_ids: @conversations_scope.conversation_ids }
-      end
-      InstStatsd::Statsd.increment("inbox.visit.scope.inbox.pages_loaded.legacy") if params[:scope] == "inbox"
-      InstStatsd::Statsd.increment("inbox.visit.scope.unread.pages_loaded.legacy") if params[:scope] == "unread"
-      InstStatsd::Statsd.increment("inbox.visit.scope.sent.pages_loaded.legacy") if params[:scope] == "sent"
-      InstStatsd::Statsd.increment("inbox.visit.scope.starred.pages_loaded.legacy") if params[:scope] == "starred"
-      InstStatsd::Statsd.increment("inbox.visit.scope.archived.pages_loaded.legacy") if params[:scope] == "archived"
-      render json: @conversations_json
-    else
-      return redirect_to conversations_path(scope: params[:redirect_scope]) if params[:redirect_scope]
-
-      @current_user.reset_unread_conversations_counter
-      @current_user.reload
-
-      hash = {
-        ATTACHMENTS_FOLDER_ID: @current_user.conversation_attachments_folder.id.to_s,
-        ACCOUNT_CONTEXT_CODE: "account_#{@domain_root_account.id}",
-        CAN_MESSAGE_ACCOUNT_CONTEXT: valid_account_context?(@domain_root_account),
-        MAX_GROUP_CONVERSATION_SIZE: Conversation.max_group_conversation_size
-      }
-
-      notes_enabled_accounts = @current_user.associated_accounts.where(enable_user_notes: true)
-
-      hash[:NOTES_ENABLED] = notes_enabled_accounts.any?
-      hash[:CAN_ADD_NOTES_FOR_ACCOUNT] = notes_enabled_accounts.any? { |a| a.grants_right?(@current_user, :manage_students) }
-
-      if hash[:NOTES_ENABLED] && !hash[:CAN_ADD_NOTES_FOR_ACCOUNT]
-        course_note_permissions = {}
-        @current_user.enrollments.active.of_instructor_type.preload(:course).each do |enrollment|
-          course_note_permissions[enrollment.course_id] = true if enrollment.has_permission_to?(:manage_user_notes)
+        if params[:include_all_conversation_ids]
+          @conversations_json = { conversations: @conversations_json, conversation_ids: @conversations_scope.conversation_ids }
         end
-        hash[:CAN_ADD_NOTES_FOR_COURSES] = course_note_permissions
+        InstStatsd::Statsd.increment("inbox.visit.scope.inbox.pages_loaded.legacy") if params[:scope] == "inbox"
+        InstStatsd::Statsd.increment("inbox.visit.scope.unread.pages_loaded.legacy") if params[:scope] == "unread"
+        InstStatsd::Statsd.increment("inbox.visit.scope.sent.pages_loaded.legacy") if params[:scope] == "sent"
+        InstStatsd::Statsd.increment("inbox.visit.scope.starred.pages_loaded.legacy") if params[:scope] == "starred"
+        InstStatsd::Statsd.increment("inbox.visit.scope.archived.pages_loaded.legacy") if params[:scope] == "archived"
+        render json: @conversations_json
       end
-      js_env({
-               CONVERSATIONS: hash,
-               apollo_caching: Account.site_admin.feature_enabled?(:apollo_caching),
-               conversation_cache_key: Base64.encode64("#{@current_user.uuid}jamDN74lLSmfnmo74Hb6snyBnmc6q")
-             })
-      if @domain_root_account.feature_enabled?(:react_inbox)
+      format.html do
+        return redirect_to conversations_path(scope: params[:redirect_scope]) if params[:redirect_scope]
+
+        @current_user.reset_unread_conversations_counter
+        @current_user.reload
+
+        hash = {
+          ATTACHMENTS_FOLDER_ID: @current_user.conversation_attachments_folder.id.to_s,
+          ACCOUNT_CONTEXT_CODE: "account_#{@domain_root_account.id}",
+          CAN_MESSAGE_ACCOUNT_CONTEXT: valid_account_context?(@domain_root_account),
+          MAX_GROUP_CONVERSATION_SIZE: Conversation.max_group_conversation_size
+        }
+
+        is_student = inbox_settings_student?(user: @current_user, account: @domain_root_account)
+        hash[:INBOX_SIGNATURE_BLOCK_ENABLED] = Account.site_admin.feature_enabled?(:inbox_settings) &&
+                                               @domain_root_account.enable_inbox_signature_block? &&
+                                               (!is_student || (is_student && !@domain_root_account.disable_inbox_signature_block_for_students?))
+        hash[:INBOX_AUTO_RESPONSE_ENABLED] = Account.site_admin.feature_enabled?(:inbox_settings) &&
+                                             @domain_root_account.enable_inbox_auto_response? &&
+                                             (!is_student || (is_student && !@domain_root_account.disable_inbox_auto_response_for_students?))
+
+        js_env({
+                 CONVERSATIONS: hash,
+                 apollo_caching: Account.site_admin.feature_enabled?(:apollo_caching),
+                 conversation_cache_key: Base64.encode64("#{@current_user.uuid}jamDN74lLSmfnmo74Hb6snyBnmc6q"),
+                 react_inbox_labels: Account.site_admin.feature_enabled?(:react_inbox_labels),
+                 inbox_translation_languages: @domain_root_account.feature_enabled?(:translate_inbox_messages) ? Translation.languages : [],
+                 inbox_translation_enabled: @domain_root_account.feature_enabled?(:translate_inbox_messages)
+               })
+        @page_title = t("Inbox")
         InstStatsd::Statsd.increment("inbox.visit.react")
         InstStatsd::Statsd.count("inbox.visit.scope.inbox.count.react", @current_user.conversations.default.size)
         InstStatsd::Statsd.count("inbox.visit.scope.sent.count.react", @current_user.all_conversations.sent.size)
@@ -327,16 +327,7 @@ class ConversationsController < ApplicationController
         css_bundle :canvas_inbox
         js_bundle :inbox
         render html: "", layout: true
-        return
       end
-
-      InstStatsd::Statsd.count("inbox.visit.scope.inbox.count.legacy", @current_user.conversations.default.size)
-      InstStatsd::Statsd.count("inbox.visit.scope.sent.count.legacy", @current_user.all_conversations.sent.size)
-      InstStatsd::Statsd.count("inbox.visit.scope.unread.count.legacy", @current_user.conversations.unread.size)
-      InstStatsd::Statsd.count("inbox.visit.scope.starred.count.legacy", @current_user.starred_conversations.size)
-      InstStatsd::Statsd.count("inbox.visit.scope.archived.count.legacy", @current_user.conversations.archived.size)
-      InstStatsd::Statsd.increment("inbox.visit.legacy")
-      render :index_new
     end
   end
 
@@ -378,11 +369,6 @@ class ConversationsController < ApplicationController
   #
   # @argument media_comment_type [String, "audio"|"video"]
   #   Type of the associated media file
-  #
-  # @argument user_note [Boolean]
-  #   Will add a faculty journal entry for each recipient as long as the user
-  #   making the api call has permission, the recipient is a student and
-  #   faculty journals are enabled in the account.
   #
   # @argument mode [String, "sync"|"async"]
   #   Determines whether the messages will be created/sent synchronously or
@@ -433,6 +419,8 @@ class ConversationsController < ApplicationController
     end
 
     params[:recipients].each do |recipient|
+      return render_error("recipients", "invalid") unless recipient.is_a?(String)
+
       if recipient =~ /\A(course_\d+)(?:_([a-z]+))?$/ && [nil, "students", "observers"].include?($2) &&
          !Context.find_by_asset_string($1).try(:grants_right?, @current_user, session, :send_messages_all)
         return render_error("recipients", "restricted by role")
@@ -453,6 +441,13 @@ class ConversationsController < ApplicationController
         mode = (params[:mode] == "async") ? :async : :sync
         message.relativize_attachment_ids(from_shard: message.shard, to_shard: shard)
         message.shard = shard
+
+        # Bulk Messages should not trigger OOO responses
+        # Marking the message with 'automated' will prevent this
+        if value_to_boolean(params[:bulk_message])
+          message.automated = true
+        end
+
         batch = ConversationBatch.generate(message,
                                            @recipients,
                                            mode,
@@ -474,9 +469,6 @@ class ConversationsController < ApplicationController
         InstStatsd::Statsd.count("inbox.message.sent.recipients.legacy", @recipients.count)
         if context_type == "Account" || context_type.nil?
           InstStatsd::Statsd.increment("inbox.conversation.sent.account_context.legacy")
-        end
-        if params[:user_note] == "1"
-          InstStatsd::Statsd.increment("inbox.conversation.sent.faculty_journal.legacy")
         end
         if params[:bulk_message] == "1"
           InstStatsd::Statsd.increment("inbox.conversation.sent.individual_message_option.legacy")
@@ -509,9 +501,6 @@ class ConversationsController < ApplicationController
         end
         if !message[:attachment_ids].nil? && message[:attachment_ids] != ""
           InstStatsd::Statsd.increment("inbox.message.sent.attachment.legacy")
-        end
-        if params[:user_note] == "1"
-          InstStatsd::Statsd.increment("inbox.conversation.sent.faculty_journal.legacy")
         end
         InstStatsd::Statsd.count("inbox.message.sent.recipients.legacy", @recipients.count)
         render json: [conversation_json(@conversation.reload, @current_user, session, include_indirect_participants: true, messages: [message])], status: :created
@@ -924,11 +913,6 @@ class ConversationsController < ApplicationController
   # of the new message. Recipients who already had a copy of included
   # messages will not be affected.
   #
-  # @argument user_note [Boolean]
-  #   Will add a faculty journal entry for each recipient as long as the user
-  #   making the api call has permission, the recipient is a student and
-  #   faculty journals are enabled in the account.
-  #
   # @example_response
   #   {
   #     "id": 2,
@@ -980,8 +964,7 @@ class ConversationsController < ApplicationController
       attachment_ids: params[:attachment_ids],
       domain_root_account_id: @domain_root_account.id,
       media_comment_id: params[:media_comment_id],
-      media_comment_type: params[:media_comment_type],
-      user_note: params[:user_note]
+      media_comment_type: params[:media_comment_type]
     )
     InstStatsd::Statsd.increment("inbox.message.sent.legacy")
     InstStatsd::Statsd.increment("inbox.message.sent.isReply.legacy")
@@ -1089,13 +1072,11 @@ class ConversationsController < ApplicationController
 
     @current_user = @context
     load_all_contexts
-    feed = Atom::Feed.new do |f|
-      f.title = t("titles.rss_feed", "Conversations Feed")
-      f.links << Atom::Link.new(href: conversations_url, rel: "self")
-      f.updated = Time.now
-      f.id = conversations_url
-    end
-    GuardRail.activate(:secondary) do
+
+    title = t("titles.rss_feed", "Conversations Feed")
+    link = conversations_url
+
+    feed_xml = GuardRail.activate(:secondary) do
       @entries = []
       @conversation_contexts = {}
       @current_user.conversations.each do |conversation|
@@ -1105,12 +1086,13 @@ class ConversationsController < ApplicationController
         end
       end
       @entries = @entries.sort_by { |e| [e.created_at, e.id] }.reverse
-      @entries.each do |entry|
-        feed.entries << entry.to_atom(additional_content: @conversation_contexts[entry.conversation.id])
+
+      AtomFeedHelper.render_xml(title:, link:, entries: @entries) do |entry|
+        { additional_content: @conversation_contexts[entry.conversation.id] }
       end
     end
     respond_to do |format|
-      format.atom { render plain: feed.to_xml }
+      format.atom { render plain: feed_xml }
     end
   end
 

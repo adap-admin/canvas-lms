@@ -21,13 +21,13 @@
 class Mutations::SetFriendlyDescription < Mutations::BaseMutation
   graphql_name "SetFriendlyDescription"
 
+  argument :context_id, ID, required: true
+  argument :context_type, String, required: true
   argument :description, String, required: true
   argument :outcome_id,
            ID,
            required: true,
            prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func("LearningOutcome")
-  argument :context_id, ID, required: true
-  argument :context_type, String, required: true
 
   field :outcome_friendly_description, Types::OutcomeFriendlyDescriptionType, null: true
 
@@ -57,17 +57,15 @@ class Mutations::SetFriendlyDescription < Mutations::BaseMutation
       friendly_description.workflow_state = "active"
       friendly_description.description = description
       friendly_description.save!
-      return {
-        outcome_friendly_description: friendly_description
-      }
-    elsif friendly_description.persisted?
-      friendly_description.destroy
-      return {
-        outcome_friendly_description: friendly_description
-      }
+
+    else
+      friendly_description.destroy if friendly_description.persisted?
+      friendly_description.description = ""
     end
 
-    {}
+    {
+      outcome_friendly_description: friendly_description
+    }
   end
 
   private

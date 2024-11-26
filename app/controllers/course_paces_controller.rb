@@ -292,6 +292,8 @@ class CoursePacesController < ApplicationController
   include K5Mode
   include GranularPermissionEnforcement
 
+  COURSE_PACES_PUBLISHING_LIMIT = 50
+
   def index
     add_crumb(t("Course Pacing"))
     @course_pace = @context.course_paces.primary.first
@@ -335,12 +337,22 @@ class CoursePacesController < ApplicationController
   end
 
   def paces_publishing
-    jobs_progress = Delayed::Job.where(tag: "CoursePace#publish").map do |job|
-      progress = Progress.find_by(delayed_job_id: job.id)
+    jobs_progress = Progress
+                    .where(tag: "course_pace_publish", context: @context.course_paces)
+                    .is_pending
+                    .select('DISTINCT ON ("context_id") *')
+                    .map do |progress|
       pace = progress.context
       if pace&.workflow_state == "active"
+        pace_context = context_for(pace)
+        # If the pace context is nil, then the context was deleted and we should destroy the progress
+        if pace_context.nil?
+          progress.destroy
+          next
+        end
+
         {
-          pace_context: CoursePacing::PaceContextsPresenter.as_json(context_for(pace)),
+          pace_context: CoursePacing::PaceContextsPresenter.as_json(pace_context),
           progress_context_id: progress.context_id
         }
       else
@@ -405,8 +417,8 @@ class CoursePacesController < ApplicationController
                       { user_id: @context.user }
                     end
       # Duplicate a published plan if one exists for the plan or for the course
-      published_course_pace = @course.course_paces.published.where(pace_params).take
-      published_course_pace ||= @course.course_paces.published.where(course_section_id: @context.course_section_id).take if @context.is_a?(Enrollment)
+      published_course_pace = @course.course_paces.published.find_by(pace_params)
+      published_course_pace ||= @course.course_paces.published.find_by(course_section_id: @context.course_section_id) if @context.is_a?(Enrollment)
       published_course_pace ||= @course.course_paces.primary.published.take
       if published_course_pace
         @course_pace = published_course_pace.duplicate(pace_params)
@@ -427,6 +439,7 @@ class CoursePacesController < ApplicationController
 
   def publish
     publish_course_pace
+    log_course_paces_publishing
     render json: progress_json(@progress, @current_user, session)
   end
 
@@ -473,13 +486,24 @@ class CoursePacesController < ApplicationController
   #     -H 'Authorization: Bearer <token>'
 
   def create
-    @course_pace = @context.course_paces.new(create_params)
+    create_params
+    pace_draft_feature_flag
+    @course_pace = @context.course_paces.new(@permitted_params)
 
     if @course_pace.save
-      publish_course_pace
+      @progress = nil
+      if @draft_feature_flag_enabled
+        if @permitted_params[:workflow_state].present? && @permitted_params[:workflow_state] == "active"
+          # only publishes the pace if workflow_state is explicitly set to active to allow creating paces in draft state
+          publish_course_pace
+        end
+      else
+        publish_course_pace
+      end
+
       render json: {
         course_pace: CoursePacePresenter.new(@course_pace).as_json,
-        progress: progress_json(@progress, @current_user, session)
+        progress: @progress.present? ? progress_json(@progress, @current_user, session) : nil
       }
     else
       render json: { success: false, errors: @course_pace.errors.full_messages }, status: :unprocessable_entity
@@ -518,15 +542,32 @@ class CoursePacesController < ApplicationController
   #     -H 'Authorization: Bearer <token>'
 
   def update
-    if @course_pace.update(update_params)
+    update_params
+    pace_draft_feature_flag
+    @progress = nil
+    should_publish = false
+
+    if @draft_feature_flag_enabled
+      if @course_pace.workflow_state == "active" || @permitted_params[:workflow_state] == "active"
+        should_publish = true
+        # override workflow state to ensure it's always active if we're publishing
+        @permitted_params = @permitted_params.merge(workflow_state: "active")
+      end
+    else
+      should_publish = true
+    end
+
+    if @course_pace.update(@permitted_params)
       # Force the updated_at to be updated, because if the update just changed the items the course pace's
       # updated_at doesn't get modified
       @course_pace.touch
+      if should_publish
+        publish_course_pace
+      end
 
-      publish_course_pace
       render json: {
         course_pace: CoursePacePresenter.new(@course_pace).as_json,
-        progress: progress_json(@progress, @current_user, session)
+        progress: @progress.present? ? progress_json(@progress, @current_user, session) : nil
       }
     else
       render json: { success: false, errors: @course_pace.errors.full_messages }, status: :unprocessable_entity
@@ -621,12 +662,15 @@ class CoursePacesController < ApplicationController
   def load_and_run_progress
     @progress = latest_progress
     if @progress
-      # start delayed job if it's not already started
       if @progress.queued?
-        if @progress.delayed_job.present?
-          @progress.delayed_job.update(run_at: Time.now)
-        else
+        case [@progress.delayed_job_id.present?, @progress.delayed_job.present?]
+        in [false, _]
+          @course_pace.run_publish_progress(@progress)
+        in [true, false]
+          @progress.fail!
           @progress = publish_course_pace
+        in [true, true]
+          @progress.delayed_job.update(run_at: Time.now)
         end
       end
       @progress_json = progress_json(@progress, @current_user, session)
@@ -644,7 +688,7 @@ class CoursePacesController < ApplicationController
         full_name: enrollment.user.name,
         sortable_name: enrollment.user.sortable_name,
         start_at: enrollment.start_at,
-        avatar_url: User.find_by(id: enrollment.user_id).avatar_image_url
+        avatar_url: enrollment.user.avatar_image_url
       }
     end
     json.index_by { |h| h[:id] }
@@ -665,6 +709,10 @@ class CoursePacesController < ApplicationController
 
   def require_feature_flag
     not_found unless @course.account.feature_enabled?(:course_paces) && @course.enable_course_paces
+  end
+
+  def pace_draft_feature_flag
+    @draft_feature_flag_enabled = @context.root_account.feature_enabled?(:course_pace_draft_state)
   end
 
   def load_course_pace
@@ -742,5 +790,10 @@ class CoursePacesController < ApplicationController
 
   def publish_course_pace
     @progress = @course_pace.create_publish_progress(run_at: Time.now)
+  end
+
+  def log_course_paces_publishing
+    count = paces_publishing.length
+    InstStatsd::Statsd.count("course_pacing.publishing.count_exceeding_limit", count) if count > COURSE_PACES_PUBLISHING_LIMIT
   end
 end

@@ -17,6 +17,9 @@
  */
 
 import {enhanceUserContent} from '../enhance_user_content'
+import {Mathml} from '../mathml'
+import formatMessage from '../../format-message'
+import * as instructureHelper from '../instructure_helper'
 
 jest.useFakeTimers()
 
@@ -96,44 +99,83 @@ describe('enhanceUserContent()', () => {
     })
   })
 
-  describe('when given a containingCanvasLtiToolId', () => {
-    const opts = {
-      canvasOrigin: 'https://canvas.is.here:2000/',
-      containingCanvasLtiToolId: 'toolid',
-    }
-
-    it('adds parent_frame_context to relative canvas urls', () => {
-      subject('<iframe id="iframe" src="/media_object_iframe" />')
-
-      enhanceUserContent(document, opts)
-
-      expect(document.getElementById('iframe').src).toEqual(
-        'https://canvas.is.here:2000/media_object_iframe?parent_frame_context=toolid'
-      )
+  describe('file path matching', () => {
+    beforeEach(() => {
+      jest.clearAllMocks()
     })
 
-    it('adds parent_frame_context to absolute canvas urls', () => {
-      subject('<iframe id="iframe" src="https://canvas.is.here:2000/files/1?download_frd=1" />')
+    describe('does enhance', () => {
+      describe('Canvas file links', () => {
+        it('with query params', () => {
+          const showFilePreviewSpy = jest
+            .spyOn(instructureHelper, 'showFilePreview')
+            .mockImplementation(() => {})
+          const url = '/courses/1/files/1?download_frd=1'
+          subject(`<a class="instructure_file_link inline_disabled" href="${url}">file</a>`)
+          enhanceUserContent()
+          expect(document.querySelector('.instructure_file_holder')).toBeInTheDocument()
+          document.querySelector('.instructure_file_holder > a').click()
+          expect(showFilePreviewSpy).toHaveBeenCalled()
+        })
 
-      enhanceUserContent(document, opts)
+        it('with a hash', () => {
+          const showFilePreviewSpy = jest
+            .spyOn(instructureHelper, 'showFilePreview')
+            .mockImplementation(() => {})
+          const url = '/courses/1/files/1#not-sure-what-this-even-does'
+          subject(`<a class="instructure_file_link inline_disabled" href="${url}">file</a>`)
+          enhanceUserContent()
+          expect(document.querySelector('.instructure_file_holder')).toBeInTheDocument()
+          document.querySelector('.instructure_file_holder > a').click()
+          expect(showFilePreviewSpy).toHaveBeenCalled()
+        })
 
-      expect(document.getElementById('iframe').getAttribute('src')).toEqual(
-        'https://canvas.is.here:2000/files/1?download_frd=1&parent_frame_context=toolid'
-      )
+        it('with a slash after the file ID', () => {
+          const showFilePreviewSpy = jest
+            .spyOn(instructureHelper, 'showFilePreview')
+            .mockImplementation(() => {})
+          const url = '/courses/1/files/1/media_tracks_for_some_reason'
+          subject(`<a class="instructure_file_link inline_disabled" href="${url}">file</a>`)
+          enhanceUserContent()
+          expect(document.querySelector('.instructure_file_holder')).toBeInTheDocument()
+          document.querySelector('.instructure_file_holder > a').click()
+          expect(showFilePreviewSpy).toHaveBeenCalled()
+        })
+
+        it('with cross-shard file IDs', () => {
+          const showFilePreviewSpy = jest
+            .spyOn(instructureHelper, 'showFilePreview')
+            .mockImplementation(() => {})
+          const url = '/courses/1~1/files/1~1'
+          subject(`<a class="instructure_file_link inline_disabled" href="${url}">file</a>`)
+          enhanceUserContent()
+          expect(document.querySelector('.instructure_file_holder')).toBeInTheDocument()
+          document.querySelector('.instructure_file_holder > a').click()
+          expect(showFilePreviewSpy).toHaveBeenCalled()
+        })
+      })
     })
 
-    it('does not add parent_frame_context to non-canvas urls', () => {
-      subject('<iframe id="iframe" src="https://canvas.is.not.here:3000/files/1?download_frd=1" />')
-
-      enhanceUserContent(document, opts)
-
-      expect(document.getElementById('iframe').getAttribute('src')).toEqual(
-        'https://canvas.is.not.here:3000/files/1?download_frd=1'
-      )
+    describe('does not enhance', () => {
+      it('instfs file links with UUIDs that start with a number', () => {
+        const showFilePreviewSpy = jest
+          .spyOn(instructureHelper, 'showFilePreview')
+          .mockImplementation(() => {})
+        const url = 'http://inst-fs.test/files/11111111-2222-3333-4444-555555555555'
+        subject(`<a class="instructure_file_link inline_disabled" href="${url}">file</a>`)
+        enhanceUserContent()
+        expect(document.querySelector('.instructure_file_holder')).not.toBeInTheDocument()
+        document.querySelector('.instructure_file_link').click()
+        expect(showFilePreviewSpy).not.toHaveBeenCalled()
+      })
     })
   })
 
   describe('when a link has an href that matches a canvas file path', () => {
+    beforeEach(() => {
+      jest.clearAllMocks()
+    })
+
     it('makes relative links absolute', () => {
       subject(
         '<a id="relative_link" class="instructure_file_link instructure_scribd_file" href="/courses/1/files/1">file</a>'
@@ -151,11 +193,16 @@ describe('enhanceUserContent()', () => {
     })
 
     it('enhances the link', () => {
+      const showFilePreviewSpy = jest
+        .spyOn(instructureHelper, 'showFilePreview')
+        .mockImplementation(() => {})
       subject(
         '<a class="instructure_file_link instructure_scribd_file" href="/courses/1/files/1">file</a>'
       )
       enhanceUserContent()
       expect(document.querySelector('.instructure_file_holder')).toBeInTheDocument()
+      document.querySelector('.instructure_file_holder > a').click()
+      expect(showFilePreviewSpy).toHaveBeenCalled()
     })
 
     it('adds download icon button', () => {
@@ -215,6 +262,18 @@ describe('enhanceUserContent()', () => {
         expect(aTag).toHaveAttribute('target')
       })
     })
+
+    describe('when the link has preview inline set', () => {
+      it('includes previewable in the class list', () => {
+        subject(
+          '<a class="instructure_file_link instructure_scribd_file" href="/courses/1/files/1" target="_blank" data-canvas-previewable="true">file</a>'
+        )
+        enhanceUserContent(document, {locale: 'es'})
+        const aTag = document.querySelector('a')
+        expect(aTag.classList.value).toEqual('file_preview_link previewable')
+        expect(aTag).toHaveAttribute('target')
+      })
+    })
   })
 
   describe('internal links target attribute', () => {
@@ -233,6 +292,59 @@ describe('enhanceUserContent()', () => {
       expect(document.getElementById('blank_target').getAttribute('target')).toEqual('open_here')
       expect(document.getElementById('no_target').getAttribute('target')).toEqual('open_here')
       expect(document.getElementById('a_target').getAttribute('target')).toEqual('a_target')
+    })
+  })
+
+  describe('when given a containingCanvasLtiToolId', () => {
+    const opts = {
+      canvasOrigin: 'https://canvas.is.here:2000/',
+      containingCanvasLtiToolId: 'toolid',
+    }
+
+    it('adds parent_frame_context to relative canvas urls', () => {
+      subject('<iframe id="iframe" src="/media_object_iframe" />')
+
+      enhanceUserContent(document, opts)
+
+      expect(document.getElementById('iframe').src).toEqual(
+        'https://canvas.is.here:2000/media_object_iframe?parent_frame_context=toolid'
+      )
+    })
+
+    it('adds parent_frame_context to absolute canvas urls', () => {
+      subject('<iframe id="iframe" src="https://canvas.is.here:2000/files/1?download_frd=1" />')
+
+      enhanceUserContent(document, opts)
+
+      expect(document.getElementById('iframe').getAttribute('src')).toEqual(
+        'https://canvas.is.here:2000/files/1?download_frd=1&parent_frame_context=toolid'
+      )
+    })
+
+    it('does not add parent_frame_context to non-canvas urls', () => {
+      subject('<iframe id="iframe" src="https://canvas.is.not.here:3000/files/1?download_frd=1" />')
+
+      enhanceUserContent(document, opts)
+
+      expect(document.getElementById('iframe').getAttribute('src')).toEqual(
+        'https://canvas.is.not.here:3000/files/1?download_frd=1'
+      )
+    })
+  })
+
+  describe('when tool launch iframe has display=in_rce', () => {
+    const canvasOrigin = 'https://canvas.is.here:2000/'
+
+    it('replaces with display=borderless', () => {
+      subject(
+        `<iframe id="iframe" src="${canvasOrigin}courses/1/external_tools/retrieve?display=in_rce" />`
+      )
+
+      enhanceUserContent(document, {canvasOrigin})
+
+      expect(document.getElementById('iframe').getAttribute('src')).toEqual(
+        `${canvasOrigin}courses/1/external_tools/retrieve?display=borderless`
+      )
     })
   })
 
@@ -298,6 +410,152 @@ describe('enhanceUserContent()', () => {
       const customFunc = jest.fn()
       enhanceUserContent(document, {customEnhanceFunc: customFunc})
       expect(customFunc).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('math rendering', () => {
+    beforeEach(() => {
+      jest.resetAllMocks()
+    })
+
+    it('processes math inside content when ELT is on', () => {
+      const processSpy = jest.spyOn(Mathml.prototype, 'processNewMathInElem')
+      subject('<p>anything</p>')
+      enhanceUserContent(document, {explicit_latex_typesetting: true})
+      expect(processSpy).toHaveBeenCalledWith(elem)
+    })
+
+    it('does not process math inside content when ELT is off', () => {
+      const processSpy = jest.spyOn(Mathml.prototype, 'processNewMathInElem')
+      subject('<p>anything</p>')
+      enhanceUserContent(document, {explicit_latex_typesetting: false})
+      expect(processSpy).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('addResourceIdentifiersToStudioContent', () => {
+    beforeEach(() => {
+      const userContent = document.querySelector('.user_content')
+      userContent.dataset.resourceType = 'assignment.body'
+      userContent.dataset.resourceId = '123'
+    })
+
+    it('adds resource identifiers to studio iframe', () => {
+      subject(
+        '<p><iframe class="lti-embed" title="small_video" src="http://localhost/courses/1/external_tools/retrieve?display=in_rce&url=https%3A%2F%2Fbeta.instructuremedia.com%2Flti%2Flaunch%3Fcustom_arc_launch_type%3Dembed%26custom_arc_media_id%3D902318c4-cc8d-4c4d-95dd-5d955f6dc5af-8%26custom_arc_start_at%3D0"></iframe></p>'
+      )
+      enhanceUserContent()
+      const iframe = document.querySelector('iframe')
+      expect(iframe.src).toEqual(
+        'http://localhost/courses/1/external_tools/retrieve?display=in_rce&url=https%3A%2F%2Fbeta.instructuremedia.com%2Flti%2Flaunch%3Fcustom_arc_launch_type%3Dembed%26custom_arc_media_id%3D902318c4-cc8d-4c4d-95dd-5d955f6dc5af-8%26custom_arc_start_at%3D0&com_instructure_course_canvas_resource_type=assignment.body&com_instructure_course_canvas_resource_id=123'
+      )
+    })
+
+    it('adds resource identifiers to multiple studio iframes', () => {
+      subject(
+        '<p><iframe class="lti-embed" title="small_video" src="http://localhost/courses/1/external_tools/retrieve?display=in_rce&url=https%3A%2F%2Fbeta.instructuremedia.com%2Flti%2Flaunch%3Fcustom_arc_launch_type%3Dembed%26custom_arc_media_id%3D902318c4-cc8d-4c4d-95dd-5d955f6dc5af-8%26custom_arc_start_at%3D0"></iframe></p><p><iframe class="lti-embed" title="small_video" src="http://localhost/courses/1/external_tools/retrieve?display=in_rce&url=https%3A%2F%2Fbeta.instructuremedia.com%2Flti%2Flaunch%3Fcustom_arc_launch_type%3Dembed%26custom_arc_media_id%3D902318c4-cc8d-4c4d-95dd-5d955f6dc5ae-8%26custom_arc_start_at%3D0"></iframe></p>'
+      )
+      enhanceUserContent()
+      const iframes = document.querySelectorAll('iframe')
+      expect(iframes[0].src).toEqual(
+        'http://localhost/courses/1/external_tools/retrieve?display=in_rce&url=https%3A%2F%2Fbeta.instructuremedia.com%2Flti%2Flaunch%3Fcustom_arc_launch_type%3Dembed%26custom_arc_media_id%3D902318c4-cc8d-4c4d-95dd-5d955f6dc5af-8%26custom_arc_start_at%3D0&com_instructure_course_canvas_resource_type=assignment.body&com_instructure_course_canvas_resource_id=123'
+      )
+      expect(iframes[1].src).toEqual(
+        'http://localhost/courses/1/external_tools/retrieve?display=in_rce&url=https%3A%2F%2Fbeta.instructuremedia.com%2Flti%2Flaunch%3Fcustom_arc_launch_type%3Dembed%26custom_arc_media_id%3D902318c4-cc8d-4c4d-95dd-5d955f6dc5ae-8%26custom_arc_start_at%3D0&com_instructure_course_canvas_resource_type=assignment.body&com_instructure_course_canvas_resource_id=123'
+      )
+    })
+
+    it('ignores non-studio iframes', () => {
+      subject(
+        '<p><iframe class="lti-embed" title="something else" src="http://localhost/courses/1/external_tools/retrieve?display=in_rce&url=https%3A%2F%2Fbeta.somethingelse.com"></iframe></p>'
+      )
+      enhanceUserContent()
+      const iframe = document.querySelector('iframe')
+      expect(iframe.src).toEqual(
+        'http://localhost/courses/1/external_tools/retrieve?display=in_rce&url=https%3A%2F%2Fbeta.somethingelse.com'
+      )
+    })
+  })
+
+  describe('replaceInstFSLinksWithOldLinks', () => {
+    describe('links using the href attribute', () => {
+      describe('and option is disabled', () => {
+        it('does not replace instfs links with old links', () => {
+          subject(
+            '<a href="http://instfs.fake.com/files/1" data-old-link="courses/1/files/1">file</a>'
+          )
+          enhanceUserContent(document, {replaceInstFSLinksWithOldLinks: false})
+          const aTag = document.querySelector('a')
+          expect(aTag.href).toEqual('http://instfs.fake.com/files/1')
+          expect(aTag.hasAttribute('src')).toBe(false)
+        })
+
+        it('does not replace links without old links', () => {
+          subject('<a href="/courses/1/files/1">file</a>')
+          enhanceUserContent(document, {replaceInstFSLinksWithOldLinks: false})
+          const aTag = document.querySelector('a')
+          expect(aTag.href).toEqual('http://localhost/courses/1/files/1')
+          expect(aTag.hasAttribute('src')).toBe(false)
+        })
+      })
+
+      describe('and option is enabled', () => {
+        it('replaces instfs links with old links', () => {
+          subject(
+            '<a href="http://instfs.fake.com/files/1" data-old-link="courses/1/files/1">file</a>'
+          )
+          enhanceUserContent(document, {replaceInstFSLinksWithOldLinks: true})
+          const aTag = document.querySelector('a')
+          expect(aTag.href).toEqual('http://localhost/courses/1/files/1')
+          expect(aTag.hasAttribute('src')).toBe(false)
+        })
+
+        it('does not replace links without old links', () => {
+          subject('<a href="/courses/1/files/1">file</a>')
+          enhanceUserContent(document, {replaceInstFSLinksWithOldLinks: true})
+          const aTag = document.querySelector('a')
+          expect(aTag.href).toEqual('http://localhost/courses/1/files/1')
+          expect(aTag.hasAttribute('src')).toBe(false)
+        })
+      })
+    })
+
+    describe('links using the src attribute', () => {
+      describe('and option is disabled', () => {
+        it('does not replace instfs links with old links', () => {
+          subject('<img src="http://instfs.fake.com/files/1" data-old-link="courses/1/files/1"/>')
+          enhanceUserContent(document, {replaceInstFSLinksWithOldLinks: false})
+          const imgTag = document.querySelector('img')
+          expect(imgTag.src).toEqual('http://instfs.fake.com/files/1')
+          expect(imgTag.hasAttribute('href')).toBe(false)
+        })
+
+        it('does not replace links without old links', () => {
+          subject('<img src="/courses/1/files/1"/>')
+          enhanceUserContent(document, {replaceInstFSLinksWithOldLinks: false})
+          const imgTag = document.querySelector('img')
+          expect(imgTag.src).toEqual('http://localhost/courses/1/files/1')
+          expect(imgTag.hasAttribute('href')).toBe(false)
+        })
+      })
+
+      describe('and option is enabled', () => {
+        it('replaces instfs links with old links', () => {
+          subject('<img src="http://instfs.fake.com/files/1" data-old-link="courses/1/files/1"/>')
+          enhanceUserContent(document, {replaceInstFSLinksWithOldLinks: true})
+          const imgTag = document.querySelector('img')
+          expect(imgTag.src).toEqual('http://localhost/courses/1/files/1')
+          expect(imgTag.hasAttribute('href')).toBe(false)
+        })
+
+        it('does not replace links without old links', () => {
+          subject('<img src="/courses/1/files/1"/>')
+          enhanceUserContent(document, {replaceInstFSLinksWithOldLinks: true})
+          const imgTag = document.querySelector('img')
+          expect(imgTag.src).toEqual('http://localhost/courses/1/files/1')
+          expect(imgTag.hasAttribute('href')).toBe(false)
+        })
+      })
     })
   })
 })

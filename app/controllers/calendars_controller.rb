@@ -23,6 +23,7 @@ class CalendarsController < ApplicationController
   include CalendarConferencesHelper
 
   before_action :require_user
+  before_action :check_limited_access_for_students, only: %i[show]
 
   def show
     get_context
@@ -43,6 +44,7 @@ class CalendarsController < ApplicationController
                            unseen_auto_sub_cals = all_auto_sub_cals - viewed_auto_sub_cal_asset_strings
                            current_user_selected_cals = @current_user.get_preference(:selected_calendar_contexts)
                            unless current_user_selected_cals.nil?
+                             current_user_selected_cals = Array(current_user_selected_cals)
                              @current_user.set_preference(:selected_calendar_contexts, ((current_user_selected_cals || []) + unseen_auto_sub_cals).uniq)
                            end
                            @current_user.get_preference(:selected_calendar_contexts)
@@ -86,7 +88,7 @@ class CalendarsController < ApplicationController
         can_create_assignments: context.respond_to?(:assignments) && Assignment.new.tap { |a| a.context = context }.grants_right?(@current_user, session, :create),
         assignment_groups: context.respond_to?(:assignments) ? context.assignment_groups.active.pluck(:id, :name).map { |id, name| { id:, name: } } : [],
         can_create_appointment_groups: ag_permission,
-        can_make_reservation: context.grants_right?(@current_user, :participate_as_student),
+        user_is_student: context.grants_right?(@current_user, :participate_as_student),
         can_update_todo_date: context.grants_any_right?(@current_user, session, :manage_content, :manage_course_content_edit),
         can_update_discussion_topic: context.grants_right?(@current_user, session, :moderate_forum),
         can_update_wiki_page: context.grants_right?(@current_user, session, :update),
@@ -96,8 +98,12 @@ class CalendarsController < ApplicationController
         course_pacing_enabled: context.is_a?(Course) && @domain_root_account.feature_enabled?(:course_paces) && context.enable_course_paces,
         user_is_observer: context.is_a?(Course) && context.enrollments.where(user_id: @current_user).first&.observer?,
         default_due_time: context.is_a?(Course) && context.default_due_time,
-        can_view_context: context.grants_right?(@current_user, session, :read)
+        can_view_context: context.grants_right?(@current_user, session, :read),
+        allow_observers_in_appointment_groups: context.is_a?(Course) && context.account.allow_observers_in_appointment_groups?,
       }
+      if context.is_a?(Course)
+        info[:course_conclude_at] = context.restrict_enrollments_to_course_dates ? context.conclude_at : context.enrollment_term.end_at
+      end
       if context.respond_to?(:course_sections) && !context.is_a?(Account)
         info[:course_sections] = context.course_sections.active.pluck(:id, :name).map do |id, name|
           hash = { id:, asset_string: "course_section_#{id}", name: }
@@ -121,7 +127,7 @@ class CalendarsController < ApplicationController
           MAX_NAME_LENGTH: max_name_length,
           DUE_DATE_REQUIRED_FOR_ACCOUNT: due_date_required_for_account
         }
-      elsif (context.is_a? Account) && Account.site_admin.feature_enabled?(:auto_subscribe_account_calendars)
+      elsif context.is_a? Account
         info[:auto_subscribe] = context.account_calendar_subscription_type == "auto"
         info[:viewed_auto_subscribed_account_calendars] = @viewed_auto_subscribed_account_calendars.include?(context.global_id)
       end

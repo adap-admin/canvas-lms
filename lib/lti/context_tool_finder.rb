@@ -38,15 +38,15 @@ module Lti
       @options = options
     end
 
-    def self.all_tools_scope_union(*args)
-      new(*args).send(:all_tools_scope_union)
+    def self.all_tools_scope_union(*)
+      new(*).send(:all_tools_scope_union)
     end
 
     # TEMPORARY shim function until we can switch away from it.
     # Returns a scope, only on the context's shard, so doesn't look at
     # the context's root account's federated parent account
-    def self.all_tools_for(*args)
-      new(*args).single_shard_scope
+    def self.all_tools_for(*)
+      new(*).single_shard_scope
     end
 
     # TEMPORARY shim function until we can switch away from all_tools_for
@@ -54,8 +54,8 @@ module Lti
     # parameter
     def single_shard_scope
       scopes(include_federated_parent: false).first
-            &.order(ContextExternalTool.best_unicode_collation_key("context_external_tools.name"))
-            &.order(Arel.sql("context_external_tools.id"))
+                                             &.order(ContextExternalTool.best_unicode_collation_key("context_external_tools.name"))
+                                             &.order(Arel.sql("context_external_tools.id"))
     end
 
     # If exclude_admin_visibility is true, does not return any tools where the options[:type]
@@ -92,7 +92,7 @@ module Lti
 
       return [] if contexts.empty?
 
-      Shard.partition_by_shard(contexts) do |contexts_by_shard|
+      Shard.partition_by_shard(contexts, ->(c) { c.shard }) do |contexts_by_shard|
         # Important to use .shard() here to get a scope on the current shard but translate any ids
         scope = options[:base_scope]&.shard(Shard.current) || ContextExternalTool
         scope = scope.where(context: contexts_by_shard).active

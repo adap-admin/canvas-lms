@@ -25,7 +25,7 @@
 </td>
 {{/if}}
 {{#unless hideSectionsOnCourseUsersPage}}
-<td data-test-id="section-column-cell">
+<td data-testid="section-column-cell">
   {{#each sections}}
   <div class="section">{{name}}</div>
   {{/each}}
@@ -33,7 +33,12 @@
 {{/unless}}
 <td>
   {{#each enrollments}}
-  <div>{{enrollmentName role}}</div>
+  <div>
+    {{#if temporary_enrollment_source_user_id}}
+      {{#t}}Temporary:{{/t}}
+    {{/if}}
+    {{enrollmentName role}}
+  </div>
   {{/each}}
 </td>
 {{#if ENV.permissions.read_reports}}
@@ -70,10 +75,6 @@
       {{/if}}
       {{#if canEditRoles}}
       <li><a href="#" data-event="editRoles"><i class="icon-edit" aria-hidden="true"></i> {{#t}}Edit Role{{/t}}</a></li>
-      {{/if}}
-      {{#if canManageUserNotes}}
-      <li><a href={{faculyJournalUrl}}><i class="icon-note-light" aria-hidden="true"></i> {{#t}}Faculty
-          Journal{{/t}}</a></li>
       {{/if}}
       {{/if}}
       <li><a href="{{url}}"><i class="icon-user" aria-hidden="true"></i> {{#t "links.user_details"}}User

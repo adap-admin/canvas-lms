@@ -18,6 +18,8 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
+require "feedjira"
+
 describe CalendarsController do
   def course_event(date = nil)
     date = Date.parse(date) if date
@@ -46,12 +48,12 @@ describe CalendarsController do
       expect(assigns[:contexts][1]).to eql(@course)
     end
 
-    it "only enrolled students can make reservations" do
+    it "sets user_is_student based off enrollments" do
       course_event
       get "show", params: { user_id: @user.id }
       expect(response).to be_successful
-      expect(assigns[:contexts_json][0][:can_make_reservation]).to be(false)
-      expect(assigns[:contexts_json][1][:can_make_reservation]).to be(true)
+      expect(assigns[:contexts_json][0][:user_is_student]).to be(false)
+      expect(assigns[:contexts_json][1][:user_is_student]).to be(true)
     end
 
     it "js_env DUE_DATE_REQUIRED_FOR_ACCOUNT is true when AssignmentUtil.due_date_required_for_account? == true" do
@@ -97,8 +99,7 @@ describe CalendarsController do
       expect(assigns[:js_env][:MAX_NAME_LENGTH]).to eq(15)
     end
 
-    it "sets account's auto_subscribe if auto_subscribe_account_calendars flag is on" do
-      Account.site_admin.enable_feature!(:auto_subscribe_account_calendars)
+    it "sets account's auto_subscribe" do
       account = @user.account
       account.account_calendar_visible = true
       account.account_calendar_subscription_type = "auto"
@@ -110,7 +111,6 @@ describe CalendarsController do
     end
 
     it "sets viewed_auto_subscribed_account_calendars for viewed auto-subscribed account calendars" do
-      Account.site_admin.enable_feature!(:auto_subscribe_account_calendars)
       account = @student.account
       account.account_calendar_visible = true
       account.account_calendar_subscription_type = "auto"
@@ -122,7 +122,6 @@ describe CalendarsController do
     end
 
     it "does not set viewed_auto_subscribed_account_calendars for viewed manual-subscribed account calendars" do
-      Account.site_admin.enable_feature!(:auto_subscribe_account_calendars)
       account = @user.account
       account.account_calendar_visible = true
       account.account_calendar_subscription_type = "manual"
@@ -134,7 +133,6 @@ describe CalendarsController do
     end
 
     it "includes unviewed, auto subscribed calendars to be selected" do
-      Account.site_admin.enable_feature!(:auto_subscribe_account_calendars)
       account = @user.account
       account.account_calendar_visible = true
       account.account_calendar_subscription_type = "auto"
@@ -144,6 +142,36 @@ describe CalendarsController do
       @student.set_preference(:selected_calendar_contexts, [])
       get "show"
       expect(assigns[:selected_contexts]).to eql([account.asset_string])
+    end
+
+    it "has account calendars cope with a non-array user preference" do
+      # this was caught in Sentry when the :selected_calendar_contexts preference
+      # was a string instead of an array.
+      account = @user.account
+      account.account_calendar_visible = true
+      account.account_calendar_subscription_type = "auto"
+      account.save!
+      @admin = account_admin_user(account:, active_all: true)
+      @admin.set_preference(:enabled_account_calendars, account.id)
+      # this pref should be an array, but sometimes is not
+      @student.set_preference(:selected_calendar_contexts, account.asset_string)
+      get "show"
+      expect(assigns[:selected_contexts]).to eql([account.asset_string])
+    end
+
+    it "sets selected_contexts to nil if the user_preference is nil" do
+      # this was caught in Sentry when the :selected_calendar_contexts preference
+      # was a string instead of an array.
+      account = @user.account
+      account.account_calendar_visible = true
+      account.account_calendar_subscription_type = "auto"
+      account.save!
+      @admin = account_admin_user(account:, active_all: true)
+      @admin.set_preference(:enabled_account_calendars, account.id)
+      # this pref should be an array, but sometimes is not
+      @student.set_preference(:selected_calendar_contexts, nil)
+      get "show"
+      expect(assigns[:selected_contexts]).to be_nil
     end
 
     it "sets context.course_sections.can_create_ag based off :manage_calendar permission" do
@@ -263,8 +291,16 @@ describe CalendarEventsApiController do
     it "uses the relevant event for that section, in the course feed" do
       skip "requires changing the format of the course feed url to include user information"
       s2 = @course.course_sections.create!(name: "s2")
-      c1 = factory_with_protected_attributes(@event.child_events, description: @event.description, title: @event.title, context: @course.default_section, start_at: 2.hours.ago, end_at: 1.hour.ago)
-      factory_with_protected_attributes(@event.child_events, description: @event.description, title: @event.title, context: s2, start_at: 3.hours.ago, end_at: 2.hours.ago)
+      c1 = @event.child_events.create!(description: @event.description,
+                                       title: @event.title,
+                                       context: @course.default_section,
+                                       start_at: 2.hours.ago,
+                                       end_at: 1.hour.ago)
+      @event.child_events.create!(description: @event.description,
+                                  title: @event.title,
+                                  context: s2,
+                                  start_at: 3.hours.ago,
+                                  end_at: 2.hours.ago)
       get "public_feed", params: { feed_code: "course_#{@course.uuid}", format: "ics" }
       expect(response).to be_successful
       expect(assigns[:events]).to be_present
@@ -274,8 +310,16 @@ describe CalendarEventsApiController do
     context "for a user context" do
       it "uses the relevant event for that section" do
         s2 = @course.course_sections.create!(name: "s2")
-        c1 = factory_with_protected_attributes(@event.child_events, description: @event.description, title: @event.title, context: @course.default_section, start_at: 2.hours.ago, end_at: 1.hour.ago)
-        factory_with_protected_attributes(@event.child_events, description: @event.description, title: @event.title, context: s2, start_at: 3.hours.ago, end_at: 2.hours.ago)
+        c1 = @event.child_events.create!(description: @event.description,
+                                         title: @event.title,
+                                         context: @course.default_section,
+                                         start_at: 2.hours.ago,
+                                         end_at: 1.hour.ago)
+        @event.child_events.create!(description: @event.description,
+                                    title: @event.title,
+                                    context: s2,
+                                    start_at: 3.hours.ago,
+                                    end_at: 2.hours.ago)
         get "public_feed", params: { feed_code: "user_#{@user.uuid}" }, format: "ics"
         expect(response).to be_successful
         expect(assigns[:events]).to be_present
@@ -289,18 +333,17 @@ describe CalendarEventsApiController do
 
       it "includes absolute path for rel='self' link" do
         get "public_feed", params: { feed_code: @user.feed_code }, format: "atom"
-        feed = Atom::Feed.load_feed(response.body) rescue nil
+        feed = Feedjira.parse(response.body)
         expect(feed).not_to be_nil
-        expect(feed.links.first.rel).to match(/self/)
-        expect(feed.links.first.href).to match(%r{http://})
+        expect(feed.feed_url).to match(%r{http://})
       end
 
       it "includes an author for each entry" do
         get "public_feed", params: { feed_code: @user.feed_code }, format: "atom"
-        feed = Atom::Feed.load_feed(response.body) rescue nil
+        feed = Feedjira.parse(response.body)
         expect(feed).not_to be_nil
         expect(feed.entries).not_to be_empty
-        expect(feed.entries.all? { |e| e.authors.present? }).to be_truthy
+        expect(feed.entries.all? { |e| e.author.present? }).to be_truthy
       end
 
       it "includes description in event for unlocked assignment" do

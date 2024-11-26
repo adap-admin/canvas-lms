@@ -18,13 +18,19 @@
 
 import React from 'react'
 import ReactDOM from 'react-dom'
-import {Pill, PillProps} from '@instructure/ui-pill'
+import {Pill} from '@instructure/ui-pill'
+import type {PillProps} from '@instructure/ui-pill'
 
 export const renderFrontPagePill = (el: HTMLElement, props?: PillProps) => {
   const frontPageContainer = el.querySelector('.front-page')
+  let children
+  if (typeof props !== 'undefined') {
+    children = props.children
+    delete props.children
+  }
   if (frontPageContainer) {
-    ReactDOM.render(<Pill {...props} />, frontPageContainer)
+    ReactDOM.render(<Pill {...props}>{children}</Pill>, frontPageContainer)
   }
 
-  return <Pill {...props} />
+  return <Pill {...props}>{children}</Pill>
 }

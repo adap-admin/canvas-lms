@@ -70,23 +70,7 @@ describe ApplicationHelper do
   context "show_user_create_course_button" do
     before(:once) { @domain_root_account = Account.default }
 
-    it "works (non-granular)" do
-      @domain_root_account.disable_feature!(:granular_permissions_manage_courses)
-      @domain_root_account.update_attribute(
-        :settings,
-        { teachers_can_create_courses: true, students_can_create_courses: true }
-      )
-      expect(show_user_create_course_button(nil)).to be_falsey
-      user_factory
-      expect(show_user_create_course_button(@user)).to be_falsey
-      course_with_teacher
-      expect(show_user_create_course_button(@teacher)).to be_truthy
-      account_admin_user
-      expect(show_user_create_course_button(@admin)).to be_truthy
-    end
-
-    it "works for no enrollments setting (granular permissions)" do
-      @domain_root_account.enable_feature!(:granular_permissions_manage_courses)
+    it "works for no enrollments setting" do
       @domain_root_account.update(settings: { no_enrollments_can_create_courses: true })
       expect(show_user_create_course_button(nil)).to be_falsey
       user_factory
@@ -425,30 +409,14 @@ describe ApplicationHelper do
           it "justs include domain root account's when there is no context or @current_user" do
             output = helper.include_account_js
             expect(output).to have_tag "script"
-            expect(output).to eq("<script>
-//<![CDATA[
-
-      ;[\"https://example.com/root/account.js\"].forEach(function(src) {
-        var s = document.createElement('script'); s.src = src; s.async = false;
-        document.head.appendChild(s)
-      });
-//]]>
-</script>")
+            expect(output).to eq("<script src=\"https://example.com/root/account.js\" defer=\"defer\"></script>")
           end
 
           it "loads custom js even for high contrast users" do
             @current_user = user_factory
             user_factory.enable_feature!(:high_contrast)
             output = helper.include_account_js
-            expect(output).to eq("<script>
-//<![CDATA[
-
-      ;[\"https://example.com/root/account.js\"].forEach(function(src) {
-        var s = document.createElement('script'); s.src = src; s.async = false;
-        document.head.appendChild(s)
-      });
-//]]>
-</script>")
+            expect(output).to eq("<script src=\"https://example.com/root/account.js\" defer=\"defer\"></script>")
           end
 
           it "includes granchild, child, and root when viewing the grandchild or any course or group in it" do
@@ -456,15 +424,7 @@ describe ApplicationHelper do
             group = course.groups.create!
             [@grandchild_account, course, group].each do |context|
               @context = context
-              expect(helper.include_account_js).to eq("<script>
-//<![CDATA[
-
-      ;[\"https://example.com/root/account.js\", \"https://example.com/child/account.js\", \"https://example.com/grandchild/account.js\"].forEach(function(src) {
-        var s = document.createElement('script'); s.src = src; s.async = false;
-        document.head.appendChild(s)
-      });
-//]]>
-</script>")
+              expect(helper.include_account_js).to eq("<script src=\"https://example.com/root/account.js\" defer=\"defer\"></script>\n  <script src=\"https://example.com/child/account.js\" defer=\"defer\"></script>\n  <script src=\"https://example.com/grandchild/account.js\" defer=\"defer\"></script>")
             end
           end
         end
@@ -476,6 +436,11 @@ describe ApplicationHelper do
     it "configures the help link to display the dialog by default" do
       expect(helper.help_link_url).to eq "#"
       expect(helper.help_link_classes).to eq "help_dialog_trigger"
+    end
+
+    it "returns the default_support_url setting if set" do
+      Setting.set("default_support_url", "http://help.example.com")
+      expect(helper.help_link_url).to eq "http://help.example.com"
     end
 
     it "overrides default help link with the configured support url" do
@@ -607,6 +572,7 @@ describe ApplicationHelper do
                                      width: 800,
                                      height: 400,
                                      use_tray: false,
+                                     on_by_default: false,
                                      description: "<p>the description.</p>\n",
                                      favorite: false
                                    }])
@@ -629,6 +595,7 @@ describe ApplicationHelper do
                                      width: 800,
                                      height: 400,
                                      use_tray: false,
+                                     on_by_default: false,
                                      description: "",
                                      favorite: false
                                    }])
@@ -648,6 +615,20 @@ describe ApplicationHelper do
       @context = @admin
 
       expect(editor_buttons).to be_empty
+    end
+
+    it "passes in the base url for use with default tool icons" do
+      @course = course_model
+      @context = @course
+
+      expect(ContextExternalTool).to receive(:editor_button_json).with(
+        an_instance_of(Array),
+        anything,
+        anything,
+        anything,
+        "http://test.host"
+      )
+      editor_buttons
     end
   end
 
@@ -821,6 +802,15 @@ describe ApplicationHelper do
     end
 
     it "returns false with no user" do
+      expect(planner_enabled?).to be false
+    end
+
+    it "returns false for student in at least one limited access account" do
+      course_with_student(active_all: true)
+      @current_user = @user
+      @course.root_account.enable_feature!(:allow_limited_access_for_students)
+      @course.account.settings[:enable_limited_access_for_students] = true
+      @course.account.save!
       expect(planner_enabled?).to be false
     end
 
@@ -1186,14 +1176,6 @@ describe ApplicationHelper do
         allow(helper).to receive(:csp_context).and_return(account)
       end
 
-      it "doesn't set the CSP report only header if not configured" do
-        helper.add_csp_for_root
-        helper.include_custom_meta_tags
-        expect(headers).to_not have_key("Content-Security-Policy-Report-Only")
-        expect(headers).to_not have_key("Content-Security-Policy")
-        expect(js_env).not_to have_key(:csp)
-      end
-
       it "doesn't set the CSP header for non-html requests" do
         response.content_type = "application/json"
         account.enable_csp!
@@ -1212,26 +1194,21 @@ describe ApplicationHelper do
         expect(js_env[:csp]).to eq "frame-src 'self' localhost root_account.test root_account2.test blob:; script-src 'self' 'unsafe-eval' 'unsafe-inline' localhost root_account.test root_account2.test; object-src 'self' localhost root_account.test root_account2.test; "
       end
 
-      it "includes the report URI" do
-        allow(helper).to receive(:csp_report_uri).and_return("; report-uri https://somewhere/")
-        helper.add_csp_for_root
-        helper.include_custom_meta_tags
-        expect(headers["Content-Security-Policy-Report-Only"]).to eq "frame-src 'self' blob: localhost root_account.test root_account2.test; report-uri https://somewhere/; "
-      end
-
-      it "includes the report URI when active" do
+      it "does not include the report URI when active" do
         allow(helper).to receive(:csp_report_uri).and_return("; report-uri https://somewhere/")
         account.enable_csp!
         helper.add_csp_for_root
         helper.include_custom_meta_tags
-        expect(headers["Content-Security-Policy"]).to eq "frame-src 'self' blob: localhost root_account.test root_account2.test; report-uri https://somewhere/; "
+        expect(headers["Content-Security-Policy"]).to eq "frame-src 'self' blob: localhost root_account.test root_account2.test; "
       end
 
       it "includes canvadocs domain if enabled" do
         account.enable_csp!
 
-        allow(Canvadocs).to receive(:enabled?).and_return(true)
-        allow(Canvadocs).to receive(:config).and_return("base_url" => "https://canvadocs.instructure.com/1")
+        allow(Canvadocs).to receive_messages(
+          enabled?: true,
+          config: { "base_url" => "https://canvadocs.instructure.com/1" }
+        )
         helper.add_csp_for_root
         expect(headers["Content-Security-Policy"]).to eq "frame-src 'self' blob: canvadocs.instructure.com localhost root_account.test root_account2.test; "
       end
@@ -1239,10 +1216,78 @@ describe ApplicationHelper do
       it "includes inst_fs domain if enabled" do
         account.enable_csp!
 
-        allow(InstFS).to receive(:enabled?).and_return(true)
-        allow(InstFS).to receive(:app_host).and_return("https://inst_fs.instructure.com")
+        allow(InstFS).to receive_messages(
+          enabled?: true,
+          app_host: "https://inst_fs.instructure.com"
+        )
         helper.add_csp_for_root
-        expect(headers["Content-Security-Policy"]).to eq "frame-src 'self' blob: inst_fs.instructure.com localhost root_account.test root_account2.test; "
+        expect(headers["Content-Security-Policy"]).to eq "frame-src 'self' blob: *.inst_fs.instructure.com inst_fs.instructure.com localhost root_account.test root_account2.test; "
+      end
+
+      context "with default source CSP directives" do
+        before do
+          account.enable_feature!(:javascript_csp)
+          account.enable_feature!(:default_source_csp_logging)
+          account.enable_csp!
+        end
+
+        it "sets header for frames" do
+          allow(helper).to receive(:csp_report_uri).and_return("report-uri https://somewhere/; ")
+          helper.add_csp_for_root
+          expect(headers["Content-Security-Policy"])
+            .to eq "frame-src 'self' blob: #{helper.allow_list_domains}; " + helper.default_csp_logging_directives
+        end
+
+        it "sets header for files" do
+          allow(helper).to receive(:csp_report_uri).and_return("report-uri https://somewhere/; ")
+          helper.add_csp_for_file
+          expect(headers["Content-Security-Policy"])
+            .to eq(helper.csp_iframe_attribute + helper.default_csp_logging_directives(include_script_src: false))
+        end
+
+        it "sets header when the content type is not text/html" do
+          allow(helper).to receive(:csp_report_uri).and_return("report-uri https://somewhere/; ")
+          response.content_type = "application/json"
+          helper.set_default_source_csp_directive_if_enabled
+          expect(headers["Content-Security-Policy"]).to eq helper.default_csp_logging_directives
+        end
+
+        it "sets header without default source CSP directives if :default_source_csp_logging feature is disabled" do
+          account.disable_feature!(:default_source_csp_logging)
+          helper.add_csp_for_root
+          expect(headers["Content-Security-Policy"]).to eq "frame-src 'self' blob: #{helper.allow_list_domains}; "
+          headers.clear
+          helper.add_csp_for_file
+          expect(headers["Content-Security-Policy"]).to eq helper.csp_iframe_attribute
+          headers.clear
+          helper.set_default_source_csp_directive_if_enabled
+          expect(headers["Content-Security-Policy"]).not_to eq helper.default_csp_logging_directives
+        end
+
+        it "doesn't set the header if :javascript_csp feature is enabled but not enforced" do
+          account.disable_feature!(:default_source_csp_logging)
+          account.disable_csp!
+          allow_any_instance_of(DynamicSettings).to receive(:find).with("csp-logging").and_return({ host: "mocked_host_value" })
+          helper.add_csp_for_root
+          expect(headers).to_not have_key("Content-Security-Policy")
+        end
+
+        it "doesn't set the header if javascript_csp feature is disabled" do
+          account.disable_feature!(:javascript_csp)
+          allow(helper).to receive(:csp_report_uri).and_return("report-uri https://somewhere/; ")
+          helper.add_csp_for_root
+          expect(headers).to_not have_key("Content-Security-Policy")
+        end
+
+        it "won't override existing header" do
+          allow(helper).to receive(:csp_report_uri).and_return("report-uri https://somewhere/; ")
+          directives =
+            "frame-src 'self' blob: #{helper.allow_list_domains}; " + helper.default_csp_logging_directives
+          helper.add_csp_for_root
+          expect(headers["Content-Security-Policy"]).to eq directives
+          helper.set_default_source_csp_directive_if_enabled
+          expect(headers["Content-Security-Policy"]).to eq directives
+        end
       end
     end
   end
@@ -1404,6 +1449,58 @@ describe ApplicationHelper do
         helper.improved_outcomes_management_js_env
         expect(js_env).to have_key :IMPROVED_OUTCOMES_MANAGEMENT
         expect(js_env[:IMPROVED_OUTCOMES_MANAGEMENT]).to be(false)
+      end
+    end
+  end
+
+  describe "context_user_name" do
+    before :once do
+      user_factory(short_name: "User Name")
+    end
+
+    it "accepts a user" do
+      expect(context_user_name(Account.default, @user)).to eq "User Name"
+    end
+
+    it "accepts a user_id" do
+      expect(context_user_name(Account.default, @user.id)).to eq "User Name"
+    end
+
+    it "returns nil if supplied the id of a nonexistent user" do
+      expect(context_user_name(Account.default, 0)).to be_nil
+    end
+  end
+
+  describe "number_to_human_size_mb" do
+    let(:quota) { 98_765.53 }
+
+    context "when no additional options" do
+      it "returns readable string with unit truncated to two decimal points" do
+        expect(number_to_human_size_mb(quota)).to eq("98.76 KB")
+      end
+    end
+
+    context "when using options" do
+      context "when value option[:precision] = 3" do
+        it "returns 3 decimal points (truncated)" do
+          expect(number_to_human_size_mb(quota, precision: 3)).to eq("98.765 KB")
+        end
+
+        context "and option[:round] = true" do
+          it "returns 3 decimal points rounding the last digit" do
+            expect(number_to_human_size_mb(quota, precision: 3, round: true)).to eq("98.766 KB")
+          end
+        end
+      end
+
+      context "when option[:base] = 1024" do
+        let(:quota) { 500_000_000 }
+
+        it "returns the same value as number_to_human_size" do
+          readable_size_mib = number_to_human_size_mb(quota, base: 1024, precision: 0, round: true)
+          readable_size = number_to_human_size(quota)
+          expect(readable_size_mib).to eq(readable_size)
+        end
       end
     end
   end

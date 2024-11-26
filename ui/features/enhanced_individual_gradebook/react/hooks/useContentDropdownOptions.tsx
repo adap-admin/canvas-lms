@@ -21,9 +21,10 @@ import {useScope as useI18nScope} from '@canvas/i18n'
 
 import {
   GradebookSortOrder,
-  GradebookUserSubmissionDetails,
-  SortableAssignment,
-  SortableStudent,
+  type GradebookUserSubmissionDetails,
+  type SortableAssignment,
+  type SortableStudent,
+  type Outcome,
 } from '../../types'
 import {filterAssignmentsByStudent, sortAssignments} from '../../utils/gradebookUtils'
 
@@ -32,21 +33,40 @@ const I18n = useI18nScope('enhanced_individual_gradebook_content_selection')
 type DropDownOption<T> = {
   id: string
   name: string
+  sortableName: string
   data?: T
 }
 
 type StudentDropdownOption = DropDownOption<SortableStudent>[]
 type AssignmentDropdownOption = DropDownOption<SortableAssignment>[]
+type OutcomeDropdownOption = DropDownOption<Outcome>[]
 
 const DEFAULT_STUDENT_DROPDOWN_TEXT = I18n.t('No Student Selected')
 const DEFAULT_ASSIGNMENT_DROPDOWN_TEXT = I18n.t('No Assignment Selected')
+const DEFAULT_OUTCOME_DROPDOWN_TEXT = I18n.t('No Outcome Selected')
 
-const defaultStudentDropdownOptions = {id: '-1', name: DEFAULT_STUDENT_DROPDOWN_TEXT}
-const defaultAssignmentDropdownOptions = {id: '-1', name: DEFAULT_ASSIGNMENT_DROPDOWN_TEXT}
+const defaultStudentDropdownOptions = {
+  id: '-1',
+  name: DEFAULT_STUDENT_DROPDOWN_TEXT,
+  sortableName: DEFAULT_STUDENT_DROPDOWN_TEXT,
+}
+const defaultAssignmentDropdownOptions = {
+  id: '-1',
+  name: DEFAULT_ASSIGNMENT_DROPDOWN_TEXT,
+  sortableName: DEFAULT_ASSIGNMENT_DROPDOWN_TEXT,
+}
+const defaultOutcomeDropdownOptions = {
+  id: '-1',
+  name: DEFAULT_OUTCOME_DROPDOWN_TEXT,
+  sortableName: DEFAULT_OUTCOME_DROPDOWN_TEXT,
+}
+
+const defaultAllowedEnrollmentStates = ['active', 'invited']
 
 type UserDropdownProps = {
   students?: SortableStudent[]
   selectedSection?: string | null
+  showConcludedEnrollments: boolean
 }
 
 type UserDropdownResponse = {
@@ -56,6 +76,7 @@ type UserDropdownResponse = {
 export const useUserDropdownOptions = ({
   students,
   selectedSection,
+  showConcludedEnrollments,
 }: UserDropdownProps): UserDropdownResponse => {
   const [studentDropdownOptions, setStudentDropdownOptions] = useState<StudentDropdownOption>()
 
@@ -63,20 +84,26 @@ export const useUserDropdownOptions = ({
     if (!students) {
       return
     }
-
-    const filteredStudents = selectedSection
-      ? students.filter(student => student.sections.includes(selectedSection))
-      : students
+    const filteredStates = [
+      ...defaultAllowedEnrollmentStates,
+      ...(showConcludedEnrollments ? ['completed'] : []),
+    ]
+    const filteredStudents = students.filter(
+      student =>
+        filteredStates.includes(student.state) &&
+        (selectedSection ? student.sections.includes(selectedSection) : true)
+    )
     const studentOptions: StudentDropdownOption = [
       defaultStudentDropdownOptions,
       ...filteredStudents.map(student => ({
         id: student.id,
-        name: student.sortableName,
+        name: student.name,
+        sortableName: student.sortableName,
         data: student,
       })),
     ]
     setStudentDropdownOptions(studentOptions)
-  }, [students, selectedSection, setStudentDropdownOptions])
+  }, [students, selectedSection, setStudentDropdownOptions, showConcludedEnrollments])
 
   return {studentDropdownOptions}
 }
@@ -86,6 +113,7 @@ type AssignmentDropdownProps = {
   sortOrder: GradebookSortOrder
   selectedStudentId?: string | null
   studentSubmissions?: GradebookUserSubmissionDetails[]
+  selectedGradingPeriodId?: string | null
 }
 
 type AssignmentDropdownResponse = {
@@ -97,6 +125,7 @@ export const useAssignmentDropdownOptions = ({
   sortOrder,
   selectedStudentId,
   studentSubmissions,
+  selectedGradingPeriodId,
 }: AssignmentDropdownProps): AssignmentDropdownResponse => {
   const [assignmentDropdownOptions, setAssignmentDropdownOptions] =
     useState<AssignmentDropdownOption>()
@@ -107,10 +136,20 @@ export const useAssignmentDropdownOptions = ({
     }
 
     const sortedAssignments = sortAssignments(assignments, sortOrder)
-    const filteredAssignments =
+    let filteredAssignments =
       selectedStudentId && studentSubmissions
         ? filterAssignmentsByStudent(sortedAssignments, studentSubmissions)
         : sortedAssignments
+
+    if (selectedGradingPeriodId) {
+      filteredAssignments = filteredAssignments.filter(
+        assignment => assignment.gradingPeriodId === selectedGradingPeriodId
+      )
+    }
+
+    if (selectedStudentId) {
+      filteredAssignments = filteredAssignments.filter(assignment => !assignment.anonymizeStudents)
+    }
 
     const assignmentOptions: AssignmentDropdownOption = [
       defaultAssignmentDropdownOptions,
@@ -118,10 +157,54 @@ export const useAssignmentDropdownOptions = ({
         id: assignment.id,
         name: assignment.name,
         data: assignment,
+        sortableName: assignment.sortableName,
       })),
     ]
     setAssignmentDropdownOptions(assignmentOptions)
-  }, [assignments, sortOrder, selectedStudentId, studentSubmissions, setAssignmentDropdownOptions])
+  }, [
+    assignments,
+    sortOrder,
+    selectedStudentId,
+    studentSubmissions,
+    selectedGradingPeriodId,
+    setAssignmentDropdownOptions,
+  ])
 
   return {assignmentDropdownOptions}
+}
+
+type OutcomeDropdownProps = {
+  outcomes?: Outcome[]
+  selectedOutcomeId?: string | null
+}
+
+type OutcomeDropdownResponse = {
+  outcomeDropdownOptions?: OutcomeDropdownOption
+}
+
+export const useOutcomeDropdownOptions = ({
+  outcomes,
+  selectedOutcomeId,
+}: OutcomeDropdownProps): OutcomeDropdownResponse => {
+  const [outcomeDropdownOptions, setOutcomeDropdownOptions] = useState<OutcomeDropdownOption>()
+
+  useEffect(() => {
+    if (!outcomes) {
+      return
+    }
+
+    const outcomeOptions: OutcomeDropdownOption = [
+      defaultOutcomeDropdownOptions,
+      ...outcomes.map(outcome => ({
+        id: outcome.id,
+        name: outcome.title,
+        data: outcome,
+        sortableName: outcome.id,
+      })),
+    ]
+
+    setOutcomeDropdownOptions(outcomeOptions)
+  }, [outcomes, selectedOutcomeId, setOutcomeDropdownOptions])
+
+  return {outcomeDropdownOptions}
 }

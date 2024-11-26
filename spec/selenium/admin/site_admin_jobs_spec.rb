@@ -75,7 +75,7 @@ describe "site admin jobs ui" do
     site_admin_logged_in
     track_jobs do
       2.times { "present".delay.reverse }
-      "future".delay(run_at: Time.now + 30.days).capitalize
+      "future".delay(run_at: 30.days.from_now).capitalize
       job = "failure".delay(ignore_transaction: true).downcase
       @failed_job = job.fail!
     end
@@ -107,7 +107,7 @@ describe "site admin jobs ui" do
       f("#job-handler-show").click
       wait_for_ajax_requests
       expect(get_value("#job-handler")).to eq job.handler
-      f("button.ui-dialog-titlebar-close").click
+      f(".ui-dialog-titlebar-close").click
 
       # also for failed job
       filter_jobs("Failed")
@@ -183,7 +183,7 @@ describe "site admin jobs ui" do
         expect(f("#jobs-grid .even")).to be_displayed
         expect(f("#jobs-total").text).to eq "3"
         expect(future_jobs.count).to eq 3
-        num_of_jobs = Delayed::Job.all.count
+        num_of_jobs = Delayed::Job.count
 
         delete = f("#delete-jobs")
         keep_trying_until do

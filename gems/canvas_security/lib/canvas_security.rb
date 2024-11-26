@@ -220,7 +220,7 @@ module CanvasSecurity
     raw_jwt = JSON::JWT.new(jwt_body)
     return raw_jwt.to_s if key == :unsigned
 
-    raw_jwt.sign(key || encryption_key, alg || :HS256).to_s
+    raw_jwt.sign(key || encryption_key, alg || :autodetect).to_s
   end
 
   # Creates an encrypted JWT token string
@@ -265,7 +265,7 @@ module CanvasSecurity
     keys.each do |key|
       body = JSON::JWT.decode(token, key)
       verify_jwt(body, ignore_expiration:)
-      return body.with_indifferent_access
+      return body
     rescue JSON::JWS::VerificationFailed
       # Keep looping, to try all the keys. If none succeed,
       # we raise below.
@@ -281,7 +281,7 @@ module CanvasSecurity
   def self.decrypt_encrypted_jwt(token, signing_secret, encryption_secret, ignore_expiration: false)
     begin
       signed_coded_jwt = JSON::JWT.decode(token, encryption_secret)
-    rescue OpenSSL::Cipher::CipherError => e
+    rescue JSON::JWE::DecryptionFailed => e
       # this seems to happen if the token is of a valid shape,
       # but signed by some OTHER encryption secret?
       CanvasErrors.capture_exception(:security_auth, e, :warn)
@@ -314,7 +314,11 @@ module CanvasSecurity
   end
 
   def self.validate_encryption_key(overwrite = false)
-    db_hash = settings_store.get("encryption_key_hash", nil) rescue return # in places like rake db:test:reset, we don't care that the db/table doesn't exist
+    begin
+      db_hash = settings_store.get("encryption_key_hash", nil)
+    rescue
+      return # in places like rake db:test:reset, we don't care that the db/table doesn't exist
+    end
     return if encryption_keys.any? { |key| Digest::SHA1.hexdigest(key) == db_hash }
 
     if db_hash.nil? || overwrite
@@ -339,6 +343,10 @@ module CanvasSecurity
 
     def services_previous_signing_secret
       Rails.application&.credentials&.dig(:canvas_security, :signing_secret_deprecated)
+    end
+
+    def services_issuer
+      "Canvas"
     end
 
     private

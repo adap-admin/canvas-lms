@@ -21,9 +21,6 @@
 // Generates all the pre-translated code in lib/translated/{locale}.
 
 const shell = require('shelljs')
-const promisify = require('util').promisify
-const exec = promisify(require('child_process').exec)
-const getTranslationList = require('@instructure/translations/bin/get-translation-list')
 
 shell.set('-e')
 
@@ -39,29 +36,5 @@ shell.exec('rm -rf lib/*')
 shell.exec('rm -rf es/*')
 shell.exec('scripts/installTranslations.js')
 
-shell.echo('Building CommonJS version')
-shell.exec(
-  "JEST_WORKER_ID=1 npx babel --out-dir lib src --ignore '**/__tests__' --extensions '.ts,.tsx,.js,.jsx'"
-)
-
-shell.echo('Building ES Modules version')
+shell.echo('Building')
 shell.exec("npx babel --out-dir es src --ignore '**/__tests__' --extensions '.ts,.tsx,.js,.jsx'")
-
-shell.echo(`building pretranslated output in lib/translated in mulitple processes`)
-getTranslationList('canvas-rce')
-  .then(translationFiles => {
-    const locales = translationFiles.map(tf => tf.split('.')[0])
-    const processPromises = locales.map(locale => {
-      return exec(
-        `BUILD_LOCALE=${locale} npx babel --out-dir lib/translated/${locale}/modules --ignore locales* src --extensions '.ts,.tsx,.js'`
-      )
-    })
-    Promise.all(processPromises)
-      .then(() => {
-        console.log('Translations complete')
-      })
-      .catch(e => {
-        throw e
-      })
-  })
-  .catch(e => console.error(e))

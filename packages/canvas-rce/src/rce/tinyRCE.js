@@ -38,13 +38,14 @@ import 'tinymce/plugins/wordcount/plugin'
 import 'tinymce/plugins/paste/plugin'
 import 'tinymce/plugins/table/plugin'
 import 'tinymce/plugins/hr/plugin'
+import 'tinymce/plugins/searchreplace/plugin'
 
 // add custom plugins
+import './plugins/instructure_color/plugin'
 import './plugins/instructure-ui-icons/plugin'
 import './plugins/instructure_condensed_buttons/plugin'
 import './plugins/instructure_equation/plugin'
 import './plugins/instructure_image/plugin'
-import './plugins/instructure_external_tools/plugin'
 import './plugins/instructure_rce_external_tools/plugin'
 import './plugins/instructure_record/plugin'
 import './plugins/instructure_links/plugin'
@@ -56,7 +57,7 @@ import './plugins/instructure_wordcount/plugin'
 import './plugins/instructure_paste/plugin'
 import './plugins/instructure_fullscreen/plugin'
 import './plugins/instructure_studio_media_options/plugin'
-
+import './plugins/instructure_search_and_replace/plugin'
 import './plugins/tinymce-a11y-checker/plugin'
 
 // prevent tinymce from loading language scripts with explicit

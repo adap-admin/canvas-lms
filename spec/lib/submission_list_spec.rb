@@ -22,15 +22,15 @@ describe SubmissionList do
   it "initializes with a course" do
     course_model
     expect { @sl = SubmissionList.new(@course) }.not_to raise_error
-    expect(@sl).to be_is_a(SubmissionList)
+    expect(@sl).to be_a(SubmissionList)
     expect(@sl.course).to eql(@course)
 
     expect { @sl = SubmissionList.new(-1) }.to raise_error(ArgumentError, "Must provide a course.")
   end
 
-  it "provides a dictionary in 'list'" do
+  it "provides a hash in 'list'" do
     course_model
-    expect(SubmissionList.new(@course).list).to be_is_a(Hashery::Dictionary)
+    expect(SubmissionList.new(@course).list).to be_a(Hash)
   end
 
   it "creates keys in the data when versions of submissions existed" do
@@ -92,26 +92,20 @@ describe SubmissionList do
     end
 
     it "is able to loop on days" do
-      available_keys = [:graders, :date]
       SubmissionList.days(@course).each do |day|
-        expect(day).to be_is_a(OpenStruct)
-        expect(day.send(:table).keys.size).to eql(available_keys.size)
-        available_keys.each { |k| expect(day.send(:table)).to be_include(k) }
-        expect(day.graders).to be_is_a(Array)
-        expect(day.date).to be_is_a(Date)
+        expect(day).to be_a(SubmissionList::DateAndGraders)
+        expect(day.graders).to be_a(Array)
+        expect(day.date).to be_a(Date)
       end
     end
 
     it "is able to loop on graders" do
-      available_keys = %i[grader_id assignments name]
       SubmissionList.days(@course).each do |day|
         day.graders.each do |grader|
-          expect(grader).to be_is_a(OpenStruct)
-          expect(grader.send(:table).keys.size).to eql(available_keys.size)
-          available_keys.each { |k| expect(grader.send(:table).keys).to be_include(k) }
-          expect(grader.grader_id).to be_is_a(Numeric)
-          expect(grader.assignments).to be_is_a(Array)
-          expect(grader.name).to be_is_a(String)
+          expect(grader).to be_a(SubmissionList::AssignmentsForGrader)
+          expect(grader.grader_id).to be_a(Numeric)
+          expect(grader.assignments).to be_a(Array)
+          expect(grader.name).to be_a(String)
           expect(grader.assignments[0].submissions[0].grader).to eql(grader.name)
           expect(grader.assignments[0].submissions[0].grader_id).to eql(grader.grader_id)
         end
@@ -129,17 +123,14 @@ describe SubmissionList do
     end
 
     it "is able to loop on assignments" do
-      available_keys = %i[submission_count name submissions assignment_id]
       SubmissionList.days(@course).each do |day|
         day.graders.each do |grader|
           grader.assignments.each do |assignment|
-            expect(assignment).to be_is_a(OpenStruct)
-            expect(assignment.send(:table).keys.size).to eql(available_keys.size)
-            available_keys.each { |k| expect(assignment.send(:table).keys).to be_include(k) }
+            expect(assignment).to be_a(SubmissionList::AssignmentsForGraderAndDay)
             expect(assignment.submission_count).to eql(assignment.submissions.size)
-            expect(assignment.name).to be_is_a(String)
+            expect(assignment.name).to be_a(String)
             expect(assignment.name).to eql(assignment.submissions[0].assignment_name)
-            expect(assignment.submissions).to be_is_a(Array)
+            expect(assignment.submissions).to be_a(Array)
             expect(assignment.assignment_id).to eql(assignment.submissions[0].assignment_id)
           end
         end
@@ -192,9 +183,8 @@ describe SubmissionList do
           day.graders.each do |grader|
             grader.assignments.each do |assignment|
               assignment.submissions.each do |submission|
-                expect(submission).to be_is_a(OpenStruct)
-                expect(submission.send(:table).keys.size).to eql(available_keys.size)
-                available_keys.each { |k| expect(submission.send(:table).keys).to be_include(k) }
+                expect(submission).to be_a(SubmissionList::SubmissionEntry)
+                available_keys.each { |k| expect(submission).to respond_to(k) }
               end
             end
           end
@@ -342,8 +332,8 @@ def interesting_submission_data(opts = {})
 
   @grader = user_model({ name: "some_grader" }.merge(opts[:grader]))
   @grader2 = user_model({ name: "another_grader" }.merge(opts[:grader]))
-  @student = factory_with_protected_attributes(User, { name: "studeñt", workflow_state: "registered" }.merge(opts[:user]))
-  @course = factory_with_protected_attributes(Course, { name: "some course", workflow_state: "available" }.merge(opts[:course]))
+  @student = User.create!({ name: "studeñt", workflow_state: "registered" }.merge(opts[:user]))
+  @course = Course.create!({ name: "some course", workflow_state: "available" }.merge(opts[:course]))
   [@grader, @grader2].each do |grader|
     e = @course.enroll_teacher(grader)
     e.accept

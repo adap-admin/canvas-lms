@@ -19,18 +19,15 @@
 // xsslint safeString.method I18n.t
 
 import {useScope as useI18nScope} from '@canvas/i18n'
-import htmlEscape from 'html-escape'
+import htmlEscape from '@instructure/html-escape'
 import {extractDataTurnitin} from '@canvas/grading/Turnitin'
 import GradeFormatHelper from '@canvas/grading/GradeFormatHelper'
 import {extractSimilarityInfo, isPostable, similarityIcon} from '@canvas/grading/SubmissionHelper'
 import {classNamesForAssignmentCell} from './CellStyles'
 import type Gradebook from '../../Gradebook'
 import type {PendingGradeInfo} from '../../gradebook.d'
-import type {
-  GradingStandard,
-  SubmissionData,
-  SubmissionWithOriginalityReport,
-} from '@canvas/grading/grading.d'
+import type {SubmissionData, SubmissionWithOriginalityReport} from '@canvas/grading/grading.d'
+import type {GradingStandard} from '@instructure/grading-utils'
 import type {Assignment, Student, Submission} from '../../../../../../api.d'
 
 const I18n = useI18nScope('gradebook')
@@ -50,6 +47,8 @@ type Getters = {
   getAssignment(assignmentId: string): ReturnType<Gradebook['getAssignment']>
   getEnterGradesAsSetting(assignmentId: string): ReturnType<Gradebook['getEnterGradesAsSetting']>
   getGradingSchemeData(assignmentId: string): undefined | GradingStandard[]
+  getPointsBasedGradingScheme(assignmentId: string): undefined | boolean
+  getScalingFactor(assignmentId: string): undefined | number
   getPendingGradeInfo(submission: {
     assignmentId: string
     userId: string
@@ -91,7 +90,9 @@ function formatGrade(submissionData: SubmissionData, assignment: Assignment, opt
   const formatOptions = {
     formatType: options.getEnterGradesAsSetting(assignment.id),
     gradingScheme: options.getGradingSchemeData(assignment.id),
+    pointsBasedGradingScheme: options.getPointsBasedGradingScheme(assignment.id),
     pointsPossible: assignment.points_possible,
+    scalingFactor: options.getScalingFactor(assignment.id),
     version: 'final',
   }
 
@@ -160,6 +161,8 @@ function renderTemplate(grade: string, options: Options = {}) {
 export default class AssignmentCellFormatter {
   options: Getters
 
+  customGradeStatusesEnabled: boolean
+
   constructor(gradebook: Gradebook) {
     this.options = {
       getAssignment(assignmentId: string) {
@@ -171,8 +174,14 @@ export default class AssignmentCellFormatter {
       getGradingSchemeData(assignmentId: string): undefined | GradingStandard[] {
         return gradebook.getAssignmentGradingScheme(assignmentId)?.data
       },
+      getPointsBasedGradingScheme(assignmentId: string): undefined | boolean {
+        return gradebook.getAssignmentGradingScheme(assignmentId)?.pointsBased
+      },
       getPendingGradeInfo(submission: {assignmentId: string; userId: string}) {
         return gradebook.getPendingGradeInfo(submission)
+      },
+      getScalingFactor(assignmentId: string): undefined | number {
+        return gradebook.getAssignmentGradingScheme(assignmentId)?.scalingFactor
       },
       getStudent(studentId: string) {
         return gradebook.student(studentId)
@@ -184,6 +193,7 @@ export default class AssignmentCellFormatter {
         return gradebook.options.show_similarity_score
       },
     }
+    this.customGradeStatusesEnabled = gradebook.options.custom_grade_statuses_enabled
   }
 
   render = (
@@ -225,6 +235,9 @@ export default class AssignmentCellFormatter {
       missing: submission.missing,
       resubmitted: submission.grade_matches_current_submission === false,
       score: submission.score,
+      customGradeStatusId: this.customGradeStatusesEnabled
+        ? submission.custom_grade_status_id
+        : null,
     }
 
     const pendingGradeInfo = this.options.getPendingGradeInfo({

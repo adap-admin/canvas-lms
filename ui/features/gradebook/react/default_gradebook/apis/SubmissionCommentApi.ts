@@ -17,7 +17,7 @@
  */
 
 import axios from '@canvas/axios'
-import timezone from '@canvas/timezone'
+import * as timezone from '@instructure/moment-utils'
 import type {SubmissionComment, SubmissionCommentData} from '../../../../../api.d'
 import type {SerializedComment} from '../gradebook.d'
 
@@ -30,9 +30,11 @@ function deserializeComment(comment: SubmissionComment): SerializedComment {
   }
 
   if (!comment.author) {
+    // @ts-expect-error
     return baseComment
   }
 
+  // @ts-expect-error
   return {
     ...baseComment,
     authorId: comment.author.id,
@@ -47,11 +49,11 @@ function deserializeComments(comments: SubmissionComment[]) {
 }
 
 function getSubmissionComments(courseId: string, assignmentId: string, studentId: string) {
-  const commentOptions = {params: {include: 'submission_comments'}}
+  const commentOptions = {params: {include: 'submission_html_comments'}}
   const url = `/api/v1/courses/${courseId}/assignments/${assignmentId}/submissions/${studentId}`
   return axios
     .get(url, commentOptions)
-    .then(response => deserializeComments(response.data.submission_comments))
+    .then(response => deserializeComments(response.data.submission_html_comments))
 }
 
 function createSubmissionComment(

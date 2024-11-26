@@ -191,10 +191,10 @@ class CourseLinkValidator
     end
   end
 
-  # pretty much copied from ImportedHtmlConverter
+  # pretty much copied from CanvasImportedHtmlConverter
   def find_invalid_links(html)
     links = []
-    doc = Nokogiri::HTML5(html || "")
+    doc = Nokogiri::HTML5(html || "", nil, max_tree_depth: 10_000)
     attrs = %w[href src data value]
 
     doc.search("*").each do |node|
@@ -224,7 +224,7 @@ class CourseLinkValidator
 
     unless (result = visited_urls[url])
       begin
-        if ImportedHtmlConverter.relative_url?(url) || (domain_regex && url.match(domain_regex))
+        if CanvasLinkMigrator.relative_url?(url) || (domain_regex && url.match(domain_regex))
           result = if valid_route?(url)
                      if url.match(%r{/courses/(\d+)}) && course.id.to_s != $1
                        :course_mismatch
@@ -268,8 +268,9 @@ class CourseLinkValidator
 
     object ||= Context.find_asset_by_url(url)
     unless object
-      return :missing_item unless [nil, "syllabus"].include?(url.match(%r{/courses/\d+/\w+/(.+)})&.[](1))
-      return :missing_item if url.include?("/media_objects_iframe/")
+      path = URI.parse(url).path
+      return :missing_item unless [nil, "syllabus"].include?(path.match(%r{/courses/\d+/\w+/(.+)})&.[](1))
+      return :missing_item if path.include?("/media_objects_iframe/")
 
       return nil
     end

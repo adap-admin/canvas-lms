@@ -24,9 +24,12 @@ class GroupCategory < ActiveRecord::Base
   attr_accessor :group_by_section
   attr_writer :assign_unassigned_members
 
+  attr_readonly :non_collaborative
+
   belongs_to :context, polymorphic: [:course, :account]
   belongs_to :sis_batch
   belongs_to :root_account, class_name: "Account", inverse_of: :all_group_categories
+  has_many :assignments, inverse_of: :group_category
   has_many :groups, dependent: :destroy
   has_many :progresses, as: "context", dependent: :destroy
   has_many :group_and_membership_importers, dependent: :destroy, inverse_of: :group_category
@@ -34,9 +37,11 @@ class GroupCategory < ActiveRecord::Base
 
   before_validation :set_root_account_id
   validates :sis_source_id, uniqueness: { scope: :root_account }, allow_nil: true
+  validate :validate_non_collaborative_constraints, if: :non_collaborative?
 
   after_save :auto_create_groups
   after_update :update_groups_max_membership
+  after_update :clear_permissions_cache_for_selfsignup
 
   delegate :time_zone, to: :context
 
@@ -97,6 +102,8 @@ class GroupCategory < ActiveRecord::Base
 
   scope :by_name, -> { order(Bookmarker.order_by) }
   scope :active, -> { where(deleted_at: nil) }
+  scope :collaborative, -> { where(non_collaborative: false) }
+  scope :non_collaborative, -> { where(non_collaborative: true) }
   scope :other_than, ->(cat) { where("group_categories.id<>?", cat.id || 0) }
 
   class << self
@@ -202,6 +209,12 @@ class GroupCategory < ActiveRecord::Base
     self_signup.present? && self_signup == "restricted"
   end
 
+  def past_self_signup_end_at?
+    return false unless context.is_a?(Course) && context.account.feature_enabled?(:self_signup_deadline)
+
+    self_signup? && self_signup_end_at.present? && self_signup_end_at < Time.now.utc
+  end
+
   def has_heterogenous_group?
     # if it's not a course, we want the answer to be false. but that same
     # condition would may any group in the category say has_common_section?
@@ -214,7 +227,7 @@ class GroupCategory < ActiveRecord::Base
 
   def group_for(user)
     shard.activate do
-      groups.active.where(GroupMembership.active.where("group_id=groups.id").where(user_id: user).arel.exists).take
+      groups.active.find_by(GroupMembership.active.where("group_id=groups.id").where(user_id: user).arel.exists)
     end
   end
 
@@ -393,7 +406,7 @@ class GroupCategory < ActiveRecord::Base
     Group.where(id: groups).touch_all
     if context_type == "Course"
       opts = { assignments: Assignment.where(context_type:, context_id:, group_category_id: self).pluck(:id) }
-      DueDateCacher.recompute_course(context_id, **opts)
+      SubmissionLifecycleManager.recompute_course(context_id, **opts)
     end
   end
 
@@ -488,7 +501,7 @@ class GroupCategory < ActiveRecord::Base
 
   def assign_unassigned_members(by_section = false, updating_user: nil)
     Delayed::Batch.serial_batch do
-      DueDateCacher.with_executing_user(updating_user) do
+      SubmissionLifecycleManager.with_executing_user(updating_user) do
         if by_section
           distribute_members_among_groups_by_section
           finish_group_member_assignment
@@ -536,7 +549,14 @@ class GroupCategory < ActiveRecord::Base
   end
 
   set_policy do
-    given { |user, session| context.grants_right?(user, session, :read) }
+    given do |user, session|
+      # For non_collaborative group_sets, we only give read access to users who can manage groups
+      if non_collaborative? && !context.grants_any_right?(user, session, *RoleOverride::GRANULAR_MANAGE_TAGS_PERMISSIONS)
+        false
+      else
+        context.grants_right?(user, session, :read)
+      end
+    end
     can :read
   end
 
@@ -560,6 +580,11 @@ class GroupCategory < ActiveRecord::Base
   end
 
   protected
+
+  def validate_non_collaborative_constraints
+    errors.add(:base, "Non-collaborative group categories can only be created for courses") unless context_type == "Course"
+    errors.add(:base, "Non-collaborative group categories cannot be student organized or communities") if ["student_organized", "communities"].include?(role)
+  end
 
   def start_progress
     self.current_progress ||= progresses.build(tag: "assign_unassigned_members", completion: 0)
@@ -678,5 +703,11 @@ class GroupCategory < ActiveRecord::Base
         end
       end
     end
+  end
+
+  def clear_permissions_cache_for_selfsignup
+    return unless %i[self_signup self_signup_end_at].any? { |k| saved_changes.key?(k) } # Skip if neither setting was changed
+
+    context.students.each { |student| clear_permissions_cache(student) } if context.is_a?(Course)
   end
 end

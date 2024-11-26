@@ -125,7 +125,7 @@ const ApplyScoreToUngradedModal = ({assignmentGroup, onApply, onClose, open}: Pr
         <RadioInputGroup
           description={I18n.t('Apply to:')}
           name="artifactScope"
-          onChange={(_event: Event, value: string) => {
+          onChange={(_event, value) => {
             setArtifactScope(value)
           }}
           value={artifactScope}
@@ -142,6 +142,7 @@ const ApplyScoreToUngradedModal = ({assignmentGroup, onApply, onClose, open}: Pr
           {I18n.t('Cancel')}
         </Button>
         <Button
+          id="apply-score-to-ungraded" // EVAL-4236
           interaction={isCurrentInputValid ? 'enabled' : 'disabled'}
           onClick={handleApply}
           color="primary"

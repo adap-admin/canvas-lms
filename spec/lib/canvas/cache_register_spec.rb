@@ -35,7 +35,7 @@ describe Canvas::CacheRegister do
   let(:time2) { 2.minutes.from_now }
 
   def to_stamp(time)
-    time.to_s(User.cache_timestamp_format)
+    time.to_fs(User.cache_timestamp_format)
   end
 
   context "reading" do
@@ -280,6 +280,13 @@ describe Canvas::CacheRegister do
       check_cache
     end
 
+    it "regenerates when fetch_with_cache_register can't generate a key" do
+      expect(Canvas::CacheRegister.lua).to receive(:run).with(:get_with_batched_keys, anything, anything, anything).and_raise(Redis::ConnectionError.new)
+      expect(Rails.cache.redis).not_to receive(:set)
+
+      expect(Rails.cache.fetch_with_batched_keys("some_base_key/withstuff", batch_object: @user, batched_keys: [:enrollments, :groups]) { "some value" }).to eq "some value"
+    end
+
     it "still works with expiration" do
       some_key = "some_base_key/withstuff"
       some_value = "some value"
@@ -339,6 +346,31 @@ describe Canvas::CacheRegister do
         Rails.cache.fetch_with_batched_keys("k", batch_object: @user, batched_keys: :blah) { "v" }
       end.to raise_error("invalid cache_key type 'blah' for User")
     end
+
+    it "ignores the cache when the entry is utter garbage" do
+      Rails.cache.fetch_with_batched_keys("key", batch_object: @user, batched_keys: [:enrollments, :groups], expires_in: 5.minutes) do
+        "a"
+      end
+
+      allow(Canvas::CacheRegister.lua).to receive(:run).and_return(["frd_key", "garbage"])
+
+      expect(Rails.cache.fetch_with_batched_keys("key", batch_object: @user, batched_keys: [:enrollments, :groups], expires_in: 5.minutes) do
+        "b"
+      end).to eql "b"
+    end
+
+    it "ignores the cache when the entry is not unmarshallable" do
+      stub_const("MyCacheClass", Class.new(String))
+      Rails.cache.fetch_with_batched_keys("key", batch_object: @user, batched_keys: [:enrollments, :groups], expires_in: 5.minutes) do
+        MyCacheClass.new
+      end
+
+      stub_const("MyCacheClass", Class.new)
+
+      expect(Rails.cache.fetch_with_batched_keys("key", batch_object: @user, batched_keys: [:enrollments, :groups], expires_in: 5.minutes) do
+        "b"
+      end).to eql "b"
+    end
   end
 
   context "without an object" do
@@ -354,13 +386,13 @@ describe Canvas::CacheRegister do
       end
     end
 
-    it "returns nil if cache register is disabled" do
+    it "returns a key for 'now' if cache register is disabled" do
       set_revert!
       Timecop.freeze(time1) do
         @user.cache_key(:enrollments)
       end
       Timecop.freeze(time2) do
-        expect(User.cache_key_for_id(@user.id, :enrollments)).to be_nil
+        expect(User.cache_key_for_id(@user.id, :enrollments)).to include(to_stamp(time2))
       end
     end
 
@@ -416,7 +448,7 @@ describe Canvas::CacheRegister do
     end
 
     it "uses multi-cache delete when clearing a configured key" do
-      key = Account.base_cache_register_key_for(Account.default) + "/feature_flags"
+      key = "{#{Account.base_cache_register_key_for(Account.default)}}/feature_flags"
       allow(Canvas::CacheRegister).to receive(:can_use_multi_cache_redis?).and_return(true)
       expect(Canvas::CacheRegister).to_not receive(:redis)
       expect(MultiCache).to receive(:delete).with(key, { unprefixed_key: true })

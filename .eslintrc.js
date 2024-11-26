@@ -16,6 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+const {glob} = require('glob')
 const path = require('path')
 
 module.exports = {
@@ -91,6 +92,7 @@ module.exports = {
     'no-return-assign': 'off',
     'no-underscore-dangle': 'off',
     'no-use-before-define': 'off',
+    'object-shorthand': 'warn',
     '@typescript-eslint/no-use-before-define': [
       'error',
       {
@@ -112,6 +114,8 @@ module.exports = {
     'promise/catch-or-return': ['warn', {allowFinally: true}], // The recommendation is to error on this, but we downgrade it to a warning
     'promise/avoid-new': 'off',
     'promise/no-nesting': 'off',
+    'react/jsx-no-target-blank': 'warn',
+    'react/jsx-curly-brace-presence': 'warn',
     'react/destructuring-assignment': 'off',
     'react/forbid-prop-types': 'off', // AirBnB doesn't want you to use PropTypes.object, and we agree normally. But there are times where you just want to pass on an opaque object to something else and forcing people to make a PropTypes.shape for it doesn't add any value. People should still encourage each other to use PropTypes.shape normally, when it makes sense, in code-review but we're not going to -2 because of it.
     'react/no-typos': 'off',
@@ -176,6 +180,12 @@ module.exports = {
         property: '__defineSetter__',
         message: 'Please use Object.defineProperty instead.',
       },
+      {
+        object: 'ReactDOM',
+        property: 'render',
+        message:
+          'React 18 deprecates ReactDOM.render, try using ReactDOM.createRoot and render instead.',
+      },
     ],
 
     'no-restricted-syntax': [
@@ -198,16 +208,16 @@ module.exports = {
     'jest/no-large-snapshots': 'warn',
 
     // These are things we care about
-    'react/jsx-filename-extension': ['error', {extensions: ['.js', 'ts', 'tsx']}],
+    'react/jsx-filename-extension': ['error', {extensions: ['jsx', 'tsx']}],
     'eslint-comments/no-unused-disable': 'error',
     'jest/no-disabled-tests': 'off',
     'import/extensions': [
       'error',
       'ignorePackages',
-      {js: 'never', ts: 'never', tsx: 'never', coffee: 'never'},
+      {js: 'never', ts: 'never', jsx: 'never', tsx: 'never', coffee: 'never'},
     ],
     'import/no-commonjs': 'off', // This is overridden where it counts
-    'import/no-extraneous-dependencies': ['error', {devDependencies: true}],
+    'import/no-extraneous-dependencies': 'off',
     'lodash/callback-binding': 'error',
     'lodash/collection-method-value': 'error',
     'lodash/collection-return': 'error',
@@ -233,16 +243,20 @@ module.exports = {
     '@typescript-eslint/no-shadow': 'warn', // AirBnB says 'error', we downgrade to just 'warn'
     'no-unused-vars': 'off',
     '@typescript-eslint/no-unused-vars': [
-      'error',
+      'warn',
       {
+        args: 'all',
         argsIgnorePattern: '^_',
-
+        caughtErrors: 'all',
+        caughtErrorsIgnorePattern: '^_',
+        destructuredArrayIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
         // allows `const {propIUse, propIDontUseButDontWantToPassOn, ...propsToPassOn} = this.props`
         ignoreRestSiblings: true,
       },
     ],
     semi: 'off',
-    '@typescript-eslint/semi': ['error', 'never'],
+    '@typescript-eslint/semi': ['warn', 'never'],
   },
   settings: {
     'import/resolver': {
@@ -255,6 +269,36 @@ module.exports = {
     },
   },
   overrides: [
+    {
+      files: ['ui/**/*Spec.js', 'ui/**/*Spec.jsx'],
+      extends: ['plugin:qunit/recommended', 'plugin:qunit/two'],
+      plugins: ['qunit'],
+      globals: {
+        module: true,
+        test: true,
+        equal: true,
+        ok: true,
+        sandbox: true,
+        sinon: true,
+        deepEqual: true,
+      },
+      env: {
+        qunit: true,
+      },
+      rules: {
+        'func-names': 'off',
+        'prefer-arrow-callback': 'off',
+        'jest/no-identical-title': 'off',
+        'qunit/no-identical-names': 'off',
+        'qunit/no-setup-teardown': 'off',
+        'qunit/no-global-assertions': 'off',
+        'qunit/no-global-module-test': 'off',
+        'qunit/require-expect': 'off',
+        'qunit/no-assert-logical-expression': 'error',
+        'qunit/no-commented-tests': 'error',
+        'qunit/no-compare-relation-boolean': 'error',
+      },
+    },
     {
       files: require('./jest.config').testMatch,
       plugins: ['jest'],
@@ -270,7 +314,7 @@ module.exports = {
       },
     },
     {
-      files: ['ui/**/*', 'spec/**/*', 'public/**/*'],
+      files: ['ui/**/*', 'spec/**/*', 'public/**/*', 'packages/**/*'],
       rules: {
         // Turn off the "absolute-first" rule. Until we get rid of the `compiled/` and `jsx/`
         // stuff and use real realitive paths it will tell you to do the wrong thing
@@ -283,11 +327,13 @@ module.exports = {
         'import/order': 'off', // because it thinks 'jsx/whatever' and 'compiled/baz' should go in their groups. we don't want to encourage people to do that just so they move them back together once  those everything is in same dir
         'import/no-unresolved': 'off',
         'import/no-webpack-loader-syntax': 'off',
+        'import/newline-after-import': 'warn',
 
         'jest/no-jasmine-globals': 'error',
         'no-constant-condition': 'error',
         'react-hooks/exhaustive-deps': 'error',
         'react/prefer-stateless-function': 'error',
+        'prefer-const': 'warn',
 
         // TODO: resolve and remove these overrides
         'react/no-string-refs': 'warn',
@@ -316,7 +362,6 @@ module.exports = {
       ],
       rules: {
         'react/prop-types': 'off',
-        'prefer-const': 'warn',
         'react/no-string-refs': 'warn',
       },
     },

@@ -1,7 +1,4 @@
-<h1 class="screenreader-only">
-  {{#if newRecord}}{{#t "new_calendar_event_header"}}New Calendar Event{{/t}}
-  {{else}}{{#t "edit_calendar_event_header"}}Edit Calendar Event{{/t}}{{/if}}
-</h1>
+<div id="header_component_root"></div>
 <form id="editCalendarEventFull" class="{{#if use_section_dates}}use_section_dates{{/if}}">
     <fieldset>
       <label for="calendar_event_title"><strong>{{#t}}Event Title{{/t}}</strong></label>
@@ -94,7 +91,9 @@
         {{#t}}Event Date{{/t}}
         {{datepickerScreenreaderPrompt 'date'}}
       </label>
-      <input type="text"
+      <input
+             id="calendar_event_date"
+             type="text"
              name="start_date"
              class="date_field start_date"
              value="{{start_date}}"
@@ -138,12 +137,16 @@
   </div>
 
   <fieldset>
-    <label class="location_label" for="calendar_event_location_name">{{#t "location_name"}}Location:{{/t}}</label>
+    <div id="recurring_event_frequency_picker"></div>
+  </fieldset>
+
+  <fieldset>
+    <label class="location_label" for="calendar_event_location_name">{{#t "location_name"}}Location{{/t}}</label>
     <input id="calendar_event_location_name" data-testid="calendar_event_location_name" name="location_name" size="30" maxlength="255" type="text" value="{{location_name}}"/>
   </fieldset>
 
   <fieldset>
-    <label class="location_label" for="calendar_event_location_address">{{#t "location_address"}}Address:{{/t}}</label>
+    <label class="location_label" for="calendar_event_location_address">{{#t "location_address"}}Address{{/t}}</label>
     <input id="calendar_event_location_address" data-testid="calendar_event_location_address" name="location_address" size="30" maxlength="255" type="text" value="{{location_address}}"/>
   </fieldset>
 
@@ -172,38 +175,39 @@
     </fieldset>
   {{/if}}
 
+  {{!-- Only show duplicate form if is new record; this is only enabled for section dates. --}}
   {{#if newRecord}}
-  <label class="label_with_checkbox" for="duplicate_event">
-    <input type="checkbox" id="duplicate_event" name="duplicate" value="true"/>
-    {{#t "repeat"}}Duplicate{{/t}}
-  </label>
-
-  <div class="duplicate_event_row duplicate_fields" style="display: none">
-    <label for="duplicate_interval">
-      <div class="duplicate_label">{{#t}}Every{{/t}}</div>
-      <input value="1" disabled="true" type="number" id="duplicate_interval" name="duplicate_interval" min="1" />
-      <select id="duplicate_frequency" name="duplicate_frequency">
-        <option value="daily">{{#t}}Day(s){{/t}}</option>
-        <option value="weekly" selected>{{#t}}Week(s){{/t}}</option>
-        <option value="monthly">{{#t}}Month(s){{/t}}</option>
-      </select>
+    <label class="label_with_checkbox" for="duplicate_event">
+      <input type="checkbox" id="duplicate_event" name="duplicate" value="true"/>
+      {{#t "repeat"}}Duplicate{{/t}}
     </label>
-  </div>
 
-  <div class="duplicate_event_row duplicate_fields" style="display: none">
-    <label for="duplicate_count">
-      <div class="duplicate_label" >{{#t}}For{{/t}}</div>
-      <input value="1" disabled="true" type="number" id="duplicate_count" name="duplicate_count" min="1" max="{{recurringEventLimit}}" />
-      <span class="occurences_div">{{#t}}additional occurrence(s){{/t}}</span>
-    </label>
-  </div>
+    <div class="duplicate_event_row duplicate_fields" style="display: none">
+      <label for="duplicate_interval">
+        <div class="duplicate_label">{{#t}}Every{{/t}}</div>
+        <input value="1" disabled="true" type="number" id="duplicate_interval" name="duplicate_interval" min="1" />
+        <select id="duplicate_frequency" name="duplicate_frequency">
+          <option value="daily">{{#t}}Day(s){{/t}}</option>
+          <option value="weekly" selected>{{#t}}Week(s){{/t}}</option>
+          <option value="monthly">{{#t}}Month(s){{/t}}</option>
+        </select>
+      </label>
+    </div>
 
-  <div class="duplicate_event_row duplicate_fields" style="display: none">
-    <label for="append_iterator" class="label_with_checkbox" data-tooltip title="{{#t}}Appends a number to the end of each event title (e.g. Event 1, Event 2, etc){{/t}}">
-      <input value="true" disabled="true" type="checkbox" id="append_iterator" name="append_iterator" />
-      {{#t}}Number each event{{/t}}
-    </label>
-  </div>
+    <div class="duplicate_event_row duplicate_fields" style="display: none">
+      <label for="duplicate_count">
+        <div class="duplicate_label" >{{#t}}For{{/t}}</div>
+        <input value="1" disabled="true" type="number" id="duplicate_count" name="duplicate_count" min="1" max="{{recurringEventLimit}}" />
+        <span class="occurences_div">{{#t}}additional occurrence(s){{/t}}</span>
+      </label>
+    </div>
+
+    <div class="duplicate_event_row duplicate_fields" style="display: none">
+      <label for="append_iterator" class="label_with_checkbox" data-tooltip title="{{#t}}Appends a number to the end of each event title (e.g. Event 1, Event 2, etc){{/t}}">
+        <input value="true" disabled="true" type="checkbox" id="append_iterator" name="append_iterator" />
+        {{#t}}Number each event{{/t}}
+      </label>
+    </div>
   {{/if}}
 
   <div class="form-actions">

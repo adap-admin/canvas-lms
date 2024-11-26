@@ -18,12 +18,12 @@
 
 import {extend} from '@canvas/backbone/utils'
 import Backbone from '@canvas/backbone'
-import _ from 'underscore'
+import {intersection, isEmpty, has} from 'lodash'
 import DefaultUrlMixin from '@canvas/backbone/DefaultUrlMixin'
 import AssignmentCollection from '../collections/AssignmentCollection'
 
 const isAdmin = function () {
-  return _.includes(ENV.current_user_roles, 'admin')
+  return ENV.current_user_is_admin
 }
 
 extend(AssignmentGroup, Backbone.Model)
@@ -93,7 +93,7 @@ AssignmentGroup.prototype.countRules = function () {
   for (const k in rules) {
     const v = rules[k]
     if (k === 'never_drop') {
-      count += _.intersection(aids, v).length
+      count += intersection(aids, v).length
     } else {
       count++
     }
@@ -126,8 +126,17 @@ AssignmentGroup.prototype.anyAssignmentInClosedGradingPeriod = function () {
   return this.get('any_assignment_in_closed_grading_period')
 }
 
-AssignmentGroup.prototype.hasIntegrationData = function () {
-  return !_.isEmpty(this.get('integration_data')) || !_.isEmpty(this.get('sis_source_id'))
+AssignmentGroup.prototype.hasSisSourceId = function () {
+  return !isEmpty(this.get('sis_source_id'))
+}
+
+AssignmentGroup.prototype.syncedWithSisCategory = function () {
+  // Only the syncedWithSisCategory flag check should be kept, once
+  // all customers have migrated to the new integration_data format
+  return (
+    has(this.get('integration_data'), 'sistemic.categoryMapping') ||
+    has(this.get('integration_data'), 'syncedWithSisCategory')
+  )
 }
 
 export default AssignmentGroup

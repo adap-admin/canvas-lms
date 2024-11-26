@@ -25,7 +25,10 @@ import tabTemplate from '../../jst/groupCategoryTab.handlebars'
 import awaitElement from '@canvas/await-element'
 import {renderCreateDialog} from '@canvas/groups/react/CreateOrEditSetModal'
 import 'jqueryui/tabs'
+import {initializeTopNavPortalWithDefaults} from '@canvas/top-navigation/react/TopNavPortalWithDefaults'
+import {useScope as useI18nScope} from '@canvas/i18n'
 
+const I18n = useI18nScope('GroupCategoriesView')
 export default class GroupCategoriesView extends CollectionView {
   static initClass() {
     this.prototype.template = groupCategoriesTemplate
@@ -54,6 +57,15 @@ export default class GroupCategoriesView extends CollectionView {
         })
       },
     })
+    const handleBreadCrumbSetter = ({getCrumbs, setCrumbs}) => {
+      const crumbs = getCrumbs()
+      crumbs.push({name: I18n.t('People'), url: 'users'})
+      crumbs.push({name: I18n.t('Groups'), url: ''})
+      setCrumbs(crumbs)
+    }
+    initializeTopNavPortalWithDefaults({
+      getBreadCrumbSetter: handleBreadCrumbSetter,
+    })
   }
 
   render() {
@@ -71,15 +83,29 @@ export default class GroupCategoriesView extends CollectionView {
       this.$tabs.find('ul.ui-tabs-nav').prepend(this.$static)
     }
     // setup the tabs
-    if (this.$tabs.data('tabs')) {
+    if (this.$tabs.data('ui-tabs')) {
       this.$tabs.tabs('refresh').show()
     } else {
       this.$tabs.tabs({cookie: {}}).show()
     }
 
+    requestAnimationFrame(() => {
+      const activeTab = this.$tabs.find('li.ui-tabs-active')
+      activeTab.trigger('focus')
+    })
+
     this.$tabs.tabs({
       beforeActivate(event, ui) {
+        ui.newTab.trigger('focus')
         return !ui.newTab.hasClass('static')
+      },
+      activate: (event, ui) => {
+        requestAnimationFrame(() => {
+          ui.oldTab.removeClass('ui-state-focus')
+          const activeItemHref = ui.newTab.find('a').attr('href')
+          window.history.replaceState({}, document.title, activeItemHref)
+          ui.newTab.trigger('focus')
+        })
       },
     })
 

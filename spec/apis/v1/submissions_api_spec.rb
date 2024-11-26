@@ -40,7 +40,7 @@ describe "Submissions API", type: :request do
     sub.workflow_state = "submitted"
     yield(sub) if block_given?
     sub.with_versioning(explicit: true) do
-      update_with_protected_attributes!(sub, { submitted_at: @submit_homework_time, created_at: @submit_homework_time }.merge(opts))
+      sub.update!({ submitted_at: @submit_homework_time, created_at: @submit_homework_time }.merge(opts))
     end
     sub.versions.reload.each { |v| Version.where(id: v).update_all(created_at: v.model.created_at) }
     sub
@@ -51,7 +51,7 @@ describe "Submissions API", type: :request do
       @student1 = user_factory(active_all: true)
       course_with_teacher(active_all: true)
       @default_section = @course.default_section
-      @section = factory_with_protected_attributes(@course.course_sections, sis_source_id: "my-section-sis-id", name: "section2")
+      @section = @course.course_sections.create!(sis_source_id: "my-section-sis-id", name: "section2")
       @course.enroll_user(@student1, "StudentEnrollment", section: @section).accept!
 
       quiz = Quizzes::Quiz.create!(title: "quiz1", context: @course)
@@ -94,7 +94,7 @@ describe "Submissions API", type: :request do
                  section_id: @default_section.id.to_s },
                { student_ids: [@student1.id] },
                {},
-               expected_status: 401)
+               expected_status: 403)
 
       json = api_call(:get,
                       "/api/v1/sections/sis_section_id:my-section-sis-id/students/submissions",
@@ -130,7 +130,7 @@ describe "Submissions API", type: :request do
 
     shared_examples_for "enrollment_state" do
       it "scopes call to enrollment_state" do
-        e = @section.enrollments.where(user_id: @student1.id).take
+        e = @section.enrollments.find_by(user_id: @student1.id)
         json = api_call(:get,
                         "/api/v1/sections/sis_section_id:my-section-sis-id/students/submissions",
                         { controller: "submissions_api",
@@ -657,7 +657,7 @@ describe "Submissions API", type: :request do
       it "doesn't let you attach files you don't have permission for" do
         course_with_student_logged_in(course: @course, active_all: true)
         put_comment_attachment
-        assert_status(401)
+        assert_forbidden
       end
 
       it "works" do
@@ -675,7 +675,9 @@ describe "Submissions API", type: :request do
     course_with_teacher(active_all: true)
     @course.enroll_student(@student).accept!
     @context = @course
-    @assignment = factory_with_protected_attributes(@course.assignments, { title: "assignment1", submission_types: "discussion_topic", discussion_topic: discussion_topic_model })
+    @assignment = @course.assignments.create!(title: "assignment1",
+                                              submission_types: "discussion_topic",
+                                              discussion_topic: discussion_topic_model)
 
     e1 = @topic.discussion_entries.create!(message: "main entry", user: @user)
     se1 = @topic.discussion_entries.create!(message: "sub 1", user: @student, parent_entry: e1)
@@ -756,7 +758,9 @@ describe "Submissions API", type: :request do
     @group = @course.groups.create(name: "Group", group_category:)
     @group.add_user(@student)
     @context = @course
-    @assignment = factory_with_protected_attributes(@course.assignments, { title: "assignment1", submission_types: "discussion_topic", discussion_topic: discussion_topic_model(group_category: @group.group_category) })
+    @assignment = @course.assignments.create!(title: "assignment1",
+                                              submission_types: "discussion_topic",
+                                              discussion_topic: discussion_topic_model(group_category: @group.group_category))
     @topic.refresh_subtopics # since the DJ won't happen in time
     @child_topic = @group.discussion_topics.where(root_topic_id: @topic).first
 
@@ -806,6 +810,32 @@ describe "Submissions API", type: :request do
          "rating_count" => nil,
        }].sort_by { |h| h["user_id"] }
     )
+  end
+
+  context "checkpointed discussions" do
+    before do
+      course_with_teacher(active_all: true)
+      @student1 = student_in_course(course: @course, active_enrollment: true).user
+      @course.root_account.enable_feature!(:discussion_checkpoints)
+      @assignment = @course.assignments.create!(has_sub_assignments: true)
+      @assignment.sub_assignments.create!(context: @course, sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC, due_at: 2.days.from_now)
+      @assignment.sub_assignments.create!(context: @course, sub_assignment_tag: CheckpointLabels::REPLY_TO_ENTRY, due_at: 3.days.from_now)
+      @topic = @course.discussion_topics.create!(assignment: @assignment, reply_to_entry_required_count: 4)
+    end
+
+    it "returns sub_assignment_submissions for checkpointed discussions submissions" do
+      json = api_call(:get,
+                      "/api/v1/courses/#{@course.id}/assignments/#{@assignment.id}/submissions/#{@student.id}.json",
+                      { controller: "submissions_api",
+                        action: "show",
+                        format: "json",
+                        course_id: @course.id.to_s,
+                        assignment_id: @assignment.id.to_s,
+                        user_id: @student1.id.to_s },
+                      include: %w[sub_assignment_submissions])
+
+      expect(json["sub_assignment_submissions"].size).to eq 2
+    end
   end
 
   def submission_with_comment
@@ -930,7 +960,9 @@ describe "Submissions API", type: :request do
     course_with_teacher(active_all: true)
     @course.enroll_student(@student).accept!
     @context = @course
-    @assignment = factory_with_protected_attributes(@course.assignments, { title: "assignment1", submission_types: "discussion_topic", discussion_topic: discussion_topic_model })
+    @assignment = @course.assignments.create!(title: "assignment1",
+                                              submission_types: "discussion_topic",
+                                              discussion_topic: discussion_topic_model)
 
     e1 = @topic.discussion_entries.create!(message: "main entry", user: @user)
     @topic.discussion_entries.create!(message: "sub 1", user: @student, parent_entry: e1)
@@ -1150,9 +1182,10 @@ describe "Submissions API", type: :request do
                           "url" => nil,
                           "submission_type" => "online_text_entry",
                           "user_id" => student1.id,
+                          "custom_grade_status_id" => nil,
                           "submission_comments" =>
          [{ "comment" => "Well here's the thing...",
-            "attempt" => nil,
+            "attempt" => 1,
             "media_comment" => {
               "media_id" => "3232",
               "media_type" => "audio",
@@ -1180,6 +1213,7 @@ describe "Submissions API", type: :request do
                           "missing" => false,
                           "late_policy_status" => nil,
                           "seconds_late" => 0,
+                          "sticker" => nil,
                           "points_deducted" => nil,
                           "extra_attempts" => nil
                         })
@@ -1195,7 +1229,7 @@ describe "Submissions API", type: :request do
                    assignment_id: a1.id.to_s,
                    user_id: student1.id.to_s },
                  { include: %w[submission_comments] })
-    assert_status(401)
+    assert_forbidden
   end
 
   it "returns grading information for observers" do
@@ -1233,6 +1267,26 @@ describe "Submissions API", type: :request do
                         course_id: @course.id.to_s,
                         assignment_id: a1.id.to_s,
                         user_id: student1.id.to_s })
+      json["body"]
+    end
+  end
+
+  it "apis translate online_text_entry submissions without verifiers" do
+    student1 = user_factory(active_all: true)
+    course_with_teacher(active_all: true)
+    @course.enroll_student(student1).accept!
+    a1 = @course.assignments.create!(title: "assignment1", grading_type: "letter_grade", points_possible: 15)
+    should_translate_user_content(@course, false) do |content|
+      submit_homework(a1, student1, body: content)
+      json = api_call(:get,
+                      "/api/v1/courses/#{@course.id}/assignments/#{a1.id}/submissions/#{student1.id}.json",
+                      { controller: "submissions_api",
+                        action: "show",
+                        format: "json",
+                        course_id: @course.id.to_s,
+                        assignment_id: a1.id.to_s,
+                        user_id: student1.id.to_s,
+                        no_verifiers: true })
       json["body"]
     end
   end
@@ -1313,6 +1367,7 @@ describe "Submissions API", type: :request do
     media_object(media_id: "54321", context: student1, user: student1)
     submit_homework(a1, student1, media_comment_id: "54321", media_comment_type: "video")
     sub1 = submit_homework(a1, student1) { |s| s.attachments = [attachment_model(context: student1, folder: nil)] }
+    sub1.update!(sticker: "trophy")
 
     sub2a1 = attachment_model(context: student2, filename: "snapshot.png", content_type: "image/png")
     sub2 = submit_homework(a1, student2, url: "http://www.instructure.com") do |s|
@@ -1357,6 +1412,7 @@ describe "Submissions API", type: :request do
          "assignment_id" => a1.id,
          "submitted_at" => "1970-01-01T03:00:00Z",
          "cached_due_date" => nil,
+         "custom_grade_status_id" => nil,
          "preview_url" => "http://www.example.com/courses/#{@course.id}/assignments/#{a1.id}/submissions/#{student1.id}?preview=1&version=3",
          "redo_request" => false,
          "grade_matches_current_submission" => true,
@@ -1400,6 +1456,7 @@ describe "Submissions API", type: :request do
             "assignment_id" => a1.id,
             "submitted_at" => "1970-01-01T01:00:00Z",
             "cached_due_date" => nil,
+            "custom_grade_status_id" => nil,
             "attempt" => 1,
             "url" => nil,
             "submission_type" => "online_text_entry",
@@ -1414,6 +1471,7 @@ describe "Submissions API", type: :request do
             "missing" => false,
             "late_policy_status" => nil,
             "seconds_late" => 0,
+            "sticker" => nil,
             "points_deducted" => nil,
             "extra_attempts" => nil },
           { "id" => sub1.id,
@@ -1434,6 +1492,7 @@ describe "Submissions API", type: :request do
             "body" => "test!",
             "submitted_at" => "1970-01-01T02:00:00Z",
             "cached_due_date" => nil,
+            "custom_grade_status_id" => nil,
             "attempt" => 2,
             "url" => nil,
             "submission_type" => "online_text_entry",
@@ -1448,6 +1507,7 @@ describe "Submissions API", type: :request do
             "missing" => false,
             "late_policy_status" => nil,
             "seconds_late" => 0,
+            "sticker" => nil,
             "points_deducted" => nil,
             "extra_attempts" => nil },
           { "id" => sub1.id,
@@ -1494,6 +1554,7 @@ describe "Submissions API", type: :request do
             "body" => "test!",
             "submitted_at" => "1970-01-01T03:00:00Z",
             "cached_due_date" => nil,
+            "custom_grade_status_id" => nil,
             "attempt" => 3,
             "url" => nil,
             "submission_type" => "online_text_entry",
@@ -1508,6 +1569,7 @@ describe "Submissions API", type: :request do
             "missing" => false,
             "late_policy_status" => nil,
             "seconds_late" => 0,
+            "sticker" => "trophy",
             "points_deducted" => nil,
             "extra_attempts" => nil }],
          "attempt" => 3,
@@ -1516,7 +1578,7 @@ describe "Submissions API", type: :request do
          "user_id" => student1.id,
          "submission_comments" =>
          [{ "comment" => "Well here's the thing...",
-            "attempt" => nil,
+            "attempt" => 3,
             "media_comment" => {
               "media_type" => "audio",
               "media_id" => "3232",
@@ -1550,6 +1612,7 @@ describe "Submissions API", type: :request do
          "missing" => false,
          "late_policy_status" => nil,
          "seconds_late" => 0,
+         "sticker" => "trophy",
          "points_deducted" => nil },
        { "id" => sub2.id,
          "grade" => "F",
@@ -1558,6 +1621,7 @@ describe "Submissions API", type: :request do
          "excused" => sub2.excused,
          "grader_id" => @teacher.id,
          "cached_due_date" => nil,
+         "custom_grade_status_id" => nil,
          "graded_at" => sub2.graded_at.as_json,
          "posted_at" => sub2.posted_at.as_json,
          "assignment_id" => a1.id,
@@ -1579,6 +1643,7 @@ describe "Submissions API", type: :request do
             "body" => nil,
             "submitted_at" => "1970-01-01T04:00:00Z",
             "cached_due_date" => nil,
+            "custom_grade_status_id" => nil,
             "attempt" => 1,
             "url" => "http://www.instructure.com",
             "submission_type" => "online_url",
@@ -1619,6 +1684,7 @@ describe "Submissions API", type: :request do
             "missing" => false,
             "late_policy_status" => nil,
             "seconds_late" => 0,
+            "sticker" => nil,
             "points_deducted" => nil,
             "extra_attempts" => nil }],
          "attempt" => 1,
@@ -1661,6 +1727,7 @@ describe "Submissions API", type: :request do
          "missing" => false,
          "late_policy_status" => nil,
          "seconds_late" => 0,
+         "sticker" => nil,
          "points_deducted" => nil }]
     expect(json.sort_by { |h| h["user_id"] }).to eql(res.sort_by { |h| h["user_id"] })
   end
@@ -2412,7 +2479,7 @@ describe "Submissions API", type: :request do
                { controller: "submissions_api", action: "for_students", format: "json", section_id: @section2.to_param },
                { student_ids: [@student1.id, @student2.id], grouped: true },
                {},
-               { expected_status: 401 })
+               { expected_status: 403 })
     end
   end
 
@@ -2543,7 +2610,7 @@ describe "Submissions API", type: :request do
                                user_id: @student.id.to_s },
                              { include: %w[submission_comments rubric_assessment] },
                              {},
-                             expected_status: 401)
+                             expected_status: 403)
           end
 
           it "does not return the submission, even if it is graded" do
@@ -2634,7 +2701,7 @@ describe "Submissions API", type: :request do
                              user_id: @student.id.to_s },
                            { include: %w[full_rubric_assessment] },
                            {},
-                           expected_status: 401)
+                           expected_status: 403)
         end
       end
     end
@@ -3024,7 +3091,7 @@ describe "Submissions API", type: :request do
                            course_id: @course.to_param },
                          { student_ids: [rando.id] },
                          {},
-                         { expected_status: 401 })
+                         { expected_status: 403 })
       end
     end
 
@@ -3107,11 +3174,11 @@ describe "Submissions API", type: :request do
                    student_ids: [@student1.to_param, @student2.to_param] },
                  {},
                  {},
-                 expected_status: 401)
+                 expected_status: 403)
       end
 
       it "errors if too many students requested" do
-        allow(Api).to receive(:max_per_page).and_return(0)
+        stub_const("Api::MAX_PER_PAGE", 0)
         @user = @student1
         api_call(:get,
                  "/api/v1/courses/#{@course.id}/students/submissions.json",
@@ -3261,7 +3328,7 @@ describe "Submissions API", type: :request do
                    course_id: @course.to_param },
                  { student_ids: [@student1.id, @student2.id, student3.id] },
                  {},
-                 { expected_status: 401 })
+                 { expected_status: 403 })
       end
 
       it "does not work with a non-active ObserverEnrollment" do
@@ -3275,7 +3342,7 @@ describe "Submissions API", type: :request do
                    course_id: @course.to_param },
                  { student_ids: [@student1.id, @student2.id] },
                  {},
-                 { expected_status: 401 })
+                 { expected_status: 403 })
       end
     end
 
@@ -3360,6 +3427,29 @@ describe "Submissions API", type: :request do
         expect(json.dig("submission_comments", 0, "author_name")).to eq "Anonymous User"
       end
     end
+
+    it "handles updating the submission sticker" do
+      submission = @assignment.submission_for_student(@student)
+      expect do
+        api_call(
+          :put,
+          "/api/v1/courses/#{@course.id}/assignments/#{@assignment.id}/anonymous_submissions/#{submission.anonymous_id}.json",
+          {
+            controller: "submissions_api",
+            action: "update_anonymous",
+            format: "json",
+            course_id: @course.id.to_s,
+            assignment_id: @assignment.id.to_s,
+            anonymous_id: submission.anonymous_id.to_s
+          },
+          {
+            submission: { sticker: "trophy" }
+          }
+        )
+      end.to change {
+        submission.reload.sticker
+      }.from(nil).to("trophy")
+    end
   end
 
   describe "#update" do
@@ -3373,7 +3463,7 @@ describe "Submissions API", type: :request do
       )
     end
 
-    it "allows grading an uncreated submission" do
+    it "allows grading a student that has not submitted" do
       json = api_call(
         :put,
         "/api/v1/courses/#{@course.id}/assignments/#{@assignment.id}/submissions/#{@student.id}.json",
@@ -3393,6 +3483,55 @@ describe "Submissions API", type: :request do
       )
 
       expect(Submission.count).to eq 1
+      expect(json["grade"]).to eq "B"
+      expect(json["score"]).to eq 12.9
+    end
+
+    it "allows grading an assigned student whose placeholder submission object has not yet been created" do
+      # This simulates a scenario where the delayed job to create the
+      # assigned student's submission has not yet completed
+      @assignment.submissions.find_by(user: @student).destroy
+      json = api_call(
+        :put,
+        "/api/v1/courses/#{@course.id}/assignments/#{@assignment.id}/submissions/#{@student.id}.json",
+        {
+          controller: "submissions_api",
+          action: "update",
+          format: "json",
+          course_id: @course.id.to_s,
+          assignment_id: @assignment.id.to_s,
+          user_id: @student.id.to_s
+        },
+        {
+          submission: {
+            posted_grade: "B"
+          },
+        }
+      )
+      expect(@assignment.reload.submissions.where(user: @student).exists?).to be true
+      expect(json["grade"]).to eq "B"
+      expect(json["score"]).to eq 12.9
+    end
+
+    it "allows grading an assigned student without visibility" do
+      @course.enrollments.find_by(user: @student).deactivate
+      json = api_call(
+        :put,
+        "/api/v1/courses/#{@course.id}/assignments/#{@assignment.id}/submissions/#{@student.id}.json",
+        {
+          controller: "submissions_api",
+          action: "update",
+          format: "json",
+          course_id: @course.id.to_s,
+          assignment_id: @assignment.id.to_s,
+          user_id: @student.id.to_s
+        },
+        {
+          submission: {
+            posted_grade: "B"
+          },
+        }
+      )
       expect(json["grade"]).to eq "B"
       expect(json["score"]).to eq 12.9
     end
@@ -3550,6 +3689,163 @@ describe "Submissions API", type: :request do
       }.by(1)
     end
 
+    describe "checkpointed discussions" do
+      before do
+        @course.root_account.enable_feature!(:discussion_checkpoints)
+        assignment = @course.assignments.create!(has_sub_assignments: true)
+        assignment.sub_assignments.create!(context: @course, sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC, due_at: 2.days.from_now)
+        assignment.sub_assignments.create!(context: @course, sub_assignment_tag: CheckpointLabels::REPLY_TO_ENTRY, due_at: 3.days.from_now)
+        @topic = @course.discussion_topics.create!(assignment:, reply_to_entry_required_count: 1)
+      end
+
+      let(:api_call_args) do
+        [
+          :put,
+          "/api/v1/courses/#{@course.id}/assignments/#{@topic.assignment_id}/submissions/#{@student.id}.json",
+          {
+            controller: "submissions_api",
+            action: "update",
+            format: "json",
+            course_id: @course.id.to_s,
+            assignment_id: @topic.assignment_id.to_s,
+            user_id: @student.id.to_s
+          }
+        ]
+      end
+
+      let(:reply_to_topic_submission) do
+        @topic.reply_to_topic_checkpoint.submissions.find_by(user: @student)
+      end
+
+      it "supports grading checkpoints" do
+        api_call(
+          *api_call_args,
+          submission: { posted_grade: 10 },
+          sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC
+        )
+        expect(response).to be_successful
+        expect(reply_to_topic_submission.score).to eq 10
+      end
+
+      it "supports marking checkpoints as excused" do
+        api_call(
+          *api_call_args,
+          submission: { excuse: true },
+          sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC
+        )
+        expect(response).to be_successful
+        expect(reply_to_topic_submission.excused).to be_truthy
+      end
+
+      it "supports marking checkpoints as missing" do
+        api_call(
+          *api_call_args,
+          submission: { late_policy_status: "missing" },
+          sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC
+        )
+        expect(response).to be_successful
+        expect(reply_to_topic_submission.late_policy_status).to eq "missing"
+      end
+
+      it "supports marking checkpoints as late and updating the seconds_late_override" do
+        api_call(
+          *api_call_args,
+          submission: { late_policy_status: "late", seconds_late_override: 100 },
+          sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC
+        )
+        expect(response).to be_successful
+        expect(reply_to_topic_submission.late_policy_status).to eq "late"
+        expect(reply_to_topic_submission.seconds_late_override).to eq 100
+      end
+
+      it "raises an error if no sub assignment tag is provided" do
+        api_call(
+          *api_call_args,
+          submission: { posted_grade: 10 }
+        )
+        expect(response).to have_http_status :bad_request
+        expect(json_parse.fetch("error")).to eq "Must provide a valid sub assignment tag when grading checkpointed discussions"
+      end
+
+      it "ignores checkpoints when the feature flag is disabled" do
+        @course.root_account.disable_feature!(:discussion_checkpoints)
+        api_call(
+          *api_call_args,
+          submission: { posted_grade: 10 },
+          sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC
+        )
+        expect(response).to be_successful
+        expect(reply_to_topic_submission.score).to be_nil
+        expect(@topic.assignment.submissions.find_by(user: @student).score).to eq 10
+      end
+    end
+
+    describe "stickers" do
+      let(:update_sticker_api_call) do
+        api_call(
+          :put,
+          "/api/v1/courses/#{@course.id}/assignments/#{@assignment.id}/submissions/#{@student.id}.json",
+          {
+            controller: "submissions_api",
+            action: "update",
+            format: "json",
+            course_id: @course.id.to_s,
+            assignment_id: @assignment.id.to_s,
+            user_id: @student.id.to_s
+          },
+          {
+            submission: { sticker: "trophy" }
+          }
+        )
+      end
+
+      it "handles updating the submission sticker" do
+        submission = @assignment.submission_for_student(@student)
+        expect { update_sticker_api_call }.to change {
+          submission.reload.sticker
+        }.from(nil).to("trophy")
+      end
+
+      it "does not update the grader when the sticker is set" do
+        submission = @assignment.submission_for_student(@student)
+        expect { update_sticker_api_call }.not_to change {
+          submission.reload.grader
+        }.from(nil)
+      end
+
+      context "group assignments" do
+        before do
+          @student2 = @course.enroll_student(User.create!, enrollment_state: :active).user
+          group_category = @course.group_categories.create!(name: "Category")
+          group = @course.groups.create!(name: "Group", group_category:)
+          group.add_user(@student, "accepted")
+          group.add_user(@student2, "accepted")
+          @assignment.update!(group_category:, grade_group_students_individually: false)
+        end
+
+        let(:student_submissions) do
+          @assignment.submissions.where(user: [@student, @student2])
+        end
+
+        it "assigns the sticker to all group members" do
+          expect { update_sticker_api_call }.to change {
+            student_submissions.pluck(:user_id, :sticker).to_h
+          }
+            .from({ @student.id => nil, @student2.id => nil })
+            .to({ @student.id => "trophy", @student2.id => "trophy" })
+        end
+
+        it "assigns the sticker to only one student if 'grade group students individually' is set" do
+          @assignment.update!(grade_group_students_individually: true)
+          expect { update_sticker_api_call }.to change {
+            student_submissions.pluck(:user_id, :sticker).to_h
+          }
+            .from({ @student.id => nil, @student2.id => nil })
+            .to({ @student.id => "trophy", @student2.id => nil })
+        end
+      end
+    end
+
     context "grading scheme with numerics in names" do
       before do
         @standard = @course.grading_standards.create!(title: "course standard", standard_data: { a: { name: "5", value: "90" }, b: { name: "4", value: "70" }, c: { name: "3", value: "50" }, d: { name: "Revision required/Komplettering", value: "25" }, e: { name: "U", value: "0" } })
@@ -3635,6 +3931,12 @@ describe "Submissions API", type: :request do
 
     context "group assignments" do
       before do
+        @admin = account_admin_user(account: @course.root_account)
+        @custom_status = @course.root_account.custom_grade_statuses.create!(
+          color: "#BBB",
+          created_by: @admin,
+          name: "yolo"
+        )
         @student2 = @course.enroll_student(User.create!, enrollment_state: :active).user
         group_category = @course.group_categories.create!(name: "Category")
         group = @course.groups.create!(name: "Group", group_category:)
@@ -3663,6 +3965,55 @@ describe "Submissions API", type: :request do
 
         submission = @assignment.submission_for_student(@student2)
         expect(submission.late_policy_status).to eq "missing"
+      end
+
+      it "can set a custom status on a group member's submission" do
+        api_call(
+          :put,
+          "/api/v1/courses/#{@course.id}/assignments/#{@assignment.id}/submissions/#{@student.id}.json",
+          {
+            controller: "submissions_api",
+            action: "update",
+            format: "json",
+            course_id: @course.id.to_s,
+            assignment_id: @assignment.id.to_s,
+            user_id: @student.id.to_s
+          },
+          {
+            submission: {
+              custom_grade_status_id: @custom_status.id.to_s
+            }
+          }
+        )
+
+        submission = @assignment.submission_for_student(@student2)
+        expect(submission.custom_grade_status_id).to eq @custom_status.id
+      end
+
+      it "does not set a custom status for the whole group when assignment is graded individually" do
+        @assignment.update!(grade_group_students_individually: true)
+        api_call(
+          :put,
+          "/api/v1/courses/#{@course.id}/assignments/#{@assignment.id}/submissions/#{@student.id}.json",
+          {
+            controller: "submissions_api",
+            action: "update",
+            format: "json",
+            course_id: @course.id.to_s,
+            assignment_id: @assignment.id.to_s,
+            user_id: @student.id.to_s
+          },
+          {
+            submission: {
+              custom_grade_status_id: @custom_status.id.to_s
+            }
+          }
+        )
+
+        first_submission = @assignment.submission_for_student(@student)
+        expect(first_submission.custom_grade_status_id).to eq @custom_status.id
+        second_submission = @assignment.submission_for_student(@student2)
+        expect(second_submission.custom_grade_status_id).to be_nil
       end
 
       it "can set seconds_late_override on a group member's submission" do
@@ -3761,6 +4112,38 @@ describe "Submissions API", type: :request do
       submission = @assignment.submission_for_student(@student)
       expect(submission.late_policy_status).to eq "missing"
       expect(json["late_policy_status"]).to eq "missing"
+    end
+
+    it "can set a custom status on a submission" do
+      admin = account_admin_user(account: @course.root_account)
+      custom_status = @course.root_account.custom_grade_statuses.create!(
+        color: "#BBB",
+        created_by: admin,
+        name: "yolo"
+      )
+      submission = @assignment.submission_for_student(@student)
+      submission.update!(late_policy_status: "missing")
+      api_call(
+        :put,
+        "/api/v1/courses/#{@course.id}/assignments/#{@assignment.id}/submissions/#{@student.id}.json",
+        {
+          controller: "submissions_api",
+          action: "update",
+          format: "json",
+          course_id: @course.id.to_s,
+          assignment_id: @assignment.id.to_s,
+          user_id: @student.id.to_s
+        },
+        {
+          submission: {
+            custom_grade_status_id: custom_status.id.to_s
+          }
+        }
+      )
+
+      submission.reload
+      expect(submission.late_policy_status).to be_nil
+      expect(submission.custom_grade_status_id).to eq custom_status.id
     end
 
     it "can set seconds_late_override on a submission along with the late_policy_status of late" do
@@ -4100,7 +4483,7 @@ describe "Submissions API", type: :request do
                    user_id: student.id.to_s },
                  { comment: { text_comment: "witty remark" },
                    submission: { posted_grade: "B" } })
-    assert_status(401)
+    assert_forbidden
   end
 
   it "does not allow grading of a student not assigned to the assignment" do
@@ -4122,7 +4505,7 @@ describe "Submissions API", type: :request do
                    user_id: student2.id.to_s },
                  { comment: { text_comment: "witty remark" },
                    submission: { posted_grade: "B" } })
-    assert_status(401)
+    assert_forbidden
   end
 
   it "does not allow rubricking by a student" do
@@ -4143,7 +4526,7 @@ describe "Submissions API", type: :request do
                    user_id: student.id.to_s },
                  { comment: { text_comment: "witty remark" },
                    rubric_assessment: { criteria: { points: 5 } } })
-    assert_status(401)
+    assert_forbidden
   end
 
   context "moderated grading" do
@@ -4221,7 +4604,7 @@ describe "Submissions API", type: :request do
           },
         }
       )
-      assert_status(401)
+      assert_forbidden
     end
 
     it "allows posting provisional grades of a moderated assignment whose grades have not been published" do
@@ -4859,7 +5242,7 @@ describe "Submissions API", type: :request do
                course_id: @course.id.to_s },
              { student_ids: [s1.user_id, s2.user_id], grouped: 1 },
              {},
-             expected_status: 401)
+             expected_status: 403)
 
     # try querying the other section directly
     api_call(:get,
@@ -4870,7 +5253,7 @@ describe "Submissions API", type: :request do
                section_id: section2.id.to_s },
              { student_ids: [s1.user_id, s2.user_id], grouped: 1 },
              {},
-             expected_status: 401)
+             expected_status: 403)
 
     # grade the s1 submission, succeeds because the section is the same
     api_call(:put,
@@ -4965,334 +5348,448 @@ describe "Submissions API", type: :request do
   end
 
   context "create" do
-    before :once do
-      course_with_student(active_all: true)
-      assignment_model(course: @course, submission_types: "online_url", points_possible: 12)
-      @url = "/api/v1/courses/#{@course.id}/assignments/#{@assignment.id}/submissions"
-      @args = { controller: "submissions", action: "create", format: "json", course_id: @course.id.to_s, assignment_id: @assignment.id.to_s }
-    end
+    context "individual (non-group) submissions" do
+      before :once do
+        course_with_student(active_all: true)
+        assignment_model(course: @course, submission_types: "online_url", points_possible: 12)
+        @url = "/api/v1/courses/#{@course.id}/assignments/#{@assignment.id}/submissions"
+        @args = { controller: "submissions", action: "create", format: "json", course_id: @course.id.to_s, assignment_id: @assignment.id.to_s }
+      end
 
-    it "rejects a submission by a non-student" do
-      @user = course_with_teacher(course: @course).user
-      api_call(:post, @url, @args, { submission: { submission_type: "online_url", url: "www.example.com" } }, {}, expected_status: 401)
-    end
+      it "rejects a submission by a non-student" do
+        @user = course_with_teacher(course: @course).user
+        api_call(:post, @url, @args, { submission: { submission_type: "online_url", url: "www.example.com" } }, {}, expected_status: 403)
+      end
 
-    it "rejects a request with an invalid submission_type" do
-      json = api_call(:post, @url, @args, { submission: { submission_type: "blergh" } }, {}, expected_status: 400)
-      expect(json["message"]).to eq "Invalid submission[submission_type] given"
-    end
+      it "rejects a request with an invalid submission_type" do
+        json = api_call(:post, @url, @args, { submission: { submission_type: "blergh" } }, {}, expected_status: 400)
+        expect(json["message"]).to eq "Invalid submission[submission_type] given"
+      end
 
-    it "rejects a submission_type not allowed by the assignment" do
-      json = api_call(:post, @url, @args, { submission: { submission_type: "media_recording" } }, {}, expected_status: 400)
-      expect(json["message"]).to eq "Invalid submission[submission_type] given"
-    end
+      it "rejects a submission_type not allowed by the assignment" do
+        json = api_call(:post, @url, @args, { submission: { submission_type: "media_recording" } }, {}, expected_status: 400)
+        expect(json["message"]).to eq "Invalid submission[submission_type] given"
+      end
 
-    it "rejects mismatched submission_type and params" do
-      json = api_call(:post, @url, @args, { submission: { submission_type: "online_url", body: "some html text" } }, {}, expected_status: 400)
-      expect(json["message"]).to eq "Invalid parameters for submission_type online_url. Required: submission[url]"
-    end
+      it "rejects mismatched submission_type and params" do
+        json = api_call(:post, @url, @args, { submission: { submission_type: "online_url", body: "some html text" } }, {}, expected_status: 400)
+        expect(json["message"]).to eq "Invalid parameters for submission_type online_url. Required: submission[url]"
+      end
 
-    it "works with section ids" do
-      @section = @course.default_section
-      api_call(:post, "/api/v1/sections/#{@section.id}/assignments/#{@assignment.id}/submissions", { controller: "submissions", action: "create", format: "json", section_id: @section.id.to_s, assignment_id: @assignment.id.to_s }, { submission: { submission_type: "online_url", url: "www.example.com/a/b?q=1" } }, {}, expected_status: 201)
-      @submission = @assignment.submissions.find_by!(user: @user)
-      expect(@submission.url).to eq "http://www.example.com/a/b?q=1"
-    end
-
-    describe "valid submissions" do
-      def do_submit(opts)
-        json = api_call(:post, @url, @args, { submission: opts })
-        expect(response["Location"]).to eq "http://www.example.com/api/v1/courses/#{@course.id}/assignments/#{@assignment.id}/submissions/#{@user.id}"
+      it "works with section ids" do
+        @section = @course.default_section
+        api_call(:post, "/api/v1/sections/#{@section.id}/assignments/#{@assignment.id}/submissions", { controller: "submissions", action: "create", format: "json", section_id: @section.id.to_s, assignment_id: @assignment.id.to_s }, { submission: { submission_type: "online_url", url: "www.example.com/a/b?q=1" } }, {}, expected_status: 201)
         @submission = @assignment.submissions.find_by!(user: @user)
-        expect(json.slice("user_id", "assignment_id", "score", "grade")).to eq({
-                                                                                 "user_id" => @user.id,
-                                                                                 "assignment_id" => @assignment.id,
-                                                                                 "score" => nil,
-                                                                                 "grade" => nil,
-                                                                               })
-        json
-      end
-
-      it "creates a url submission" do
-        json = do_submit(submission_type: "online_url", url: "www.example.com/a/b?q=1")
         expect(@submission.url).to eq "http://www.example.com/a/b?q=1"
-        expect(json["url"]).to eq @submission.url
       end
 
-      it "creates with an initial comment" do
-        json = api_call(:post, @url, @args, { comment: { text_comment: "ohai teacher" }, submission: { submission_type: "online_url", url: "http://www.example.com/a/b" } })
-        @submission = @assignment.submissions.where(user: @user).first
-        expect(@submission.submission_comments.size).to eq 1
-        expect(@submission.submission_comments.first.attributes.slice("author_id", "comment")).to eq({
-                                                                                                       "author_id" => @user.id,
-                                                                                                       "comment" => "ohai teacher",
-                                                                                                     })
-        expect(json["url"]).to eq "http://www.example.com/a/b"
-      end
+      describe "valid submissions" do
+        def do_submit(opts)
+          json = api_call(:post, @url, @args, { submission: opts })
+          expect(response["Location"]).to eq "http://www.example.com/api/v1/courses/#{@course.id}/assignments/#{@assignment.id}/submissions/#{@user.id}"
+          @submission = @assignment.submissions.find_by!(user: @user)
+          expect(json.slice("user_id", "assignment_id", "score", "grade")).to eq({
+                                                                                   "user_id" => @user.id,
+                                                                                   "assignment_id" => @assignment.id,
+                                                                                   "score" => nil,
+                                                                                   "grade" => nil,
+                                                                                 })
+          json
+        end
 
-      it "creates a online text submission" do
-        @assignment.update(submission_types: "online_text_entry")
-        json = do_submit(submission_type: "online_text_entry", body: <<~HTML)
-          <p>
-            This is <i>some</i> text. The <script src='evil.com'></script> sanitization will take effect.
-          </p>
-        HTML
-        expect(json["body"]).to eq <<~HTML
-          <p>
-            This is <i>some</i> text. The  sanitization will take effect.
-          </p>
-        HTML
-        expect(json["body"]).to eq @submission.body
-      end
+        it "creates a url submission" do
+          json = do_submit(submission_type: "online_url", url: "www.example.com/a/b?q=1")
+          expect(@submission.url).to eq "http://www.example.com/a/b?q=1"
+          expect(json["url"]).to eq @submission.url
+        end
 
-      it "creates a student annotation submission" do
-        a1 = attachment_model(context: @course)
-        @assignment.update(submission_types: "student_annotation", annotatable_attachment_id: a1.id)
-        json = api_call(:post, @url, @args, { submission: { submission_type: "student_annotation", annotatable_attachment_id: a1.id } }, {}, expected_status: 201)
-        expect(json["workflow_state"]).to eq "submitted"
-      end
+        it "creates with an initial comment" do
+          json = api_call(:post, @url, @args, { comment: { text_comment: "ohai teacher" }, submission: { submission_type: "online_url", url: "http://www.example.com/a/b" } })
+          @submission = @assignment.submissions.where(user: @user).first
+          expect(@submission.submission_comments.size).to eq 1
+          expect(@submission.submission_comments.first.attributes.slice("author_id", "comment")).to eq({
+                                                                                                         "author_id" => @user.id,
+                                                                                                         "comment" => "ohai teacher",
+                                                                                                       })
+          expect(json["url"]).to eq "http://www.example.com/a/b"
+        end
 
-      it "processs html content in body" do
-        @assignment.update(submission_types: "online_text_entry")
-        should_process_incoming_user_content(@course) do |content|
-          do_submit(submission_type: "online_text_entry", body: content)
-          @submission.body
+        it "creates a online text submission" do
+          @assignment.update(submission_types: "online_text_entry")
+          json = do_submit(submission_type: "online_text_entry", body: <<~HTML)
+            <p>
+              This is <i>some</i> text. The <script src='evil.com'></script> sanitization will take effect.
+            </p>
+          HTML
+          expect(json["body"]).to eq <<~HTML
+            <p>
+              This is <i>some</i> text. The  sanitization will take effect.
+            </p>
+          HTML
+          expect(json["body"]).to eq @submission.body
+        end
+
+        it "creates a student annotation submission" do
+          a1 = attachment_model(context: @course)
+          @assignment.update(submission_types: "student_annotation", annotatable_attachment_id: a1.id)
+          json = api_call(:post, @url, @args, { submission: { submission_type: "student_annotation", annotatable_attachment_id: a1.id } }, {}, expected_status: 201)
+          expect(json["workflow_state"]).to eq "submitted"
+        end
+
+        it "processs html content in body" do
+          @assignment.update(submission_types: "online_text_entry")
+          should_process_incoming_user_content(@course) do |content|
+            do_submit(submission_type: "online_text_entry", body: content)
+            @submission.body
+          end
+        end
+
+        it "creates a file upload submission" do
+          @assignment.update(submission_types: "online_upload")
+          a1 = attachment_model(context: @user)
+          a2 = attachment_model(context: @user)
+          json = do_submit(submission_type: "online_upload", file_ids: [a1.id, a2.id])
+          sub_a1 = Attachment.where(root_attachment_id: a1).first
+          sub_a2 = Attachment.where(root_attachment_id: a2).first
+          expect(json["attachments"].pluck("url")).to eq [file_download_url(sub_a1, verifier: sub_a1.uuid, download: "1", download_frd: "1"),
+                                                          file_download_url(sub_a2, verifier: sub_a2.uuid, download: "1", download_frd: "1")]
+        end
+
+        it "creates a media comment submission" do
+          @assignment.update(submission_types: "media_recording")
+          media_object(media_id: "3232", media_type: "audio")
+          json = do_submit(submission_type: "media_recording", media_comment_id: "3232", media_comment_type: "audio")
+          expect(json["media_comment"].slice("media_id", "media_type")).to eq({
+                                                                                "media_id" => "3232",
+                                                                                "media_type" => "audio",
+                                                                              })
+        end
+
+        it "copies files to the submissions folder if they're not there already" do
+          @assignment.update(submission_types: "online_upload")
+          a1 = attachment_model(context: @user, folder: @user.submissions_folder)
+          a2 = attachment_model(context: @user)
+          json = do_submit(submission_type: "online_upload", file_ids: [a1.id, a2.id])
+          submission_attachment_ids = json["attachments"].pluck("id")
+          expect(submission_attachment_ids.size).to eq 2
+          expect(submission_attachment_ids.delete(a1.id)).not_to be_nil
+          copy = Attachment.find(submission_attachment_ids.last)
+          expect(copy.folder).to eq @user.submissions_folder(@course)
+          expect(copy.root_attachment).to eq a2
         end
       end
 
-      it "creates a file upload submission" do
-        @assignment.update(submission_types: "online_upload")
-        a1 = attachment_model(context: @user)
-        a2 = attachment_model(context: @user)
-        json = do_submit(submission_type: "online_upload", file_ids: [a1.id, a2.id])
-        sub_a1 = Attachment.where(root_attachment_id: a1).first
-        sub_a2 = Attachment.where(root_attachment_id: a2).first
-        expect(json["attachments"].pluck("url")).to eq [file_download_url(sub_a1, verifier: sub_a1.uuid, download: "1", download_frd: "1"),
-                                                        file_download_url(sub_a2, verifier: sub_a2.uuid, download: "1", download_frd: "1")]
+      context "submission file uploads" do
+        before :once do
+          @assignment.update(submission_types: "online_upload")
+          @student1 = @student
+          course_with_student(course: @course)
+          @context = @course
+          @student2 = @student
+          @user = @student1
+        end
+
+        include_examples "file uploads api"
+        include_examples "file uploads api without quotas"
+
+        # preflight_params has to be first and nameless to keep backwards compat with the include_examples
+        def preflight(preflight_params, request_params: {}, api_url: nil)
+          api_url ||= "/api/v1/courses/#{@course.id}/assignments/#{@assignment.id}/submissions/#{@student1.id}/files"
+
+          api_call(
+            :post,
+            api_url,
+            {
+              controller: "submissions_api",
+              action: "create_file",
+              format: "json",
+              course_id: @course.to_param,
+              assignment_id: @assignment.to_param,
+              user_id: @student1.to_param,
+            }.merge(request_params),
+            preflight_params
+          )
+        end
+
+        def has_query_exemption?
+          true
+        end
+
+        it "rejects uploading files to other students' submissions" do
+          preflight(
+            {},
+            api_url: "/api/v1/courses/#{@course.id}/assignments/#{@assignment.id}/submissions/#{@student2.id}/files",
+            request_params: { user_id: @student2.to_param }
+          )
+          assert_forbidden
+        end
+
+        it "allows a teacher to upload files for a student" do
+          @user = @teacher
+          preflight({ name: "test.txt", size: 12_345, content_type: "text/plain" })
+          assert_status(200)
+        end
+
+        it "allows any filetype when there are no restrictions on type" do
+          preflight({ name: "test.txt", size: 12_345, content_type: "text/plain" })
+          assert_status(200)
+        end
+
+        it "rejects uploading files when file extension is not given" do
+          @assignment.update(allowed_extensions: ["jpg"])
+          preflight({ name: "name", size: 12_345 })
+          assert_status(400)
+        end
+
+        it "rejects uploading files when filetype is not allowed" do
+          @assignment.update(allowed_extensions: ["doc"])
+          preflight({ name: "test.txt", size: 12_345, content_type: "text/plain" })
+          assert_status(400)
+        end
+
+        it "allows filetype when restricted and is correct filetype" do
+          @assignment.update(allowed_extensions: ["txt"])
+          preflight({ name: "test.txt", size: 12_345, content_type: "text/plain" })
+          assert_status(200)
+        end
+
+        it "falls back to parsing the extension when an unknown type" do
+          @assignment.update(allowed_extensions: ["beepboop"])
+          preflight({ name: "test.beepboop", size: 12_345 })
+          assert_status(200)
+        end
+
+        it "uploads to a student's Submissions folder" do
+          preflight({ name: "test.txt", size: 12_345, content_type: "text/plain" })
+          f = Attachment.last.folder
+          expect(f.submission_context_code).to eq @course.asset_string
+        end
+
+        context "for url upload using InstFS" do
+          let(:json_response) do
+            preflight({ url: "http://example.com/test", comment: "my comment" })
+            JSON.parse(response.body)
+          end
+
+          before { allow(InstFS).to receive(:enabled?).and_return(true) }
+
+          context "returns an upload_url with a token" do
+            let(:token) { json_response["upload_url"].match(/\?token=(.+)&?/)[1] }
+            let(:jwt) { Canvas::Security.decode_jwt(token) }
+
+            it "encodes capture_params in the token" do
+              capture_params = {
+                "eula_agreement_timestamp" => nil,
+                "comment" => "my comment",
+                "context_type" => "User",
+                "context_id" => @student1.id.to_s,
+                "user_id" => @student1.id.to_s,
+                "quota_exempt" => true,
+                "on_duplicate" => "overwrite",
+                "include" => nil
+              }
+              expect(jwt["capture_params"]).to include capture_params
+            end
+
+            it "returns a valid upload url" do
+              expect(json_response["upload_url"]).to match(/files\?token=.+&?/)
+            end
+          end
+
+          it "returns upload_params infering the filename from the URL" do
+            upload_json = {
+              "filename" => "test",
+              "content_type" => "unknown/unknown",
+              "target_url" => "http://example.com/test"
+            }
+            expect(json_response["upload_params"]).to eq upload_json
+          end
+
+          it "returns progress json" do
+            progress_json = {
+              "context_id" => @assignment.id,
+              "context_type" => "Assignment",
+              "user_id" => @student1.id,
+              "tag" => "upload_via_url"
+            }
+            expect(json_response["progress"]).to include progress_json
+          end
+        end
+
+        context "for url upload using DelayedJob" do
+          let(:json_response) do
+            preflight({ url: "http://example.com/test", filename: "test.txt", comment: "hello comment" })
+            JSON.parse(response.body)
+          end
+
+          before { allow(InstFS).to receive(:enabled?).and_return(false) }
+
+          it "returns progress json" do
+            progress_json = {
+              "context_id" => @assignment.id,
+              "context_type" => "Assignment",
+              "user_id" => @student1.id,
+              "tag" => "upload_via_url"
+            }
+            expect(json_response["progress"]).to include progress_json
+          end
+
+          it "enqueues the submit job" do
+            json_response
+            job = Delayed::Job.order(:id).last
+            expect(job.handler).to include Services::SubmitHomeworkService::SubmitWorker.name
+            expect(job.handler).to include "hello comment"
+          end
+
+          it "enqueues the copy job when the submit_assignment parameter is false" do
+            preflight({ url: "http://example.com/test", filename: "test.txt", submit_assignment: false })
+            JSON.parse(response.body)
+            job = Delayed::Job.order(:id).last
+            expect(job.handler).to include Services::SubmitHomeworkService::CopyWorker.name
+          end
+        end
+
+        context "student in limited access account" do
+          it "renders unauthorized" do
+            @course.root_account.enable_feature!(:allow_limited_access_for_students)
+            @course.account.settings[:enable_limited_access_for_students] = true
+            @course.account.save!
+            preflight({ name: "test.txt", size: 12_345, content_type: "text/plain" })
+            assert_forbidden
+          end
+        end
       end
 
-      it "creates a media comment submission" do
-        @assignment.update(submission_types: "media_recording")
-        media_object(media_id: "3232", media_type: "audio")
-        json = do_submit(submission_type: "media_recording", media_comment_id: "3232", media_comment_type: "audio")
-        expect(json["media_comment"].slice("media_id", "media_type")).to eq({
-                                                                              "media_id" => "3232",
-                                                                              "media_type" => "audio",
-                                                                            })
+      it "rejects invalid urls" do
+        api_call(:post, @url, @args, { submission: { submission_type: "online_url", url: "ftp://ftp.example.com/a/b" } }, {}, expected_status: 400)
       end
 
-      it "copies files to the submissions folder if they're not there already" do
+      it "rejects attachment ids not belonging to the user" do
         @assignment.update(submission_types: "online_upload")
-        a1 = attachment_model(context: @user, folder: @user.submissions_folder)
-        a2 = attachment_model(context: @user)
-        json = do_submit(submission_type: "online_upload", file_ids: [a1.id, a2.id])
-        submission_attachment_ids = json["attachments"].pluck("id")
-        expect(submission_attachment_ids.size).to eq 2
-        expect(submission_attachment_ids.delete(a1.id)).not_to be_nil
-        copy = Attachment.find(submission_attachment_ids.last)
-        expect(copy.folder).to eq @user.submissions_folder(@course)
-        expect(copy.root_attachment).to eq a2
+        a1 = attachment_model(context: @course)
+        json = api_call(:post, @url, @args, { submission: { submission_type: "online_upload", file_ids: [a1.id] } }, {}, expected_status: 400)
+        expect(json["message"]).to eq "No valid file ids given"
+      end
+
+      it "allows a grader to submit for a student and set submitted_at" do
+        submitted_at = 1.day.ago.change(usec: 0)
+        @user = course_with_teacher(course: @course).user
+        api_call(:post, @url, @args, { submission: { submission_type: "online_url", url: "www.example.com", user_id: @student.id, submitted_at: } }, {}, expected_status: 201)
+        submission = Submission.last
+        expect(submission.submitted_at).to eq submitted_at
+      end
+
+      it "rejects submissions for one student from another" do
+        @student1 = @student
+        @user = course_with_student(course: @course).user
+        api_call(:post, @url, @args, { submission: { submission_type: "online_url", url: "www.example.com", user_id: @student1.id } }, {}, expected_status: 403)
+      end
+
+      it "prevents a student from sending submitted_at for their own submission" do
+        api_call(:post, @url, @args, { submissions: { submission_type: "online_url", url: "www.example.com", user_id: @student.id, submitted_at: 1.day.ago } }, {}, expected_status: 400)
       end
     end
 
-    context "submission file uploads" do
+    context "group submissions" do
       before :once do
-        @assignment.update(submission_types: "online_upload")
+        course_with_student(active_all: true)
         @student1 = @student
-        course_with_student(course: @course)
-        @context = @course
-        @student2 = @student
+        @student2 = student_in_course(course: @course, active_all: true).user
+
+        group_category = @course.group_categories.create!(name: "Group Category")
+        group = group_category.groups.create!(name: "Group 1", context: @course)
+        group.add_user(@student1, "accepted")
+        group.add_user(@student2, "accepted")
+
+        @assignment = @course.assignments.create!(
+          points_possible: 10,
+          submission_types: "online_url",
+          group_category:
+        )
         @user = @student1
       end
 
-      include_examples "file uploads api"
-      include_examples "file uploads api without quotas"
+      let(:url) { "/api/v1/courses/#{@course.id}/assignments/#{@assignment.id}/submissions" }
+      let(:args) { { controller: "submissions", action: "create", format: "json", course_id: @course.id.to_s, assignment_id: @assignment.id.to_s } }
+      let(:student_1_comments) { @assignment.submissions.find_by!(user: @student1).submission_comments }
+      let(:student_2_comments) { @assignment.submissions.find_by!(user: @student2).submission_comments }
 
-      # preflight_params has to be first and nameless to keep backwards compat with the include_examples
-      def preflight(preflight_params, request_params: {}, api_url: nil)
-        api_url ||= "/api/v1/courses/#{@course.id}/assignments/#{@assignment.id}/submissions/#{@student1.id}/files"
+      it "leaves an individual comment by default" do
+        comment = "Individual comment!"
+        submission = {
+          submission_type: "online_url",
+          url: "www.example.com/a/b?q=1",
+          comment:
+        }
+        api_call(:post, url, args, { submission: })
 
-        api_call(
-          :post,
-          api_url,
-          {
-            controller: "submissions_api",
-            action: "create_file",
-            format: "json",
-            course_id: @course.to_param,
-            assignment_id: @assignment.to_param,
-            user_id: @student1.to_param,
-          }.merge(request_params),
-          preflight_params
-        )
-      end
-
-      def has_query_exemption?
-        true
-      end
-
-      it "rejects uploading files to other students' submissions" do
-        preflight(
-          {},
-          api_url: "/api/v1/courses/#{@course.id}/assignments/#{@assignment.id}/submissions/#{@student2.id}/files",
-          request_params: { user_id: @student2.to_param }
-        )
-        assert_status(401)
-      end
-
-      it "allows a teacher to upload files for a student" do
-        @user = @teacher
-        preflight({ name: "test.txt", size: 12_345, content_type: "text/plain" })
-        assert_status(200)
-      end
-
-      it "allows any filetype when there are no restrictions on type" do
-        preflight({ name: "test.txt", size: 12_345, content_type: "text/plain" })
-        assert_status(200)
-      end
-
-      it "rejects uploading files when file extension is not given" do
-        @assignment.update(allowed_extensions: ["jpg"])
-        preflight({ name: "name", size: 12_345 })
-        assert_status(400)
-      end
-
-      it "rejects uploading files when filetype is not allowed" do
-        @assignment.update(allowed_extensions: ["doc"])
-        preflight({ name: "test.txt", size: 12_345, content_type: "text/plain" })
-        assert_status(400)
-      end
-
-      it "allows filetype when restricted and is correct filetype" do
-        @assignment.update(allowed_extensions: ["txt"])
-        preflight({ name: "test.txt", size: 12_345, content_type: "text/plain" })
-        assert_status(200)
-      end
-
-      it "falls back to parsing the extension when an unknown type" do
-        @assignment.update(allowed_extensions: ["beepboop"])
-        preflight({ name: "test.beepboop", size: 12_345 })
-        assert_status(200)
-      end
-
-      it "uploads to a student's Submissions folder" do
-        preflight({ name: "test.txt", size: 12_345, content_type: "text/plain" })
-        f = Attachment.last.folder
-        expect(f.submission_context_code).to eq @course.asset_string
-      end
-
-      context "for url upload using InstFS" do
-        let(:json_response) do
-          preflight({ url: "http://example.com/test", comment: "my comment" })
-          JSON.parse(response.body)
-        end
-
-        before { allow(InstFS).to receive(:enabled?).and_return(true) }
-
-        context "returns an upload_url with a token" do
-          let(:token) { json_response["upload_url"].match(/\?token=(.+)&?/)[1] }
-          let(:jwt) { Canvas::Security.decode_jwt(token) }
-
-          it "encodes capture_params in the token" do
-            capture_params = {
-              "eula_agreement_timestamp" => nil,
-              "comment" => "my comment",
-              "context_type" => "User",
-              "context_id" => @student1.id.to_s,
-              "user_id" => @student1.id.to_s,
-              "quota_exempt" => true,
-              "on_duplicate" => "overwrite",
-              "include" => nil
-            }
-            expect(jwt["capture_params"]).to include capture_params
-          end
-
-          it "returns a valid upload url" do
-            expect(json_response["upload_url"]).to match(/files\?token=.+&?/)
-          end
-        end
-
-        it "returns upload_params infering the filename from the URL" do
-          upload_json = {
-            "filename" => "test",
-            "content_type" => "unknown/unknown",
-            "target_url" => "http://example.com/test"
-          }
-          expect(json_response["upload_params"]).to eq upload_json
-        end
-
-        it "returns progress json" do
-          progress_json = {
-            "context_id" => @assignment.id,
-            "context_type" => "Assignment",
-            "user_id" => @student1.id,
-            "tag" => "upload_via_url"
-          }
-          expect(json_response["progress"]).to include progress_json
+        aggregate_failures do
+          expect(student_1_comments.where(comment:).exists?).to be true
+          expect(student_2_comments.where(comment:).exists?).to be false
         end
       end
 
-      context "for url upload using DelayedJob" do
-        let(:json_response) do
-          preflight({ url: "http://example.com/test", filename: "test.txt", comment: "hello comment" })
-          JSON.parse(response.body)
-        end
+      it "allows leaving a group comment via the comment[text_comment] param when submitting" do
+        comment = "Comment to the whole group!"
+        submission = {
+          submission_type: "online_url",
+          url: "www.example.com/a/b?q=1",
+          group_comment: true
+        }
+        api_call(:post, url, args, { comment: { text_comment: comment }, submission: })
 
-        before { allow(InstFS).to receive(:enabled?).and_return(false) }
-
-        it "returns progress json" do
-          progress_json = {
-            "context_id" => @assignment.id,
-            "context_type" => "Assignment",
-            "user_id" => @student1.id,
-            "tag" => "upload_via_url"
-          }
-          expect(json_response["progress"]).to include progress_json
-        end
-
-        it "enqueues the submit job" do
-          json_response
-          job = Delayed::Job.order(:id).last
-          expect(job.handler).to include Services::SubmitHomeworkService::SubmitWorker.name
-          expect(job.handler).to include "hello comment"
-        end
-
-        it "enqueues the copy job when the submit_assignment parameter is false" do
-          preflight({ url: "http://example.com/test", filename: "test.txt", submit_assignment: false })
-          JSON.parse(response.body)
-          job = Delayed::Job.order(:id).last
-          expect(job.handler).to include Services::SubmitHomeworkService::CopyWorker.name
+        aggregate_failures do
+          expect(student_1_comments.where(comment:).exists?).to be true
+          expect(student_2_comments.where(comment:).exists?).to be true
         end
       end
-    end
 
-    it "rejects invalid urls" do
-      api_call(:post, @url, @args, { submission: { submission_type: "online_url", url: "ftp://ftp.example.com/a/b" } }, {}, expected_status: 400)
-    end
+      it "allows leaving an individual comment via the comment[text_comment] param when submitting" do
+        comment = "Individual comment!"
+        submission = {
+          submission_type: "online_url",
+          url: "www.example.com/a/b?q=1",
+          group_comment: false
+        }
+        api_call(:post, url, args, { comment: { text_comment: comment }, submission: })
 
-    it "rejects attachment ids not belonging to the user" do
-      @assignment.update(submission_types: "online_upload")
-      a1 = attachment_model(context: @course)
-      json = api_call(:post, @url, @args, { submission: { submission_type: "online_upload", file_ids: [a1.id] } }, {}, expected_status: 400)
-      expect(json["message"]).to eq "No valid file ids given"
-    end
+        aggregate_failures do
+          expect(student_1_comments.where(comment:).exists?).to be true
+          expect(student_2_comments.where(comment:).exists?).to be false
+        end
+      end
 
-    it "allows a grader to submit for a student and set submitted_at" do
-      submitted_at = 1.day.ago.change(usec: 0)
-      @user = course_with_teacher(course: @course).user
-      api_call(:post, @url, @args, { submission: { submission_type: "online_url", url: "www.example.com", user_id: @student.id, submitted_at: } }, {}, expected_status: 201)
-      submission = Submission.last
-      expect(submission.submitted_at).to eq submitted_at
-    end
+      it "allows leaving a group comment via the submission[comment] param when submitting" do
+        comment = "Comment to the whole group!"
+        submission = {
+          submission_type: "online_url",
+          url: "www.example.com/a/b?q=1",
+          comment:,
+          group_comment: true
+        }
+        api_call(:post, url, args, { submission: })
 
-    it "rejects submissions for one student from another" do
-      @student1 = @student
-      @user = course_with_student(course: @course).user
-      api_call(:post, @url, @args, { submission: { submission_type: "online_url", url: "www.example.com", user_id: @student1.id } }, {}, expected_status: 401)
-    end
+        aggregate_failures do
+          expect(student_1_comments.where(comment:).exists?).to be true
+          expect(student_2_comments.where(comment:).exists?).to be true
+        end
+      end
 
-    it "prevents a student from sending submitted_at for their own submission" do
-      api_call(:post, @url, @args, { submissions: { submission_type: "online_url", url: "www.example.com", user_id: @student.id, submitted_at: 1.day.ago } }, {}, expected_status: 400)
+      it "allows leaving an individual comment via the submission[comment] param when submitting" do
+        comment = "Individual comment!"
+        submission = {
+          submission_type: "online_url",
+          url: "www.example.com/a/b?q=1",
+          comment:,
+          group_comment: false
+        }
+        api_call(:post, url, args, { submission: })
+
+        aggregate_failures do
+          expect(student_1_comments.where(comment:).exists?).to be true
+          expect(student_2_comments.where(comment:).exists?).to be false
+        end
+      end
     end
   end
 
@@ -5358,7 +5855,7 @@ describe "Submissions API", type: :request do
         },
         opts
       )
-      assert_status(401)
+      assert_forbidden
     end
   end
 
@@ -5520,9 +6017,8 @@ describe "Submissions API", type: :request do
     expect(@submission.reload.read?(@teacher)).to be_falsey
   end
 
-  context "with feedback visibility on" do
+  context "submission feedback" do
     before :once do
-      Account.site_admin.enable_feature!(:visibility_feedback_student_grades_page)
       course_with_student_and_submitted_homework
     end
 
@@ -5558,7 +6054,7 @@ describe "Submissions API", type: :request do
     context "when current user is not the student" do
       it "doesn't allow you to mark someone else's submission item read" do
         @submission.add_comment(author: @teacher, comment: "teacher")
-        api_call_as_user(@teacher, :put, endpoint, params, {}, {}, { expected_status: 401 })
+        api_call_as_user(@teacher, :put, endpoint, params, {}, {}, { expected_status: 403 })
         expect(@submission.reload.unread_item?(@student, "comment")).to be_truthy
       end
     end
@@ -5611,7 +6107,7 @@ describe "Submissions API", type: :request do
                          format: "json" },
                        {},
                        {},
-                       { expected_status: 401 })
+                       { expected_status: 403 })
     end
 
     it "marks document annotations read" do
@@ -5640,7 +6136,7 @@ describe "Submissions API", type: :request do
                          format: "json" },
                        {},
                        {},
-                       { expected_status: 401 })
+                       { expected_status: 403 })
     end
   end
 
@@ -5681,7 +6177,6 @@ describe "Submissions API", type: :request do
 
   context "clear unread submissions" do
     before :once do
-      Account.site_admin.enable_feature!(:visibility_feedback_student_grades_page)
       course_with_teacher(active_all: true)
       student_in_course(active_all: true)
       assignment_model(course: @course)
@@ -5719,7 +6214,7 @@ describe "Submissions API", type: :request do
     it "does not mark submission grade as read if user is not a Site Admin" do
       @user = @teacher
       raw_api_call(:put, endpoint, params)
-      assert_status(401)
+      assert_forbidden
     end
   end
 
@@ -5770,7 +6265,7 @@ describe "Submissions API", type: :request do
                          format: "json" },
                        {},
                        {},
-                       { expected_status: 401 })
+                       { expected_status: 403 })
     end
 
     it "marks rubric comments read" do
@@ -5799,7 +6294,7 @@ describe "Submissions API", type: :request do
                          format: "json" },
                        {},
                        {},
-                       { expected_status: 401 })
+                       { expected_status: 403 })
     end
   end
 
@@ -6032,7 +6527,7 @@ describe "Submissions API", type: :request do
                      assignment_id: @a1.id.to_s,
                      grade_data: { foo: "bar" } },
                    {})
-      assert_status(401)
+      assert_forbidden
     end
 
     it "excuses assignments" do
@@ -6210,7 +6705,7 @@ describe "Submissions API", type: :request do
     end
 
     it "requires grading rights" do
-      api_call_as_user(@student1, :get, @path, @params, {}, {}, { expected_status: 401 })
+      api_call_as_user(@student1, :get, @path, @params, {}, {}, { expected_status: 403 })
     end
 
     it "lists students with and without submissions" do
@@ -6266,12 +6761,12 @@ describe "Submissions API", type: :request do
       end
 
       it "is unauthorized when the user is not the assigned final grader" do
-        api_call_as_user(@teacher, :get, @path, @params, {}, {}, expected_status: 401)
+        api_call_as_user(@teacher, :get, @path, @params, {}, {}, expected_status: 403)
       end
 
       it "is unauthorized when the user is an account admin without 'Select Final Grade for Moderation' permission" do
         @course.account.role_overrides.create!(role: admin_role, enabled: false, permission: :select_final_grade)
-        api_call_as_user(account_admin_user, :get, @path, @params, {}, {}, expected_status: 401)
+        api_call_as_user(account_admin_user, :get, @path, @params, {}, {}, expected_status: 403)
       end
 
       it "is authorized when the user is the final grader" do
@@ -6380,7 +6875,7 @@ describe "Submissions API", type: :request do
     end
 
     it "requires grading rights" do
-      api_call_as_user(@student1, :get, @path, @params, {}, {}, { expected_status: 401 })
+      api_call_as_user(@student1, :get, @path, @params, {}, {}, { expected_status: 403 })
     end
 
     it "lists students" do
@@ -6566,6 +7061,22 @@ describe "Submissions API", type: :request do
         end
 
         it "includes action when action is passed to the include param" do
+          json = api_call_as_user(teacher, :get, path, params.merge(include: field))
+          expect(json).to all include field
+        end
+      end
+
+      describe "student_entered_score" do
+        let(:field) { "student_entered_score" }
+
+        it "is not included by default" do
+          json = api_call_as_user(teacher, :get, path, params)
+          json.each do |entry| # can't use `.not_to all`
+            expect(entry).not_to include field
+          end
+        end
+
+        it "included when passed to the include param" do
           json = api_call_as_user(teacher, :get, path, params.merge(include: field))
           expect(json).to all include field
         end

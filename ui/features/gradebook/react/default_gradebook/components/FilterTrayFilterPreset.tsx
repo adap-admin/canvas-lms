@@ -27,14 +27,13 @@ import {Flex} from '@instructure/ui-flex'
 import FilterComponent from './FilterTrayFilter'
 import {ToggleGroup} from '@instructure/ui-toggle-details'
 import {Text} from '@instructure/ui-text'
+import {TruncateText} from '@instructure/ui-truncate-text'
 import type {CamelizedGradingPeriod} from '@canvas/grading/grading.d'
 import type {Filter, FilterPreset, FilterType, PartialFilterPreset} from '../gradebook.d'
 import type {AssignmentGroup, Module, Section, StudentGroupCategoryMap} from '../../../../../api.d'
 import {isFilterNotEmpty} from '../Gradebook.utils'
 
 const I18n = useI18nScope('gradebook')
-
-const {Item: FlexItem} = Flex as any
 
 export type FilterTrayPresetProps = {
   applyFilters: (filters: PartialFilterPreset['filters']) => void
@@ -43,7 +42,6 @@ export type FilterTrayPresetProps = {
   gradingPeriods: CamelizedGradingPeriod[]
   isActive: boolean
   modules: Module[]
-  onChange?: (filter: PartialFilterPreset) => void
   onCreate?: (filter: PartialFilterPreset) => Promise<boolean>
   onUpdate?: (filter: FilterPreset) => Promise<boolean>
   onDelete?: () => void
@@ -51,6 +49,7 @@ export type FilterTrayPresetProps = {
   isExpanded: boolean
   sections: Section[]
   studentGroupCategories: StudentGroupCategoryMap
+  closeRef: React.RefObject<any>
 }
 
 export default function FilterTrayPreset({
@@ -67,6 +66,7 @@ export default function FilterTrayPreset({
   isExpanded,
   sections,
   studentGroupCategories,
+  closeRef,
 }: FilterTrayPresetProps) {
   const [name, setName] = useState(filterPreset.name)
   const [filterPresetWasChanged, setFilterPresetWasChanged] = useState(false)
@@ -103,6 +103,7 @@ export default function FilterTrayPreset({
         filters: stagedFilters.filter(isFilterNotEmpty),
       }).then(success => {
         if (success) {
+          closeRef?.current?.focus()
           setName('')
           setStagedFilters(filterPreset.filters)
           setFilterPresetWasChanged(false)
@@ -122,6 +123,7 @@ export default function FilterTrayPreset({
       } as FilterPreset
       return onUpdate(updatedFilter).then(success => {
         if (success) {
+          closeRef?.current?.focus()
           setFilterPresetWasChanged(false)
         }
         if (isActive) {
@@ -182,14 +184,15 @@ export default function FilterTrayPreset({
       onToggle={(_event: React.MouseEvent, expanded: boolean) => {
         onToggle(expanded)
       }}
+      data-testid={`${filterPreset.name || 'create-filter-preset'}-dropdown`}
       expanded={isExpanded}
       summary={
         <Flex margin="0 0 0 xxx-small">
           <Flex direction="column">
             <View>
-              <Text weight="bold">
+              <TruncateText position="middle">
                 {filterPreset.id ? filterPreset.name : I18n.t('Create Filter Preset')}
-              </Text>
+              </TruncateText>
             </View>
             {filterPreset.id && (
               <View>
@@ -215,12 +218,17 @@ export default function FilterTrayPreset({
         <View as="div" padding="xx-small 0 xx-small xx-small">
           <Flex margin="0 0 small 0" padding="0 xx-small 0 0">
             <TextInput
-              inputRef={ref => (inputRef.current = ref)}
+              inputRef={ref => {
+                if (ref instanceof HTMLInputElement) {
+                  inputRef.current = ref
+                }
+              }}
               width="100%"
+              data-testid="filter-preset-name-input"
               renderLabel={I18n.t('Filter preset name')}
               placeholder={I18n.t('Give your filter preset a name')}
               value={name}
-              onChange={(_event, value) => {
+              onChange={(_event: React.ChangeEvent<HTMLInputElement>, value: string) => {
                 setName(value)
                 setFilterPresetWasChanged(true)
               }}
@@ -231,7 +239,7 @@ export default function FilterTrayPreset({
             // eslint-disable-next-line react/no-array-index-key
             <Flex key={`chunk-${index}`} margin="small 0">
               {filters.map(filter => (
-                <FlexItem key={filter.id} size="50%" padding="0 xx-small 0 0">
+                <Flex.Item key={filter.id} size="50%" padding="0 xx-small 0 0">
                   <FilterComponent
                     assignmentGroups={assignmentGroups}
                     filter={filter}
@@ -241,7 +249,7 @@ export default function FilterTrayPreset({
                     sections={sections}
                     studentGroupCategories={studentGroupCategories}
                   />
-                </FlexItem>
+                </Flex.Item>
               ))}
             </Flex>
           ))}
@@ -250,7 +258,7 @@ export default function FilterTrayPreset({
             // eslint-disable-next-line react/no-array-index-key
             <Flex key={`always-shown-${index}`} margin="small 0">
               {filters.map(filter => (
-                <FlexItem key={filter.id} size="50%" padding="0 xx-small 0 0">
+                <Flex.Item key={filter.id} size="50%" padding="0 xx-small 0 0">
                   <FilterComponent
                     assignmentGroups={assignmentGroups}
                     filter={filter}
@@ -260,15 +268,16 @@ export default function FilterTrayPreset({
                     sections={sections}
                     studentGroupCategories={studentGroupCategories}
                   />
-                </FlexItem>
+                </Flex.Item>
               ))}
             </Flex>
           ))}
 
           <Flex justifyItems="end" margin="0 xx-small">
-            <FlexItem margin="0 0 0 small">
+            <Flex.Item margin="0 0 0 small">
               <Button
                 color="secondary"
+                id="delete-preset-button" // EVAL-4234
                 data-testid="delete-filter-preset-button"
                 margin="small 0 0 0"
                 onClick={() => {
@@ -281,10 +290,11 @@ export default function FilterTrayPreset({
               >
                 {filterPreset.id ? I18n.t('Delete Preset') : I18n.t('Clear')}
               </Button>
-            </FlexItem>
+            </Flex.Item>
 
-            <FlexItem margin="0 0 0 small">
+            <Flex.Item margin="0 0 0 small">
               <Button
+                id="save-filter-button" // EVAL-4233
                 color="primary"
                 data-testid="save-filter-button"
                 margin="small 0 0 0"
@@ -293,7 +303,7 @@ export default function FilterTrayPreset({
               >
                 {I18n.t('Save Filter Preset')}
               </Button>
-            </FlexItem>
+            </Flex.Item>
           </Flex>
         </View>
       </View>

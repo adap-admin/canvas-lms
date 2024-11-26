@@ -39,7 +39,7 @@ describe "Section Paces API" do
   def assert_grant_check
     user_session(@user)
     yield
-    expect(response).to have_http_status :unauthorized
+    expect(response).to have_http_status :forbidden
   end
 
   describe "show" do
@@ -88,7 +88,7 @@ describe "Section Paces API" do
       end.to change {
         section.course_paces.reload.count
       }.by(1)
-        .and change { Progress.count }.by(1)
+       .and change { Progress.count }.by(1)
       expect(Progress.last.queued?).to be_truthy
       expect(response).to have_http_status :created
       json = response.parsed_body
@@ -102,7 +102,7 @@ describe "Section Paces API" do
       expect(response).to have_http_status :not_found
     end
 
-    it "returns a 401 if the user lacks permission" do
+    it "returns a 403 if the user lacks permission" do
       assert_grant_check { post api_v1_new_section_pace_path(course, section), params: { format: :json } }
     end
 
@@ -120,6 +120,21 @@ describe "Section Paces API" do
         expect(json["pace"]["id"]).to eq section_pace.id
         expect(json["progress"]["context_id"]).to eq(CoursePace.last.id)
         expect(json["progress"]["tag"]).to eq("course_pace_publish")
+      end
+    end
+
+    context "when course draft feature flag is enabled" do
+      before :once do
+        course.root_account.enable_feature!(:course_pace_draft_state)
+      end
+
+      it "can create a pace in an unpublished workflow_state" do
+        expect do
+          post api_v1_new_section_pace_path(course, section), params: { format: :json, workflow_state: "unpublished" }
+        end.to change {
+          section.course_paces.reload.count
+        }.by(1)
+         .and not_change { Progress.count }
       end
     end
   end
@@ -160,6 +175,22 @@ describe "Section Paces API" do
         }
       }
       expect(response).to have_http_status :unprocessable_entity
+    end
+
+    context "when course draft feature flag is enabled" do
+      before :once do
+        course.root_account.enable_feature!(:course_pace_draft_state)
+      end
+
+      it "updates an unpublished pace and leave it as unpublished workflow_state" do
+        pace.workflow_state = "unpublished"
+        pace.save!
+
+        expect do
+          patch api_v1_patch_section_pace_path(course, section), params: { format: :json, workflow_state: "unpublished" }
+        end.to not_change { Progress.count }
+        expect(pace.reload.workflow_state).to eq("unpublished")
+      end
     end
   end
 

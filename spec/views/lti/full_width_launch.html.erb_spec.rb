@@ -29,7 +29,7 @@ describe "lti full width launch view" do
     let(:tool) do
       dev_key = DeveloperKey.create
       tool_id = ContextExternalTool::QUIZ_LTI
-      ContextExternalTool.create(developer_key: dev_key, context: course, tool_id:)
+      ContextExternalTool.create(developer_key: dev_key, context: course, tool_id:, root_account: course.root_account)
     end
     let(:tag) { LtiLayoutSpecHelper.create_tag(tool) }
     let(:current_user) { user_with_pseudonym }
@@ -44,13 +44,13 @@ describe "lti full width launch view" do
         it "does not warn the student with an active enrollment about a New Quizzes being unavailable" do
           course.enroll_student(current_user, enrollment_state: "active")
           ctrl.send(:content_tag_redirect, Account.default, tag, nil)
-          expect(ctrl.response.body).not_to have_text("no longer available")
+          expect(ctrl.response.body).not_to include("no longer available")
         end
 
         it "warns the student with a concluded enrollment about a New Quizzes being unavailable" do
           course.enroll_student(current_user, enrollment_state: "completed")
           ctrl.send(:content_tag_redirect, Account.default, tag, nil)
-          expect(ctrl.response.body).to have_text("no longer available")
+          expect(ctrl.response.body).to include("no longer available")
         end
 
         context "with sections" do
@@ -67,20 +67,20 @@ describe "lti full width launch view" do
           it "does not warn the student in an active section about a New Quizzes being unavailable" do
             active_section.enroll_user(current_user, "StudentEnrollment", "active")
             ctrl.send(:content_tag_redirect, Account.default, tag, nil)
-            expect(ctrl.response.body).not_to have_text("no longer available")
+            expect(ctrl.response.body).not_to include("no longer available")
           end
 
           it "warns the student in a completed section about a New Quizzes being unavailable" do
             completed_section.enroll_user(current_user, "StudentEnrollment", "active")
             ctrl.send(:content_tag_redirect, Account.default, tag, nil)
-            expect(ctrl.response.body).to have_text("no longer available")
+            expect(ctrl.response.body).to include("no longer available")
           end
 
           it "does not warn the student who has at least one active section about a New Quizzes being unavailable" do
             active_section.enroll_user(current_user, "StudentEnrollment", "active")
             completed_section.enroll_user(current_user, "StudentEnrollment", "active")
             ctrl.send(:content_tag_redirect, Account.default, tag, nil)
-            expect(ctrl.response.body).not_to have_text("no longer available")
+            expect(ctrl.response.body).not_to include("no longer available")
           end
         end
       end
@@ -91,7 +91,18 @@ describe "lti full width launch view" do
           course.soft_conclude!
           course.save!
           ctrl.send(:content_tag_redirect, Account.default, tag, nil)
-          expect(ctrl.response.body).to have_text("no longer available")
+          expect(ctrl.response.body).to include("no longer available")
+        end
+
+        context "with quiz_results_visibility_after_course_conclusion enabled" do
+          it "does not warn the student about a New Quizzes being unavailable" do
+            course.enroll_student(current_user, enrollment_state: "active")
+            course.soft_conclude!
+            course.save!
+            course.root_account.enable_feature!(:new_quizzes_enable_quiz_visibility_after_course_conclusion)
+            ctrl.send(:content_tag_redirect, Account.default, tag, nil)
+            expect(ctrl.response.body).not_to include("no longer available")
+          end
         end
       end
 
@@ -100,7 +111,17 @@ describe "lti full width launch view" do
           course.enroll_student(current_user, enrollment_state: "active")
           course.complete!
           ctrl.send(:content_tag_redirect, Account.default, tag, nil)
-          expect(ctrl.response.body).to have_text("no longer available")
+          expect(ctrl.response.body).to include("no longer available")
+        end
+
+        context "with quiz_results_visibility_after_course_conclusion enabled" do
+          it "does not warn the student with an active enrollment about a New Quizzes being unavailable" do
+            course.enroll_student(current_user, enrollment_state: "active")
+            course.complete!
+            course.root_account.enable_feature!(:new_quizzes_enable_quiz_visibility_after_course_conclusion)
+            ctrl.send(:content_tag_redirect, Account.default, tag, nil)
+            expect(ctrl.response.body).not_to include("no longer available")
+          end
         end
       end
     end
@@ -114,7 +135,7 @@ describe "lti full width launch view" do
 
       it "does not warn about quizzes being unavailable when the user is active" do
         ctrl.send(:content_tag_redirect, Account.default, tag, nil)
-        expect(ctrl.response.body).not_to have_text("no longer available")
+        expect(ctrl.response.body).not_to include("no longer available")
       end
     end
 
@@ -122,7 +143,7 @@ describe "lti full width launch view" do
       it "warns the observer with a concluded enrollment about a New Quizzes being unavailable" do
         course.enroll_user(current_user, "ObserverEnrollment", enrollment_state: "completed")
         ctrl.send(:content_tag_redirect, Account.default, tag, nil)
-        expect(ctrl.response.body).to have_text("no longer available")
+        expect(ctrl.response.body).to include("no longer available")
       end
     end
 
@@ -134,7 +155,7 @@ describe "lti full width launch view" do
       context "in an active course" do
         it "does not warn the teacher about a New Quizzes being unavailable" do
           ctrl.send(:content_tag_redirect, Account.default, tag, nil)
-          expect(ctrl.response.body).not_to have_text("no longer available")
+          expect(ctrl.response.body).not_to include("no longer available")
         end
       end
 
@@ -143,7 +164,7 @@ describe "lti full width launch view" do
           course.soft_conclude!
           course.save!
           ctrl.send(:content_tag_redirect, Account.default, tag, nil)
-          expect(ctrl.response.body).not_to have_text("no longer available")
+          expect(ctrl.response.body).not_to include("no longer available")
         end
       end
 
@@ -151,7 +172,7 @@ describe "lti full width launch view" do
         it "does not warn the teacher about a New Quizzes being unavailable" do
           course.complete!
           ctrl.send(:content_tag_redirect, Account.default, tag, nil)
-          expect(ctrl.response.body).not_to have_text("no longer available")
+          expect(ctrl.response.body).not_to include("no longer available")
         end
       end
     end
@@ -162,7 +183,7 @@ describe "lti full width launch view" do
       context "in an active course" do
         it "does not warn the account admin about a New Quizzes being unavailable" do
           ctrl.send(:content_tag_redirect, Account.default, tag, nil)
-          expect(ctrl.response.body).not_to have_text("no longer available")
+          expect(ctrl.response.body).not_to include("no longer available")
         end
       end
 
@@ -171,7 +192,7 @@ describe "lti full width launch view" do
           course.soft_conclude!
           course.save!
           ctrl.send(:content_tag_redirect, Account.default, tag, nil)
-          expect(ctrl.response.body).not_to have_text("no longer available")
+          expect(ctrl.response.body).not_to include("no longer available")
         end
       end
 
@@ -179,7 +200,7 @@ describe "lti full width launch view" do
         it "does not warn the account admin about a New Quizzes being unavailable" do
           course.complete!
           ctrl.send(:content_tag_redirect, Account.default, tag, nil)
-          expect(ctrl.response.body).not_to have_text("no longer available")
+          expect(ctrl.response.body).not_to include("no longer available")
         end
       end
     end
@@ -190,7 +211,7 @@ describe "lti full width launch view" do
       context "in an active course" do
         it "does not warn the site admin about a New Quizzes being unavailable" do
           ctrl.send(:content_tag_redirect, Account.default, tag, nil)
-          expect(ctrl.response.body).not_to have_text("no longer available")
+          expect(ctrl.response.body).not_to include("no longer available")
         end
       end
 
@@ -199,7 +220,7 @@ describe "lti full width launch view" do
           course.soft_conclude!
           course.save!
           ctrl.send(:content_tag_redirect, Account.default, tag, nil)
-          expect(ctrl.response.body).not_to have_text("no longer available")
+          expect(ctrl.response.body).not_to include("no longer available")
         end
       end
 
@@ -207,7 +228,7 @@ describe "lti full width launch view" do
         it "does not warn the site admin about a New Quizzes being unavailable" do
           course.complete!
           ctrl.send(:content_tag_redirect, Account.default, tag, nil)
-          expect(ctrl.response.body).not_to have_text("no longer available")
+          expect(ctrl.response.body).not_to include("no longer available")
         end
       end
     end

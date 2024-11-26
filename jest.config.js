@@ -17,30 +17,30 @@
  */
 
 const {defaults} = require('jest-config')
+const {swc} = require('./ui-build/webpack/webpack.rules')
+
+const esModules = ['mime', 'react-dnd', 'dnd-core', '@react-dnd'].join('|')
 
 module.exports = {
   moduleNameMapper: {
     '\\.svg$': '<rootDir>/jest/imageMock.js',
     'node_modules-version-of-backbone': require.resolve('backbone'),
     'node_modules-version-of-react-modal': require.resolve('react-modal'),
-    underscore$: '<rootDir>/packages/lodash-underscore/index.js',
     '^Backbone$': '<rootDir>/public/javascripts/Backbone.js',
     // jest can't import the icons
     '@instructure/ui-icons/es/svg': '<rootDir>/packages/canvas-rce/src/rce/__tests__/_mockIcons.js',
-    // redirect imports from es/rce to lib
-    '@instructure/canvas-rce/es/rce/tinyRCE': '<rootDir>/packages/canvas-rce/lib/rce/tinyRCE.js',
-    '@instructure/canvas-rce/es/rce/RCE': '<rootDir>/packages/canvas-rce/lib/rce/RCE.js',
-    '@instructure/canvas-rce/es/rce/plugins/shared/Upload/CategoryProcessor':
-      '<rootDir>/packages/canvas-rce/lib/rce/plugins/shared/Upload/CategoryProcessor',
     // mock the tinymce-react Editor react component
-    '@tinymce/tinymce-react': '<rootDir>/packages/canvas-rce/src/rce/__mocks__/tinymceReact.js',
+    '@tinymce/tinymce-react': '<rootDir>/packages/canvas-rce/src/rce/__mocks__/tinymceReact.jsx',
     'decimal.js/decimal.mjs': 'decimal.js/decimal.js',
     // https://github.com/ai/nanoid/issues/363
     '^nanoid(/(.*)|$)': 'nanoid$1',
     '\\.(css)$': '<rootDir>/jest/styleMock.js',
+    'crypto-es': '<rootDir>/packages/canvas-rce/src/rce/__mocks__/_mockCryptoEs.ts',
+    '@instructure/studio-player':
+      '<rootDir>/packages/canvas-rce/src/rce/__mocks__/_mockStudioPlayer.js',
   },
   roots: ['<rootDir>/ui', 'gems/plugins', 'public/javascripts'],
-  moduleDirectories: ['ui/shims', 'public/javascripts', 'node_modules'],
+  moduleDirectories: ['public/javascripts', 'node_modules'],
   reporters: [
     'default',
     [
@@ -56,7 +56,7 @@ module.exports = {
   snapshotSerializers: ['enzyme-to-json/serializer'],
   setupFiles: ['jest-localstorage-mock', 'jest-canvas-mock', '<rootDir>/jest/jest-setup.js'],
   setupFilesAfterEnv: [
-    '@testing-library/jest-dom/extend-expect',
+    '@testing-library/jest-dom',
     './packages/validated-apollo/src/ValidatedApolloCleanup.js',
     '<rootDir>/jest/stubInstUi.js',
   ],
@@ -77,29 +77,29 @@ module.exports = {
 
   testEnvironment: '<rootDir>/jest/strictTimeLimitEnvironment.js',
 
+  transformIgnorePatterns: [`/node_modules/(?!${esModules})`],
+
   transform: {
     '\\.handlebars$': '<rootDir>/jest/handlebarsTransformer.js',
     '\\.graphql$': '<rootDir>/jest/rawLoader.js',
-    '\\.[jt]sx?$': [
-      'babel-jest',
+    '^.+\\.(j|t)s?$': [
+      '@swc/jest',
       {
-        configFile: false,
-        presets: [
-          [
-            '@babel/preset-env',
-            {
-              // until we're on Jest 27 and can look into loading ESMs natively;
-              // https://jestjs.io/docs/ecmascript-modules
-              modules: 'commonjs',
-            },
-          ],
-          ['@babel/preset-react', {useBuiltIns: true}],
-          ['@babel/preset-typescript', {}],
-        ],
-        targets: {
-          node: 'current',
-        },
+        jsc: swc[0].use.options.jsc,
       },
     ],
+    '^.+\\.(j|t)sx?$': [
+      '@swc/jest',
+      {
+        jsc: swc[1].use.options.jsc,
+      },
+    ],
+    '^.+\\.jsx?$': 'babel-jest',
   },
+  extensionsToTreatAsEsm: ['.jsx'],
+  testEnvironmentOptions: {
+    // https://github.com/mswjs/examples/blob/main/examples/with-jest/jest.config.ts#L20
+    customExportConditions: [''],
+  },
+  testTimeout: 10000,
 }

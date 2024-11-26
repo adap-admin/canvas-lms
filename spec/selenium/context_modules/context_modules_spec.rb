@@ -19,10 +19,16 @@
 
 require_relative "../helpers/context_modules_common"
 require_relative "../helpers/public_courses_context"
+require_relative "page_objects/modules_index_page"
+require_relative "page_objects/modules_settings_tray"
+require_relative "../../helpers/selective_release_common"
 
 describe "context modules" do
   include_context "in-process server selenium tests"
   include ContextModulesCommon
+  include ModulesIndexPage
+  include ModulesSettingsTray
+  include SelectiveReleaseCommon
 
   context "adds existing items to modules" do
     before(:once) do
@@ -43,6 +49,8 @@ describe "context modules" do
         # truthy setting
         Account.default.settings[:restrict_quantitative_data] = { value: true, locked: true }
         Account.default.save!
+        @course.restrict_quantitative_data = true
+        @course.save!
       end
 
       it "hides points possible for student", priority: "1" do
@@ -100,9 +108,7 @@ describe "context modules" do
     end
 
     it "adds a published quiz to a module", priority: "1" do
-      @pub_quiz = Quizzes::Quiz.create!(context: @course, title: "Published Quiz")
-      @pub_quiz.workflow_state = "published"
-      @pub_quiz.save!
+      @pub_quiz = Quizzes::Quiz.create!(context: @course, title: "Published Quiz", workflow_state: "available")
       @mod.add_item(type: "quiz", id: @pub_quiz.id)
       go_to_modules
       verify_module_title("Published Quiz")
@@ -210,6 +216,16 @@ describe "context modules" do
       expect(f(".due_date_display").text).to eq date_string(todo_date, :no_words)
     end
 
+    it "does not show the todo date on an graded discussion in a module", priority: "2" do
+      due_at = 3.days.from_now
+      todo_date = 3.days.from_now
+      @assignment = @course.assignments.create!(name: "assignemnt", due_at:)
+      @discussion = @course.discussion_topics.create!(title: "Graded Discussion", assignment: @assignment, todo_date:)
+      @mod.add_item(type: "discussion_topic", id: @discussion.id)
+      go_to_modules
+      expect(f(".due_date_display").text).to eq date_string(due_at, :no_words)
+    end
+
     it "edits available/until dates on a ungraded discussion in a module", priority: "2" do
       available_from = 2.days.from_now
       available_until = 4.days.from_now
@@ -234,10 +250,11 @@ describe "context modules" do
       @mod.save!
       go_to_modules
       verify_module_title("some assignment in a module")
-      expect(ff("span.publish-icon.unpublished.publish-icon-publish > i.icon-unpublish").length).to eq(2)
-      ff(".icon-unpublish")[0].click
-      wait_for_ajax_requests
-      expect(ff("span.publish-icon.unpublished.publish-icon-published > i.icon-publish").length).to eq(2)
+      expect(unpublished_module_icon(@mod.id)).to be_present
+      expect(f("span.publish-icon.unpublished.publish-icon-publish > i.icon-unpublish")).to be_present
+      publish_module_and_items(@mod.id)
+      expect(published_module_icon(@mod.id)).to be_present
+      expect(f("span.publish-icon.unpublished.publish-icon-published > i.icon-publish")).to be_present
     end
   end
 
@@ -563,7 +580,9 @@ describe "context modules" do
         expect(find_with_jquery('.module_dnd input[type="file"]')).to be_nil
       end
 
-      it "creating a new module should display a drag and drop area" do
+      it "creating a new module should display a drag and drop area without differentiated modules" do
+        Account.site_admin.disable_feature! :selective_release_ui_api
+
         get "/courses/#{@course.id}/modules"
         wait_for_ajaximations
 
@@ -576,11 +595,32 @@ describe "context modules" do
 
         expect(ff('.module_dnd input[type="file"]')).to have_size(2)
       end
+
+      it "creating a new module should display a drag and drop area with differentiated modules" do
+        differentiated_modules_on
+        get "/courses/#{@course.id}/modules"
+
+        click_new_module_link
+        update_module_name("New Module")
+        click_add_tray_add_module_button
+
+        expect(ff('.module_dnd input[type="file"]')).to have_size(2)
+      end
     end
 
-    it "adds a file item to a module", priority: "1" do
+    it "adds a file item to a module when differentiated modules is disabled", priority: "1" do
+      Account.site_admin.disable_feature! :selective_release_ui_api
       get "/courses/#{@course.id}/modules"
       manually_add_module_item("#attachments_select", "File", file_name)
+      expect(f(".context_module_item")).to include_text(file_name)
+    end
+
+    it "adds a file item to a module when differentiated modules is enabled", priority: "1" do
+      differentiated_modules_on
+
+      get "/courses/#{@course.id}/modules"
+      manually_add_module_item("#attachments_select", "File", file_name)
+      expect(f(".context_module_item")).to include_text(file_name)
     end
 
     it "does not remove the file link in a module when file is overwritten" do
@@ -602,7 +642,7 @@ describe "context modules" do
       @module.add_item({ id: @file.id, type: "attachment" })
       get "/courses/#{@course.id}/modules"
 
-      ff(".icon-publish")[1].click
+      f(".icon-publish").click
       wait_for_ajaximations
       set_value f(".UsageRightsSelectBox__select"), "own_copyright"
       set_value f("#copyrightHolder"), "Test User"

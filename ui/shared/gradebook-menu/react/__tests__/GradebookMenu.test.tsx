@@ -17,24 +17,50 @@
  */
 
 import React from 'react'
-import GradebookMenu from '@canvas/gradebook-menu'
-import type {GradiantVariantName} from '@canvas/gradebook-menu'
+import GradebookMenu from '../GradebookMenu'
+import {Link} from '@instructure/ui-link'
+import type {GradiantVariantName} from '../GradebookMenu'
 import {fireEvent, render} from '@testing-library/react'
 
 describe('GradebookMenu', () => {
-  const defaultProps = {
+  // EVAL-3711 Remove ICE Evaluate feature flag
+  beforeEach(() => {
+    window.ENV.FEATURES.instui_nav = true
+  })
+  const defaultProps = (props = {}) => ({
     courseUrl: '/courseUrl',
     learningMasteryEnabled: true,
-    enhancedIndividualGradebookEnabled: undefined,
     variant: 'DefaultGradebook' as GradiantVariantName,
-  }
+    ...props,
+  })
+
+  it('renders custom trigger if provided', () => {
+    const customTrigger = <Link as="button">Custom Trigger</Link>
+    const {getByText} = render(<GradebookMenu {...defaultProps({customTrigger})} />)
+
+    const item = getByText('Custom Trigger')
+    expect(item).toBeInTheDocument()
+  })
 
   describe('when variant is "DefaultGradebook"', () => {
-    it('renders the expected options', () => {
-      const {getAllByRole, getByRole} = render(<GradebookMenu {...defaultProps} />)
+    // EVAL-3711 Remove ICE Evaluate feature flag
+    it('renders the gradebook title when ICE feature flag is OFF', () => {
+      window.ENV.FEATURES.instui_nav = false
+      const {getByRole} = render(<GradebookMenu {...defaultProps()} />)
       const menu = getByRole('button')
-
       expect(menu).toHaveTextContent('Gradebook')
+    })
+
+    // EVAL-3711 Remove ICE Evaluate feature flag
+    it('renders the gradebook title when ICE feature flag is ON', () => {
+      const {getByTestId} = render(<GradebookMenu {...defaultProps()} />)
+      expect(getByTestId('gradebook-title')).toHaveTextContent('Gradebook')
+    })
+
+    it('renders the expected options', () => {
+      const {getAllByRole, getByRole} = render(<GradebookMenu {...defaultProps()} />)
+
+      const menu = getByRole('button')
       fireEvent.click(menu)
 
       const menuItems = getAllByRole('menuitemradio')
@@ -47,7 +73,7 @@ describe('GradebookMenu', () => {
 
     it('omits "Learning Mastery" when learningMasteryEnabled is false (1)', () => {
       const {getByRole, queryByTestId} = render(
-        <GradebookMenu {...defaultProps} learningMasteryEnabled={false} />
+        <GradebookMenu {...defaultProps()} learningMasteryEnabled={false} />
       )
       const menu = getByRole('button')
       fireEvent.click(menu)
@@ -57,12 +83,30 @@ describe('GradebookMenu', () => {
   })
 
   describe('when variant is "DefaultGradebookLearningMastery"', () => {
-    it('renders the expected options', () => {
-      const {getAllByRole, getByRole} = render(
-        <GradebookMenu {...defaultProps} variant="DefaultGradebookLearningMastery" />
+    // EVAL-3711 Remove ICE Evaluate feature flag
+    it('renders the gradebook title when ICE feature flag is OFF', () => {
+      window.ENV.FEATURES.instui_nav = false
+      const {getByRole} = render(
+        <GradebookMenu {...defaultProps()} variant="DefaultGradebookLearningMastery" />
       )
       const menu = getByRole('button')
       expect(menu).toHaveTextContent('Learning Mastery')
+    })
+
+    // EVAL-3711 Remove ICE Evaluate feature flag
+    it('renders the gradebook title when ICE feature flag is ON', () => {
+      const {getByTestId} = render(
+        <GradebookMenu {...defaultProps()} variant="DefaultGradebookLearningMastery" />
+      )
+      expect(getByTestId('gradebook-title')).toHaveTextContent('Learning Mastery')
+    })
+
+    it('renders the expected options', () => {
+      const {getAllByRole, getByRole} = render(
+        <GradebookMenu {...defaultProps()} variant="DefaultGradebookLearningMastery" />
+      )
+
+      const menu = getByRole('button')
       fireEvent.click(menu)
 
       const menuItems = getAllByRole('menuitemradio')
@@ -89,13 +133,27 @@ describe('GradebookMenu', () => {
   })
 
   describe('when variant is "GradebookHistory"', () => {
+    // EVAL-3711 Remove ICE Evaluate feature flag
+    it('renders the gradebook title when ICE feature flag is OFF', () => {
+      window.ENV.FEATURES.instui_nav = false
+      const {getByRole} = render(<GradebookMenu {...defaultProps()} variant="GradebookHistory" />)
+      const menu = getByRole('button')
+      expect(menu).toHaveTextContent('Gradebook History')
+    })
+
+    // EVAL-3711 Remove ICE Evaluate feature flag
+    it('renders the gradebook title when ICE feature flag is ON', () => {
+      const {getByTestId} = render(<GradebookMenu {...defaultProps()} variant="GradebookHistory" />)
+      expect(getByTestId('gradebook-title')).toHaveTextContent('Gradebook History')
+    })
+
     it('renders the expected options', () => {
       const {getAllByRole, getByRole} = render(
-        <GradebookMenu {...defaultProps} variant="GradebookHistory" />
+        <GradebookMenu {...defaultProps()} variant="GradebookHistory" />
       )
+
       const menu = getByRole('button')
 
-      expect(menu).toHaveTextContent('Gradebook History')
       fireEvent.click(menu)
 
       const menuItems = getAllByRole('menuitemradio')
@@ -123,7 +181,7 @@ describe('GradebookMenu', () => {
     it('omits "Learning Mastery" when learningMasteryEnabled is false (2)', () => {
       const {getAllByRole, getByRole} = render(
         <GradebookMenu
-          {...defaultProps}
+          {...defaultProps()}
           variant="GradebookHistory"
           learningMasteryEnabled={false}
         />

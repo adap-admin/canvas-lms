@@ -23,6 +23,8 @@ module Api::V1::Group
   include Api::V1::Context
   include Api::V1::Tab
 
+  GROUP_MEMBER_LIMIT = 1000
+
   API_GROUP_JSON_OPTS = {
     only: %w[id name description is_public join_level group_category_id max_membership created_at],
     methods: %w[members_count storage_quota_mb],
@@ -42,6 +44,7 @@ module Api::V1::Group
 
     hash = api_json(group, user, session, API_GROUP_JSON_OPTS, permissions_to_include)
     hash.merge!(context_data(group))
+    hash["context_name"] = group.context.name
     image = group.avatar_attachment
     hash["avatar_url"] = image && thumbnail_image_url(image)
     hash["role"] = group.group_category.role if group.group_category
@@ -49,11 +52,10 @@ module Api::V1::Group
     hash["leader"] = group.leader ? user_display_json(group.leader, group) : nil
 
     if includes.include?("users")
-      group_member_json_limit = Setting.get("group_json_user_cap", "1000").to_i
       users = if group.grants_right?(@current_user, :read_as_admin)
-                group.users.order_by_sortable_name.limit(group_member_json_limit).distinct
+                group.users.order_by_sortable_name.limit(GROUP_MEMBER_LIMIT).distinct
               else
-                group.participating_users_in_context(sort: true, include_inactive_users: options[:include_inactive_users]).limit(group_member_json_limit).distinct
+                group.participating_users_in_context(sort: true, include_inactive_users: options[:include_inactive_users]).limit(GROUP_MEMBER_LIMIT).distinct
               end
       active_user_ids = nil
       if options[:include_inactive_users]
@@ -89,6 +91,9 @@ module Api::V1::Group
     if includes.include?("can_message")
       hash["can_message"] = group.grants_right?(@current_user, :send_messages)
     end
+
+    hash["non_collaborative"] = group.non_collaborative?
+
     hash
   end
 

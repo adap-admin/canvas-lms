@@ -43,8 +43,8 @@ class MasterCourses::MasterMigration < ActiveRecord::Base
 
   before_create :set_root_account_id
 
-  serialize :export_results, Hash
-  serialize :migration_settings, Hash
+  serialize :export_results, type: Hash
+  serialize :migration_settings, type: Hash
 
   has_a_broadcast_policy
 
@@ -86,6 +86,10 @@ class MasterCourses::MasterMigration < ActiveRecord::Base
 
   def copy_settings=(val)
     migration_settings[:copy_settings] = val
+  end
+
+  def send_item_notifications=(val)
+    migration_settings[:send_item_notifications] = val
   end
 
   def publish_after_initial_sync=(val)
@@ -214,7 +218,7 @@ class MasterCourses::MasterMigration < ActiveRecord::Base
     ce.master_migration = self # don't need to reload
     ce.export_course(export_opts)
     if type == :selective && ce.referenced_files.present?
-      ce.settings[:referenced_file_migration_ids] = ce.referenced_files.values
+      ce.settings[:referenced_file_migration_ids] = ce.referenced_files.values.map(&:export_id)
       ce.save!
     end
     if ce.exported_for_course_copy? && is_primary
@@ -243,7 +247,7 @@ class MasterCourses::MasterMigration < ActiveRecord::Base
     return false unless obj
     return true if last_export_at.nil? || ignore_updated_at
 
-    if obj.is_a?(LearningOutcome) && obj.context_type == "Account"
+    if obj.is_a?(LearningOutcome)
       link = master_template.course.learning_outcome_links.where(content: obj).first
       obj = link if link # export the outcome if it's a new link
     end
@@ -292,6 +296,7 @@ class MasterCourses::MasterMigration < ActiveRecord::Base
       cm.migration_settings[:hide_from_index] = true # we may decide we want to show this after all, but hide them for now
       cm.migration_settings[:master_course_export_id] = export.id
       cm.migration_settings[:master_migration_id] = id
+      cm.migration_settings[:send_item_notifications] = true if migration_settings[:send_item_notifications]
       cm.migration_settings[:publish_after_completion] = type == :full && migration_settings[:publish_after_initial_sync]
       cm.child_subscription_id = sub.id
       cm.source_course_id = master_template.course_id # apparently this is how some lti tools try to track copied content :/

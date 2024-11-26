@@ -252,6 +252,25 @@ class OutcomeResultsController < ApplicationController
     render json:
   end
 
+  # @API Set outcome ordering for LMGB
+  #
+  # Saves the ordering of outcomes in LMGB for a user
+  def outcome_order
+    outcome_position_map = JSON.parse(request.body.read)
+
+    # Validate outcomes belong to this course
+    course_outcome_ids = @outcomes.pluck(:id).to_set
+    outcome_position_map.each do |outcome|
+      reject! "Outcomes do not belong to Course" unless course_outcome_ids.include?(outcome["outcome_id"])
+    end
+
+    # Associate user with shard if they are not already
+    @current_user.associate_with_shard(@context.shard, :shadow) unless @current_user.associated_shards.include?(@context.shard)
+
+    # Save Lmgb Outcome Ordering
+    UserLmgbOutcomeOrderings.set_lmgb_outcome_ordering(@context.root_account_id, @current_user.id, @context.id, outcome_position_map)
+  end
+
   # @API Get outcome result rollups
   #
   # Gets the outcome rollups for the users and outcomes in the specified
@@ -481,22 +500,21 @@ class OutcomeResultsController < ApplicationController
     filters << "completed" if exclude_concluded
     filters << "inactive" if exclude_inactive
 
-    ActiveRecord::Associations.preload(@users, :enrollments)
     # Only pull enrollment records for students included in the current course
     # If a user is enrolled more than once in a course - i.e. the student could be in multiple
     # sections of the course. Then we will need to one of two things:
     # 1. If the section parameter is available - filter only by the user's enrollment status in
     #    the section
     # 2. If the section parameter is not available - filter by the user's enrollment status(es) in the course.
-    #    If there are multiple enrollments available for the user, `.all?` will return false if the user is
-    #    active in one of the sections.
     # NOTE: If viewing all sections and a user is concluded or inactive in one section and not another,
     # the student should always be visible
-    @users = if params[:section_id]
-               @users.reject { |u| u.enrollments.where(course_id: @context.id, course_section_id: params[:section_id]).all? { |e| filters.include? e.workflow_state } }
-             else
-               @users.reject { |u| u.enrollments.where(course_id: @context.id).all? { |e| filters.include? e.workflow_state } }
-             end
+
+    join_query = "LEFT JOIN #{Enrollment.quoted_table_name} ON enrollments.type IN ('StudentEnrollment', 'StudentViewEnrollment') AND enrollments.user_id = users.id"
+    if params[:section_id]
+      join_query += " AND enrollments.course_section_id = #{params[:section_id]}"
+    end
+
+    @users = User.joins(join_query).where("#{Enrollment.quoted_table_name}.course_id = #{@context.id} AND enrollments.workflow_state NOT IN (?)", filters).distinct
   end
 
   # used in LMGB
@@ -730,8 +748,19 @@ class OutcomeResultsController < ApplicationController
       reject! "can only include id's of outcomes in the outcome context" if @outcomes.count != outcome_ids.count
     else
       outcome_group_ids.each_slice(100) do |outcome_group_ids_slice|
-        @outcome_links += ContentTag.learning_outcome_links.active.where(associated_asset_id: outcome_group_ids_slice)
+        @outcome_links += ContentTag.learning_outcome_links.active
+                                    .where(associated_asset_id: outcome_group_ids_slice)
+                                    .joins("LEFT OUTER JOIN #{UserLmgbOutcomeOrderings.quoted_table_name} as u
+                                              ON u.learning_outcome_id = content_tags.content_id
+                                              AND u.user_id = #{@current_user.id}
+                                              AND u.course_id = #{@context.id}")
+                                    .select("#{ContentTag.quoted_table_name}.*, u.position")
       end
+
+      # Sort outcomes by lmgb_position
+      # If there is no lmgb_position for an outcome, then place it at the end
+      @outcome_links.sort_by! { |link| link[:position] || link[:id] }
+
       associations = [:learning_outcome_content]
       if Api.value_to_array(params[:include]).include? "outcome_paths"
         associations << { associated_asset: :learning_outcome_group }
@@ -770,7 +799,7 @@ class OutcomeResultsController < ApplicationController
       @users = apply_sort_order(@section.all_students).to_a
     end
     @users ||= users_for_outcome_context.to_a
-    @users.sort! { |a, b| a.id <=> b.id } unless params[:sort_by]
+    @users.sort_by!(&:id) unless params[:sort_by]
     # cache all users, since pagination in #user_rollups_json may remove some
     # when we need all users when calculating rating percents
     @all_users = @users

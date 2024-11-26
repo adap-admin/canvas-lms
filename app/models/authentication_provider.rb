@@ -26,6 +26,8 @@ class AuthenticationProvider < ActiveRecord::Base
   include Workflow
   validates :auth_filter, length: { maximum: maximum_text_length, allow_blank: true }
 
+  DEBUG_EXPIRE = 30.minutes
+
   workflow do
     state :active
     state :deleted
@@ -47,7 +49,7 @@ class AuthenticationProvider < ActiveRecord::Base
     case type_name
     when "cas", "ldap", "saml"
       const_get(type_name.upcase)
-    when "apple", "clever", "facebook", "google", "microsoft", "saml_idp_discovery", "twitter"
+    when "apple", "clever", "facebook", "google", "microsoft", "saml_idp_discovery"
       const_get(type_name.classify)
     when "canvas"
       Canvas
@@ -57,6 +59,8 @@ class AuthenticationProvider < ActiveRecord::Base
       LinkedIn
     when "openid_connect"
       OpenIDConnect
+    when "twitter"
+      Twitter
     else
       super
     end
@@ -70,7 +74,7 @@ class AuthenticationProvider < ActiveRecord::Base
     false
   end
 
-  def self.enabled?(_account = nil)
+  def self.enabled?(_account = nil, _user = nil)
     true
   end
 
@@ -90,7 +94,11 @@ class AuthenticationProvider < ActiveRecord::Base
     t("Login with %{provider}", provider: display_name)
   end
 
-  scope :active, -> { where("workflow_state <> 'deleted'") }
+  def self.supports_autoconfirmed_email?
+    true
+  end
+
+  scope :active, -> { where.not(workflow_state: "deleted") }
   belongs_to :account
   include ::Canvas::RootAccountCacher
   has_many :pseudonyms, inverse_of: :authentication_provider
@@ -119,7 +127,7 @@ class AuthenticationProvider < ActiveRecord::Base
   end
 
   def self.recognized_params
-    [:mfa_required, :skip_internal_mfa].freeze
+    %i[mfa_required skip_internal_mfa otp_via_sms].freeze
   end
 
   def self.site_admin_params
@@ -134,6 +142,14 @@ class AuthenticationProvider < ActiveRecord::Base
 
   def self.login_button?
     Rails.root.join("app/views/shared/svg/_svg_icon_#{sti_name}.svg").exist?
+  end
+
+  def visible_to?(_user)
+    true
+  end
+
+  def login_attribute_for_pseudonyms
+    nil
   end
 
   def destroy
@@ -181,7 +197,7 @@ class AuthenticationProvider < ActiveRecord::Base
   end
 
   def settings
-    read_attribute(:settings) || {}
+    super || {}
   end
 
   def federated_attributes=(value)
@@ -216,6 +232,20 @@ class AuthenticationProvider < ActiveRecord::Base
     settings["skip_internal_mfa"] = ::Canvas::Plugin.value_to_boolean(value)
   end
 
+  # Default to true if not set, for backwards compatibility/opt-out
+  def otp_via_sms?
+    if settings.key?("otp_via_sms")
+      !!settings["otp_via_sms"]
+    else
+      true
+    end
+  end
+  alias_method :otp_via_sms, :otp_via_sms?
+
+  def otp_via_sms=(value)
+    settings["otp_via_sms"] = ::Canvas::Plugin.value_to_boolean(value)
+  end
+
   def federated_attributes_for_api
     if jit_provisioning?
       federated_attributes
@@ -244,12 +274,19 @@ class AuthenticationProvider < ActiveRecord::Base
     time_zone
   ].freeze
 
-  def provision_user(unique_id, provider_attributes = {})
+  def provision_user(unique_ids, provider_attributes = {})
     User.transaction(requires_new: true) do
+      if unique_ids.is_a?(Hash)
+        unique_id = unique_ids[login_attribute]
+      else
+        unique_id = unique_ids
+        unique_ids = {}
+      end
       pseudonym = account.pseudonyms.build
       pseudonym.user = User.create!(name: unique_id) { |u| u.workflow_state = "registered" }
       pseudonym.authentication_provider = self
       pseudonym.unique_id = unique_id
+      pseudonym.unique_ids = unique_ids
       pseudonym.save!
       apply_federated_attributes(pseudonym, provider_attributes, purpose: :provisioning)
       pseudonym
@@ -297,28 +334,47 @@ class AuthenticationProvider < ActiveRecord::Base
         account_users_to_delete.each(&:destroy)
         account_users_to_activate.each(&:reactivate)
       when "sis_user_id", "integration_id"
+        next if value.empty?
+        next if pseudonym.account.pseudonyms.where(sis_user_id: value).exists?
+
         pseudonym[attribute] = value
       when "display_name"
         user.short_name = value
       when "email"
-        cc = user.communication_channels.email.by_path(value).first
-        cc ||= user.communication_channels.email.new(path: value)
-        cc.workflow_state = "active"
-        cc.save! if cc.changed?
-      when "locale"
-        # convert _ to -, be lenient about case, and perform fallbacks
-        value = value.tr("_", "-")
-        lowercase_locales = I18n.available_locales.map(&:to_s).map(&:downcase)
-        while value.include?("-")
-          break if lowercase_locales.include?(value.downcase)
+        next if value.empty?
 
-          value = value.sub(/(?:x-)?-[^-]*$/, "")
+        autoconfirm = self.class.supports_autoconfirmed_email? && federated_attributes.dig("email", "autoconfirm")
+        Array.wrap(value).uniq.each do |email|
+          cc = user.communication_channels.email.by_path(email).first
+          cc ||= user.communication_channels.email.new(path: email)
+          if autoconfirm
+            cc.workflow_state = "active"
+          elsif cc.new_record?
+            cc.workflow_state = "unconfirmed"
+          end
+          if cc.changed?
+            cc.save!
+            cc.send_confirmation!(pseudonym.account) unless autoconfirm
+          end
         end
-        if (i = lowercase_locales.index(value.downcase))
-          user.locale = I18n.available_locales[i].to_s
+      when "locale"
+        lowercase_locales = I18n.available_locales.map { |locale| locale.to_s.downcase }
+
+        Array.wrap(value).uniq.map do |locale|
+          # convert _ to -, be lenient about case
+          locale = locale.tr("_", "-")
+          while locale.include?("-")
+            break if lowercase_locales.include?(locale.downcase)
+
+            locale = locale.sub(/(?:x-)?-[^-]*$/, "")
+          end
+          if (i = lowercase_locales.index(locale.downcase))
+            user.locale = I18n.available_locales[i].to_s
+            break
+          end
         end
       else
-        user.send("#{attribute}=", value)
+        user.send(:"#{attribute}=", value)
       end
     end
     if pseudonym.changed? && !pseudonym.save
@@ -349,11 +405,11 @@ class AuthenticationProvider < ActiveRecord::Base
   end
 
   def debug_get(key)
-    ::Canvas.redis.get(debug_key(key))
+    ::Canvas.redis.get(debug_key(key), failsafe: nil)
   end
 
   def debug_set(key, value, overwrite: true)
-    ::Canvas.redis.set(debug_key(key), value, ex: debug_expire.to_i, nx: overwrite ? nil : true)
+    ::Canvas.redis.set(debug_key(key), value, ex: DEBUG_EXPIRE.to_i, nx: overwrite ? nil : true)
   end
 
   protected
@@ -364,6 +420,9 @@ class AuthenticationProvider < ActiveRecord::Base
 
   private
 
+  BOOLEAN_ATTRIBUTE_PROPERTIES = %w[provisioning_only autoconfirm].freeze
+  private_constant :BOOLEAN_ATTRIBUTE_PROPERTIES
+
   def validate_federated_attributes
     bad_keys = federated_attributes.keys - CANVAS_ALLOWED_FEDERATED_ATTRIBUTES
     unless bad_keys.empty?
@@ -373,17 +432,27 @@ class AuthenticationProvider < ActiveRecord::Base
 
     # normalize values to { attribute: <attribute>, provisioning_only: true|false }
     federated_attributes.each_key do |key|
-      case federated_attributes[key]
+      case (attr = federated_attributes[key])
       when String
-        federated_attributes[key] = { "attribute" => federated_attributes[key], "provisioning_only" => false }
+        attr = federated_attributes[key] = { "attribute" => federated_attributes[key], "provisioning_only" => false }
+        attr["autoconfirm"] = false if key == "email"
       when Hash
-        bad_keys = federated_attributes[key].keys - ["attribute", "provisioning_only"]
+        bad_keys = attr.keys - ["attribute", "provisioning_only"]
+        bad_keys.delete("autoconfirm") if key == "email"
         unless bad_keys.empty?
           errors.add(:federated_attributes, "unrecognized key #{bad_keys.join(", ")} in #{key} attribute definition")
           return
         end
-        federated_attributes[key]["provisioning_only"] =
-          ::Canvas::Plugin.value_to_boolean(federated_attributes[key]["provisioning_only"])
+        unless attr.key?("attribute")
+          errors.add(:federated_attributes, "missing key attribute in #{key} attribute definition")
+          return
+        end
+
+        BOOLEAN_ATTRIBUTE_PROPERTIES.each do |prop|
+          next if prop == "autoconfirm" && key != "email"
+
+          attr[prop] = ::Canvas::Plugin.value_to_boolean(attr[prop])
+        end
       else
         errors.add(:federated_attributes, "invalid attribute definition for #{key}")
         return
@@ -424,9 +493,5 @@ class AuthenticationProvider < ActiveRecord::Base
 
   def debug_key(key)
     ["auth_provider_debugging", global_id, key.to_s].cache_key
-  end
-
-  def debug_expire
-    Setting.get("auth_provider_debug_expire_minutes", 30).to_i.minutes
   end
 end

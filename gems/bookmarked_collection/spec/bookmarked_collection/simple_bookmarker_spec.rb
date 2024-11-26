@@ -27,7 +27,7 @@ describe BookmarkedCollection::SimpleBookmarker do
     end
 
     BookmarkedCollection.best_unicode_collation_key_proc = lambda do |col|
-      return "lower(#{col})"
+      "lower(#{col})"
     end
 
     @bookmarker = BookmarkedCollection::SimpleBookmarker.new(@example_class, :name, :id)
@@ -43,9 +43,9 @@ describe BookmarkedCollection::SimpleBookmarker do
     @bill = @example_class.create!(name: "BILL!")
   end
 
-  context "#bookmark_for" do
+  describe "#bookmark_for" do
     it "is comparable" do
-      expect(@bookmarker.bookmark_for(@bob)).to be_respond_to(:<=>)
+      expect(@bookmarker.bookmark_for(@bob)).to respond_to(:<=>)
     end
 
     it "matches the columns, in order" do
@@ -53,7 +53,7 @@ describe BookmarkedCollection::SimpleBookmarker do
     end
   end
 
-  context "#validate" do
+  describe "#validate" do
     it "validates the bookmark and its contents" do
       expect(@bookmarker.validate({ name: "bob", id: 1 })).to be_falsey
       expect(@bookmarker.validate(["bob"])).to be_falsey
@@ -72,7 +72,7 @@ describe BookmarkedCollection::SimpleBookmarker do
     end
   end
 
-  context "#restrict_scope" do
+  describe "#restrict_scope" do
     it "orders correctly" do
       pager = double(current_bookmark: nil)
       expect(@bookmarker.restrict_scope(@example_class, pager)).to eq(

@@ -24,6 +24,9 @@
             "name": "AdhocStudents"
           },
           {
+            "name": "Course"
+          },
+          {
             "name": "Group"
           },
           {
@@ -78,9 +81,6 @@
             "name": "AssignmentGroup"
           },
           {
-            "name": "AssignmentOverride"
-          },
-          {
             "name": "CommentBankItem"
           },
           {
@@ -91,6 +91,9 @@
           },
           {
             "name": "Course"
+          },
+          {
+            "name": "CustomGradeStatus"
           },
           {
             "name": "Discussion"
@@ -118,6 +121,9 @@
           },
           {
             "name": "GradingPeriod"
+          },
+          {
+            "name": "GradingPeriodGroup"
           },
           {
             "name": "Group"
@@ -198,6 +204,9 @@
             "name": "Section"
           },
           {
+            "name": "StandardGradeStatus"
+          },
+          {
             "name": "Submission"
           },
           {
@@ -208,6 +217,9 @@
           },
           {
             "name": "Term"
+          },
+          {
+            "name": "UsageRights"
           },
           {
             "name": "User"
@@ -282,9 +294,6 @@
             "name": "AssignmentGroup"
           },
           {
-            "name": "AssignmentOverride"
-          },
-          {
             "name": "CommentBankItem"
           },
           {
@@ -300,6 +309,9 @@
             "name": "Course"
           },
           {
+            "name": "CustomGradeStatus"
+          },
+          {
             "name": "Discussion"
           },
           {
@@ -313,6 +325,12 @@
           },
           {
             "name": "GradingPeriod"
+          },
+          {
+            "name": "GradingPeriodGroup"
+          },
+          {
+            "name": "GradingStandard"
           },
           {
             "name": "Group"
@@ -378,10 +396,16 @@
             "name": "Section"
           },
           {
+            "name": "StandardGradeStatus"
+          },
+          {
             "name": "Submission"
           },
           {
             "name": "Term"
+          },
+          {
+            "name": "UsageRights"
           },
           {
             "name": "User"
@@ -483,10 +507,16 @@
             "name": "GradingPeriod"
           },
           {
+            "name": "GradingPeriodGroup"
+          },
+          {
             "name": "Group"
           },
           {
             "name": "GroupMembership"
+          },
+          {
+            "name": "InboxSettings"
           },
           {
             "name": "InternalSetting"

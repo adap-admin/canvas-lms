@@ -16,73 +16,79 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React, {useState} from 'react'
+import React from 'react'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import doFetchApi from '@canvas/do-fetch-api-effect'
-import {teacherNotes} from '../../../types/gradebook.d'
+import type {CustomColumn, HandleCheckboxChange, TeacherNotes} from '../../../types'
+import {executeApiRequest} from '@canvas/do-fetch-api-effect/apiRequest'
+import CheckboxTemplate from './CheckboxTemplate'
 
 const I18n = useI18nScope('enhanced_individual_gradebook')
 type Props = {
-  teacherNotes?: teacherNotes | null
+  teacherNotes?: TeacherNotes | null
+  customColumns?: CustomColumn[] | null
   customColumnsUrl?: string | null
   customColumnUrl?: string | null
+  reorderCustomColumnsUrl?: string | null
+  handleCheckboxChange: HandleCheckboxChange
+  showNotesColumn: boolean
+  onTeacherNotesCreation: (teacherNotes: TeacherNotes) => void
 }
+
 export default function ShowNotesColumnCheckbox({
   teacherNotes,
+  customColumns,
   customColumnsUrl,
   customColumnUrl,
+  reorderCustomColumnsUrl,
+  showNotesColumn,
+  handleCheckboxChange,
+  onTeacherNotesCreation,
 }: Props) {
-  const [showNotesColumn, setShowNotesColumn] = useState(
-    teacherNotes?.hidden !== undefined ? !teacherNotes?.hidden : false
-  )
-  const handleShowNotesColumnChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    let url: string
-    let method: string
-    let body: {}
-    if (customColumnUrl && customColumnsUrl) {
-      if (teacherNotes) {
-        method = 'PUT'
-        url = customColumnUrl.replace(':id', teacherNotes?.id)
-        body = {column: {hidden: !event.target.checked}}
-      } else if (event.target.checked) {
-        url = customColumnsUrl
-        method = 'POST'
-        body = {
-          column: {
-            title: I18n.t('notes', 'Notes'),
-            position: 1,
-            teacher_notes: true,
-          },
-        }
-      } else {
-        return
-      }
-    } else {
+  const handleShowNotesColumnChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!customColumnUrl || !customColumnsUrl) {
       return
     }
-    doFetchApi({
-      method,
-      body,
-      path: url,
+    const checked = event.target.checked
+    if (teacherNotes) {
+      executeApiRequest({
+        method: 'PUT',
+        body: {column: {hidden: !checked}},
+        path: customColumnUrl.replace(':id', teacherNotes?.id),
+      })
+    } else {
+      const {data} = await executeApiRequest<TeacherNotes>({
+        method: 'POST',
+        body: {
+          column: {
+            title: I18n.t('Notes'),
+            position: 1,
+            teacher_notes: true,
+            hidden: !checked,
+          },
+        },
+        path: customColumnsUrl,
+      })
+      onTeacherNotesCreation(data)
+    }
+    handleCheckboxChange('showNotesColumn', checked)
+    if (!checked || !reorderCustomColumnsUrl || !customColumns) {
+      return
+    }
+    executeApiRequest({
+      method: 'POST',
+      path: reorderCustomColumnsUrl,
+      body: {
+        order: customColumns.map(column => Number(column.id)),
+      },
     })
-    setShowNotesColumn(event.target.checked)
   }
 
   return (
-    <div
-      className="checkbox"
-      style={{padding: 12, margin: '10px 0px', background: '#eee', borderRadius: 5}}
-    >
-      <label className="checkbox" htmlFor="show_notes_checkbox">
-        <input
-          type="checkbox"
-          id="show_notes_checkbox"
-          name="show_notes_checkbox"
-          checked={showNotesColumn}
-          onChange={handleShowNotesColumnChange}
-        />
-        {I18n.t('Show Notes in Student Info')}
-      </label>
-    </div>
+    <CheckboxTemplate
+      dataTestId="show-notes-column-checkbox"
+      label={I18n.t('Show Notes in Student Info')}
+      checked={showNotesColumn}
+      onChange={handleShowNotesColumnChange}
+    />
   )
 }

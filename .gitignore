@@ -10,19 +10,23 @@
 #
 # That's what .git/info/exclude and core.excludesfile are for :)
 .bundle/
-.byebug_history
 .env
 .mutagen
+.swc
+.idea/
 /.yardoc/
 /.ruby-version
 /app/views/info/styleguide.html.erb
 /config/*.yml
+/config/*.yml.cached
 /config/credentials.yml.enc
 !/config/brakeman.yml
+!/config/code_ownership.yml
 !/config/credentials.test.yml
 !/config/crystalball.yml
 /config/environments/*-local.rb
 /config/locales/generated/
+/config/saml/*
 /config/RAILS_VERSION
 /coverage/
 /coverage-js/
@@ -35,10 +39,11 @@ docker-compose.override.yml
 !/log/.keep
 !/log/parallel-runtime-rspec.log
 mkmf.log
-/node_modules
+node_modules
 npm-debug.log
 /public/dist/
 /public/doc/api/
+/public/doc/api_md/
 /public/javascripts/translations/*
 !/public/javascripts/translations/en.json
 /storybook-static/
@@ -72,10 +77,8 @@ docker-compose/api-gateway.override.yml
 /packages/*/node_modules
 /packages/*/es
 /packages/*/lib
-!/packages/babel-plugin-themeable-styles/lib
 /packages/*/coverage/
 /packages/*/coverage-js/
-/packages/canvas-planner/.babel-cache
 
 # pact artifacts
 /reports/
@@ -86,6 +89,9 @@ docker-compose/api-gateway.override.yml
 
 # generated scopes markdown
 /doc/api/api_token_scopes.md
+
+# generated live events docs
+/doc/api/data_services/md/dynamic/*.md
 
 # js coverage stuff
 .nyc_output

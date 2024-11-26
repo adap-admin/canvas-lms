@@ -16,7 +16,7 @@
 #
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
-require_relative "./job_live_events_context"
+require_relative "job_live_events_context"
 Delayed::Job.include(JobLiveEventsContext)
 
 Delayed::Backend::Base.class_eval do
@@ -71,16 +71,15 @@ end
 Delayed::Backend::ActiveRecord::Job.include(Delayed::Backend::DefaultJobAccount)
 
 Delayed::Settings.default_job_options        = -> { { current_shard: Shard.current } }
-Delayed::Settings.fetch_batch_size           = -> { Setting.get("jobs_get_next_batch_size", "5").to_i }
+Delayed::Settings.fetch_batch_size           = 20
 Delayed::Settings.job_detailed_log_format    = ->(job) { job.to_detailed_log_format }
 Delayed::Settings.job_short_log_format       = ->(job) { job.to_short_log_format }
 Delayed::Settings.max_attempts               = 1
 Delayed::Settings.num_strands                = ->(strand_name) { Setting.get("#{strand_name}_num_strands", nil) }
 Delayed::Settings.pool_procname_suffix       = " (#{Canvas.revision})" if Canvas.revision
 Delayed::Settings.queue                      = "canvas_queue"
-Delayed::Settings.select_random_from_batch   = -> { Setting.get("jobs_select_random", "false") == "true" }
-Delayed::Settings.sleep_delay                = -> { Setting.get("delayed_jobs_sleep_delay", "2.0").to_f }
-Delayed::Settings.sleep_delay_stagger        = -> { Setting.get("delayed_jobs_sleep_delay_stagger", "2.0").to_f }
+Delayed::Settings.sleep_delay                = 2.0
+Delayed::Settings.sleep_delay_stagger        = 2.0
 Delayed::Settings.worker_procname_prefix     = -> { "#{Shard.current(Delayed::Backend::ActiveRecord::AbstractJob).id}~" }
 Delayed::Settings.worker_health_check_type   = Delayed::CLI.instance&.config&.dig("health_check", "type")&.to_sym || :none
 Delayed::Settings.worker_health_check_config = Delayed::CLI.instance&.config&.[]("health_check")
@@ -88,9 +87,7 @@ Delayed::Settings.worker_health_check_config = Delayed::CLI.instance&.config&.[]
 # ResendPlagiarismEvents
 # MicrosoftSync::StateMachineJob
 # turnitin/veracite/canvadocs/etc.
-Delayed::Settings.stranded_run_at_grace_period = -> { Setting.get("delayed_jobs_stranded_run_at_grace_period", 31_622_400).to_f.seconds }
-# transitional
-Delayed::Settings.infer_strand_from_singleton = -> { Setting.get("infer_strand_from_singleton", false) == "true" }
+Delayed::Settings.stranded_run_at_grace_period = 1.year
 
 # load our periodic_jobs.yml (cron overrides config file)
 Delayed::Periodic.add_overrides(ConfigFile.load("periodic_jobs").dup || {})
@@ -120,28 +117,11 @@ Delayed::Worker.on_max_failures = proc do |_job, err|
   err.is_a?(Delayed::Backend::RecordNotFound)
 end
 
-module DelayedJobConfig
-  class << self
-    def config
-      @config ||= YAML.safe_load(DynamicSettings.find(tree: :private)["delayed_jobs.yml"] || "{}")
-    end
-
-    def strands_to_send_to_statsd
-      @strands_to_send_to_statsd ||= (config["strands_to_send_to_statsd"] || []).to_set
-    end
-
-    def reload
-      @config = @strands_to_send_to_statsd = nil
-    end
-    Canvas::Reloader.on_reload { DelayedJobConfig.reload }
-  end
-end
-
 ### lifecycle callbacks
 
 Delayed::Worker.lifecycle.around(:perform) do |worker, job, &block|
   Canvas::Reloader.reload! if Canvas::Reloader.pending_reload
-  Canvas::Redis.clear_idle_connections
+  Canvas::RedisConnections.clear_idle!
   job.current_shard.activate do
     LoadAccount.check_schema_cache
   end
@@ -156,7 +136,9 @@ Delayed::Worker.lifecycle.around(:perform) do |worker, job, &block|
   LiveEvents.set_context(job.live_events_context)
 
   Sentry.set_tags({
-                    jobs_cluster: job.current_shard.delayed_jobs_shard&.id
+                    jobs_cluster: job.current_shard.delayed_jobs_shard&.id,
+                    shard: job.current_shard.id,
+                    db_cluster: job.current_shard.database_server.id
                   })
 
   HostUrl.reset_cache!

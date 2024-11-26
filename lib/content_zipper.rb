@@ -20,6 +20,8 @@
 require "zip"
 
 class ContentZipper
+  MAX_FILENAME_LENGTH = 255
+
   def initialize(options = {})
     @check_user = options.key?(:check_user) ? options[:check_user] : true
     @logger = Rails.logger
@@ -160,14 +162,14 @@ class ContentZipper
 
     all_attachments = rich_text_attachments + static_attachments
 
-    filename = portfolio.name
-    make_zip_tmpdir(filename) do |zip_name|
+    make_zip_tmpdir(portfolio.name) do |zip_name|
       index = 0
       count = all_attachments.length + 2
       Zip::File.open(zip_name, Zip::File::CREATE) do |zipfile|
         update_progress(zip_attachment, index, count)
         portfolio_entries.each do |entry|
-          filename = "#{entry.full_slug}.html"
+          # if filename > 180 characters (allows 75 character buffer for the unique slug)
+          filename = Attachment.shorten_filename(entry.full_slug.concat(".html"))
           content = render_eportfolio_page_content(entry, portfolio, all_attachments, submissions_hash)
           zipfile.get_output_stream(filename) { |f| f.puts content }
         end
@@ -195,8 +197,8 @@ class ContentZipper
     )
   end
 
-  def self.zip_base_folder(*args)
-    ContentZipper.new.zip_base_folder(*args)
+  def self.zip_base_folder(*)
+    ContentZipper.new.zip_base_folder(*)
   end
 
   def zip_base_folder(zip_attachment, folder)
@@ -245,7 +247,7 @@ class ContentZipper
     # 2. we're doing this inside a course context export, and are bypassing
     # the user check (@check_user == false)
     attachments =
-      if !@check_user || folder.context.grants_any_right?(@user, *RoleOverride::GRANULAR_FILE_PERMISSIONS)
+      if !@check_user || folder.context.grants_any_right?(@user, :read_as_admin, :manage_contents, *RoleOverride::GRANULAR_FILE_PERMISSIONS)
         folder.active_file_attachments
       else
         folder.visible_file_attachments
@@ -314,9 +316,11 @@ class ContentZipper
   def add_attachment_to_zip(attachment, zipfile, filename = nil)
     filename ||= attachment.filename
 
+    @files_in_zip ||= Set.new
+    # if filename > 180 characters (allows 75 character buffer for the unique filename)
+    filename = Attachment.shorten_filename(filename)
     # we allow duplicate filenames in the same folder. it's a bit silly, but we
     # have to handle it here or people might not get all their files zipped up.
-    @files_in_zip ||= Set.new
     filename = Attachment.make_unique_filename(filename, @files_in_zip)
     @files_in_zip << filename
 
@@ -352,7 +356,7 @@ class ContentZipper
   def complete_attachment!(zip_attachment, zip_name)
     if zipped_successfully?
       @logger.debug("data zipped! uploading to external store...")
-      uploaded_data = Rack::Test::UploadedFile.new(zip_name, "application/zip")
+      uploaded_data = Canvas::UploadedFile.new(zip_name, "application/zip")
       Attachments::Storage.store_for_attachment(zip_attachment, uploaded_data)
       zip_attachment.workflow_state = "zipped"
       zip_attachment.file_state = "available"

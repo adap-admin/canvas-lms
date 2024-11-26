@@ -106,6 +106,26 @@ module GradebookCommon
     accept_alert
   end
 
+  def set_checkpoints_default_grade(reply_to_topic_value, reply_to_entry_value)
+    move_to_click('[data-menu-item-id="set-default-grade"]')
+    dialog = find_with_jquery(".ui-dialog:visible")
+    f("input[name=reply_to_topic_input]").send_keys(reply_to_topic_value)
+    f("input[name=reply_to_entry_input]").send_keys(reply_to_entry_value)
+    submit_dialog(dialog, ".ui-button")
+    accept_alert
+  end
+
+  def set_checkpoints_default_grade_for_pass_fail(reply_to_topic_value, reply_to_entry_value)
+    move_to_click('[data-menu-item-id="set-default-grade"]')
+    dialog = find_with_jquery(".ui-dialog:visible")
+    f("input[name=reply_to_topic_input]").click
+    fj("li:contains('#{reply_to_topic_value}')").click
+    f("input[name=reply_to_entry_input]").click
+    fj("li:contains('#{reply_to_entry_value}')").click
+    submit_dialog(dialog, ".ui-button")
+    accept_alert
+  end
+
   def find_slick_cells(row_index, element)
     grid = element
     rows = grid.find_elements(:css, ".slick-row")
@@ -314,6 +334,13 @@ module GradebookCommon
         due_at: 2.days.from_now,
         submission_types: "online_text_entry"
       )
+    end
+
+    def create_checkpoint_assignment
+      @topic = DiscussionTopic.create_graded_topic!(course: @course, title: "Checkpointed Discussion")
+      @topic.create_checkpoints(reply_to_topic_points: 5, reply_to_entry_points: 15, reply_to_entry_required_count: 3)
+
+      @checkpoint_assignment = @topic.assignment
     end
 
     def make_submissions

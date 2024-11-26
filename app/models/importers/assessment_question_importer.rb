@@ -194,7 +194,7 @@ module Importers
         next unless hash[field].present?
 
         hash[field] = migration.convert_html(
-          hash[field], item_type, hash[:migration_id], field, { remove_outer_nodes_if_one_child: true }
+          hash[field], item_type, hash[:migration_id], field, remove_outer_nodes_if_one_child: true
         )
       end
 
@@ -205,7 +205,7 @@ module Importers
       end
 
       %i[correct_comments incorrect_comments neutral_comments more_comments].each do |field|
-        html_field = "#{field}_html".to_sym
+        html_field = :"#{field}_html"
         if hash[field].present? && hash[field] == hash[html_field]
           hash.delete(html_field)
         end
@@ -218,7 +218,7 @@ module Importers
           next unless answer[field].present?
 
           answer[field] = migration.convert_html(
-            answer[field], item_type, hash[:migration_id], key, { remove_outer_nodes_if_one_child: true }
+            answer[field], item_type, hash[:migration_id], key, remove_outer_nodes_if_one_child: true
           )
         end
         if answer[:comments].present? && answer[:comments] == answer[:comments_html]

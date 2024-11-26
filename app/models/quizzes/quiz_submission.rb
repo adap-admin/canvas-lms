@@ -60,7 +60,7 @@ class Quizzes::QuizSubmission < ActiveRecord::Base
   resolves_root_account through: :quiz
 
   # update the QuizSubmission's Submission to 'graded' when the QuizSubmission is marked as 'complete.' this
-  # ensures that quiz submissions with essay questions don't show as graded in the SpeedGrader until the instructor
+  # ensures that quiz submissions with essay questions don't show as graded in SpeedGrader until the instructor
   # has graded the essays.
   after_update :grade_submission!, if: :just_completed?
 
@@ -452,6 +452,7 @@ class Quizzes::QuizSubmission < ActiveRecord::Base
       @assignment_submission.score = kept_score if kept_score
       @assignment_submission.submitted_at = finished_at
       @assignment_submission.grade_matches_current_submission = workflow_state != "pending_review" || attempt == 1
+      @assignment_submission.regraded = workflow_state == "pending_review" && attempt != 1
       @assignment_submission.quiz_submission_id = id
       @assignment_submission.graded_at = Time.zone.now
       @assignment_submission.grader_id = grader_id || "-#{quiz_id}".to_i
@@ -555,7 +556,8 @@ class Quizzes::QuizSubmission < ActiveRecord::Base
   def time_left(hard: false)
     return unless end_at
     return (end_at - Time.zone.now).round unless hard && quiz&.timer_autosubmit_disabled?
-    return (end_at_without_time_limit - Time.zone.now).round if end_at_without_time_limit
+
+    (end_at_without_time_limit - Time.zone.now).round if end_at_without_time_limit
   end
 
   def less_than_allotted_time?
@@ -713,8 +715,8 @@ class Quizzes::QuizSubmission < ActiveRecord::Base
         raise "Quizzes::QuizSubmission.update_scores called on a quiz that appears to be in progress"
       end
       answer = answer.with_indifferent_access
-      score = params["question_score_#{answer["question_id"]}".to_sym]
-      answer["more_comments"] = params["question_comment_#{answer["question_id"]}".to_sym] if params["question_comment_#{answer["question_id"]}".to_sym]
+      score = params[:"question_score_#{answer["question_id"]}"]
+      answer["more_comments"] = params[:"question_comment_#{answer["question_id"]}"] if params[:"question_comment_#{answer["question_id"]}"]
       if score.present?
         begin
           float_score = score.to_f

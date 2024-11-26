@@ -32,26 +32,60 @@ module Lti
   # Canvas to tool.
   #
   # Other references:
-  # * standard postMessage listener: ui/shared/lti/jquery/messages.js
+  # * standard postMessage listener: ui/shared/lti/jquery/messages.ts
   # * forwarding listener: ui/features/post_message_forwarding/index.ts
   # * postMessage docs: doc/api/lti_window_post_message.md
+  # * LTI Platform Storage spec:
+  #   * Client Side postMessages: https://www.imsglobal.org/spec/lti-cs-pm/v0p1
+  #   * postMessage Storage: https://www.imsglobal.org/spec/lti-pm-s/v0p1
+  #   * Implementation Guide: https://www.imsglobal.org/spec/lti-cs-oidc/v0p1
   class PlatformStorageController < ApplicationController
-    after_action :set_extra_csp_frame_ancestor!
+    RB_REV =
+      begin
+        code = File.read(__FILE__)
+        view_file = Rails.root.join("app/views/lti/platform_storage/post_message_forwarding.html.erb")
+        code += File.read(view_file)
+        Digest::SHA256.hexdigest(code)[0...16]
+      rescue => e
+        Canvas::Errors.capture(e)
+        Time.zone.today.to_s
+      end
 
+    before_action :ensure_decoded_jwt
+
+    # The forwarder iframe HTML and Javascript are heavily cached. This
+    # fingerprints the ruby and JS files. This can then be used as a query
+    # param, so the URL will change and bypass the cache when the code changes
+    def self.rev_fingerprint
+      "#{js_rev}-#{RB_REV}"
+    end
+
+    def self.js_rev
+      js_url = Canvas::Cdn.registry.url_for("javascripts/lti_post_message_forwarding.js")
+      # Seems to be nil at least sometimes in specs
+      return Time.zone.today.to_s unless js_url
+
+      File.basename(js_url).split("-").last.split(".").first
+    end
+
+    # render a *very* bare-bones page that only has the JS it needs
+    # to forward postMessages to the parent Canvas window
     def post_message_forwarding
-      unless Lti::PlatformStorage.flag_enabled?
-        render status: :not_found
-        return
-      end
+      @parent_origin = "#{HostUrl.protocol}://#{parent_domain}"
 
-      unless current_domain == forwarding_domain
-        redirect_to "#{forwarding_domain}/post_message_forwarding?token=#{create_jwt}"
-        return
-      end
+      set_extra_csp_frame_ancestor!
 
-      js_env({ PARENT_DOMAIN: parent_domain })
+      # cache aggressively since this is rendered on every page
+      ttl = Setting.get("post_message_forwarding_html_ttl", 1.year.seconds.to_s).to_i
+      response.headers["Cache-Control"] = "max-age=#{ttl}"
+      cancel_cache_buster
 
-      render layout: "bare"
+      # this page has no UI and so doesn't need all the preloaded JS.
+      # also, the preloaded JS ends up loading the canvas postMessage handler
+      # (through the RCE), which results in duplicate responses to postMessages,
+      # so we extra do not need this here.
+      # @headers = false
+      render layout: false
     end
 
     # Allow iframe loading for a domain that is different than the already listed
@@ -65,67 +99,63 @@ module Lti
     #
     # Adding `school.instructure.com` allows the main Canvas window (showing `school.instructure.com`) to
     # load an iframe that points to `canvas.instructure.com`
-    #
-    # TODO: this doesn't account for accounts that have the CSP enabled, since that adds `frame-src ...;`,
-    # which means this will add the parent domain to both -ancestors and -src.
-    # TODO: is there a way to achieve this same result using frame-src <forwarding domain>? Since that
-    # is already added when an account turns on the CSP, it may be easier. but what to do for accounts
-    # that have it off (which is the majority)
-    # TODO: resolve these above TODOs before enabling the lti_platform_storage flag (see INTEROP-7714)
-
     def set_extra_csp_frame_ancestor!
-      csp_frame_ancestors << URI.parse(parent_domain)&.host
+      csp_frame_ancestors << parent_domain
     end
 
-    # Per the LTI Platform Storage spec, postMessages from tools to get and put data
-    # must be sent to the OIDC Auth domain.
-    #   For most environments, that is the same as the `iss` value sent in the LTI 1.3 launch.
-    #   For local development, that will normally be the main domain unless an override is set.
-    def forwarding_domain
-      if Rails.env.development?
-        return forwarding_domain_override if forwarding_domain_override
-
-        return request.base_url
-      end
-
-      # TODO: this will eventually need to change to match the LTI OIDC Auth redirect endpoint.
-      # That is currently the same as the iss (`canvas.instructure.com`), but at some point will
-      # need to be changed to `sso.canvaslms.com`, while leaving the iss with its original value.
-      # see INTEROP-7715
-      CanvasSecurity.config["lti_iss"]
-    end
-
-    # For local development
-    # Set this value in `config/dynamic_settings.yml` under
-    # development.config.canvas.canvas.lti_post_message_forwarding_domain
-    # An example:
-    #   Set this value to `canvas.docker`
-    #   Render this route at `shard2.canvas.docker` or another local domain
-    #   This route should redirect to `canvas.docker`
-    def forwarding_domain_override
-      DynamicSettings.find("canvas")["lti_post_message_forwarding_domain"]
+    # format: canvas.docker, school.instructure.com, etc.
+    def current_domain
+      HostUrl.context_host(@domain_root_account, request.host_with_port)
     end
 
     def parent_domain
-      decoded_jwt["parent_domain"] || request.base_url
+      decoded_jwt["parent_domain"] || current_domain
     end
 
-    def current_domain
-      request.base_url
+    def ensure_decoded_jwt
+      decoded_jwt
+    rescue JSON::JWT::InvalidFormat, CanvasSecurity::InvalidToken
+      # Plain text error rather than an HTML error page, which would have another forwarder iframe...
+      render status: :forbidden, plain: "Invalid token"
     end
 
+    # We generate a JWT on Canvas pages with the iframe and pass it in to
+    # ensure that the iframe (on our trusted domain) will only forward messages
+    # to domains that are really Canvas.
     def decoded_jwt
-      return {} unless params[:token]
-
-      CanvasSecurity.decode_jwt(params[:token], [signing_secret])
+      @decoded_jwt ||=
+        if params[:token].blank?
+          {}
+        else
+          CanvasSecurity.decode_jwt(params[:token], [self.class.signing_secret])
+        end
     end
 
-    def create_jwt
+    MAX_THREAD_JWT_CACHE_SIZE = 256
+
+    # In my tests, uncached this took ~0.9ms, but that's on EVERY canvas page load.
+    # Cached it took about 0.003ms.
+    def self.parent_domain_jwt(current_domain)
+      cached_val = parent_domain_jwt_cache[current_domain]
+      return cached_val if cached_val
+
+      new_val = new_parent_domain_jwt(current_domain)
+      if parent_domain_jwt_cache.length < MAX_THREAD_JWT_CACHE_SIZE
+        parent_domain_jwt_cache[current_domain] = new_val
+      end
+      new_val
+    end
+
+    def self.parent_domain_jwt_cache
+      Thread.current[:lti_platform_storage_jwt_cache] ||= {}
+    end
+
+    def self.new_parent_domain_jwt(current_domain)
       CanvasSecurity.create_jwt({ parent_domain: current_domain }, nil, signing_secret, :HS512)
     end
 
-    def signing_secret
-      CanvasSecurity.services_signing_secret
+    def self.signing_secret
+      Lti::PlatformStorage.signing_secret
     end
   end
 end

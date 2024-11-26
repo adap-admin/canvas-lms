@@ -409,7 +409,7 @@ describe CourseLinkValidator do
     expect(issues).to be_empty
   end
 
-  context "#check_object_status" do
+  describe "#check_object_status" do
     before :once do
       course_model
       @course_link_validator = CourseLinkValidator.new(@course)
@@ -448,6 +448,14 @@ describe CourseLinkValidator do
       attachment_model(context: @course).destroy
       expect(@course_link_validator.check_object_status("/courses/#{@course.id}/files/#{@attachment.id}/download")).to eq :deleted
     end
+
+    it "returns nil for syllabus links with query params and fragments" do
+      expect(@course_link_validator.check_object_status("/courses/#{@course.id}/assignments/syllabus?foo=bar")).to be_nil
+
+      expect(@course_link_validator.check_object_status("/courses/#{@course.id}/assignments/syllabus#grading")).to be_nil
+
+      expect(@course_link_validator.check_object_status("/courses/#{@course.id}/assignments/syllabus?foo=bar#grading")).to be_nil
+    end
   end
 
   describe "#valid_route?" do
@@ -463,6 +471,34 @@ describe CourseLinkValidator do
 
     it "returns true for a valid public file" do
       expect(@course_link_validator.valid_route?("/favicon.ico")).to be_truthy
+    end
+  end
+
+  describe "#find_invalid_links" do
+    before :once do
+      course_model
+      assignment_model(course: @course)
+      @course_link_validator = CourseLinkValidator.new(@course)
+    end
+
+    it "can handle deeply nested content" do
+      # The default is Nokogiri::Gumbo::DEFAULT_MAX_TREE_DEPTH = 400. Here we are testing that
+      # we are overriding that default with our own value of 10,000.
+      depth = 500
+      html = "<!DOCTYPE html><html><head><title>Deeply Nested HTML</title></head><body>"
+      depth.times do
+        html += "<div>"
+      end
+      nonsense_link = "/courses/#{@course.id}/external_tools/retrieve?url=#{CGI.escape("https://lolwut.beep")}"
+      html += "<a href='#{nonsense_link}'>link</a>"
+      depth.times do
+        html += "</div>"
+      end
+      html += "</body></html>"
+      @assignment.update(description: html)
+      @course_link_validator.find_invalid_links(@assignment.description) do |links|
+        expect(links).to eq([{ link_text: "link", reason: :missing_item, url: nonsense_link }])
+      end
     end
   end
 end

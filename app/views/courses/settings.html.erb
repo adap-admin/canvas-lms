@@ -24,16 +24,18 @@
 
   can_manage = can_do(@context, @current_user, :manage)
 
-  can_manage_courses = can_do(@context.account, @current_user, :manage_courses, :manage_courses_admin)
+  can_manage_courses = can_do(@context.account, @current_user, :manage_courses_admin)
   can_rename_course = can_manage_courses || (can_manage && !@context.root_account.settings[:prevent_course_renaming_by_teachers])
   can_change_course_availability = can_manage_courses || (can_manage && !@context.root_account.settings[:prevent_course_availability_editing_by_teachers])
   can_manage_master_courses = can_manage_courses && can_do(@context.account, @current_user, :manage_master_courses)
   has_multiple_sections = @context.course_sections.active.count > 1
-  show_publish_controls = can_do(@context, @current_user, :change_course_state, :manage_courses_publish) && (@context.unpublished? || @context.unpublishable?)
+  show_publish_controls = can_do(@context, @current_user, :manage_courses_publish) && (@context.unpublished? || @context.unpublishable?)
 
   is_master_course = MasterCourses::MasterTemplate.is_master_course?(@context)
   blueprint_subscription = @context.master_course_subscriptions.active.first
   master_course = blueprint_subscription&.master_template&.course
+
+  can_see_restrict_quantitative_setting = ((@context&.restrict_quantitative_data || @context&.account&.restrict_quantitative_data[:value]) && @context&.root_account&.feature_enabled?(:restrict_quantitative_data))
 
   if @context.elementary_subject_course?
     navigation_help_text = t("help.edit_navigation_k5", "Drag and drop items to reorder them in the subject navigation.")
@@ -59,6 +61,10 @@
       <% end %>
       <% if can_do(@context, @current_user, :read_as_admin) %>
         <li id="external_tools_tab"><a href="#tab-tools" id="tab-tools-link"><%= t('tabs.tools', %{Apps}) %></a></li>
+      <% end %>
+      <% if can_do(@context, @current_user, :read_as_admin) && @context.root_account.feature_enabled?(:lti_apps_page_instructors) %>
+        <%# TODO: change name and deal with old apps? %>
+        <li id="apps_tab"><a href="#tab-apps" id="tab-apps-link">Apps (Discover)</a></li>
       <% end %>
       <% if @publishing_enabled %>
         <li id="grade_publishing_tab"><a href="#tab-grade-publishing" id="tab-grade-publishing-link"><%= t('Grade Syncing') %></a></li>
@@ -242,7 +248,7 @@
           <% if can_manage %>
             <% account_chain = @context.account.account_chain.reverse %>
             <% account_chain.each do |account| %>
-              <% if can_do(account, @current_user, :manage_courses, :manage_courses_admin) %>
+              <% if can_do(account, @current_user, :manage_courses_admin) %>
                 <% if account.root_account? && account.all_accounts.active.count > Setting.get('course_settings_sub_account_dropdown_limit', '500').to_i %>
                   <a href="<%= context_url(account, :context_sub_accounts_url, :format => :json, :include_self => "1") %>" id="course_account_id_url" style="display: none;">&nbsp;</a>
                   <input type="hidden" name="course[account_id]" id="course_account_id" value="<%= @context.account_id %>"/>
@@ -308,7 +314,7 @@
       <div class="form-row">
         <div class="form-label"><%= f.blabel :enrollment_term_id, :en => "Term" %></div>
         <div>
-          <% if can_manage && can_do(@context.account, @current_user, :manage_courses, :manage_courses_admin) %>
+          <% if can_manage && can_do(@context.account, @current_user, :manage_courses_admin) %>
             <select name="course[enrollment_term_id]" id="course_enrollment_term_id">
               <% @context.root_account.enrollment_terms.active.sort_by{|t| t.start_at || CanvasSort::First}.each do |term| %>
                 <option value="<%= term.id %>" <%= 'selected' if term.id == @context.enrollment_term_id %>><%= term.name %></option>
@@ -332,7 +338,7 @@
           <%= f.hidden_field :restrict_student_future_view %>
         </div>
       </div>
-      <% if @context.root_account.feature_enabled?(:restrict_quantitative_data) %>
+      <% if can_see_restrict_quantitative_setting %>
       <div class="form-row course-quantitative-data-row">
         <div class="form-label"><label for="restrict_quantitative_data_options"><%= f.blabel :restrict_quantitative_data, :en => "Quantitative Data Options" %></label></div>
         <div class="nobr">
@@ -345,8 +351,13 @@
       <div class="form-row language-row">
         <div class="form-label"><%= f.blabel :default_due_time, en: "Default due time" %></div>
         <div class="tall-row">
-          <%= f.select :default_due_time, options_for_select(default_due_time_options(@context), default_due_time_key(@context)) %>
-          <div class="aside palign">
+          <% if Account.site_admin.feature_enabled?(:customizable_default_due_time) %>
+            <div id="default_due_time_container" style="width: 350px"></div>
+            <%= f.hidden_field :default_due_time %>
+          <% else %>
+            <%= f.select :default_due_time, options_for_select(default_due_time_options(@context), default_due_time_key(@context)), {}, {'aria-describedby' => 'due-time-description'} %>
+          <% end %>
+          <div class="aside palign" id="due-time-description">
             <%= t("This influences the user interface for setting due dates. It does not change the time due for any existing assignments.") %>
           </div>
         </div>
@@ -361,10 +372,10 @@
             <div>
               <%= f.select :locale,
                            [[no_language, nil]] + available_locales.invert.sort_by { |desc, _| Canvas::ICU.collation_key(desc) },
-                           {:selected => @context.locale}, {:class => 'locale'} %>
+                           {:selected => @context.locale}, {:class => 'locale', 'aria-describedby' => 'language-description'} %>
               <%= render :partial => 'shared/locale_warning' %>
             </div>
-            <div class="aside palign">
+            <div class="aside palign" id="language-description">
               <%= t('language_overrides_preferences', "This will override any user/system language preferences. This is only recommended for foreign language courses") %>
             </div>
           <% else %>
@@ -403,14 +414,14 @@
           </div>
         </div>
       <% end %>
-      <div class="form-row">
+      <div class="form-row" style="align-items:start;">
         <div class="form-label">
           <label for="course_grading_scheme"><%= before_label('grading_scheme', %{Grading Scheme}) %></label>
         </div>
         <div id="course_grading_scheme">
           <div class="checkbox-flex-container">
-            <%= f.check_box :grading_standard_enabled, :class => "grading_standard_checkbox", :disabled => !can_manage %>
-            <%= f.label :grading_standard_enabled, :en => "Enable course grading scheme" %>
+            <%= f.check_box :course_grading_standard_enabled, :class => "grading_standard_checkbox", :disabled => !can_manage %>
+            <%= f.label :course_grading_standard_enabled, :en => "Enable course grading scheme" %>
           </div>
           <% if Account.site_admin.feature_enabled?(:grading_scheme_updates) %>
             <input type="hidden" name="course[grading_standard_id]" id="grading_standard_id" value="<%= @context.grading_standard_id %>" />
@@ -619,8 +630,7 @@
             <% end %>
           </span>
           <% if !@context.elementary_homeroom_course? %>
-            <a href="#" role="button" class="course_form course_form_more_options_link" style="padding-<%= direction('left') %>: 20px;"><%= t('links.more_options', %{more options}) %></a>
-            <div class="course_form_more_options" style="display: none; padding-<%= direction('left') %>: 20px;">
+            <div class="course_form_more_options" style="padding-<%= direction('left') %>: 20px;">
               <% if @context.self_enrollment_allowed? %>
                 <div class="checkbox-flex-container">
                   <%= f.check_box :self_enrollment, :class => 'self_enrollment_checkbox', :disabled => !can_manage %>
@@ -664,12 +674,10 @@
               <%= f.check_box :allow_student_organized_groups, :disabled => !can_manage %>
               <%= f.label :allow_student_organized_groups, :en => "Let students organize their own groups" %><br/>
               </div>
-              <% unless @context.restrict_quantitative_data && @context.root_account.feature_enabled?(:restrict_quantitative_data) %>
                 <div class="checkbox-flex-container">
                 <%= f.check_box :hide_final_grades, :disabled => !can_manage %>
                 <%= f.label :hide_final_grades, :en => "Hide totals in student grades summary" %><br/>
-              <% end %>
-              </div>
+                </div>
               <% unless @context.elementary_subject_course? || (@context.restrict_quantitative_data && @context.root_account.feature_enabled?(:restrict_quantitative_data)) %>
                 <div class="checkbox-flex-container">
                 <%= f.check_box :hide_distribution_graphs, :disabled => !can_manage %>
@@ -684,8 +692,16 @@
               <% end %>
               <% unless @context.elementary_subject_course? %>
                 <div class="checkbox-flex-container">
-                <%= f.check_box :lock_all_announcements, :disabled => !can_manage || @context.account.lock_all_announcements[:locked] %>
-                <%= f.label :lock_all_announcements, :en => 'Disable comments on announcements' %><br />
+                  <span <%= 'data-tooltip' if @context.account.lock_all_announcements[:locked] %> title="<%= t("This setting is locked on the account level")%>">
+                    <%= f.check_box :lock_all_announcements, :disabled => !can_manage || @context.account.lock_all_announcements[:locked] %>
+                    <%= f.label :lock_all_announcements, :en => 'Disable comments on announcements' %><br />
+                  </span>
+                </div>
+              <% end %>
+              <% if @context.account.feature_enabled?(:horizon_course_setting) %>
+                <div class="checkbox-flex-container">
+                  <%= f.check_box :horizon_course, :disabled => !can_manage_courses %>
+                  <%= f.label :horizon_course, :en => 'Horizon course' %><br />
                 </div>
               <% end %>
               <%= f.select :default_wiki_editing_roles, [
@@ -708,26 +724,73 @@
         </div>
       </div>
       <% if can_manage %>
-        <div class="form-row">
-          <div colspan="4">
+        <footer class="sticky-footer">
+          <div>
             <% if Setting.get('cross_root_account_course_moves', 'false') == 'true' &&
-              Account.site_admin.grants_any_right?(@current_user, :manage_courses, :manage_courses_admin) && Account.root_accounts.length > 1 %>
+              Account.site_admin.grants_any_right?(@current_user, :manage_courses_admin) && Account.root_accounts.count > 1 %>
                 <a href="#" class="move_course_link btn"><i class="icon-arrow-right"></i> <%= t('links.move_course', %{Move To Another Account}) %></a>
             <% end %>
-            <span class="course_form">
-              <div class="form-actions">
-                <button type="submit" class="btn btn-primary"><%= t('buttons.update_course', %{Update Course Details}) %></button>
-              </div>
-            </span>
+              <span class="course_form">
+                <div class="form-actions-sticky-footer">
+                  <button type="submit" class="btn btn-primary"><%= t('buttons.update_course', %{Update Course Details}) %></button>
+                </div>
+              </span>
           </div>
-        </div>
+        </footer>
       <% end %>
     </div>
     <% end %>
   </div>
   <div id="tab-sections">
     <h2 style="margin-top: 10px;"><%= t('headings.sections', %{Course Sections}) %></h2>
+    <div class="course_section_dates">
+      <%= t('Course Start Date: %{start_date} | Course End Date: %{end_date}', {
+        :start_date => format_course_section_date(@context.start_at),
+        :end_date => format_course_section_date(@context.end_at) }) %>
+    </div>
+    <div class="course_section_dates">
+      <%= t('Term Start Date: %{start_date} | Term End Date: %{end_date}', {
+        :start_date => format_course_section_date(@context.enrollment_term.start_at),
+        :end_date => format_course_section_date(@context.enrollment_term.end_at) }) %>
+    </div>
     <ul id="sections">
+      <% if can_do(@context.course_sections.temp_record, @current_user, :create) %>
+        <li>
+          <%= form_for :course_section, :url => context_url(@context, :context_sections_url), :html => {:id => "add_section_form", :class => "form-inline", :style => "margin-top: 20px;"} do |f| %>
+            <h3><%= f.blabel :name, :course_section_name, :en => "Add a New Section" %></h3>
+            <%= f.text_field :name %>
+            <button class="btn btn-primary" type="submit" title="<%= t('Add Section') %>" aria-label="<%= t('Add Section') %>"><i class="icon-plus" role="presentation"></i> <%= t('buttons.add_section', %{Section}) %></button>
+          <% end %>
+        </li>
+      <% end %>
+      <li class="section_blank" style="display: none;">
+        <a href="<%= context_url(@context, :context_section_url, "{{ id }}") %>" class="name"></a>
+        <span class="section_links">
+          <a class="Button Button--icon-action no-hover edit_section_link"
+             role="button"
+             href="<%= context_url(@context, :context_section_url, "{{ id }}") %>"
+             title="<%= t('links.title.edit_section', %{Edit Section}) %>">
+              <i class="icon-edit" aria-hidden="true"></i>
+              <span class="screenreader-only">
+                <%= t('Edit Section "%{name}"', :name => "%%name%%") %>
+              </span>
+          </a>
+          <a class="Button Button--icon-action delete_section_link"
+             role="button"
+             href="<%= context_url(@context, :context_section_url, "{{ id }}") %>"
+             title="<%= t('links.title.delete_section', %{Delete Section}) %>"
+             class="no-hover">
+              <i class="icon-end" aria-hidden="true"></i>
+              <span class="screenreader-only"><%= t('Delete Section "%{name}"', :name => "%%name%%") %></span>
+          </a>
+        </span>
+        <div class="course_section_dates">
+          <%= t('Start Date: %{start_date} | End Date: %{end_date}', {
+            :start_date => format_course_section_date,
+            :end_date => format_course_section_date }) %>
+        </div>
+        <div class="clear"></div>
+      </li>
       <% @context.course_sections.active.order(CourseSection.best_unicode_collation_key('name')).each do |section| %>
         <li class="section">
           <% if can_do section, @current_user, :read %>
@@ -778,39 +841,12 @@
               <% end %>
             <% end %>
           </span>
+          <div class="course_section_dates">
+            <%= t('Start Date: %{start_date} | End Date: %{end_date}', {
+              :start_date => format_course_section_date(section.start_at),
+              :end_date => format_course_section_date(section.end_at) }) %>
+          </div>
           <div class="clear"></div>
-        </li>
-      <% end %>
-      <li class="section_blank" style="display: none;">
-        <a href="<%= context_url(@context, :context_section_url, "{{ id }}") %>" class="name"></a>
-        <span class="section_links">
-          <a class="Button Button--icon-action no-hover edit_section_link"
-            role="button"
-            href="<%= context_url(@context, :context_section_url, "{{ id }}") %>"
-            title="<%= t('links.title.edit_section', %{Edit Section}) %>">
-              <i class="icon-edit" aria-hidden="true"></i>
-              <span class="screenreader-only">
-                <%= t('Edit Section "%{name}"', :name => "%%name%%") %>
-              </span>
-          </a>
-          <a class="Button Button--icon-action delete_section_link"
-            role="button"
-            href="<%= context_url(@context, :context_section_url, "{{ id }}") %>"
-            title="<%= t('links.title.delete_section', %{Delete Section}) %>"
-            class="no-hover">
-              <i class="icon-end" aria-hidden="true"></i>
-              <span class="screenreader-only"><%= t('Delete Section "%{name}"', :name => "%%name%%") %></span>
-          </a>
-        </span>
-        <div class="clear"></div>
-      </li>
-      <% if can_do(@context.course_sections.temp_record, @current_user, :create) %>
-        <li>
-          <%= form_for :course_section, :url => context_url(@context, :context_sections_url), :html => {:id => "add_section_form", :class => "form-inline", :style => "margin-top: 20px;"} do |f| %>
-            <h3><%= f.blabel :name, :course_section_name, :en => "Add a New Section" %></h3>
-            <%= f.text_field :name %>
-            <button class="btn btn-primary" type="submit" title="<%= t('Add Section') %>" aria-label="<%= t('Add Section') %>"><i class="icon-plus" role="presentation"></i> <%= t('buttons.add_section', %{Section}) %></button>
-          <% end %>
         </li>
       <% end %>
     </ul>
@@ -853,7 +889,17 @@
           <li aria-label="<%= tab[:label] %>" class="navitem <%= 'enabled' if @context.tab_enabled?(tab) %>"
               id="nav_edit_tab_id_<%= tab[:id] %>"
           >
-            <%= tab[:label] %>
+            <div class="draggable_handle">
+              <% if @context.tab_enabled?(tab) %>
+                  <i class="icon-drag-handle"></i>
+              <% else %>
+                &nbsp;
+              <% end %>
+            </div>
+            <div class="navitem_content">
+              <%= tab[:label] %>
+              <span class="disabled_message"><%= tab[:disabled_message] %></span>
+            </div>
             <% if @context.tab_enabled?(tab) %>
               <div class="admin-links">
                 <a class="al-trigger al-trigger-gray" role="button" href="#">
@@ -871,7 +917,6 @@
                   </li>
                 </ul>
               </div>
-              <span class="disabled_message"><%= tab[:disabled_message] %></span>
             <% end %>
           </li>
         <% end %>
@@ -892,7 +937,13 @@
               class="navitem enabled"
               id="nav_edit_tab_id_<%= tab[:id] %>"
           >
-            <%= tab[:label] %>
+            <div class="draggable_handle">
+              <i class="icon-drag-handle"></i>
+            </div>
+            <div class="navitem_content">
+              <%= tab[:label] %>
+              <span class="disabled_message"><%= tab[:disabled_message] %></span>
+            </div>
             <div class="admin-links">
                 <a class="al-trigger al-trigger-gray" role="button" href="#">
                   <i class="icon-more" aria-hidden="true"></i>
@@ -909,8 +960,6 @@
                   </li>
                 </ul>
               </div>
-              <span class="disabled_message"><%= tab[:disabled_message] %></span>
-
           </li>
         <% end %>
       </ul>
@@ -927,6 +976,10 @@
     <div id="tab-tools">
       <%= render :partial => 'external_tools/external_tools', :object => @context.context_external_tools.active %>
     </div>
+  <% end %>
+
+  <% if @context.root_account.feature_enabled?(:lti_apps_page_instructors) && can_do(@context, @current_user, :read_as_admin) && !@context.elementary_homeroom_course? %>
+    <div id="tab-apps"></div>
   <% end %>
 
   <% if @publishing_enabled && !@context.elementary_homeroom_course? %>
@@ -954,7 +1007,7 @@
   <% end %>
 </div><!-- end course details tab -->
 
-<% if Account.site_admin.grants_any_right?(@current_user, :manage_courses, :manage_courses_admin) %>
+<% if Account.site_admin.grants_any_right?(@current_user, :manage_courses_admin) %>
   <div id="move_course_dialog" style="display: none;">
     <h2><%= t('headings.move_course', %{Move the course to another root account}) %></h2>
     <%= t('deatils.move_course', %{Select a new root account for this course.  After you move the course you'll want to specify a new department for the course as well.}) %>

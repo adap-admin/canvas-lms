@@ -28,13 +28,15 @@ describe ContentMigration do
                                            body: "<address><ul></ul></address>",
                                            editing_roles: "teachers",
                                            todo_date: Time.zone.now,
-                                           publish_at: 1.week.from_now.beginning_of_day)
+                                           publish_at: 1.week.from_now.beginning_of_day,
+                                           unlock_at: 1.week.from_now.beginning_of_day,
+                                           lock_at: 2.weeks.from_now.beginning_of_day)
 
       run_course_copy
 
       page_to = @copy_to.wiki_pages.where(migration_id: mig_id(page)).first
 
-      attrs = %i[title body editing_roles todo_date publish_at]
+      attrs = %i[title body editing_roles todo_date publish_at unlock_at lock_at]
       expect(page.attributes.slice(*attrs)).to eq page_to.attributes.slice(*attrs)
       expect(page_to.body.strip).to eq "<address><ul></ul></address>"
     end
@@ -159,6 +161,20 @@ describe ContentMigration do
         run_course_copy
 
         expect(@copy_to.wiki.front_page).to eq copy_to_front_page
+      end
+
+      it "does not point to an incorrect front page after url change" do
+        first_page = @copy_from.wiki_pages.create!(title: "page", body: "first page!")
+        second_page = @copy_from.wiki_pages.create!(title: "page", body: "second page!")
+        first_page.delete
+        @copy_from.wiki.set_front_page_url!(second_page.url)
+
+        run_course_copy
+        front_page = @copy_to.wiki.front_page
+        expect(front_page.body).to eq "second page!"
+        front_page.body = "edited body!"
+        front_page.save!
+        expect(@copy_to.wiki.front_page).to eq front_page
       end
 
       it "overwrites current front page if default_view setting is also changed to wiki" do

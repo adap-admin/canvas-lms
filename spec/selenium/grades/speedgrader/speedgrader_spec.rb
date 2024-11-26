@@ -28,7 +28,7 @@ require_relative "../pages/gradebook_page"
 require_relative "../../assignments/page_objects/assignment_page"
 require_relative "../../assignments/page_objects/submission_detail_page"
 
-describe "Speedgrader" do
+describe "SpeedGrader" do
   include_context "in-process server selenium tests"
   include QuizzesCommon
   include GradebookCommon
@@ -398,6 +398,7 @@ describe "Speedgrader" do
 
     context "submission status" do
       before do
+        Account.site_admin.enable_feature!(:custom_gradebook_statuses)
         assignment = @course.assignments.create!(points_possible: 20)
         @submission = assignment.submissions.find_by!(user: @students[0])
         @submission.update!(late_policy_status: "missing")
@@ -406,11 +407,15 @@ describe "Speedgrader" do
         @submission = assignment.submissions.find_by!(user: @students[2])
         @submission.update!(late_policy_status: "late")
         assignment.grade_student(@students[3], grader: @teacher, excused: true)
+        @submission = assignment.submissions.find_by!(user: @students[4])
+        @custom_status = CustomGradeStatus.create!(name: "Custom Status", color: "#000000", root_account_id: @course.root_account_id, created_by: @teacher)
+        @second_custom_status = CustomGradeStatus.create!(name: "Second Status", color: "#000000", root_account_id: @course.root_account_id, created_by: @teacher)
+        @submission.update!(custom_grade_status: @custom_status)
         user_session(@teacher)
         Speedgrader.visit(@course.id, assignment.id)
       end
 
-      it "displays correct missing status pill for each student submission" do
+      it "displays correct status pill for each student submission" do
         expect(f(".submission-missing-pill")).to be_displayed
         Speedgrader.click_next_student_btn
         expect(f(".submission-extended-pill")).to be_displayed
@@ -418,6 +423,46 @@ describe "Speedgrader" do
         expect(f(".submission-late-pill")).to be_displayed
         Speedgrader.click_next_student_btn
         expect(f(".submission-excused-pill")).to be_displayed
+        Speedgrader.click_next_student_btn
+        expect(f(".submission-custom-grade-status-pill-#{@custom_status.id}")).to be_displayed
+      end
+
+      it "updates status pill when standard status is changed to another standard status" do
+        expect(f(".submission-missing-pill")).to be_displayed
+        f("[data-testid='speedGraderStatusMenu-editButton']").click
+        late_status = f("[data-testid='speedGraderStatusMenu-late']")
+        expect(late_status).to be_displayed
+        late_status.click
+        expect(f(".submission-late-pill")).to be_displayed
+      end
+
+      it "updates status pill when standard status is changed to custom status" do
+        expect(f(".submission-missing-pill")).to be_displayed
+        f("[data-testid='speedGraderStatusMenu-editButton']").click
+        custom_status = f("[data-testid='speedGraderStatusMenu-#{@custom_status.id}']")
+        expect(custom_status).to be_displayed
+        custom_status.click
+        expect(f(".submission-custom-grade-status-pill-#{@custom_status.id}")).to be_displayed
+      end
+
+      it "updates status pill when custom status is changed to another custom status" do
+        Speedgrader.visit(@course.id, @submission.assignment_id, 10, @submission.user_id)
+        expect(f(".submission-custom-grade-status-pill-#{@custom_status.id}")).to be_displayed
+        f("[data-testid='speedGraderStatusMenu-editButton']").click
+        second_custom_status_button = f("[data-testid='speedGraderStatusMenu-#{@second_custom_status.id}']")
+        expect(second_custom_status_button).to be_displayed
+        second_custom_status_button.click
+        expect(f(".submission-custom-grade-status-pill-#{@second_custom_status.id}")).to be_displayed
+      end
+
+      it "updates status pill when custom status is changed to standard status" do
+        Speedgrader.visit(@course.id, @submission.assignment_id, 10, @submission.user_id)
+        expect(f(".submission-custom-grade-status-pill-#{@custom_status.id}")).to be_displayed
+        f("[data-testid='speedGraderStatusMenu-editButton']").click
+        late_status = f("[data-testid='speedGraderStatusMenu-late']")
+        expect(late_status).to be_displayed
+        late_status.click
+        expect(f(".submission-late-pill")).to be_displayed
       end
     end
   end
@@ -801,7 +846,6 @@ describe "Speedgrader" do
 
   context "assignment group" do
     it "updates grades for all students in group", priority: "1" do
-      skip "Skipped because this spec fails if not run in foreground\nThis is believed to be the issue: https://code.google.com/p/selenium/issues/detail?id=7346"
       init_course_with_students 5
       user_session(@teacher)
       seed_groups 1, 1
@@ -815,7 +859,7 @@ describe "Speedgrader" do
 
       assignment = @course.assignments.create!(
         title: "Group Assignment",
-        group_category_id: @testgroup[0].id,
+        group_category_id: @testgroup[0].group_category_id,
         grade_group_students_individually: false,
         points_possible: 20
       )
@@ -865,27 +909,6 @@ describe "Speedgrader" do
         expect(Speedgrader.quiz_header).to include_text quiz.title
         expect(Speedgrader.quiz_nav).to be_displayed
         expect(Speedgrader.quiz_nav_questions).to have_size 24
-      end
-    end
-
-    it "scrolls nav bar and to questions", priority: "1" do
-      skip_if_chrome("broken")
-
-      in_frame "speedgrader_iframe", ".quizzes-speedgrader" do
-        wrapper = f("#quiz-nav-inner-wrapper")
-
-        # check scrolling
-        first_left = wrapper.css_value("left").to_f
-
-        f("#nav-link-next").click
-        second_left = wrapper.css_value("left").to_f
-        expect(first_left).to be > second_left
-
-        # check anchors
-        anchors = ff("#quiz-nav-inner-wrapper li a")
-        data_id = anchors[1].attribute "data-id"
-        anchors[1].click
-        expect(f("#question_#{data_id}")).to have_class "selected_single_question"
       end
     end
 
@@ -1108,8 +1131,6 @@ describe "Speedgrader" do
     end
 
     it "opens and closes keyboard shortcut modal via blue info icon", priority: "2" do
-      skip "EVAL-2497 (6/10/22)"
-
       Speedgrader.click_settings_link
       expect(Speedgrader.keyboard_shortcuts_link).to be_displayed
 

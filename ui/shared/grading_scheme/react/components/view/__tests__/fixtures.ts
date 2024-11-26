@@ -16,13 +16,14 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {GradingScheme, GradingSchemeTemplate} from '../../../../gradingSchemeApiModel'
+import type {GradingScheme} from '../../../../gradingSchemeApiModel'
 
 export const MOCK_COURSE_GRADING_SCHEME: GradingScheme = {
   assessed_assignment: false,
   context_id: '5',
   context_name: 'The 5th Course',
   context_type: 'Course',
+  workflow_state: 'active',
   data: [
     {name: 'A', value: 0.9},
     {name: 'B', value: 0.8},
@@ -33,9 +34,18 @@ export const MOCK_COURSE_GRADING_SCHEME: GradingScheme = {
   permissions: {manage: true},
   title: 'A Grading Scheme',
   id: '30',
+  points_based: false,
+  scaling_factor: 1.0,
 }
 
-export const MOCK_DEFAULT_GRADING_SCHEME: GradingSchemeTemplate = {
+export const MOCK_DEFAULT_GRADING_SCHEME: GradingScheme = {
+  id: '',
+  context_id: '2',
+  context_type: 'Account',
+  context_name: '',
+  permissions: {manage: false},
+  assessed_assignment: false,
+  workflow_state: 'active',
   data: [
     {name: 'A', value: 0.9},
     {name: 'B', value: 0.8},
@@ -44,4 +54,6 @@ export const MOCK_DEFAULT_GRADING_SCHEME: GradingSchemeTemplate = {
     {name: 'F', value: 0.0},
   ],
   title: 'A Grading Scheme',
+  points_based: false,
+  scaling_factor: 1.0,
 }

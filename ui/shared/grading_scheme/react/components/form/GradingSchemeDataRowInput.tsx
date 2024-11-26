@@ -16,181 +16,299 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React, {useState} from 'react'
+import React, {useEffect, useState, useRef, useCallback} from 'react'
+
 import {useScope as useI18nScope} from '@canvas/i18n'
 import {ScreenReaderContent} from '@instructure/ui-a11y-content'
 import {TextInput} from '@instructure/ui-text-input'
 import numberHelper from '@canvas/i18n/numberHelper'
-// @ts-expect-error -- TODO: remove once we're on InstUI 8
 import {IconPlusLine, IconTrashLine} from '@instructure/ui-icons'
 import {IconButton} from '@instructure/ui-buttons'
 import {Flex} from '@instructure/ui-flex'
-// @ts-expect-error -- TODO: remove once we're on InstUI 8
 import {Tooltip} from '@instructure/ui-tooltip'
-
-import {GradingSchemeDataRow} from '../../../gradingSchemeApiModel'
-import {decimalToRoundedPercent} from '../../helpers/decimalToRoundedPercent'
-import {roundToTwoDecimalPlaces} from '../../helpers/roundToTwoDecimalPlaces'
+import {View} from '@instructure/ui-view'
 
 const I18n = useI18nScope('GradingSchemeManagement')
 
-// Doing this to avoid TS2339 errors -- TODO: remove once we're on InstUI 8
-const {Item} = Flex as any
-
 interface ComponentProps {
-  dataRow: GradingSchemeDataRow
-  highRange: number
+  letterGrade: string
+  lowRangeDefaultDisplay: string
+  highRangeDefaultDisplay: string
   isFirstRow: boolean
   isLastRow: boolean
   onRowLetterGradeChange: (letterGrade: string) => any
-  onLowRangeChange: (lowRange: number) => any
-  onLowRangeInputInvalidNumber: () => any
+  onLowRangeChange: (lowRangeDisplay: string) => any
+  onLowRangeBlur: (lowRangeDisplay: string) => any
+  onHighRangeChange: (highRangeDisplay: string) => any
+  onHighRangeBlur: (highRangeDisplay: string) => any
   onRowDeleteRequested: () => any
   onRowAddRequested: () => any
+  pointsBased: boolean
+  displayScalingFactor: number
+  editSchemeDataDisabled: boolean
 }
 
 export const GradingSchemeDataRowInput = ({
-  dataRow,
-  highRange,
+  letterGrade,
+  lowRangeDefaultDisplay,
+  highRangeDefaultDisplay,
   isFirstRow,
   isLastRow,
   onLowRangeChange,
-  onLowRangeInputInvalidNumber,
+  onLowRangeBlur,
+  onHighRangeChange,
+  onHighRangeBlur,
   onRowLetterGradeChange,
   onRowAddRequested,
   onRowDeleteRequested,
+  pointsBased,
+  displayScalingFactor,
+  editSchemeDataDisabled,
 }: ComponentProps) => {
-  const [lowRange, setLowRange] = useState<number>(dataRow.value)
-  const [lowRangeInputBuffer, setLowRangeInputBuffer] = useState<string | undefined>(undefined)
-  const [lowRangeInvalid, setLowRangeInvalid] = useState<boolean>(false)
+  const [lowRangeValid, setLowRangeValid] = useState<boolean>(true)
+  const [highRangeValid, setHighRangeValid] = useState<boolean>(true)
+  const [letterGradeValid, setLetterGradeValid] = useState<boolean>(true)
   const [addButtonHovering, setAddButtonHovering] = useState<boolean>(false)
 
-  // @ts-expect-error -- TODO: remove once we're on InstUI 8
-  const triggerLetterGradeChange = event => {
+  const lowRangeInputRef = useRef<HTMLInputElement>()
+  const highRangeInputRef = useRef<HTMLInputElement>()
+
+  const validateLowRange = useCallback(
+    (lowRange: number, highRange: number) => {
+      if (Number.isNaN(lowRange)) {
+        setLowRangeValid(false)
+      } else if (lowRange > displayScalingFactor) {
+        setLowRangeValid(false)
+      } else if (lowRange < 0) {
+        setLowRangeValid(false)
+      } else if (lowRange >= highRange) {
+        setLowRangeValid(false)
+      } else {
+        setLowRangeValid(true)
+      }
+    },
+    [displayScalingFactor]
+  )
+
+  const validateHighRange = useCallback((highRange: number) => {
+    if (Number.isNaN(highRange)) {
+      setHighRangeValid(false)
+    } else if (highRange > 100) {
+      setHighRangeValid(false)
+    } else if (highRange < 0) {
+      setHighRangeValid(false)
+    } else {
+      setHighRangeValid(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (lowRangeInputRef.current) {
+      if (lowRangeDefaultDisplay !== lowRangeInputRef.current.value) {
+        lowRangeInputRef.current.value = lowRangeDefaultDisplay
+        const lowRange = numberHelper._parseNumber(lowRangeDefaultDisplay)
+        const highRange = numberHelper._parseNumber(highRangeDefaultDisplay)
+        validateLowRange(lowRange, highRange)
+      }
+    }
+  }, [highRangeDefaultDisplay, lowRangeDefaultDisplay, validateLowRange])
+
+  useEffect(() => {
+    if (highRangeInputRef.current) {
+      if (highRangeDefaultDisplay !== highRangeInputRef.current.value) {
+        highRangeInputRef.current.value = highRangeDefaultDisplay
+        const highRange = numberHelper._parseNumber(highRangeDefaultDisplay)
+        validateHighRange(highRange)
+      }
+    }
+  }, [highRangeDefaultDisplay, validateHighRange])
+
+  const handleLetterGradeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     onRowLetterGradeChange(event.target.value)
+    setLetterGradeValid(event.target.value !== '')
   }
 
-  const triggerRowLowRangeBlur = () => {
-    if (!lowRangeInputBuffer) return
+  const handleRowLowRangeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const lowRangeInputAsString = event.target.value
+    const lowRange = numberHelper._parseNumber(lowRangeInputAsString)
+    const highRange = numberHelper._parseNumber(highRangeDefaultDisplay)
+    validateLowRange(lowRange, highRange)
+    onLowRangeChange(lowRangeInputAsString)
+  }
 
-    const inputVal = numberHelper.parse(lowRangeInputBuffer)
+  const handleLowRangeBlur = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const lowRangeInputAsString = event.target.value
+    const lowRange = numberHelper._parseNumber(lowRangeInputAsString)
+    const highRange = numberHelper._parseNumber(highRangeDefaultDisplay)
+    validateLowRange(lowRange, highRange)
+    onLowRangeBlur(lowRangeInputAsString)
+  }
 
-    if (!Number.isNaN(Number(inputVal)) && inputVal >= 0 && inputVal <= 100) {
-      setLowRangeInvalid(false)
-      const lowRangeRounded = roundToTwoDecimalPlaces(Number(inputVal))
-      setLowRangeInputBuffer(undefined)
-      setLowRange(lowRangeRounded / 100)
-      onLowRangeChange(lowRangeRounded / 100)
-    } else {
-      setLowRangeInvalid(true)
-      onLowRangeInputInvalidNumber()
+  const handleRowHighRangeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isFirstRow) {
+      throw Error('Only first row can set the (scheme) high range')
     }
-  }
-
-  // @ts-expect-error -- TODO: remove once we're on InstUI 8
-  const triggerRowLowRangeChange = event => {
-    const scoreInput = event.target.value
-    setLowRangeInputBuffer(scoreInput)
-
-    const inputVal = numberHelper.parse(scoreInput)
-    if (!Number.isNaN(Number(inputVal)) && inputVal >= 0 && inputVal <= 100) {
-      setLowRangeInvalid(false)
-      onLowRangeChange(Number(inputVal) / 100)
-    } else {
-      setLowRangeInvalid(true)
-      onLowRangeInputInvalidNumber()
+    if (!pointsBased) {
+      throw Error('Only points based schemes can set the high range (scaling factor)')
     }
+    const highRangeInputAsString = event.target.value
+    const highRange = numberHelper._parseNumber(highRangeInputAsString)
+    validateHighRange(highRange)
+    onHighRangeChange(highRangeInputAsString)
   }
 
-  function renderLowRange() {
-    return String(
-      // TODO JS: I18n for numbers (decimals)?
-      lowRangeInputBuffer !== undefined ? lowRangeInputBuffer : decimalToRoundedPercent(lowRange)
-    )
+  const handleHighRangeBlur = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const highRangeInputAsString = event.target.value
+    const highRange = numberHelper._parseNumber(highRangeInputAsString)
+    validateHighRange(highRange)
+    onHighRangeBlur(highRangeInputAsString)
   }
-
-  const lowRangeValidationMessageState = lowRangeInvalid ? 'error' : 'hint'
 
   return (
     <>
       <tr>
-        <td>
-          <Tooltip renderTip={I18n.t('add a letter grade')}>
-            <IconButton
-              withBackground={false}
-              withBorder={false}
-              screenReaderLabel={I18n.t(
-                'Add new row for a letter grade to grading scheme after this row'
-              )}
-              onClick={onRowAddRequested}
-              elementRef={(buttonRef: HTMLButtonElement) => {
-                if (!buttonRef) return
-                buttonRef.onmouseover = () => setAddButtonHovering(true)
-                buttonRef.onmouseout = () => setAddButtonHovering(false)
-              }}
-            >
-              <IconPlusLine />
-            </IconButton>
-          </Tooltip>
-        </td>
-        <td>
-          <TextInput
-            isRequired={true}
-            renderLabel={<ScreenReaderContent>{I18n.t('Letter Grade')}</ScreenReaderContent>}
-            display="inline-block"
-            width="6rem"
-            onChange={triggerLetterGradeChange}
-            defaultValue={dataRow.name}
-            messages={[{text: <></>, type: 'hint'}]}
-          />
-        </td>
-        <td style={{width: '25%'}}>
-          <span aria-label={I18n.t('Upper limit of range')}>
-            {isFirstRow ? '' : '< '}
-            {decimalToRoundedPercent(highRange)}%
-          </span>
-        </td>
-        <td style={{width: '25%'}}>
-          <Flex display="inline-flex">
-            <Item padding="x-small">{I18n.t('to')}</Item>
-            <Item>
-              <span aria-label={I18n.t('Lower limit of range')}>
-                {isLastRow ? (
-                  <>0%</>
-                ) : (
-                  <>
-                    <TextInput
-                      isRequired={true}
-                      renderLabel={
-                        <ScreenReaderContent>{I18n.t('Lower limit of range')}</ScreenReaderContent>
-                      }
-                      display="inline-block"
-                      width="4.5rem"
-                      htmlSize={3}
-                      onChange={triggerRowLowRangeChange}
-                      onBlur={triggerRowLowRangeBlur}
-                      value={renderLowRange()}
-                      messages={[{text: <></>, type: lowRangeValidationMessageState}]}
-                    />
-                    %
-                  </>
-                )}
-              </span>
-            </Item>
+        <td style={{padding: '0px 0px 3px', verticalAlign: 'top'}}>
+          <Flex alignItems="start">
+            <Flex.Item align="start">
+              <TextInput
+                isRequired={true}
+                renderLabel={<ScreenReaderContent>{I18n.t('Letter Grade')}</ScreenReaderContent>}
+                display="inline-block"
+                width="6rem"
+                onChange={handleLetterGradeChange}
+                defaultValue={letterGrade}
+                messages={[
+                  letterGradeValid
+                    ? {text: <></>, type: 'hint'}
+                    : {text: I18n.t('Enter a letter grade'), type: 'error'},
+                ]}
+                style={{margin: '0'}}
+                disabled={editSchemeDataDisabled}
+                data-testid="grading-scheme-letter-grade-input"
+              />
+            </Flex.Item>
           </Flex>
         </td>
-        <td>
+        <td style={{width: '40%', padding: '0px 0px 3px', verticalAlign: 'top'}}>
+          <Flex justifyItems="start" alignItems="start">
+            <Flex.Item align="start" padding={isFirstRow && pointsBased ? '0' : 'x-small'}>
+              {isFirstRow && pointsBased ? (
+                <>
+                  <TextInput
+                    elementRef={ref => {
+                      if (ref instanceof HTMLInputElement) {
+                        highRangeInputRef.current = ref
+                      }
+                    }}
+                    isRequired={true}
+                    renderLabel={
+                      <ScreenReaderContent>{I18n.t('Upper limit of range')}</ScreenReaderContent>
+                    }
+                    display="inline-block"
+                    width="4.5rem"
+                    htmlSize={3}
+                    onChange={handleRowHighRangeChange}
+                    onBlur={handleHighRangeBlur}
+                    defaultValue={highRangeDefaultDisplay}
+                    messages={[
+                      highRangeValid
+                        ? {text: <></>, type: 'hint'}
+                        : {text: I18n.t('Invalid entry'), type: 'error'},
+                    ]}
+                    disabled={editSchemeDataDisabled}
+                  />
+                </>
+              ) : (
+                <View as="span" aria-label={I18n.t('Upper limit of range')}>
+                  {`${isFirstRow ? '' : '< '}${highRangeDefaultDisplay}${pointsBased ? '' : '%'}`}
+                </View>
+              )}
+            </Flex.Item>
+            <Flex.Item align="start" padding="x-small">
+              <div
+                style={{
+                  paddingLeft:
+                    !isFirstRow && pointsBased
+                      ? '46px'
+                      : isFirstRow && pointsBased
+                      ? '0.5rem'
+                      : 'none',
+                }}
+              >
+                {I18n.t('to')}
+              </div>
+            </Flex.Item>
+            {isLastRow ? (
+              <Flex.Item align="start" padding="x-small">
+                <View aria-label={I18n.t('Lower limit of range')} as="span">
+                  0{pointsBased ? <></> : <>%</>}
+                </View>
+              </Flex.Item>
+            ) : (
+              <>
+                <Flex.Item align="start">
+                  <TextInput
+                    inputRef={ref => {
+                      if (ref instanceof HTMLInputElement) {
+                        lowRangeInputRef.current = ref
+                      }
+                    }}
+                    isRequired={true}
+                    renderLabel={
+                      <ScreenReaderContent>{I18n.t('Lower limit of range')}</ScreenReaderContent>
+                    }
+                    display="inline-block"
+                    width="4.5rem"
+                    htmlSize={3}
+                    onChange={handleRowLowRangeChange}
+                    onBlur={handleLowRangeBlur}
+                    defaultValue={lowRangeDefaultDisplay}
+                    messages={[
+                      lowRangeValid
+                        ? {text: <></>, type: 'hint'}
+                        : {text: I18n.t('Invalid entry'), type: 'error'},
+                    ]}
+                    disabled={editSchemeDataDisabled}
+                  />
+                </Flex.Item>
+                <Flex.Item align="start" padding="x-small">
+                  {pointsBased ? <></> : <>%</>}
+                </Flex.Item>
+              </>
+            )}
+          </Flex>
+        </td>
+
+        <td style={{verticalAlign: 'top', width: '100%', padding: '0px 0px 3px'}}>
           <Flex justifyItems="end">
-            <Item>
+            <Flex.Item align="start">
+              <Tooltip renderTip={I18n.t('add a letter grade')}>
+                <IconButton
+                  screenReaderLabel={I18n.t(
+                    'Add new row for a letter grade to grading scheme after this row'
+                  )}
+                  onClick={onRowAddRequested}
+                  elementRef={buttonRef => {
+                    if (!buttonRef) return
+                    // @ts-expect-error
+                    buttonRef.onmouseover = () => setAddButtonHovering(true)
+                    // @ts-expect-error
+                    buttonRef.onmouseout = () => setAddButtonHovering(false)
+                  }}
+                  margin="0 small 0 0"
+                  disabled={editSchemeDataDisabled}
+                >
+                  <IconPlusLine />
+                </IconButton>
+              </Tooltip>
               <IconButton
-                withBackground={false}
-                withBorder={false}
                 screenReaderLabel={I18n.t('Remove letter grade row')}
                 onClick={onRowDeleteRequested}
+                disabled={editSchemeDataDisabled || (isLastRow && isFirstRow)}
               >
                 <IconTrashLine />
               </IconButton>
-            </Item>
+            </Flex.Item>
           </Flex>
         </td>
       </tr>

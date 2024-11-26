@@ -16,38 +16,31 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React, {useState} from 'react'
+import React from 'react'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import userSettings from '@canvas/user-settings'
+import type {HandleCheckboxChange} from '../../../types'
+import CheckboxTemplate from './CheckboxTemplate'
 
 const I18n = useI18nScope('enhanced_individual_gradebook')
 
-export default function HideStudentNamesCheckbox() {
-  const [hideStudentNames, setHideStudentNames] = useState(
-    userSettings.contextGet('hide_student_names') || false
-  )
-
+type Props = {
+  handleCheckboxChange: HandleCheckboxChange
+  hideStudentNames: boolean
+}
+export default function HideStudentNamesCheckbox({handleCheckboxChange, hideStudentNames}: Props) {
   const handleHideStudentNamesChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const checked = event.target.checked
     userSettings.contextSet('hide_student_names', checked)
-    setHideStudentNames(checked)
+    handleCheckboxChange('hideStudentNames', checked)
   }
 
   return (
-    <div
-      className="checkbox"
-      style={{padding: 12, margin: '10px 0px', background: '#eee', borderRadius: 5}}
-    >
-      <label className="checkbox" htmlFor="hide_names_checkbox">
-        <input
-          type="checkbox"
-          id="hide_names_checkbox"
-          name="hide_names_checkbox"
-          checked={hideStudentNames}
-          onChange={handleHideStudentNamesChange}
-        />
-        {I18n.t('Hide Student Names')}
-      </label>
-    </div>
+    <CheckboxTemplate
+      dataTestId="hide-student-names-checkbox"
+      label={I18n.t('Hide Student Names')}
+      checked={hideStudentNames}
+      onChange={handleHideStudentNamesChange}
+    />
   )
 }

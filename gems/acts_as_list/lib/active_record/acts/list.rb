@@ -66,7 +66,7 @@ module ActiveRecord
                     else
                       raise ArgumentError, "scope must be nil, a symbol, an array, or a hash"
                     end
-            # expand assocations to their foreign keys
+            # expand associations to their foreign keys
             new_scope = {}
             scope.each do |k, v|
               if (reflection = reflections[k.to_s])
@@ -146,9 +146,7 @@ module ActiveRecord
 
           scope(:ordered, -> { order(position_column.to_sym, primary_key.to_sym) })
 
-          if position_column != "position"
-            define_method(:position) { read_attribute(self.class.position_column.to_sym) }
-          end
+          alias_attribute :position, position_column if position_column != "position"
         end
       end
 

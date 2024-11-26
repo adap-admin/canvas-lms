@@ -51,7 +51,20 @@ module Lti
       # domain in the authentication requests rather than keeping
       # track of institution-specific domain.
       def authorize_redirect
-        redirect_to authorize_redirect_url
+        Utils::InstStatsdUtils::Timing.track "lti.authorize_redirect" do
+          if @domain_root_account.settings[:lti_oidc_missing_cookie_retry]
+            csp_frame_ancestors << canvas_domain
+            render template: "lti/ims/authentication/missing_cookie_fix",
+                   layout: false,
+                   formats: :html,
+                   locals: {
+                     url: authorize_redirect_url.split("?").first,
+                     oidc_params:
+                   }
+          else
+            redirect_to authorize_redirect_url
+          end
+        end
       end
 
       # Handles the authentication response from an LTI tool. This
@@ -72,21 +85,47 @@ module Lti
       # For more details on how the cached ID token is generated,
       # please refer to the inline documentation of "app/models/lti/lti_advantage_adapter.rb"
       def authorize
-        validate_oidc_params!
-        validate_current_user!
-        validate_client_id!
-        validate_launch_eligibility!
-        set_extra_csp_frame_ancestor! unless @oidc_error
+        Utils::InstStatsdUtils::Timing.track "lti.authorize" do
+          validate_oidc_params!
+          validate_current_user!
+          validate_client_id!
+          validate_launch_eligibility!
+          set_extra_csp_frame_ancestor! unless @oidc_error
 
-        render(
-          "lti/ims/authentication/authorize",
-          formats: :html,
-          layout: "borderless_lti",
-          locals: {
-            redirect_uri:,
-            parameters: @oidc_error || launch_parameters
-          }
-        )
+          # This was added as a resolution to the INTEROP-8200 saga. Essentially, for a reason that no one was able to
+          # determine, during the second step of the LTI 1.3 launch, the browser would not send cookies. This meant that
+          # we had no user information and the launch would fail. Previously, we were forwarding this error along
+          # to tools. However, there wasn't really anything the tool was able to do. Luckily, the issue is easily fixed
+          # by just relaunching the tool. We *believe* that the issue was only present in Safari and that it was caused
+          # by ITP (Intelligent Tracking Prevention). We added this error screen to give the user and the tool a better
+          # overall experience, rather than just getting an obscure "login_required" error message.
+          # Unless you have tracked down the root cause of the issue and are sure that it is fixed,
+          # do not remove this error screen.
+          if @current_user.blank? && !public_course? && decoded_jwt.present? && Account.site_admin.feature_enabled?(:lti_login_required_error_page)
+            if context.is_a?(Account)
+              account = context
+            elsif context.respond_to?(:account)
+              account = context.account
+            end
+
+            InstStatsd::Statsd.increment("lti.oidc_login_required_error", tags: {
+                                           account: account&.global_id,
+                                           client_id: oidc_params[:client_id],
+                                         })
+            render("lti/ims/authentication/login_required_error_screen", status: :unauthorized, layout: "borderless_lti", formats: :html)
+            return
+          end
+
+          render(
+            "lti/ims/authentication/authorize",
+            formats: :html,
+            layout: "borderless_lti",
+            locals: {
+              redirect_uri:,
+              parameters: @oidc_error || launch_parameters
+            }
+          )
+        end
       end
 
       private
@@ -162,7 +201,7 @@ module Lti
           launch_payload = fetch_and_delete_launch(context, verifier)
           raise InvalidLaunch, "no payload found in cache" if launch_payload.nil?
 
-          JSON.parse(launch_payload).merge({ nonce: oidc_params[:nonce] })
+          Lti::Messages::JwtMessage.cached_hash_to_launch(JSON.parse(launch_payload), oidc_params[:nonce])
         end
       end
 
@@ -176,7 +215,7 @@ module Lti
       def lti_storage_target
         return nil unless decoded_jwt["include_storage_target"]
 
-        Lti::PlatformStorage.lti_storage_target
+        Lti::PlatformStorage::FORWARDING_TARGET
       end
 
       def id_token

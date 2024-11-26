@@ -127,6 +127,7 @@ describe Context do
       expect(Context.find_asset_by_url("/courses/#{@course.id}/files/#{@attachment.id}/download?wrap=1")).to eq @attachment
       expect(Context.find_asset_by_url("/courses/#{@course.id}/files/#{@attachment.id}/?wrap=1")).to eq @attachment
       expect(Context.find_asset_by_url("/courses/#{@course.id}/file_contents/course%20files//#{@attachment.name}")).to eq @attachment
+      expect(Context.find_asset_by_url("/media_attachments_iframe/#{@attachment.id}?type=video&amp;embedded=true")).to eq @attachment
     end
 
     it "finds folders" do
@@ -350,6 +351,31 @@ describe Context do
           expect(course2.rubric_contexts(user)).to match_array(expected.call)
         end
       end
+    end
+  end
+
+  describe "sorted_rubrics" do
+    def add_rubric(title, workflow_state = "active")
+      rubric1 = Rubric.create!(context: @course, title:, workflow_state:)
+      RubricAssociation.create!(context: @course, rubric: rubric1, purpose: :bookmark, association_object: @course)
+    end
+
+    before do
+      course_factory
+      add_rubric("Rubric 2 Active")
+      add_rubric("Rubric 1 Active")
+      add_rubric("Rubric 3 Draft", "draft")
+      add_rubric("Rubric 4 Active")
+      add_rubric("Rubric 4 Archived", "archived")
+    end
+
+    it "sorts rubrics by title and only include active rubrics" do
+      sorted_rubrics = Context.sorted_rubrics(@course)
+
+      expect(sorted_rubrics.size).to eq(3)
+      expect(sorted_rubrics[0].rubric.title).to eq("Rubric 1 Active")
+      expect(sorted_rubrics[1].rubric.title).to eq("Rubric 2 Active")
+      expect(sorted_rubrics[2].rubric.title).to eq("Rubric 4 Active")
     end
   end
 

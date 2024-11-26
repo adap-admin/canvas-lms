@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2020 - present Instructure, Inc.
  *
@@ -52,9 +53,12 @@ export function getInitialGridDisplaySettings(
   const sortRowsByDirection = settings.sort_rows_by_direction || 'ascending'
   const filterColumnsBy: FilterColumnsOptions = {
     assignmentGroupId: null,
+    assignmentGroupIds: null,
     contextModuleId: null,
+    contextModuleIds: null,
     gradingPeriodId: null,
     submissions: null,
+    submissionFilters: null,
     startDate: null,
     endDate: null,
   }
@@ -63,7 +67,9 @@ export function getInitialGridDisplaySettings(
   }
   const filterRowsBy = {
     sectionId: null,
+    sectionIds: null,
     studentGroupId: null,
+    studentGroupIds: [],
   }
   if (settings.filter_rows_by != null) {
     Object.assign(filterRowsBy, camelizeProperties(settings.filter_rows_by))
@@ -121,16 +127,22 @@ export function getInitialCourseContent(options: GradebookOptions): CourseConten
   const courseGradingScheme = options.grading_standard
     ? {
         data: options.grading_standard,
+        pointsBased: options.grading_standard_points_based,
+        scalingFactor: options.grading_standard_scaling_factor,
       }
     : null
   const defaultGradingScheme = options.default_grading_standard
     ? {
         data: options.default_grading_standard,
+        pointsBased: options.default_grading_standard_points_based,
+        scalingFactor: options.default_grading_standard_scaling_factor,
       }
     : null
   return {
     contextModules: [],
     courseGradingScheme,
+    courseGradingSchemePointsBased: options.grading_standard_points_based,
+    courseGradingSchemeScalingFactor: options.grading_standard_scaling_factor,
     defaultGradingScheme,
     gradingSchemes: options.grading_schemes.map(camelizeProperties),
     gradingPeriodAssignments: {},

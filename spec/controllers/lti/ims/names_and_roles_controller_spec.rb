@@ -76,7 +76,7 @@ describe Lti::IMS::NamesAndRolesController do
 
     context "when the page size parameter is too large" do
       let(:rqst_page_size) { 4_611_686_018_427_387_903 }
-      let(:effective_page_size) { 50 } # system max
+      let(:effective_page_size) { Lti::IMS::Providers::MembershipsProvider::MAX_PAGE_SIZE } # system max
       let(:rsp_page_size) { total_items }
 
       it "defaults to the system maximum page size" do
@@ -207,24 +207,24 @@ describe Lti::IMS::NamesAndRolesController do
           user.locale = :de
           user.time_zone = "Europe/Berlin"
           user.save!
+          sis_email = "sis@example.com"
+          cc = user.communication_channels.email.create!(path: sis_email)
+          cc.user = user
+          cc.save!
+          @cc_pseud = user.pseudonyms.create!({
+                                                account: course.account,
+                                                unique_id: cc.path,
+                                                sis_communication_channel_id: cc.id,
+                                                communication_channel_id: cc.id,
+                                                workflow_state: "active",
+                                                sis_user_id: "user-1-sis-user-id-1",
+                                                integration_id: "user-1-sis-integration-id-1",
+                                              })
           user.pseudonyms.create!({
                                     account: course.account,
                                     unique_id: "user1@example.com",
                                     password: "asdfasdf",
                                     password_confirmation: "asdfasdf",
-                                    workflow_state: "active",
-                                    sis_user_id: "user-1-sis-user-id-1",
-                                    integration_id: "user-1-sis-integration-id-1",
-                                  })
-          sis_email = "sis@example.com"
-          cc = user.communication_channels.email.create!(path: sis_email)
-          cc.user = user
-          cc.save!
-          user.pseudonyms.create!({
-                                    account: course.account,
-                                    unique_id: cc.path,
-                                    sis_communication_channel_id: cc.id,
-                                    communication_channel_id: cc.id,
                                     workflow_state: "active",
                                     sis_user_id: "user-1-sis-user-id-2",
                                     integration_id: "user-1-sis-integration-id-2",
@@ -264,19 +264,19 @@ describe Lti::IMS::NamesAndRolesController do
                 "person_name_family" => "Perkins",
                 "person_name_given" => "Marta",
                 "user_image" => "http://school.edu/image/url.png",
-                "user_id" => user.id,
-                "canvas_user_id" => user.id,
+                "user_id" => user.id.to_s,
+                "canvas_user_id" => user.id.to_s,
                 "vnd_instructure_user_uuid" => user.uuid,
-                "canvas_user_globalid" => user.global_id,
-                "canvas_user_sissourceid" => "user-1-sis-user-id-2",
-                "person_sourced_id" => "user-1-sis-user-id-2",
+                "canvas_user_globalid" => user.global_id.to_s,
+                "canvas_user_sissourceid" => @cc_pseud.sis_user_id,
+                "person_sourced_id" => @cc_pseud.sis_user_id,
                 "message_locale" => "de",
                 "vnd_canvas_person_email_sis" => "sis@example.com",
                 "person_email_primary" => "marta.perkins@school.edu",
                 "person_address_timezone" => "Europe/Berlin",
                 "user_username" => "sis@example.com",
                 "canvas_user_loginid" => "sis@example.com",
-                "canvas_user_sisintegrationid" => "user-1-sis-integration-id-2",
+                "canvas_user_sisintegrationid" => @cc_pseud.integration_id,
                 "canvas_xapi_url" => be_xapi_url,
                 "caliper_url" => be_caliper_url,
                 "unsupported_param_1" => "$unsupported.param.1",
@@ -319,6 +319,12 @@ describe Lti::IMS::NamesAndRolesController do
           send_request
           expect_single_member(enrollment)
         end
+
+        it "does not match against content tags with the wrong associated_asset_type" do
+          course_module.content_tags.where(associated_asset: resource_link).update_all(associated_asset_type: "LearningOutcome")
+          send_request
+          expect(json).to be_lti_advantage_error_response_body("bad_request", "Requested ResourceLink was not found")
+        end
       end
     end
 
@@ -351,26 +357,12 @@ describe Lti::IMS::NamesAndRolesController do
     # debug as compared to multi-enrollment tests
 
     describe "id field" do
-      context "when the consistent_ags_ids_based_on_account_principal_domain feature flag is on" do
-        it "uses the Account#domain in the line item id" do
-          course.root_account.enable_feature!(:consistent_ags_ids_based_on_account_principal_domain)
-          allow_any_instance_of(Account).to receive(:domain).and_return("canonical.host")
-          send_request
-          expect(json[:id]).to eq(
-            "http://canonical.host/api/lti/courses/#{course.id}/names_and_roles"
-          )
-        end
-      end
-
-      context "when the consistent_ags_ids_based_on_account_principal_domain feature flag is off" do
-        it "uses the host domain in the line item id" do
-          course.root_account.disable_feature!(:consistent_ags_ids_based_on_account_principal_domain)
-          allow_any_instance_of(Account).to receive(:domain).and_return("canonical.host")
-          send_request
-          expect(json[:id]).to eq(
-            "http://test.host/api/lti/courses/#{course.id}/names_and_roles"
-          )
-        end
+      it "uses the Account#domain in the line item id" do
+        expect_any_instance_of(Account).to receive(:environment_specific_domain).and_return("canonical.host")
+        send_request
+        expect(json[:id]).to eq(
+          "http://canonical.host/api/lti/courses/#{course.id}/names_and_roles"
+        )
       end
     end
 
@@ -714,6 +706,22 @@ describe Lti::IMS::NamesAndRolesController do
             send_request
             expect_enrollment_response_page
             expect(response_links).to have_correct_pagination_urls
+          end
+
+          it "checks tool.can_access_content_tag?" do
+            checked_tool = nil
+            checked_tag = nil
+            expect_any_instance_of(ContextExternalTool).to receive(:can_access_content_tag?) do |tool, content_tag|
+              checked_tool = tool
+              checked_tag = content_tag
+              false
+            end
+
+            send_request
+
+            expect(checked_tag.context).to eq(assignment_with_rlid_1)
+            expect(checked_tool).to eq(tool)
+            expect(response).to have_http_status(:bad_request)
           end
 
           context "and a student role param is specified" do

@@ -19,8 +19,7 @@
 
 module Canvas::LiveEvents
   def self.post_event_stringified(event_name, payload, context = nil)
-    ctx = LiveEvents.get_context || {}
-    payload.compact! if ctx[:compact_live_events]&.present?
+    payload.compact!
 
     StringifyIds.recursively_stringify_ids(payload)
     StringifyIds.recursively_stringify_ids(context)
@@ -238,32 +237,34 @@ module Canvas::LiveEvents
       assignment.migration_id&.start_with?(MasterCourses::MIGRATION_ID_PREFIX)
 
     event = {
+      anonymous_grading: assignment.anonymous_grading,
+      assignment_group_id: assignment.global_assignment_group_id,
       assignment_id: assignment.global_id,
       assignment_id_duplicated_from: assignment.duplicate_of&.global_id&.to_s,
       context_id: assignment.global_context_id,
-      context_uuid: assignment.context.uuid,
       context_type: assignment.context_type,
-      assignment_group_id: assignment.global_assignment_group_id,
-      workflow_state: assignment.workflow_state,
-      title: LiveEvents.truncate(assignment.title),
+      context_uuid: assignment.context.uuid,
+      created_on_blueprint_sync: created_on_blueprint_sync || false,
       description: LiveEvents.truncate(assignment.description),
       due_at: assignment.due_at,
-      unlock_at: assignment.unlock_at,
-      lock_at: assignment.lock_at,
-      updated_at: assignment.updated_at,
-      points_possible: assignment.points_possible,
-      lti_assignment_id: assignment.lti_context_id,
       lti_assignment_description: LiveEvents.truncate(assignment.description),
+      lti_assignment_id: assignment.lti_context_id,
       lti_resource_link_id: assignment.lti_resource_link_id,
       lti_resource_link_id_duplicated_from: assignment.duplicate_of&.lti_resource_link_id,
+      lock_at: assignment.lock_at,
+      points_possible: assignment.points_possible,
+      resource_map: assignment.resource_map,
       submission_types: assignment.submission_types,
-      created_on_blueprint_sync: created_on_blueprint_sync || false,
-      resource_map: assignment.resource_map
+      title: LiveEvents.truncate(assignment.title),
+      unlock_at: assignment.unlock_at,
+      updated_at: assignment.updated_at,
+      workflow_state: assignment.workflow_state
     }
+
     actl = assignment.assignment_configuration_tool_lookups.take
-    domain = assignment.root_account&.domain(ApplicationController.test_cluster_name)
+    domain = assignment.root_account&.environment_specific_domain
     event[:domain] = domain if domain
-    original_domain = assignment.duplicate_of&.root_account&.domain(ApplicationController.test_cluster_name)
+    original_domain = assignment.duplicate_of&.root_account&.environment_specific_domain
     event[:domain_duplicated_from] = original_domain if original_domain
     if actl && (tool_proxy = Lti::ToolProxy.proxies_in_order_by_codes(
       context: assignment.course,
@@ -433,6 +434,7 @@ module Canvas::LiveEvents
   end
 
   def self.get_user_data(user)
+    pseudo = SisPseudonym.for(user, nil, type: :implicit, require_sis: false)
     {
       user_id: user.global_id,
       uuid: user.uuid,
@@ -441,8 +443,8 @@ module Canvas::LiveEvents
       workflow_state: user.workflow_state,
       created_at: user.created_at,
       updated_at: user.updated_at,
-      user_login: user.primary_pseudonym&.unique_id,
-      user_sis_id: user.primary_pseudonym&.sis_user_id
+      user_login: pseudo&.unique_id,
+      user_sis_id: pseudo&.sis_user_id
     }
   end
 
@@ -680,9 +682,11 @@ module Canvas::LiveEvents
 
   def self.content_migration_data(content_migration)
     context = content_migration.context
-    import_quizzes_next =
-      content_migration.migration_settings&.[](:import_quizzes_next) == true
-    need_resource_map = content_migration.source_course&.has_new_quizzes?
+    import_quizzes_next = content_migration.migration_settings&.[](:import_quizzes_next) == true
+    quiz_next_imported = content_migration.migration_settings&.[](:quiz_next_imported) == true
+    link_migration_during_import = import_quizzes_next && content_migration.asset_map_v2?
+    need_resource_map = content_migration.source_course&.has_new_quizzes? || link_migration_during_import || quiz_next_imported
+
     payload = {
       content_migration_id: content_migration.global_id,
       context_id: context.global_id,
@@ -714,6 +718,14 @@ module Canvas::LiveEvents
 
   def self.quizzes_next_quiz_duplicated(payload)
     post_event_stringified("quizzes_next_quiz_duplicated", payload)
+  end
+
+  def self.quizzes_next_migration_urls_complete(payload)
+    post_event_stringified("quizzes_next_migration_urls_complete", payload)
+  end
+
+  def self.outcomes_retry_outcome_alignment_clone(payload)
+    post_event_stringified("outcomes.retry_outcome_alignment_clone", payload)
   end
 
   def self.get_course_section_data(section)
@@ -801,10 +813,43 @@ module Canvas::LiveEvents
     out&.context&.uuid
   end
 
+  def self.rubric_assessment_learning_outcome_result_associated_asset(result)
+    # By default associated_asset is nil for RubricAssessment LOR.  For what I can tell, there is no reason for this being
+    # nil and should be updated to reflect the RubricAssociation association object. This work is accounted for in OUT-6303.
+    # setting associated_asset to the Canvas assignment for Rubric Assessments
+    if result.associated_asset.nil? && result.artifact_type == "RubricAssessment" && result.association_type == "RubricAssociation"
+      rubric_association = RubricAssociation.find(result.association_id)
+      result.associated_asset_id = rubric_association.association_id
+      result.associated_asset_type = rubric_association.association_type
+    end
+  end
+
+  def self.learning_outcome_result_artifact_updated_and_created_at_data(result)
+    # Like associated_asset, learning outcome result artifact can be nil as there is nothing on a model
+    # that forces it to be present. This seems like an oversight as by definition an artifact is the
+    # the submission for the assessable content that contains the grade/score. i.e. RubricAssessment,
+    # Submission, Quizzes::QuizSubmission, or LiveAssessments::Submission.  May be there is some legacy
+    # knowledge that has been lost as to why to allow this to be nullable?  Until then, we will need to
+    # treat this as a possiblity.
+    # Since artifact can be nil, which inturn means that result.artifact_id and result.artifact_type would
+    # be nil, we need to check if artifact is nil and if so, do not include the artifact's updated_at and
+    # created_at attributes.
+    return {} if result.artifact.nil?
+
+    {
+      artifact_updated_at: result.artifact.updated_at,
+      artifact_created_at: result.artifact.created_at,
+    }
+  end
+
   def self.get_learning_outcome_result_data(result)
     {
+      id: result.id,
       learning_outcome_id: result.learning_outcome_id,
       learning_outcome_context_uuid: get_learning_outcome_context_uuid(result.learning_outcome_id),
+      result_context_id: result.context_id,
+      result_context_type: result.context_type,
+      result_context_uuid: result&.context&.uuid,
       mastery: result.mastery,
       score: result.score,
       created_at: result.created_at,
@@ -814,18 +859,48 @@ module Canvas::LiveEvents
       original_possible: result.original_possible,
       original_mastery: result.original_mastery,
       assessed_at: result.assessed_at,
-      title: result.title,
       percent: result.percent,
-      workflow_state: result.workflow_state
+      workflow_state: result.workflow_state,
+      user_uuid: result.user_uuid,
+      associated_asset_id: result.associated_asset_id,
+      associated_asset_type: result.associated_asset_type,
+      artifact_id: result.artifact_id,
+      artifact_type: result.artifact_type
     }
   end
 
   def self.learning_outcome_result_updated(result)
-    post_event_stringified("learning_outcome_result_updated", get_learning_outcome_result_data(result).merge(updated_at: result.updated_at))
+    # If the LOR's workflow_state is 'deleted' this mean the association object is deleted as well.
+    # this can happen in multiple ways, the most likely case is that the rubric was updated which causes
+    # the rubric association to be created.  After saving the new rubric association, it will call assert_uniqueness
+    # which results in permanently removing the previous association leaving only the new RubricAssociation.
+    # Given this, if the learning outcome results workflow state is deleted, do not worry about updating
+    # the associated asset information as the rubric association no longer exists.
+    rubric_assessment_learning_outcome_result_associated_asset(result) unless result.workflow_state == "deleted"
+    post_event_stringified("learning_outcome_result_updated", get_learning_outcome_result_data(result).merge(updated_at: result.updated_at).merge(learning_outcome_result_artifact_updated_and_created_at_data(result)))
   end
 
   def self.learning_outcome_result_created(result)
-    post_event_stringified("learning_outcome_result_created", get_learning_outcome_result_data(result))
+    # If the LOR's workflow_state is 'deleted' this mean the association object is deleted as well.
+    # this can happen in multiple ways, the most likely case is that the rubric was updated which causes
+    # the rubric association to be created.  After saving the new rubric association, it will call assert_uniqueness
+    # which results in permanently removing the previous association leaving only the new RubricAssociation.
+    # Given this, if the learning outcome results workflow state is deleted, do not worry about updating
+    # the associated asset information as the rubric association no longer exists.
+    rubric_assessment_learning_outcome_result_associated_asset(result) unless result.workflow_state == "deleted"
+    post_event_stringified("learning_outcome_result_created", get_learning_outcome_result_data(result).merge(learning_outcome_result_artifact_updated_and_created_at_data(result)))
+  end
+
+  # Since outcome service canvas learning_outcome global id record won't match outcomes service shard
+  # we are also sending the root_account_uuid for the original outcome, however we only send the uuid
+  # if the record is from another shard otherwise we send nil to indicate the id is for the current shard
+  def self.get_root_account_uuid(copied_from_outcome_id)
+    _, shard = Shard.local_id_for(copied_from_outcome_id)
+    return if shard.nil?
+
+    original_outcome = LearningOutcome.find(copied_from_outcome_id)
+
+    original_outcome&.context&.root_account&.uuid
   end
 
   def self.get_learning_outcome_data(outcome)
@@ -842,7 +917,9 @@ module Canvas::LiveEvents
       calculation_int: outcome.calculation_int,
       rubric_criterion: outcome.rubric_criterion,
       title: outcome.title,
-      workflow_state: outcome.workflow_state
+      workflow_state: outcome.workflow_state,
+      copied_from_outcome_id: Shard.local_id_for(outcome.copied_from_outcome_id)&.first,
+      original_outcome_root_account_uuid: get_root_account_uuid(outcome.copied_from_outcome_id)
     }
   end
 
@@ -901,6 +978,45 @@ module Canvas::LiveEvents
 
   def self.learning_outcome_link_updated(link)
     post_event_stringified("learning_outcome_link_updated", get_learning_outcome_link_data(link).merge(updated_at: link.updated_at))
+  end
+
+  def self.rubric_assessment_submitted_at(rubric_assessment)
+    submitted_at = nil
+    if rubric_assessment.artifact.is_a?(Submission)
+      submitted_at = rubric_assessment.artifact.submitted_at
+    end
+    submitted_at.nil? ? rubric_assessment.updated_at : submitted_at
+  end
+
+  def self.rubric_assessment_attempt(rubric_assessment)
+    attempt = nil
+    if rubric_assessment.artifact.is_a?(Submission)
+      attempt = rubric_assessment.artifact.attempt
+    end
+    attempt
+  end
+
+  def self.rubric_assessed(rubric_assessment)
+    # context uuid may have the potential to be nil. Instead of throwing an error if
+    # context uuid is nil, it will be up to the consumer of the live event to
+    # handle as they deem fit.  This way the consumer can raise an error if
+    # the data is expected and required by their service.
+    uuid = rubric_assessment.rubric_association&.association_object&.context&.uuid
+
+    data = {
+      id: rubric_assessment.id,
+      aligned_to_outcomes: rubric_assessment.aligned_outcome_ids.count.positive?,
+      artifact_id: rubric_assessment.artifact_id,
+      artifact_type: rubric_assessment.artifact_type,
+      assessment_type: rubric_assessment.assessment_type,
+      context_uuid: uuid,
+      submitted_at: rubric_assessment_submitted_at(rubric_assessment),
+      created_at: rubric_assessment.created_at,
+      updated_at: rubric_assessment.updated_at,
+      attempt: rubric_assessment_attempt(rubric_assessment)
+    }
+
+    post_event_stringified("rubric_assessed", data)
   end
 
   def self.grade_override(score, old_score, enrollment, course)
@@ -1119,5 +1235,24 @@ module Canvas::LiveEvents
       region: Canvas.region || "not_configured"
     }
     post_event_stringified("heartbeat", data)
+  end
+
+  def self.content_export_created(content_export)
+    post_event_stringified(
+      "content_export_created",
+      content_export_data(content_export)
+    )
+  end
+
+  def self.content_export_data(content_export)
+    {
+      content_export_id: content_export.global_id,
+      export_type: content_export.export_type,
+      created_at: content_export.created_at,
+      context_id: content_export.context_id,
+      context_uuid: content_export.context.uuid,
+      context_type: content_export.context_type,
+      settings: content_export.settings
+    }
   end
 end

@@ -16,18 +16,17 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 
-import $ from 'jquery'
 import axios from '@canvas/axios'
-
 import '@canvas/jquery/jquery.instructure_misc_helpers'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import DateHelper from '@canvas/datetime/dateHelper'
 import NaiveRequestDispatch from '@canvas/network/NaiveRequestDispatch/index'
 import gradingPeriodsApi from './gradingPeriodsApi'
-import type {CamelizedGradingPeriodSet} from '@canvas/grading/grading.d'
+import type {CamelizedGradingPeriodSet} from '../grading.d'
 import type {GradingPeriodSet, GradingPeriodSetGroup} from 'api.d'
 import {EnvGradingStandardsCommon} from '@canvas/global/env/EnvGradingStandards'
-import {GlobalEnv} from '@canvas/global/env/GlobalEnv'
+import type {GlobalEnv} from '@canvas/global/env/GlobalEnv.d'
+import replaceTags from '@canvas/util/replaceTags'
 
 // Allow unchecked access to ENV variables that should exist in this context
 declare const ENV: GlobalEnv & EnvGradingStandardsCommon
@@ -38,7 +37,7 @@ const listUrl = () => ENV.GRADING_PERIOD_SETS_URL
 
 const createUrl = () => ENV.GRADING_PERIOD_SETS_URL
 
-const updateUrl = id => $.replaceTags(ENV.GRADING_PERIOD_SET_UPDATE_URL, 'id', id)
+const updateUrl = id => replaceTags(ENV.GRADING_PERIOD_SET_UPDATE_URL, 'id', id)
 
 const serializeSet = (set: CamelizedGradingPeriodSet) => {
   const gradingPeriodSetAttrs = {

@@ -43,24 +43,14 @@ describe "Importing Learning Outcomes" do
     expect(log.child_outcome_links.detect { |link| link.content == lo2 }).not_to be_nil
   end
 
-  context "selectable_outcomes_in_course_copy enabled" do
-    before do
-      @context.root_account.enable_feature!(:selectable_outcomes_in_course_copy)
-    end
-
-    after do
-      @context.root_account.disable_feature!(:selectable_outcomes_in_course_copy)
-    end
-
-    it "imports group" do
-      migration = ContentMigration.create!(context: @context)
-      migration.migration_ids_to_import = { copy: {} }
-      data = [{ type: "learning_outcome_group", title: "hey", migration_id: "x" }.with_indifferent_access]
-      data = { "learning_outcomes" => data }
-      expect do
-        Importers::LearningOutcomeImporter.process_migration(data, migration)
-      end.to change { LearningOutcomeGroup.count }.by 1
-    end
+  it "imports group" do
+    migration = ContentMigration.create!(context: @context)
+    migration.migration_ids_to_import = { copy: {} }
+    data = [{ type: "learning_outcome_group", title: "hey", migration_id: "x" }.with_indifferent_access]
+    data = { "learning_outcomes" => data }
+    expect do
+      Importers::LearningOutcomeImporter.process_migration(data, migration)
+    end.to change { LearningOutcomeGroup.count }.by 1
   end
 
   it "does not fail when passing an outcome that already exists" do
@@ -75,7 +65,7 @@ describe "Importing Learning Outcomes" do
     existing_outcome = LearningOutcome.where(migration_id: "bdf6dc13-5d8f-43a8-b426-03380c9b6781").first
     identifier = existing_outcome.migration_id
     lo_data = @data["learning_outcomes"].find { |lo| lo["migration_id"] == identifier }
-    existing_outcome.write_attribute("migration_id", "7321d12e-3705-430d-9dfd-2511b0c73c14")
+    existing_outcome.migration_id = "7321d12e-3705-430d-9dfd-2511b0c73c14"
     existing_outcome.save!
     lo_data[:migration_id] = "7321d12e-3705-430d-9dfd-2511b0c73c14"
     Importers::LearningOutcomeImporter.import_from_migration(lo_data, @migration)
@@ -102,7 +92,7 @@ describe "Importing Learning Outcomes" do
                                          context: context2,
                                          description: friendly_description
                                        })
-    outcome.write_attribute("migration_id", "bdf6dc13-5d8f-43a8-b426-03380c9b6781")
+    outcome.migration_id = "bdf6dc13-5d8f-43a8-b426-03380c9b6781"
     identifier = outcome.migration_id
     lo_data = @data["learning_outcomes"].find { |lo| lo["migration_id"] == identifier }
     Account.site_admin.enable_feature! :outcomes_friendly_description
@@ -245,6 +235,109 @@ describe "Importing Learning Outcomes" do
     Importers::LearningOutcomeImporter.process_migration(course_content, mig)
     duplicate_check = LearningOutcome.where(vendor_guid: outcome1.vendor_guid)
     expect(duplicate_check.count).to eq 1
+  end
+
+  it "fills the copied_from_outcome_id for course copy" do
+    context2 = course_model
+    outcome1 = @context.created_learning_outcomes.create!({ title: "cc outcome 1", description: "cc outcome 1: desc" })
+    outcome2 = @context.created_learning_outcomes.create!({ title: "cc outcome 2", description: "cc outcome 2: desc" })
+
+    mig = ContentMigration.create!(context: context2).tap do |m|
+      m.migration_ids_to_import = { copy: { everything: true } }
+      m.migration_type = "course_copy_importer"
+    end
+
+    course_content = { "learning_outcomes" =>
+      [
+        {
+          "migration_id" => "x",
+          "title" => outcome1.title,
+          "description" => outcome1.description,
+          "type" => "learning_outcome",
+          "copied_from_outcome_id" => outcome1.id
+        },
+        {
+          "migration_id" => "y",
+          "title" => outcome2.title,
+          "description" => outcome2.description,
+          "type" => "learning_outcome",
+          "copied_from_outcome_id" => outcome2.id
+        }
+      ] }
+    Importers::LearningOutcomeImporter.process_migration(course_content, mig)
+    outcomes = mig.imported_migration_items_hash(LearningOutcome).with_indifferent_access
+    expect(outcomes.count).to eq 2
+    expect(outcomes[:x][:copied_from_outcome_id]).to eq outcome1.id
+    expect(outcomes[:y][:copied_from_outcome_id]).to eq outcome2.id
+  end
+
+  it "does not fill the copied_from_outcome_id for another migration type" do
+    context2 = course_model
+    outcome1 = context2.created_learning_outcomes.create!({ title: "cci outcome 1", description: "cci outcome 1: desc" })
+    outcome2 = context2.created_learning_outcomes.create!({ title: "cci outcome 2", description: "cci outcome 2: desc" })
+
+    mig = ContentMigration.create!(context: context2).tap do |m|
+      m.migration_ids_to_import = { copy: { everything: true } }
+      m.migration_type = "common_cartridge_importer"
+    end
+
+    course_content = { "learning_outcomes" =>
+      [
+        {
+          "migration_id" => "z",
+          "title" => outcome1.title,
+          "description" => outcome1.description,
+          "type" => "learning_outcome",
+          "copied_from_outcome_id" => outcome1.id
+        },
+        {
+          "migration_id" => "zz",
+          "title" => outcome2.title,
+          "description" => outcome2.description,
+          "type" => "learning_outcome",
+          "copied_from_outcome_id" => outcome2.id
+        }
+      ] }
+    Importers::LearningOutcomeImporter.process_migration(course_content, mig)
+    outcomes = mig.imported_migration_items_hash(LearningOutcome).with_indifferent_access
+    expect(outcomes.count).to eq 2
+    expect(outcomes[:z][:copied_from_outcome_id]).to be_nil
+    expect(outcomes[:zz][:copied_from_outcome_id]).to be_nil
+  end
+
+  it "does not import any copy of an existing outcome into the target course" do
+    context2 = course_model
+    outcome1 = @context.created_learning_outcomes.create!({ title: "cc outcome 1", description: "cc outcome 1: desc" })
+    outcome2 = @context.created_learning_outcomes.create!({ title: "cc outcome 2", description: "cc outcome 2: desc" })
+    # we are creating an outcome in the destination course that is already
+    # a copy of outcome2 from source course so only outcome 1 is going to be copied
+    # to destination cours
+    context2.created_learning_outcomes.create!({ title: "cc outcome 2", description: "cc outcome 2: desc", copied_from_outcome_id: outcome2.id })
+    mig = ContentMigration.create!(context: context2).tap do |m|
+      m.migration_ids_to_import = { copy: { everything: true } }
+      m.migration_type = "course_copy_importer"
+    end
+
+    course_content = { "learning_outcomes" =>
+      [
+        {
+          "migration_id" => "z",
+          "title" => outcome1.title,
+          "description" => outcome1.description,
+          "type" => "learning_outcome",
+          "copied_from_outcome_id" => outcome1.id
+        },
+        {
+          "migration_id" => "zz",
+          "title" => outcome2.title,
+          "description" => outcome2.description,
+          "type" => "learning_outcome",
+          "copied_from_outcome_id" => outcome2.id
+        }
+      ] }
+    Importers::LearningOutcomeImporter.process_migration(course_content, mig)
+    outcomes = mig.imported_migration_items_hash(LearningOutcome).with_indifferent_access
+    expect(outcomes.count).to eq 1
   end
 
   describe "with the outcome_alignments_course_migration FF enabled" do

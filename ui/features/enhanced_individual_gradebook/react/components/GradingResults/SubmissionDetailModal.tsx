@@ -16,23 +16,18 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React, {useEffect, useState} from 'react'
+import React, {useCallback, useEffect, useState} from 'react'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import LoadingIndicator from '@canvas/loading-indicator'
 import {getIconByType} from '@canvas/mime/react/mimeClassIconHelper'
 import {Button, CloseButton} from '@instructure/ui-buttons'
-// @ts-expect-error
 import {IconAudioSolid, IconUserSolid} from '@instructure/ui-icons'
 import {Heading} from '@instructure/ui-heading'
-// @ts-expect-error
 import {Modal} from '@instructure/ui-modal'
-// @ts-expect-error
 import {RadioInput, RadioInputGroup} from '@instructure/ui-radio-input'
 import {View} from '@instructure/ui-view'
 import {Text} from '@instructure/ui-text'
-// @ts-expect-error
 import {TextArea} from '@instructure/ui-text-area'
-import {TextInput} from '@instructure/ui-text-input'
 import {ScreenReaderContent} from '@instructure/ui-a11y-content'
 import {Link} from '@instructure/ui-link'
 import {Avatar} from '@instructure/ui-avatar'
@@ -40,28 +35,37 @@ import {Flex} from '@instructure/ui-flex'
 import {useSubmitScore} from '../../hooks/useSubmitScore'
 import {
   ApiCallStatus,
-  AssignmentConnection,
-  Attachment,
-  CommentConnection,
-  GradebookOptions,
-  GradebookStudentDetails,
-  GradebookUserSubmissionDetails,
+  type AssignmentConnection,
+  type Attachment,
+  type CommentConnection,
+  type GradebookOptions,
+  type GradebookStudentDetails,
+  type GradebookUserSubmissionDetails,
 } from '../../../types'
-import {submitterPreviewText, outOfText} from '../../../utils/gradebookUtils'
+import {
+  submitterPreviewText,
+  disableGrading,
+  passFailStatusOptions,
+  assignmentHasCheckpoints,
+  getCorrectSubmission,
+} from '../../../utils/gradebookUtils'
 import FriendlyDatetime from '@canvas/datetime/react/components/FriendlyDatetime'
+import GradeFormatHelper from '@canvas/grading/GradeFormatHelper'
 import {usePostComment} from '../../hooks/useComments'
 import {showFlashError} from '@canvas/alerts/react/FlashAlert'
+import DefaultGradeInput from './DefaultGradeInput'
+import sanitizeHtml from 'sanitize-html-with-tinymce'
+import {containsHtmlTags, formatMessage} from '@canvas/util/TextHelper'
+import {CheckpointGradeInputs} from './CheckpointGradeInputs'
+import {REPLY_TO_ENTRY, REPLY_TO_TOPIC} from './index'
 
 const I18n = useI18nScope('enhanced_individual_gradebook')
-
-const {Header: ModalHeader, Body: ModalBody} = Modal as any
-
-const {Item: FlexItem} = Flex as any
 
 export type GradeChangeApiUpdate = {
   status: ApiCallStatus
   newSubmission?: GradebookUserSubmissionDetails | null
   error: string
+  shouldCloseModal?: boolean
 }
 
 type Props = {
@@ -72,6 +76,7 @@ type Props = {
   comments: CommentConnection[]
   modalOpen: boolean
   loadingComments: boolean
+  submitScoreUrl: string
   onGradeChange: (updateEvent: GradeChangeApiUpdate) => void
   onPostComment: () => void
   handleClose: () => void
@@ -85,6 +90,7 @@ export default function SubmissionDetailModal({
   comments,
   loadingComments,
   modalOpen,
+  submitScoreUrl,
   handleClose,
   onGradeChange,
   onPostComment,
@@ -100,9 +106,9 @@ export default function SubmissionDetailModal({
       size="medium"
       label="Student Submission Detail Modal"
       shouldCloseOnDocumentClick={false}
-      theme={{mediumMaxWidth: '40em'}}
+      themeOverride={{mediumMaxWidth: '40em'}}
     >
-      <ModalHeader>
+      <Modal.Header>
         <CloseButton
           placement="end"
           offset="small"
@@ -110,21 +116,27 @@ export default function SubmissionDetailModal({
           screenReaderLabel="Close Submission Detail"
         />
         <Heading level="h4">{student.name}</Heading>
-      </ModalHeader>
-      <ModalBody padding="none">
-        <View as="div" padding="medium medium 0 medium">
+      </Modal.Header>
+      <Modal.Body padding="none">
+        <View
+          as="div"
+          padding="medium medium 0 medium"
+          data-testid="submission-details-assignment-name"
+        >
           <Heading level="h3">{assignment?.name}</Heading>
         </View>
 
         <SubmissionGradeForm
           assignment={assignment}
           submission={submission}
+          submitScoreUrl={submitScoreUrl}
           onGradeChange={onGradeChange}
+          gradebookOptions={gradebookOptions}
         />
 
         <View as="div" margin="small 0" padding="0 medium">
           <Link href={speedGraderUrl()} isWithinText={false}>
-            {I18n.t('More details in the SpeedGrader')}
+            {I18n.t('More details in SpeedGrader')}
           </Link>
         </View>
 
@@ -154,10 +166,10 @@ export default function SubmissionDetailModal({
 
         <PostCommentForm
           assignment={assignment}
-          submission={submission}
+          submitScoreUrl={submitScoreUrl}
           onPostComment={onPostComment}
         />
-      </ModalBody>
+      </Modal.Body>
     </Modal>
   )
 }
@@ -168,6 +180,9 @@ type SubmissionCommentProps = {
 }
 function SubmissionComment({comment, showDivider}: SubmissionCommentProps) {
   const {attachments, author, mediaObject} = comment
+  const formattedComment = containsHtmlTags(comment.htmlComment)
+    ? sanitizeHtml(comment.htmlComment)
+    : formatMessage(comment.htmlComment)
   return (
     <View
       as="div"
@@ -183,13 +198,13 @@ function SubmissionComment({comment, showDivider}: SubmissionCommentProps) {
         <Link href={author.htmlUrl} isWithinText={false}>
           <SubmissionCommentAvatar comment={comment} />
         </Link>
-        <FlexItem shouldGrow={true} shouldShrink={true} padding="0 0 0 small">
+        <Flex.Item shouldGrow={true} shouldShrink={true} padding="0 0 0 small">
           <Heading level="h5">
             <Link href={author.htmlUrl} isWithinText={false}>
               {author.name}
             </Link>
           </Heading>
-          <Text size="small">{comment.comment}</Text>
+          <Text size="small" dangerouslySetInnerHTML={{__html: formattedComment}} />
           {mediaObject && (
             <View as="div">
               <Link
@@ -206,12 +221,12 @@ function SubmissionComment({comment, showDivider}: SubmissionCommentProps) {
             attachments.map(attachment => (
               <CommentAttachment key={attachment.id} attachment={attachment} />
             ))}
-        </FlexItem>
-        <FlexItem align="start">
+        </Flex.Item>
+        <Flex.Item align="start">
           <Heading level="h5">
             <FriendlyDatetime dateTime={comment.updatedAt} />
           </Heading>
-        </FlexItem>
+        </Flex.Item>
       </Flex>
 
       {showDivider && <hr key="hrcomment-{comment.id}" style={{margin: '.6rem 0'}} />}
@@ -247,66 +262,246 @@ function SubmissionCommentAvatar({comment}: {comment: CommentConnection}) {
 type SubmissionGradeFormProps = {
   assignment: AssignmentConnection
   submission: GradebookUserSubmissionDetails
+  submitScoreUrl?: string | null
   onGradeChange: (updateEvent: GradeChangeApiUpdate) => void
+  gradebookOptions: GradebookOptions
 }
-function SubmissionGradeForm({assignment, submission, onGradeChange}: SubmissionGradeFormProps) {
+function SubmissionGradeForm({
+  assignment,
+  submission,
+  submitScoreUrl,
+  onGradeChange,
+  gradebookOptions,
+}: SubmissionGradeFormProps) {
   const [gradeInput, setGradeInput] = useState<string>('')
+  const [replyToTopicGradeInput, setReplyToTopicGradeInput] = useState<string>('')
+  const [replyToEntryGradeInput, setReplyToEntryGradeInput] = useState<string>('')
+  const [passFailStatusIndex, setPassFailStatusIndex] = useState<number>(0)
+  const [replyToTopicPassFailStatusIndex, setReplyToTopicPassFailStatusIndex] = useState<number>(0)
+  const [replyToEntryPassFailStatusIndex, setReplyToEntryPassFailStatusIndex] = useState<number>(0)
   const {submit, submitScoreError, submitScoreStatus, savedSubmission} = useSubmitScore()
+  const [submitting, setSubmitting] = useState<boolean>(false)
+  const {gradingStandardPointsBased} = gradebookOptions
 
   useEffect(() => {
     onGradeChange({
       status: submitScoreStatus,
       newSubmission: savedSubmission,
       error: submitScoreError,
+      shouldCloseModal: !submitting,
     })
-  }, [submitScoreStatus, savedSubmission, submitScoreError, onGradeChange])
+  }, [submitScoreStatus, savedSubmission, submitScoreError, onGradeChange, submitting])
+
+  const getGradeInputSetter = (subAssignmentTag?: string) => {
+    if (subAssignmentTag === REPLY_TO_TOPIC) {
+      return setReplyToTopicGradeInput
+    } else if (subAssignmentTag === REPLY_TO_ENTRY) {
+      return setReplyToEntryGradeInput
+    }
+
+    return setGradeInput
+  }
+
+  const getPassFailStatusIndexSetter = (subAssignmentTag?: string) => {
+    if (subAssignmentTag === REPLY_TO_TOPIC) {
+      return setReplyToTopicPassFailStatusIndex
+    } else if (subAssignmentTag === REPLY_TO_ENTRY) {
+      return setReplyToEntryPassFailStatusIndex
+    }
+
+    return setPassFailStatusIndex
+  }
+
+  const updateStateOnSubmissionChange = useCallback(
+    (subAssignmentTag?: string) => {
+      if (!submission) return
+
+      const correctSubmission = getCorrectSubmission(submission, subAssignmentTag)
+
+      if (!correctSubmission) return
+
+      if (assignment?.gradingType === 'pass_fail') {
+        const index = passFailStatusOptions.findIndex(
+          passFailStatusOption =>
+            passFailStatusOption.value === correctSubmission.grade ||
+            (passFailStatusOption.value === 'EX' && correctSubmission.excused)
+        )
+
+        const passFailStatusIndexSetter = getPassFailStatusIndexSetter(subAssignmentTag)
+
+        if (index !== -1) {
+          passFailStatusIndexSetter(index)
+        } else {
+          passFailStatusIndexSetter(0)
+        }
+      }
+
+      const gradeInputSetter = getGradeInputSetter(subAssignmentTag)
+
+      if (correctSubmission.excused) {
+        gradeInputSetter(I18n.t('EX'))
+      } else if (correctSubmission.grade == null) {
+        gradeInputSetter('-')
+      } else if (assignment?.gradingType === 'letter_grade') {
+        gradeInputSetter(GradeFormatHelper.replaceDashWithMinus(correctSubmission.grade))
+      } else {
+        gradeInputSetter(correctSubmission.grade)
+      }
+    },
+    [assignment, submission]
+  )
 
   useEffect(() => {
-    if (submission) {
-      setGradeInput(submission?.grade ?? '-')
+    if (submitting) return
+
+    updateStateOnSubmissionChange()
+
+    if (assignment && assignmentHasCheckpoints(assignment)) {
+      updateStateOnSubmissionChange(REPLY_TO_TOPIC)
+      updateStateOnSubmissionChange(REPLY_TO_ENTRY)
     }
-  }, [submission])
+  }, [assignment, submission, submitting, updateStateOnSubmissionChange])
 
   const submitGrade = async () => {
-    await submit(assignment, submission, gradeInput)
+    setSubmitting(true)
+
+    if (!assignmentHasCheckpoints(assignment)) {
+      await submit(assignment, submission, gradeInput, submitScoreUrl)
+    } else {
+      const replyToTopicSubmission = {
+        ...submission,
+        ...getCorrectSubmission(submission, REPLY_TO_TOPIC),
+      }
+      const replyToEntrySubmission = {
+        ...submission,
+        ...getCorrectSubmission(submission, REPLY_TO_ENTRY),
+      }
+
+      await submit(
+        assignment,
+        replyToTopicSubmission,
+        replyToTopicGradeInput,
+        submitScoreUrl,
+        REPLY_TO_TOPIC
+      )
+      await submit(
+        assignment,
+        replyToEntrySubmission,
+        replyToEntryGradeInput,
+        submitScoreUrl,
+        REPLY_TO_ENTRY
+      )
+    }
+
+    setSubmitting(false)
+  }
+
+  const handleChangePassFailStatusWrapper = (
+    value: string | number | undefined,
+    setterForGradeInput: (value: ((prevState: string) => string) | string) => void,
+    setterForPassFailStatusIndex: (value: ((prevState: number) => number) | number) => void
+  ) => {
+    if (typeof value === 'string') {
+      setterForGradeInput(value)
+
+      setterForPassFailStatusIndex(
+        passFailStatusOptions.findIndex(option => option.value === value)
+      )
+    }
+  }
+
+  const handleChangePassFailStatus = (
+    event: React.SyntheticEvent,
+    data: {value?: string | number}
+  ) => {
+    handleChangePassFailStatusWrapper(data.value, setGradeInput, setPassFailStatusIndex)
+  }
+
+  const handleChangeReplyToTopicPassFailStatus = (
+    event: React.SyntheticEvent,
+    data: {value?: string | number | undefined}
+  ) => {
+    handleChangePassFailStatusWrapper(
+      data.value,
+      setReplyToTopicGradeInput,
+      setReplyToTopicPassFailStatusIndex
+    )
+  }
+
+  const handleChangeReplyToEntryPassFailStatus = (
+    event: React.SyntheticEvent,
+    data: {value?: string | number | undefined}
+  ) => {
+    handleChangePassFailStatusWrapper(
+      data.value,
+      setReplyToEntryGradeInput,
+      setReplyToEntryPassFailStatusIndex
+    )
   }
 
   return (
     <View as="div" margin="small 0" padding="0 medium">
       <Flex>
-        <FlexItem shouldGrow={true} shouldShrink={true}>
-          <Text>{I18n.t('Grade:')} </Text>
-          <View as="span" margin="0 x-small 0 x-small">
-            <TextInput
-              renderLabel={<ScreenReaderContent>{I18n.t('Student Grade')}</ScreenReaderContent>}
-              display="inline-block"
-              width="4rem"
-              value={gradeInput}
-              disabled={submitScoreStatus === ApiCallStatus.PENDING}
-              onChange={e => setGradeInput(e.target.value)}
+        <Flex.Item shouldShrink={true}>
+          {assignmentHasCheckpoints(assignment) ? (
+            <CheckpointGradeInputs
+              parentAssignment={assignment}
+              parentSubmission={submission}
+              parentPassFailStatusIndex={passFailStatusIndex}
+              replyToTopicPassFailStatusIndex={replyToTopicPassFailStatusIndex}
+              replyToEntryPassFailStatusIndex={replyToEntryPassFailStatusIndex}
+              parentGradeInput={gradeInput}
+              replyToTopicGradeInput={replyToTopicGradeInput}
+              replyToEntryGradeInput={replyToEntryGradeInput}
+              submitScoreStatus={submitScoreStatus}
+              handleSetReplyToTopicGradeInput={setReplyToTopicGradeInput}
+              handleSetReplyToEntryGradeInput={setReplyToEntryGradeInput}
+              handleChangeReplyToTopicPassFailStatus={handleChangeReplyToTopicPassFailStatus}
+              handleChangeReplyToEntryPassFailStatus={handleChangeReplyToEntryPassFailStatus}
+              elementWrapper="span"
+              margin="0 x-small 0 x-small"
+              gradingStandardPointsBased={gradingStandardPointsBased}
+              contextPrefix="submission_details_"
             />
-          </View>
-          <Text>{outOfText(assignment, submission)}</Text>
-        </FlexItem>
-        <FlexItem align="start">
+          ) : (
+            <>
+              <Text>{I18n.t('Grade:')} </Text>
+              <DefaultGradeInput
+                assignment={assignment}
+                submission={submission}
+                passFailStatusIndex={passFailStatusIndex}
+                gradeInput={gradeInput}
+                submitScoreStatus={submitScoreStatus}
+                context="submission_details_grade"
+                elementWrapper="span"
+                margin="0 x-small 0 x-small"
+                handleSetGradeInput={setGradeInput}
+                handleChangePassFailStatus={handleChangePassFailStatus}
+                gradingStandardPointsBased={gradingStandardPointsBased}
+              />
+            </>
+          )}
+        </Flex.Item>
+        <Flex.Item align="end">
           <Button
-            disabled={submitScoreStatus === ApiCallStatus.PENDING}
+            data-testid="submission-details-submit-button"
+            disabled={disableGrading(assignment, submitScoreStatus)}
             onClick={() => submitGrade()}
           >
             {I18n.t('Update Grade')}
           </Button>
-        </FlexItem>
+        </Flex.Item>
       </Flex>
     </View>
   )
 }
 
 type PostCommentFormProps = {
-  submission: GradebookUserSubmissionDetails
   assignment: AssignmentConnection
+  submitScoreUrl?: string | null
   onPostComment: () => void
 }
-function PostCommentForm({submission, assignment, onPostComment}: PostCommentFormProps) {
+function PostCommentForm({assignment, submitScoreUrl, onPostComment}: PostCommentFormProps) {
   const {groupCategoryId, gradeGroupStudentsIndividually} = assignment
   const [newComment, setNewComment] = useState<string>('')
   const [isGroupComment, setIsGroupComment] = useState<boolean>(false)
@@ -319,7 +514,7 @@ function PostCommentForm({submission, assignment, onPostComment}: PostCommentFor
       shouldSendGroupComment = gradeGroupStudentsIndividually ? isGroupComment : true
     }
 
-    await submit(assignment, submission, newComment, shouldSendGroupComment)
+    await submit(newComment, shouldSendGroupComment, submitScoreUrl)
   }
 
   const groupRadioInputs = [
@@ -352,8 +547,8 @@ function PostCommentForm({submission, assignment, onPostComment}: PostCommentFor
           value={newComment}
           onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewComment(e.target.value)}
         />
-        <Flex margin="small 0 0 0">
-          <FlexItem padding="x-small" shouldShrink={true} shouldGrow={true}>
+        <Flex.Item margin="small 0 0 0">
+          <Flex.Item padding="x-small" shouldShrink={true} shouldGrow={true}>
             {groupCategoryId && (
               <div>
                 {gradeGroupStudentsIndividually ? (
@@ -374,13 +569,13 @@ function PostCommentForm({submission, assignment, onPostComment}: PostCommentFor
                 )}
               </div>
             )}
-          </FlexItem>
-          <FlexItem align="start">
+          </Flex.Item>
+          <Flex.Item align="start">
             <Button disabled={postCommentStatus === ApiCallStatus.PENDING} onClick={submitComment}>
               {I18n.t('Post Comment')}
             </Button>
-          </FlexItem>
-        </Flex>
+          </Flex.Item>
+        </Flex.Item>
       </View>
     </div>
   )

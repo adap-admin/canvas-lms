@@ -48,20 +48,19 @@ class StreamItem < ActiveRecord::Base
   end
 
   def get_notification_category
-    read_attribute(:data)["notification_category"] || data.notification_category
+    self["data"]["notification_category"] || data.notification_category
   end
 
   def self.reconstitute_ar_object(type, data)
     return nil unless data
 
-    data = data.instance_variable_get(:@table) if data.is_a?(OpenObject)
     data = data.with_indifferent_access
     type = data["type"] || type
     res = type.constantize.new
 
     case type
     when "Announcement", "DiscussionTopic"
-      root_discussion_entries = data.delete(:root_discussion_entries)
+      root_discussion_entries = data.delete(:root_discussion_entries) || []
       root_discussion_entries = root_discussion_entries.map { |entry| reconstitute_ar_object("DiscussionEntry", entry) }
       res.association(:root_discussion_entries).target = root_discussion_entries
       res.attachment = reconstitute_ar_object("Attachment", data.delete(:attachment))
@@ -94,7 +93,7 @@ class StreamItem < ActiveRecord::Base
     res.instance_variable_set(:@new_record, false) if data["id"]
 
     # the after_find from NotificationPreloader won't get triggered
-    if res.respond_to?(:preload_notification) && res.read_attribute(:notification_id)
+    if res.respond_to?(:preload_notification) && res["notification_id"]
       res.preload_notification
     end
 
@@ -104,7 +103,7 @@ class StreamItem < ActiveRecord::Base
   def data(viewing_user_id = nil)
     # reconstitute AR objects
     @ar_data ||= shard.activate do
-      self.class.reconstitute_ar_object(asset_type, read_attribute(:data))
+      self.class.reconstitute_ar_object(asset_type, super())
     end
     res = @ar_data
 
@@ -175,6 +174,7 @@ class StreamItem < ActiveRecord::Base
   end
 
   LATEST_ENTRY_LIMIT = 3
+
   def generate_data(object)
     self.context ||= object.try(:context) unless object.is_a?(Message)
 
@@ -248,10 +248,7 @@ class StreamItem < ActiveRecord::Base
 
     item = new
     item.generate_data(object)
-    StreamItem.unique_constraint_retry do |retry_count|
-      (retry_count == 0) ? item.save! : item = nil # if it fails just carry on - it got created somewhere else so grab it later
-    end
-    item ||= object.reload.stream_item
+    item.insert(on_conflict: -> { item = object.reload.stream_item })
 
     # prepopulate the reverse association
     # (mostly useful for specs that regenerate stream items
@@ -299,10 +296,8 @@ class StreamItem < ActiveRecord::Base
           owner_insert[:hidden] = true
         end
 
-        StreamItemInstance.unique_constraint_retry do
-          StreamItemInstance.where(stream_item_id:, user_id: sliced_user_ids).delete_all
-          StreamItemInstance.bulk_insert(inserts)
-        end
+        StreamItemInstance.where(stream_item_id:, user_id: sliced_user_ids).delete_all
+        StreamItemInstance.insert_all(inserts)
 
         # reset caches manually because the observer wont trigger off of the above mass inserts
         sliced_user_ids.each do |user_id|

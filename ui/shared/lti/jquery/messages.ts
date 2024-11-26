@@ -24,9 +24,9 @@ import {
   INPUT_CHANGE_MESSAGE as MENTIONS_INPUT_CHANGE_MESSAGE,
   SELECTION_MESSAGE as MENTIONS_SELECTION_MESSAGE,
 } from '@canvas/rce/plugins/canvas_mentions/constants'
-import {LtiMessageHandler} from './lti_message_handler'
+import type {LtiMessageHandler} from './lti_message_handler'
 import buildResponseMessages from './response_messages'
-import {getKey, hasKey} from './util'
+import {getKey, hasKey, deleteKey} from './util'
 
 // page-global storage for data relevant to LTI postMessage events
 const ltiState: {
@@ -46,23 +46,52 @@ const SUBJECT_ALLOW_LIST = [
   'lti.setUnloadMessage',
   'lti.showAlert',
   'lti.showModuleNavigation',
-  'org.imsglobal.lti.capabilities', // not part of the final LTI Platform Storage spec
-  'org.imsglobal.lti.get_data', // not part of the final LTI Platform Storage spec
-  'org.imsglobal.lti.put_data', // not part of the final LTI Platform Storage spec
   'lti.capabilities',
   'lti.get_data',
   'lti.put_data',
+  'lti.getPageContent',
+  'lti.getPageSettings',
   'requestFullWindowLaunch',
   'toggleCourseNavigationMenu',
+  'showNavigationMenu',
+  'hideNavigationMenu',
 ] as const
 
-type SubjectId = typeof SUBJECT_ALLOW_LIST[number]
+/**
+ * A mapping of message subject to a list of scopes that grant permission
+ * for that subject.
+ * A tool only needs one of the scopes listed to be granted access.
+ * If a subject is not listed here, it is assumed to be allowed for all tools.
+ */
+const SCOPE_REQUIRED_SUBJECTS: {[key: string]: string[]} = {
+  'lti.getPageContent': ['https://canvas.instructure.com/lti/page_content/show'],
+}
+
+type SubjectId = (typeof SUBJECT_ALLOW_LIST)[number]
 
 const isAllowedSubject = (subject: unknown): subject is SubjectId =>
   typeof subject === 'string' && (SUBJECT_ALLOW_LIST as ReadonlyArray<string>).includes(subject)
 
 const isIgnoredSubject = (subject: unknown): subject is SubjectId =>
   typeof subject === 'string' && (SUBJECT_IGNORE_LIST as ReadonlyArray<string>).includes(subject)
+
+const isUnsupportedInRCE = (subject: unknown): subject is SubjectId =>
+  typeof subject === 'string' && (UNSUPPORTED_IN_RCE as ReadonlyArray<string>).includes(subject)
+
+/**
+ * Checks that the tool for the given tool_id has the required
+ * scopes for the given message subject.
+ * If the subject is not in the SCOPE_REQUIRED_SUBJECTS object,
+ * it is assumed to be allowed for all tools.
+ */
+const toolIsAuthorized = (subject: string, tool_id: string) => {
+  const tool_scopes = ENV.LTI_TOOL_SCOPES?.[tool_id]
+  if (SCOPE_REQUIRED_SUBJECTS[subject]) {
+    return SCOPE_REQUIRED_SUBJECTS[subject].some(scope => tool_scopes?.includes(scope))
+  } else {
+    return true
+  }
+}
 
 // These are handled elsewhere so ignore them
 const SUBJECT_IGNORE_LIST = [
@@ -75,7 +104,10 @@ const SUBJECT_IGNORE_LIST = [
   MENTIONS_SELECTION_MESSAGE,
   'betterchat.is_mini_chat',
   'defaultToolContentReady',
+  'assignment.set_ab_guid',
 ] as const
+
+const UNSUPPORTED_IN_RCE = ['lti.enableScrollEvents', 'lti.scrollToTop'] as const
 
 const isObject = (u: unknown): u is object => {
   return typeof u === 'object'
@@ -101,7 +133,7 @@ const isDevtoolMessageData = (data: unknown): boolean => {
  * code that was present in the previous style. It may not be necessary.
  */
 const handlers: Record<
-  typeof SUBJECT_ALLOW_LIST[number],
+  (typeof SUBJECT_ALLOW_LIST)[number],
   () => Promise<{default: LtiMessageHandler<any>}>
 > = {
   'lti.enableScrollEvents': () => import(`./subjects/lti.enableScrollEvents`),
@@ -115,14 +147,15 @@ const handlers: Record<
   'lti.setUnloadMessage': () => import(`./subjects/lti.setUnloadMessage`),
   'lti.showAlert': () => import(`./subjects/lti.showAlert`),
   'lti.showModuleNavigation': () => import(`./subjects/lti.showModuleNavigation`),
-  'org.imsglobal.lti.capabilities': () => import(`./subjects/lti.capabilities`),
-  'org.imsglobal.lti.get_data': () => import(`./subjects/lti.get_data`),
-  'org.imsglobal.lti.put_data': () => import(`./subjects/lti.put_data`),
   'lti.capabilities': () => import(`./subjects/lti.capabilities`),
   'lti.get_data': () => import(`./subjects/lti.get_data`),
   'lti.put_data': () => import(`./subjects/lti.put_data`),
+  'lti.getPageContent': () => import(`./subjects/lti.getPageContent`),
+  'lti.getPageSettings': () => import(`./subjects/lti.getPageSettings`),
   requestFullWindowLaunch: () => import(`./subjects/requestFullWindowLaunch`),
   toggleCourseNavigationMenu: () => import(`./subjects/toggleCourseNavigationMenu`),
+  showNavigationMenu: () => import(`./subjects/showNavigationMenu`),
+  hideNavigationMenu: () => import(`./subjects/hideNavigationMenu`),
 }
 
 /**
@@ -130,10 +163,7 @@ const handlers: Record<
  * @param e
  * @returns
  */
-async function ltiMessageHandler(
-  e: MessageEvent<unknown>,
-  platformStorageFeatureFlag: boolean = false
-) {
+async function ltiMessageHandler(e: MessageEvent<unknown>) {
   if (isDevtoolMessageData(e.data)) {
     return false
   }
@@ -151,6 +181,13 @@ async function ltiMessageHandler(
     return false
   }
 
+  // tools launched from within the RCE are wrapped in an iframe
+  // that will forward postMessages, so that the tool can have
+  // the sibling forwarder frame for Platform Storage, and thus
+  // may not respond correctly to some message types.
+  const isFromRce = !!getKey('in_rce', message)
+  deleteKey('in_rce', message)
+
   const targetWindow = e.source as Window
 
   // look at messageType for backwards compatibility
@@ -160,7 +197,7 @@ async function ltiMessageHandler(
     origin: e.origin,
     subject,
     message_id: getKey('message_id', message),
-    toolOrigin: getKey('toolOrigin', message),
+    sourceToolInfo: getKey('sourceToolInfo', message),
   })
 
   if (subject === undefined || isIgnoredSubject(subject) || responseMessages.isResponse(e)) {
@@ -169,8 +206,13 @@ async function ltiMessageHandler(
   } else if (!isAllowedSubject(subject)) {
     responseMessages.sendUnsupportedSubjectError()
     return false
-  } else if (platformStorageFeatureFlag && subject.includes('org.imsglobal.')) {
-    responseMessages.sendUnsupportedSubjectError()
+  } else if (!toolIsAuthorized(subject, e.origin)) {
+    responseMessages.sendUnauthorizedError()
+    return false
+  } else if (isUnsupportedInRCE(subject) && isFromRce) {
+    // Since tools launched from within an active RCE are inside a nested
+    // iframe, some subjects can't find the tool frame and so are not supported
+    responseMessages.sendUnsupportedSubjectError('Not supported inside Rich Content Editor')
     return false
   } else {
     try {
@@ -218,14 +260,17 @@ async function ltiMessageHandler(
   }
 }
 
+// Prevent duplicate listeners inside the same window
 let hasListener = false
 
 function monitorLtiMessages() {
-  const platformStorageFeatureFlag: boolean = ENV?.FEATURES?.lti_platform_storage || false
+  // This should only be true when canvas is in an iframe (like for postMessage forwarding),
+  // to prevent duplicate listeners across canvas windows.
+  const shouldIgnoreLtiPostMessages: boolean = ENV?.IGNORE_LTI_POST_MESSAGES || false
   const cb = (e: MessageEvent<unknown>) => {
-    if (e.data !== '') ltiMessageHandler(e, platformStorageFeatureFlag)
+    if (e.data !== '') ltiMessageHandler(e)
   }
-  if (!hasListener) {
+  if (!hasListener && !shouldIgnoreLtiPostMessages) {
     window.addEventListener('message', cb)
     hasListener = true
   }

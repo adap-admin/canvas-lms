@@ -170,10 +170,10 @@ class Bookmarks::BookmarksController < ApplicationController
 
   def find_bookmark
     GuardRail.activate(:secondary) do
-      @bookmark = Bookmarks::Bookmark.where(id: params[:id], user_id:).take
+      @bookmark = Bookmarks::Bookmark.find_by(id: params[:id], user_id:)
     end
 
-    return head :not_found unless @bookmark.present?
+    head :not_found unless @bookmark.present?
   end
 
   def valid_params

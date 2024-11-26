@@ -58,9 +58,8 @@ module CanvasI18nFallbacks
 
     existing_elements = result.captures.map(&:present?)
 
-    order = []
-    FALLBACK_ORDER.each do |a|
-      order.push(a.dup.select { |e| existing_elements[e] })
+    order = FALLBACK_ORDER.map do |a|
+      a.dup.select { |e| existing_elements[e] }
     end
 
     order.uniq.map do |ordering|
@@ -115,7 +114,7 @@ module FormatInterpolatedNumbers
 
       values[key] = ActiveSupport::NumberHelper.number_to_delimited(value)
     end
-    super(string, values)
+    super
   end
 end
 I18n.singleton_class.prepend(FormatInterpolatedNumbers)
@@ -142,10 +141,10 @@ if ENV["LOLCALIZE"]
 end
 
 module I18nUtilities
-  def before_label(text_or_key, default_value = nil, *args)
+  def before_label(text_or_key, default_value = nil, *)
     if default_value
       text_or_key = "labels.#{text_or_key}" unless text_or_key.to_s.start_with?("#")
-      text_or_key = respond_to?(:t) ? t(text_or_key, default_value, *args) : I18n.t(text_or_key, default_value, *args)
+      text_or_key = respond_to?(:t) ? t(text_or_key, default_value, *) : I18n.t(text_or_key, default_value, *)
     end
     I18n.t("#before_label_wrapper", "%{text}:", text: text_or_key)
   end
@@ -188,7 +187,7 @@ module I18nFormHelper
   # when removing this, be sure to remove it from i18nliner_extensions.rb
   def label(object_name, method, text = nil, options = {})
     text, options = _label_symbol_translation(method, text, options)
-    super(object_name, method, text, options)
+    super
   end
 end
 ActionView::Base.include(I18nFormHelper)
@@ -197,7 +196,7 @@ ActionView::Helpers::FormHelper.prepend(I18nFormHelper)
 module I18nFormTagHelper
   def label_tag(method, text = nil, options = {})
     text, options = _label_symbol_translation(method, text, options)
-    super(method, text, options)
+    super
   end
 end
 ActionView::Helpers::FormTagHelper.prepend(I18nFormTagHelper)
@@ -360,7 +359,7 @@ ActiveRecord::Base.class_eval do
       if options[:allow_nil] && !options[:allow_empty]
         before_validation do |record|
           args.each do |field|
-            record.write_attribute(field, nil) if record.read_attribute(field) == ""
+            record[field] = nil if record[field] == ""
           end
         end
       end

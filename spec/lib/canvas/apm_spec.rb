@@ -40,6 +40,7 @@ describe Canvas::Apm do
   describe "settings parsing" do
     describe "analytics setting" do
       it "is true for bool string" do
+        Canvas::Apm.reset!
         inject_apm_settings("sample_rate: 0.5\nhost_sample_rate: 1.0\napp_analytics_enabled: true")
         expect(Canvas::Apm.config["app_analytics_enabled"]).to be(true)
         expect(Canvas::Apm).to be_analytics_enabled
@@ -129,9 +130,9 @@ describe Canvas::Apm do
     it "adds shard and account tags to active span" do
       Canvas::Apm.hostname = "testbox"
       Canvas::Apm.tracer.trace("TESTING") do |span|
-        shard = OpenStruct.new({ id: 42 })
-        account = OpenStruct.new({ global_id: 420_000_042 })
-        user = OpenStruct.new({ global_id: 42_100_000_421 })
+        shard = instance_double("Shard", { id: 42 })
+        account = instance_double("Account", { global_id: 420_000_042 })
+        user = instance_double("User", { global_id: 42_100_000_421 })
         generate_request_id = "1234567890"
         expect(tracer.active_root_span).to eq(span)
         Canvas::Apm.annotate_trace(shard, account, generate_request_id, user)
@@ -149,7 +150,7 @@ describe Canvas::Apm do
       Canvas::Apm.reset!
       Canvas::Apm.hostname = "testbox"
       expect(Canvas::Apm).to be_configured
-      expect(Canvas::Apm.tracer).to eq(Datadog.tracer)
+      expect(Canvas::Apm.tracer).to eq(Datadog::Tracing)
     end
 
     it "traces arbitrary code" do

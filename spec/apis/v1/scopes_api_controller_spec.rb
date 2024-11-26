@@ -73,10 +73,8 @@ describe ScopesApiController, type: :request do
         }]
       end
 
-      it "returns expected scopes when flag is disabled and Setting is set" do
-        Setting.set(Setting::SITE_ADMIN_ACCESS_TO_NEW_DEV_KEY_FEATURES, "true")
+      it "returns expected scopes as an admin" do
         account_admin_user(account: Account.site_admin)
-        allow_any_instance_of(Account).to receive(:feature_enabled?).and_return(false)
         DeveloperKey.default.developer_key_account_bindings.first.update!(workflow_state: "on")
         json = api_call(
           :get,
@@ -98,9 +96,9 @@ describe ScopesApiController, type: :request do
         user_with_pseudonym(account:)
       end
 
-      it "returns a 401" do
+      it "returns a 403" do
         api_call(:get, api_url, scope_params)
-        expect(response).to have_http_status :unauthorized
+        expect(response).to have_http_status :forbidden
       end
     end
   end

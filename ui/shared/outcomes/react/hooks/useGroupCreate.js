@@ -18,8 +18,8 @@
 
 import {useState, useCallback} from 'react'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import {CREATE_LEARNING_OUTCOME_GROUP} from '@canvas/outcomes/graphql/Management'
-import {useMutation} from 'react-apollo'
+import {CREATE_LEARNING_OUTCOME_GROUP} from '../../graphql/Management'
+import {useMutation} from '@apollo/react-hooks'
 import {showFlashAlert} from '@canvas/alerts/react/FlashAlert'
 
 const I18n = useI18nScope('FindOutcomesModal')

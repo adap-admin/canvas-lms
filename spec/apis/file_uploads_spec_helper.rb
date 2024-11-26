@@ -27,8 +27,7 @@ shared_examples_for "file uploads api" do
   # an array of [k,v] params so that the order of the params can be
   # defined
   def send_multipart(url, post_params = {}, http_headers = {}, method = :post)
-    mp = Multipart::Post.new
-    query, headers = mp.prepare_query(post_params)
+    query, headers = LegacyMultipart::Post.prepare_query(post_params)
 
     # A bug in the testing adapter in Rails 3-2-stable doesn't corretly handle
     # translating this header to the Rack/CGI compatible version:
@@ -68,7 +67,7 @@ shared_examples_for "file uploads api" do
     }
 
     if options[:include]&.include?("enhanced_preview_url") && (attachment.context.is_a?(Course) || attachment.context.is_a?(User) || attachment.context.is_a?(Group))
-      json["preview_url"] = context_url(attachment.context, :context_file_file_preview_url, attachment, annotate: 0, verifier: attachment.uuid)
+      json["preview_url"] = context_url(attachment.context, :context_file_file_preview_url, attachment, annotate: 0)
     end
 
     if attachment.supports_visibility?
@@ -139,7 +138,7 @@ shared_examples_for "file uploads api" do
     }
 
     if attachment.context.is_a?(User) || attachment.context.is_a?(Course) || attachment.context.is_a?(Group)
-      expected_json["preview_url"] = context_url(attachment.context, :context_file_file_preview_url, attachment, annotate: 0, verifier: attachment.uuid)
+      expected_json["preview_url"] = context_url(attachment.context, :context_file_file_preview_url, attachment, annotate: 0)
     end
 
     if attachment.supports_visibility?
@@ -478,7 +477,7 @@ shared_examples_for "file uploads api with quotas" do
   end
 
   it "returns successful preflight for files within quota limits" do
-    @context.write_attribute(:storage_quota, 5.megabytes)
+    @context["storage_quota"] = 5.megabytes
     @context.save!
     preflight({ name: "test.txt", size: 3.megabytes })
     attachment = Attachment.order(:id).last
@@ -487,14 +486,14 @@ shared_examples_for "file uploads api with quotas" do
   end
 
   it "returns unsuccessful preflight for files exceeding quota limits" do
-    @context.write_attribute(:storage_quota, 5.megabytes)
+    @context["storage_quota"] = 5.megabytes
     @context.save!
     json = preflight({ name: "test.txt", size: 10.megabytes }, expected_status: 400)
     expect(json["message"]).to eq "file size exceeds quota"
   end
 
   it "returns unsuccessful preflight for files exceeding quota limits (URL uploads)" do
-    @context.write_attribute(:storage_quota, 5.megabytes)
+    @context["storage_quota"] = 5.megabytes
     @context.save!
     json = preflight({ name: "test.txt", size: 10.megabytes, url: "http://www.example.com/test" },
                      expected_status: 400)
@@ -502,7 +501,7 @@ shared_examples_for "file uploads api with quotas" do
   end
 
   it "returns successful create_success for files within quota" do
-    @context.write_attribute(:storage_quota, 5.megabytes)
+    @context["storage_quota"] = 5.megabytes
     @context.save!
     attachment = @context.attachments.new
     attachment.filename = "smaller_file.txt"
@@ -518,7 +517,7 @@ shared_examples_for "file uploads api with quotas" do
   end
 
   it "returns unsuccessful create_success for files exceeding quota limits" do
-    @context.write_attribute(:storage_quota, 5.megabytes)
+    @context["storage_quota"] = 5.megabytes
     @context.save!
     attachment = @context.attachments.new
     attachment.filename = "bigger_file.txt"
@@ -539,7 +538,7 @@ shared_examples_for "file uploads api with quotas" do
   end
 
   it "fails URL uploads for files exceeding quota limits" do
-    @context.write_attribute(:storage_quota, 1.megabyte)
+    @context["storage_quota"] = 1.megabyte
     @context.save!
     json = preflight({ name: "test.txt", url: "http://www.example.com/test" })
     progress_url = json["progress"]["url"]
@@ -559,7 +558,7 @@ shared_examples_for "file uploads api without quotas" do
   it "ignores context-related quotas in preflight" do
     local_storage!
 
-    @context.write_attribute(:storage_quota, 0)
+    @context["storage_quota"] = 0
     @context.save!
     json = preflight({ name: "test.txt", size: 1.megabyte })
     attachment = Attachment.order(:id).last
@@ -568,7 +567,7 @@ shared_examples_for "file uploads api without quotas" do
 
   it "ignores context-related quotas in preflight" do
     s3_storage!
-    @context.write_attribute(:storage_quota, 0)
+    @context["storage_quota"] = 0
     @context.save!
     json = preflight({ name: "test.txt", size: 1.megabyte })
     attachment = Attachment.order(:id).last

@@ -60,9 +60,9 @@ describe ContentMigrationsController, type: :request do
       expect(json.first["id"]).to eq @migration.id
     end
 
-    it "401s" do
+    it "403s" do
       course_with_student_logged_in(course: @course, active_all: true)
-      api_call(:get, @migration_url, @params, {}, {}, expected_status: 401)
+      api_call(:get, @migration_url, @params, {}, {}, expected_status: 403)
     end
 
     it "creates the course root folder" do
@@ -181,9 +181,9 @@ describe ContentMigrationsController, type: :request do
       api_call(:get, @migration_url + "000", @params.merge({ id: @migration.id.to_param + "000" }), {}, {}, expected_status: 404)
     end
 
-    it "401s" do
+    it "403s" do
       course_with_student_logged_in(course: @course, active_all: true)
-      api_call(:get, @migration_url, @params, {}, {}, expected_status: 401)
+      api_call(:get, @migration_url, @params, {}, {}, expected_status: 403)
     end
 
     it "does not return attachment for course copies" do
@@ -846,7 +846,6 @@ describe ContentMigrationsController, type: :request do
       json = api_call(:get, @migration_url, @params)
       expect(json).to eq [{ "type" => "course_settings", "property" => "copy[all_course_settings]", "title" => "Course Settings" },
                           { "type" => "syllabus_body", "property" => "copy[all_syllabus_body]", "title" => "Syllabus Body" },
-                          { "type" => "blueprint_settings", "property" => "copy[all_blueprint_settings]", "title" => "Blueprint Settings" },
                           { "type" => "context_modules", "property" => "copy[all_context_modules]", "title" => "Modules", "count" => 1, "sub_items_url" => "http://www.example.com/api/v1/courses/#{@orig_course.id}/content_migrations/#{@migration.id}/selective_data?type=context_modules" },
                           { "type" => "discussion_topics", "property" => "copy[all_discussion_topics]", "title" => "Discussion Topics", "count" => 1, "sub_items_url" => "http://www.example.com/api/v1/courses/#{@orig_course.id}/content_migrations/#{@migration.id}/selective_data?type=discussion_topics" },
                           { "type" => "wiki_pages", "property" => "copy[all_wiki_pages]", "title" => "Pages", "count" => 1, "sub_items_url" => "http://www.example.com/api/v1/courses/#{@orig_course.id}/content_migrations/#{@migration.id}/selective_data?type=wiki_pages" },
@@ -908,8 +907,8 @@ describe ContentMigrationsController, type: :request do
       @src = course_factory active_all: true
       @ann = @src.announcements.create! title: "ann", message: "ohai"
       @assign = @src.assignments.create! name: "assign"
-      @shell_assign = @src.assignments.create!
-      @assign_topic = @src.discussion_topics.create! message: "assigned", assignment_id: @shell_assign.id
+      @shell_assign = @src.assignments.create! submission_types: "discussion_topic", description: "assigned"
+      @assign_topic = @shell_assign.discussion_topic
       @mod = @src.context_modules.create! name: "mod"
       @tag = @mod.add_item type: "sub_header", title: "blah"
       @page = @src.wiki_pages.create! title: "der page"
@@ -917,11 +916,14 @@ describe ContentMigrationsController, type: :request do
       @quiz = @src.quizzes.create! title: "a quiz", quiz_type: "assignment"
       @file = @src.attachments.create! filename: "teh_file.txt", uploaded_data: StringIO.new("data")
 
+      @media_object = @src.media_objects.create!(media_id: "m1234_fish_and_wildlife", title: "fish_and_wildlife.mp4")
+      @media_file = @media_object.attachment
+
       @dst = course_factory active_all: true
       @user = @dst.teachers.first
     end
 
-    def test_asset_id_mapping(json)
+    def test_asset_id_mapping(json, verifiers: true)
       expect(@dst.announcements.find(json["announcements"][@ann.id.to_s]).title).to eq "ann"
       expect(@dst.assignments.find(json["assignments"][@assign.id.to_s]).name).to eq "assign"
       expect(@dst.assignments.find(json["assignments"][@shell_assign.id.to_s]).description).to eq "assigned"
@@ -931,7 +933,61 @@ describe ContentMigrationsController, type: :request do
       expect(@dst.discussion_topics.find(json["discussion_topics"][@topic.id.to_s]).message).to eq "some topic"
       expect(@dst.discussion_topics.find(json["discussion_topics"][@assign_topic.id.to_s]).message).to eq "assigned"
       expect(@dst.quizzes.find(json["quizzes"][@quiz.id.to_s]).title).to eq "a quiz"
-      expect(@dst.attachments.find(json["files"][@file.id.to_s]).filename).to eq "teh_file.txt"
+      dst_attachment = @dst.attachments.find(json["files"][@file.id.to_s])
+      expect(dst_attachment.filename).to eq "teh_file.txt"
+      if verifiers
+        expect(json["verifiers"][dst_attachment.id.to_s]).to eq dst_attachment.uuid
+      else
+        expect(json["verifiers"]).to be_nil
+      end
+    end
+
+    # accepts block which should return the migration id
+    def test_asset_migration_id_mapping(json, verifiers: true)
+      expect(@dst.announcements.find(json["announcements"][yield(@ann)]["destination"]["id"]).title).to eq "ann"
+      expect(@dst.assignments.find(json["assignments"][yield(@assign)]["destination"]["id"]).name).to eq "assign"
+      expect(@dst.assignments.find(json["assignments"][yield(@shell_assign)]["destination"]["id"]).description).to eq "assigned"
+      expect(@dst.context_modules.find(json["modules"][yield(@mod)]["destination"]["id"]).name).to eq "mod"
+      expect(@dst.context_module_tags.find(json["module_items"][yield(@tag)]["destination"]["id"]).title).to eq "blah"
+
+      dst_page = @dst.wiki_pages.find(json["pages"][yield(@page)]["destination"]["id"])
+      expect(dst_page.title).to eq "der page"
+      expect(json["pages"][yield(@page)]["destination"]["url"]).to eq "der-page"
+      expect(dst_page.url).to eq "der-page"
+
+      expect(@dst.wiki_pages.find(json["pages"][yield(@page)]["destination"]["id"]).title).to eq "der page"
+      expect(@dst.discussion_topics.find(json["discussion_topics"][yield(@topic)]["destination"]["id"]).message).to eq "some topic"
+      expect(@dst.discussion_topics.find(json["discussion_topics"][yield(@assign_topic)]["destination"]["id"]).message).to eq "assigned"
+      expect(@dst.quizzes.find(json["quizzes"][yield(@quiz)]["destination"]["id"]).title).to eq "a quiz"
+      expect(@dst.attachments.find(json["files"][yield(@file)]["destination"]["id"]).filename).to eq "teh_file.txt"
+
+      dst_media_attachment = @dst.attachments.find(json["files"][yield(@media_file)]["destination"]["id"])
+      expect(dst_media_attachment.filename).to eq "fish_and_wildlife.mp4"
+      expect(json["files"][yield(@media_file)]["destination"]["media_entry_id"]).to eq "m1234_fish_and_wildlife"
+
+      if verifiers
+        file_verifier = @dst.attachments.find(json["files"][yield(@file)]["destination"]["id"]).uuid
+        expect(json["files"][yield(@file)]["destination"]["uuid"]).to eq file_verifier
+
+        media_verifier = @dst.attachments.find(json["files"][yield(@media_file)]["destination"]["id"]).uuid
+        expect(json["files"][yield(@media_file)]["destination"]["uuid"]).to eq media_verifier
+      else
+        expect(json["files"][yield(@file)]["destination"]["uuid"]).to be_nil
+        expect(json["files"][yield(@media_file)]["destination"]["uuid"]).to be_nil
+      end
+    end
+
+    def test_asset_migration_id_mapping_nil(json)
+      expect(json["announcements"][yield(@ann)]).to be_nil
+      expect(json["assignments"][yield(@assign)]).to be_nil
+      expect(json["assignments"][yield(@shell_assign)]).to be_nil
+      expect(json["modules"][yield(@mod)]).to be_nil
+      expect(json["module_items"][yield(@tag)]).to be_nil
+      expect(json["pages"][yield(@page)]).to be_nil
+      expect(json["discussion_topics"][yield(@topic)]).to be_nil
+      expect(json["discussion_topics"][yield(@assign_topic)]).to be_nil
+      expect(json["quizzes"][yield(@quiz)]).to be_nil
+      expect(json["files"][yield(@file)]).to be_nil
     end
 
     describe "course copy" do
@@ -939,6 +995,11 @@ describe ContentMigrationsController, type: :request do
         @migration = @dst.content_migrations.create!(source_course: @src, migration_type: "course_copy_importer")
         @migration.queue_migration
         run_jobs
+      end
+
+      def migration_id(asset)
+        asset_string = asset.class.asset_string(asset.id)
+        CC::CCHelper.create_key(asset_string, global: true)
       end
 
       it "requires permission" do
@@ -952,7 +1013,7 @@ describe ContentMigrationsController, type: :request do
                    id: @migration.to_param },
                  {},
                  {},
-                 { expected_status: 401 })
+                 { expected_status: 403 })
       end
 
       it "maps ids" do
@@ -964,6 +1025,68 @@ describe ContentMigrationsController, type: :request do
                           course_id: @dst.to_param,
                           id: @migration.to_param })
         test_asset_id_mapping(json)
+      end
+
+      it "doesn't add verifiers to the asset map if the file_verifiers_for_quiz_links flag is off" do
+        @dst.root_account.disable_feature!(:file_verifiers_for_quiz_links)
+        json = api_call(:get,
+                        "/api/v1/courses/#{@dst.to_param}/content_migrations/#{@migration.to_param}/asset_id_mapping",
+                        { controller: "content_migrations",
+                          action: "asset_id_mapping",
+                          format: "json",
+                          course_id: @dst.to_param,
+                          id: @migration.to_param })
+        test_asset_id_mapping(json, verifiers: false)
+        @dst.root_account.enable_feature!(:file_verifiers_for_quiz_links)
+      end
+
+      context "with the :content_migration_asset_map_v2 flag on" do
+        it "maps migration_ids to a hash containing the destination id" do
+          Account.site_admin.enable_feature!(:content_migration_asset_map_v2)
+          json = api_call(:get,
+                          "/api/v1/courses/#{@dst.to_param}/content_migrations/#{@migration.to_param}/asset_id_mapping",
+                          { controller: "content_migrations",
+                            action: "asset_id_mapping",
+                            format: "json",
+                            course_id: @dst.to_param,
+                            id: @migration.to_param })
+          test_asset_migration_id_mapping(json) do |asset|
+            migration_id(asset)
+          end
+          Account.site_admin.disable_feature!(:content_migration_asset_map_v2)
+        end
+
+        it "doesn't add verifiers to migration_ids hash if the file_verifiers_for_quiz_links flag is off" do
+          @dst.root_account.disable_feature!(:file_verifiers_for_quiz_links)
+          Account.site_admin.enable_feature!(:content_migration_asset_map_v2)
+          json = api_call(:get,
+                          "/api/v1/courses/#{@dst.to_param}/content_migrations/#{@migration.to_param}/asset_id_mapping",
+                          { controller: "content_migrations",
+                            action: "asset_id_mapping",
+                            format: "json",
+                            course_id: @dst.to_param,
+                            id: @migration.to_param })
+          test_asset_migration_id_mapping(json, verifiers: false) do |asset|
+            migration_id(asset)
+          end
+          Account.site_admin.disable_feature!(:content_migration_asset_map_v2)
+          @dst.root_account.enable_feature!(:file_verifiers_for_quiz_links)
+        end
+      end
+
+      context "with the :content_migration_asset_map_v2 flag off" do
+        it "does not map migration_ids to a hash containing the destination id" do
+          json = api_call(:get,
+                          "/api/v1/courses/#{@dst.to_param}/content_migrations/#{@migration.to_param}/asset_id_mapping",
+                          { controller: "content_migrations",
+                            action: "asset_id_mapping",
+                            format: "json",
+                            course_id: @dst.to_param,
+                            id: @migration.to_param })
+          test_asset_migration_id_mapping_nil(json) do |asset|
+            migration_id(asset)
+          end
+        end
       end
     end
 
@@ -975,6 +1098,30 @@ describe ContentMigrationsController, type: :request do
         run_jobs
         @mm.reload
         @migration = @mm.migration_results.first.content_migration
+
+        @master_content_tags = @template.master_content_tags.select(:content_id, :migration_id, :content_type)
+      end
+
+      def migration_id(asset)
+        if asset.instance_of?(ContentTag)
+          global_asset_string = asset.class.asset_string(Shard.global_id_for(asset.id, @src.shard))
+          @template.migration_id_for(global_asset_string)
+        elsif asset.instance_of?(Assignment) && asset.submission_types == "discussion_topic"
+          dt = DiscussionTopic.where(assignment_id: asset.id).first
+          mct = @master_content_tags.find do |t|
+            t.content_type == "DiscussionTopic" && t.content_id == dt.id
+          end
+
+          mct&.migration_id
+        else
+          mct = @master_content_tags.find do |t|
+            asset_type = asset.class.name
+            content_type = (asset_type == "Announcement") ? "DiscussionTopic" : asset_type
+            t.content_type == content_type && t.content_id == asset.id
+          end
+
+          mct&.migration_id
+        end
       end
 
       it "maps ids" do
@@ -986,6 +1133,51 @@ describe ContentMigrationsController, type: :request do
                           course_id: @dst.to_param,
                           id: @migration.to_param })
         test_asset_id_mapping(json)
+      end
+
+      it "doesn't add verifiers to the asset map if the file_verifiers_for_quiz_links flag is off" do
+        @dst.root_account.disable_feature!(:file_verifiers_for_quiz_links)
+        json = api_call(:get,
+                        "/api/v1/courses/#{@dst.to_param}/content_migrations/#{@migration.to_param}/asset_id_mapping",
+                        { controller: "content_migrations",
+                          action: "asset_id_mapping",
+                          format: "json",
+                          course_id: @dst.to_param,
+                          id: @migration.to_param })
+        test_asset_id_mapping(json, verifiers: false)
+        @dst.root_account.enable_feature!(:file_verifiers_for_quiz_links)
+      end
+
+      context "with the :content_migration_asset_map_v2 on" do
+        it "maps migration_ids to a hash containing the destination id" do
+          Account.site_admin.enable_feature!(:content_migration_asset_map_v2)
+          json = api_call(:get,
+                          "/api/v1/courses/#{@dst.to_param}/content_migrations/#{@migration.to_param}/asset_id_mapping",
+                          { controller: "content_migrations",
+                            action: "asset_id_mapping",
+                            format: "json",
+                            course_id: @dst.to_param,
+                            id: @migration.to_param })
+          test_asset_migration_id_mapping(json) do |asset|
+            migration_id(asset)
+          end
+          Account.site_admin.disable_feature!(:content_migration_asset_map_v2)
+        end
+      end
+
+      context "with the :content_migration_asset_map_v2 off" do
+        it "does not map migration_ids to a hash containing the destination id" do
+          json = api_call(:get,
+                          "/api/v1/courses/#{@dst.to_param}/content_migrations/#{@migration.to_param}/asset_id_mapping",
+                          { controller: "content_migrations",
+                            action: "asset_id_mapping",
+                            format: "json",
+                            course_id: @dst.to_param,
+                            id: @migration.to_param })
+          test_asset_migration_id_mapping_nil(json) do |asset|
+            migration_id(asset)
+          end
+        end
       end
 
       it "includes assets from previous syncs" do

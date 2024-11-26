@@ -114,7 +114,7 @@ module CC::Importer::Standard
         assignment[:similarity_detection_tool] = similarity_settings
       end
 
-      %w[title allowed_extensions grading_type submission_types external_tool_url external_tool_data_json external_tool_link_settings_json turnitin_settings].each do |string_type|
+      %w[title allowed_extensions grading_type submission_types external_tool_url external_tool_data_json external_tool_link_settings_json turnitin_settings time_zone_edited].each do |string_type|
         val = get_node_val(meta_doc, string_type)
         assignment[string_type] = val unless val.nil?
       end
@@ -193,10 +193,23 @@ module CC::Importer::Standard
       if meta_doc.at_css("annotatable_attachment_migration_id")
         assignment[:annotatable_attachment_migration_id] = get_node_val(meta_doc, "annotatable_attachment_migration_id")
       end
+      if @is_discussion_checkpoints_enabled && meta_doc.at_css("sub_assignments")
+        assignment[:sub_assignments] = parse_canvas_sub_assignment_data(meta_doc.css("sub_assignments sub_assignment"))
+      end
       assignment
     end
 
     private
+
+    def parse_canvas_sub_assignment_data(sub_assignments_node)
+      return [] unless sub_assignments_node
+
+      sub_assignments_node.map do |sub_assignment_node|
+        sub_assignment = parse_canvas_assignment_data(sub_assignment_node)
+        sub_assignment[:tag] = sub_assignment_node[:tag]
+        sub_assignment
+      end
+    end
 
     def get_tool_setting(meta_doc)
       {

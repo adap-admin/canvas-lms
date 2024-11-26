@@ -20,7 +20,12 @@ import tinymce from 'tinymce'
 
 import React from 'react'
 import ReactDOM from 'react-dom'
-import {RceToolWrapper, buildToolMenuItems, ExternalToolMenuItem} from './RceToolWrapper'
+import {
+  RceToolWrapper,
+  buildToolMenuItems,
+  ExternalToolMenuItem,
+  externalToolsForToolbar,
+} from './RceToolWrapper'
 import formatMessage from '../../../format-message'
 import {ExternalToolSelectionDialog} from './components/ExternalToolSelectionDialog/ExternalToolSelectionDialog'
 import {ensureToolDialogContainerElem} from './dialog-helper'
@@ -68,18 +73,17 @@ function registerAppsMenu(editor: ExternalToolsEditor) {
  * Registers toolbar buttons for favorite apps
  */
 function registerFavoriteAppsToolbarButtons(editor: ExternalToolsEditor) {
-  RceToolWrapper.forEditorEnv(externalToolsEnvFor(editor))
-    .filter(it => it.favorite)
-    .forEach(toolInfo =>
-      editor.ui.registry.addButton(
-        `instructure_external_button_${toolInfo.id}`,
-        toolInfo.asToolbarButton()
-      )
+  const allTools = RceToolWrapper.forEditorEnv(externalToolsEnvFor(editor))
+  externalToolsForToolbar(allTools).forEach(toolInfo =>
+    editor.ui.registry.addButton(
+      `instructure_external_button_${toolInfo.id}`,
+      toolInfo.asToolbarButton()
     )
+  )
 }
 
 function registerAppsToolbarButton(editor: ExternalToolsEditor) {
-  const tooltip = formatMessage('Apps')
+  const tooltip = 'apps-temp'
   editor.ui.registry.addMenuButton('lti_mru_button', {
     tooltip,
     icon: 'lti',
@@ -89,6 +93,9 @@ function registerAppsToolbarButton(editor: ExternalToolsEditor) {
       callback(toolMenuItems)
     },
     onSetup(_api) {
+      const e = document.querySelector("button[title='apps-temp']")
+      e?.setAttribute('title', formatMessage('Apps'))
+      e?.setAttribute('id', 'plug-apps-button')
       return () => undefined
     },
   })

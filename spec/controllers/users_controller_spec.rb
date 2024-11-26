@@ -18,6 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
+require "feedjira"
 require_relative "../lti_1_3_spec_helper"
 require_relative "../helpers/k5_common"
 
@@ -58,7 +59,19 @@ describe UsersController do
     let_once(:user) { user_factory(active_all: true) }
     before do
       account.account_users.create!(user:)
+      allow(Lti::LogService).to receive(:new) do
+        double("Lti::LogService").tap { |s| allow(s).to receive(:call) }
+      end
       user_session(user)
+    end
+
+    context "ENV.LTI_TOOL_FORM_ID" do
+      it "sets a random id" do
+        expect(controller).to receive(:random_lti_tool_form_id).and_return("1")
+        allow(controller).to receive(:js_env).with(anything).and_call_original
+        expect(controller).to receive(:js_env).with(LTI_TOOL_FORM_ID: "1")
+        get :external_tool, params: { id: tool.id, user_id: user.id }
+      end
     end
 
     it "removes query string when post_only = true" do
@@ -92,9 +105,7 @@ describe UsersController do
       let(:override_url) { "http://www.example-beta.com/basic_lti" }
 
       before do
-        allow(ApplicationController).to receive(:test_cluster?).and_return(true)
-        allow(ApplicationController).to receive(:test_cluster_name).and_return("beta")
-        Account.site_admin.enable_feature! :dynamic_lti_environment_overrides
+        allow(ApplicationController).to receive_messages(test_cluster?: true, test_cluster_name: "beta")
 
         tool.settings[:environments] = {
           launch_url: override_url
@@ -106,6 +117,19 @@ describe UsersController do
         get :external_tool, params: { id: tool.id, user_id: user.id }
         expect(assigns[:lti_launch].resource_url).to eq override_url + "?first=john&last=smith"
       end
+    end
+
+    it "logs the launch" do
+      get :external_tool, params: { id: tool.id, user_id: user.id }
+      expect(Lti::LogService).to have_received(:new).with(
+        tool:,
+        context: account,
+        user:,
+        session_id: nil,
+        placement: :user_navigation,
+        launch_type: :direct_link,
+        launch_url: tool.url
+      )
     end
 
     context "using LTI 1.3 when specified" do
@@ -133,9 +157,35 @@ describe UsersController do
           canvas_region
           canvas_environment
           client_id
-          deployment_id
+          lti_deployment_id
           lti_storage_target
         ]
+      end
+
+      context "when lti_deployment_id_in_login_request FF is off" do
+        before do
+          user.account.root_account.disable_feature!(:lti_deployment_id_in_login_request)
+          allow(SecureRandom).to receive(:hex).and_return(verifier)
+          tool.use_1_3 = true
+          tool.developer_key = developer_key
+          tool.save!
+          get :external_tool, params: { id: tool.id, user_id: user.id }
+        end
+
+        it "creates a login message" do
+          expect(assigns[:lti_launch].params.keys).to match_array %w[
+            iss
+            login_hint
+            target_link_uri
+            lti_message_hint
+            canvas_region
+            canvas_environment
+            client_id
+            deployment_id
+            lti_deployment_id
+            lti_storage_target
+          ]
+        end
       end
 
       it 'sets the "login_hint" to the current user lti id' do
@@ -143,7 +193,7 @@ describe UsersController do
       end
 
       it "caches the LTI 1.3 launch" do
-        expect(cached_launch["https://purl.imsglobal.org/spec/lti/claim/message_type"]).to eq "LtiResourceLinkRequest"
+        expect(cached_launch["post_payload"]["https://purl.imsglobal.org/spec/lti/claim/message_type"]).to eq "LtiResourceLinkRequest"
       end
 
       it "does not use the oidc_initiation_url as the resource_url" do
@@ -170,8 +220,7 @@ describe UsersController do
     it "sets up oauth for google_drive" do
       state = nil
       settings_mock = double
-      allow(settings_mock).to receive(:settings).and_return({})
-      allow(settings_mock).to receive(:enabled?).and_return(true)
+      allow(settings_mock).to receive_messages(settings: {}, enabled?: true)
 
       user_factory(active_all: true)
       user_session(@user)
@@ -198,20 +247,30 @@ describe UsersController do
     it "handles google_drive oauth_success for a logged_in_user" do
       settings_mock = double
       allow(settings_mock).to receive(:settings).and_return({})
-      authorization_mock = double("authorization", :code= => nil, :fetch_access_token! => nil, :refresh_token => "refresh_token", :access_token => "access_token")
-      drive_mock = Google::APIClient::API.new("mock", {})
-      allow(drive_mock).to receive(:about).and_return(double(get: nil))
-      client_mock = double("client", discovered_api: drive_mock, execute!: double("result", status: 200, data: { "permissionId" => "permission_id", "user" => { "emailAddress" => "blah@blah.com" } }))
-      allow(client_mock).to receive(:authorization).and_return(authorization_mock)
+      authorization_mock = instance_double("Google::Auth::UserRefreshCredentials",
+                                           :code= => nil,
+                                           :fetch_access_token! => nil,
+                                           :refresh_token => "refresh_token",
+                                           :access_token => "access_token")
+      about_mock = instance_double("Google::Apis::DriveV3::About",
+                                   user: instance_double("Google::Apis::DriveV3::User",
+                                                         email_address: "blah@blah.com",
+                                                         permission_id: "permission_id"))
+      client_mock = instance_double("Google::Apis::DriveV3::DriveService",
+                                    get_about: about_mock,
+                                    authorization: authorization_mock)
       allow(GoogleDrive::Client).to receive(:create).and_return(client_mock)
 
       session[:oauth_gdrive_nonce] = "abc123"
-      state = Canvas::Security.create_jwt({ "return_to_url" => "http://localhost.com/return", "nonce" => "abc123" })
+      state = Canvas::Security.create_jwt({ "return_to_url" => "http://localhost.com/return",
+                                            "nonce" => "abc123" })
       course_with_student_logged_in
 
       get :oauth_success, params: { state:, service: "google_drive", code: "some_code" }
 
-      service = UserService.where(user_id: @user, service: "google_drive", service_domain: "drive.google.com").first
+      service = UserService.where(user_id: @user,
+                                  service: "google_drive",
+                                  service_domain: "drive.google.com").first
       expect(service.service_user_id).to eq "permission_id"
       expect(service.service_user_name).to eq "blah@blah.com"
       expect(service.token).to eq "refresh_token"
@@ -222,15 +281,19 @@ describe UsersController do
     it "handles google_drive oauth_success for a non logged in user" do
       settings_mock = double
       allow(settings_mock).to receive(:settings).and_return({})
-      authorization_mock = double("authorization", :code= => nil, :fetch_access_token! => nil, :refresh_token => "refresh_token", :access_token => "access_token")
-      drive_mock = Google::APIClient::API.new("mock", {})
-      allow(drive_mock).to receive(:about).and_return(double(get: nil))
-      client_mock = double("client", discovered_api: drive_mock, execute!: double("result", status: 200, data: { "permissionId" => "permission_id" }))
-      allow(client_mock).to receive(:authorization).and_return(authorization_mock)
+      authorization_mock = instance_double("Google::Auth::UserRefreshCredentials",
+                                           :code= => nil,
+                                           :fetch_access_token! => nil,
+                                           :refresh_token => "refresh_token",
+                                           :access_token => "access_token")
+      client_mock = instance_double("Google::Apis::DriveV3::DriveService",
+                                    get_about: nil,
+                                    authorization: authorization_mock)
       allow(GoogleDrive::Client).to receive(:create).and_return(client_mock)
 
       session[:oauth_gdrive_nonce] = "abc123"
-      state = Canvas::Security.create_jwt({ "return_to_url" => "http://localhost.com/return", "nonce" => "abc123" })
+      state = Canvas::Security.create_jwt({ "return_to_url" => "http://localhost.com/return",
+                                            "nonce" => "abc123" })
 
       get :oauth_success, params: { state:, service: "google_drive", code: "some_code" }
 
@@ -242,16 +305,18 @@ describe UsersController do
     it "rejects invalid state" do
       settings_mock = double
       allow(settings_mock).to receive(:settings).and_return({})
-      authorization_mock = double("authorization")
-      allow(authorization_mock).to receive_messages(:code= => nil, :fetch_access_token! => nil, :refresh_token => "refresh_token", :access_token => "access_token")
-      drive_mock = Google::APIClient::API.new("mock", {})
-      allow(drive_mock).to receive(:about).and_return(double(get: nil))
-      client_mock = double("client", discovered_api: drive_mock, execute!: double("result", status: 200, data: { "permissionId" => "permission_id" }))
-
-      allow(client_mock).to receive(:authorization).and_return(authorization_mock)
+      authorization_mock = instance_double("Google::Auth::UserRefreshCredentials")
+      allow(authorization_mock).to receive_messages(:code= => nil,
+                                                    :fetch_access_token! => nil,
+                                                    :refresh_token => "refresh_token",
+                                                    :access_token => "access_token")
+      client_mock = instance_double("Google::Apis::DriveV3::DriveService",
+                                    get_about: nil,
+                                    authorization: authorization_mock)
       allow(GoogleDrive::Client).to receive(:create).and_return(client_mock)
 
-      state = Canvas::Security.create_jwt({ "return_to_url" => "http://localhost.com/return", "nonce" => "abc123" })
+      state = Canvas::Security.create_jwt({ "return_to_url" => "http://localhost.com/return",
+                                            "nonce" => "abc123" })
       get :oauth_success, params: { state:, service: "google_drive", code: "some_code" }
 
       assert_unauthorized
@@ -260,17 +325,14 @@ describe UsersController do
     end
 
     it "handles auth failure gracefully" do
-      authorization_mock = double("authorization")
-      allow(authorization_mock).to receive_messages(:code= => nil)
+      authorization_mock = instance_double("Google::Auth::UserRefreshCredentials", :code= => nil)
       allow(authorization_mock).to receive(:fetch_access_token!) do
         raise Signet::AuthorizationError, "{\"error\": \"invalid_grant\", \"error_description\": \"Bad Request\"}"
       end
-      drive_mock = Google::APIClient::API.new("mock", {})
-      allow(drive_mock).to receive(:about).and_return(double(get: nil))
-      client_mock = double("client")
-      allow(client_mock).to receive(:authorization).and_return(authorization_mock)
+      client_mock = instance_double("Google::Apis::DriveV3::DriveService", authorization: authorization_mock)
       allow(GoogleDrive::Client).to receive(:create).and_return(client_mock)
-      state = Canvas::Security.create_jwt({ "return_to_url" => "http://localhost.com/return", "nonce" => "abc123" })
+      state = Canvas::Security.create_jwt({ "return_to_url" => "http://localhost.com/return",
+                                            "nonce" => "abc123" })
       get :oauth_success, params: { state:, service: "google_drive", code: "some_code" }
       expect(response).to be_redirect
       expect(flash[:error]).to eq "Google Drive failed authorization for current user!"
@@ -512,7 +574,7 @@ describe UsersController do
 
         it "does not allow teachers to self register" do
           post "create", params: { pseudonym: { unique_id: "jane@example.com" }, user: { name: "Jane Teacher", terms_of_use: "1", initial_enrollment_type: "teacher" } }, format: "json"
-          assert_status(403)
+          assert_forbidden
         end
 
         it "does not allow students to self register" do
@@ -520,7 +582,7 @@ describe UsersController do
           @course.update_attribute(:self_enrollment, true)
 
           post "create", params: { pseudonym: { unique_id: "jane@example.com", password: "lolwut12", password_confirmation: "lolwut12" }, user: { name: "Jane Student", terms_of_use: "1", self_enrollment_code: @course.self_enrollment_code, initial_enrollment_type: "student" }, pseudonym_type: "username", self_enrollment: "1" }, format: "json"
-          assert_status(403)
+          assert_forbidden
         end
 
         it "allows observers to self register" do
@@ -750,7 +812,7 @@ describe UsersController do
         expect(p.user.communication_channels.length).to eq 1
         expect(p.user.communication_channels.first).to be_unconfirmed
         expect(p.user.communication_channels.first.path).to eq "jacob@instructure.com"
-        expect([cc1, cc2, cc3]).not_to be_include(p.user.communication_channels.first)
+        expect([cc1, cc2, cc3]).not_to include(p.user.communication_channels.first)
       end
 
       it "re-uses 'conflicting' unique_ids if it hasn't been fully registered yet" do
@@ -841,7 +903,7 @@ describe UsersController do
                                    user: { name: "happy gilmore", terms_of_use: "1", self_enrollment_code: @course.self_enrollment_code + " ", initial_enrollment_type: "student" },
                                    self_enrollment: "1" }
           expect(response).to be_successful
-          u = User.where(name: "happy gilmore").take
+          u = User.find_by(name: "happy gilmore")
           expect(u.root_account_ids).to eq [Account.default.id]
         end
 
@@ -999,61 +1061,78 @@ describe UsersController do
         expect(p.user).to be_pre_registered
       end
 
-      it "notifies the user if a merge opportunity arises" do
-        account = Account.create!
-        user_with_pseudonym(account:)
-        account.account_users.create!(user: @user)
-        user_session(@user, @pseudonym)
-        @admin = @user
+      context "merge opportunity notifications" do
+        before do
+          @notification = Notification.create(name: "Merge Email Communication Channel", category: "Registration")
+          @account = Account.create!
+          user_with_pseudonym(account: @account)
+          @account.account_users.create!(user: @user)
+          user_session(@user, @pseudonym)
+          @admin = @user
 
-        u = User.create! { |user| user.workflow_state = "registered" }
-        communication_channel(u, { username: "jacob@instructure.com", active_cc: true })
-        u.pseudonyms.create!(unique_id: "jon@instructure.com")
-        notification = Notification.create(name: "Merge Email Communication Channel", category: "Registration")
+          @u = User.create! { |user| user.workflow_state = "registered" }
+          communication_channel(@u, { username: "jacob@instructure.com", active_cc: true })
+        end
 
-        post "create",
-             params: {
-               account_id: account.id,
-               pseudonym: {
-                 unique_id: "jacob@instructure.com",
-                 send_confirmation: "0"
+        it "notifies the user if a merge opportunity arises" do
+          @u.pseudonyms.create!(unique_id: "jon@instructure.com")
+
+          post "create",
+               params: {
+                 account_id: @account.id,
+                 pseudonym: {
+                   unique_id: "jacob@instructure.com",
+                   send_confirmation: "0"
+                 },
+                 user: {
+                   name: "Jacob Fugal"
+                 }
                },
-               user: {
-                 name: "Jacob Fugal"
-               }
-             },
-             format: "json"
-        expect(response).to be_successful
-        p = Pseudonym.where(unique_id: "jacob@instructure.com").first
-        expect(Message.where(communication_channel_id: p.user.email_channel, notification_id: notification).first).to be_present
-      end
+               format: "json"
+          expect(response).to be_successful
+          p = Pseudonym.where(unique_id: "jacob@instructure.com").first
+          expect(Message.where(communication_channel_id: p.user.email_channel, notification_id: @notification).first).to be_present
+        end
 
-      it "does not notify the user if the merge opportunity can't log in'" do
-        notification = Notification.create(name: "Merge Email Communication Channel", category: "Registration")
+        it "does not notify user of opportunity when suppress_notifications = true" do
+          initial_message_count = Message.count
+          @u.pseudonyms.create!(unique_id: "jon@instructure.com")
+          @account.settings[:suppress_notifications] = true
+          @account.save!
 
-        account = Account.create!
-        user_with_pseudonym(account:)
-        account.account_users.create!(user: @user)
-        user_session(@user, @pseudonym)
-        @admin = @user
-
-        u = User.create! { |user| user.workflow_state = "registered" }
-        communication_channel(u, { username: "jacob@instructure.com", active_cc: true })
-        post "create",
-             params: {
-               account_id: account.id,
-               pseudonym: {
-                 unique_id: "jacob@instructure.com",
-                 send_confirmation: "0"
+          post "create",
+               params: {
+                 account_id: @account.id,
+                 pseudonym: {
+                   unique_id: "jacob@instructure.com",
+                   send_confirmation: "0"
+                 },
+                 user: {
+                   name: "Jacob Fugal"
+                 }
                },
-               user: {
-                 name: "Jacob Fugal"
-               }
-             },
-             format: "json"
-        expect(response).to be_successful
-        p = Pseudonym.where(unique_id: "jacob@instructure.com").first
-        expect(Message.where(communication_channel_id: p.user.email_channel, notification_id: notification).first).to be_nil
+               format: "json"
+          expect(response).to be_successful
+          expect(Message.count).to eq initial_message_count
+        end
+
+        it "does not notify the user if the merge opportunity can't log in'" do
+          post "create",
+               params: {
+                 account_id: @account.id,
+                 pseudonym: {
+                   unique_id: "jacob@instructure.com",
+                   send_confirmation: "0"
+                 },
+                 user: {
+                   name: "Jacob Fugal"
+                 }
+               },
+               format: "json"
+          expect(response).to be_successful
+          p = Pseudonym.where(unique_id: "jacob@instructure.com").first
+          expect(Message.where(communication_channel_id: p.user.email_channel, notification_id: @notification).first).to be_nil
+        end
       end
     end
   end
@@ -1104,22 +1183,22 @@ describe UsersController do
     end
 
     it "returns nil if there is no token" do
-      allow(DynamicSettings).to receive(:find).with(tree: :private).and_return({ "recaptcha_server_key" => nil })
+      allow(DynamicSettings).to receive(:find).with(tree: :private).and_return(DynamicSettings::FallbackProxy.new({ "recaptcha_server_key" => nil }))
       expect(subject.send(:validate_recaptcha, nil)).to be_nil
     end
 
     it "returns nil for valid recaptcha submissions" do
-      allow(DynamicSettings).to receive(:find).with(tree: :private).and_return({ "recaptcha_server_key" => "test-token" })
+      allow(DynamicSettings).to receive(:find).with(tree: :private).and_return(DynamicSettings::FallbackProxy.new({ "recaptcha_server_key" => "test-token" }))
       expect(subject.send(:validate_recaptcha, "valid-submit-key")).to be_nil
     end
 
     it "returns an error for missing recaptcha submissions" do
-      allow(DynamicSettings).to receive(:find).with(tree: :private).and_return({ "recaptcha_server_key" => "test-token" })
+      allow(DynamicSettings).to receive(:find).with(tree: :private).and_return(DynamicSettings::FallbackProxy.new({ "recaptcha_server_key" => "test-token" }))
       expect(subject.send(:validate_recaptcha, nil)).not_to be_nil
     end
 
     it "returns an error for invalid recaptcha submissions" do
-      allow(DynamicSettings).to receive(:find).with(tree: :private).and_return({ "recaptcha_server_key" => "test-token" })
+      allow(DynamicSettings).to receive(:find).with(tree: :private).and_return(DynamicSettings::FallbackProxy.new({ "recaptcha_server_key" => "test-token" }))
       expect(subject.send(:validate_recaptcha, "invalid-submit-key")).not_to be_nil
     end
   end
@@ -1179,6 +1258,8 @@ describe UsersController do
           # truthy setting
           Account.default.settings[:restrict_quantitative_data] = { value: true, locked: true }
           Account.default.save!
+          @course.restrict_quantitative_data = true
+          @course.save!
 
           get_grades!(all_grading_periods_id)
           expect(restrict_quantitative_data).to be true
@@ -1285,6 +1366,8 @@ describe UsersController do
         # truthy setting
         Account.default.settings[:restrict_quantitative_data] = { value: true, locked: true }
         Account.default.save!
+        @course.restrict_quantitative_data = true
+        @course.save!
 
         user_session(teacher)
         get_grades!(grading_period.id)
@@ -1400,6 +1483,8 @@ describe UsersController do
           # truthy setting
           Account.default.settings[:restrict_quantitative_data] = { value: true, locked: true }
           Account.default.save!
+          @course.restrict_quantitative_data = true
+          @course.save!
 
           get_grades!(grading_period.id)
           expect(restrict_quantitative_data).to be true
@@ -1941,8 +2026,8 @@ describe UsersController do
       teacher_enrollments = assigns[:presenter].teacher_enrollments
       expect(teacher_enrollments).not_to be_nil
       teachers = teacher_enrollments.map(&:user)
-      expect(teachers).to be_include(@teacher)
-      expect(teachers).not_to be_include(@designer)
+      expect(teachers).to include(@teacher)
+      expect(teachers).not_to include(@designer)
     end
 
     it "does not redirect to an observer enrollment with no observee" do
@@ -2054,23 +2139,22 @@ describe UsersController do
 
     it "includes absolute path for rel='self' link" do
       get "public_feed", params: { feed_code: @user.feed_code }, format: "atom"
-      feed = Atom::Feed.load_feed(response.body) rescue nil
+      feed = Feedjira.parse(response.body)
       expect(feed).not_to be_nil
-      expect(feed.links.first.rel).to match(/self/)
-      expect(feed.links.first.href).to match(%r{http://})
+      expect(feed.feed_url).to match(%r{http://})
     end
 
     it "includes an author for each entry" do
       get "public_feed", params: { feed_code: @user.feed_code }, format: "atom"
-      feed = Atom::Feed.load_feed(response.body) rescue nil
+      feed = Feedjira.parse(response.body)
       expect(feed).not_to be_nil
       expect(feed.entries).not_to be_empty
-      expect(feed.entries.all? { |e| e.authors.present? }).to be_truthy
+      expect(feed.entries.all? { |e| e.author.present? }).to be_truthy
     end
 
     it "excludes unpublished things" do
       get "public_feed", params: { feed_code: @user.feed_code }, format: "atom"
-      feed = Atom::Feed.load_feed(response.body) rescue nil
+      feed = Feedjira.parse(response.body)
       expect(feed.entries.size).to eq 3
 
       @as.unpublish
@@ -2078,7 +2162,7 @@ describe UsersController do
       @dt.unpublish! # yes, you really have to shout to unpublish a discussion topic :(
 
       get "public_feed", params: { feed_code: @user.feed_code }, format: "atom"
-      feed = Atom::Feed.load_feed(response.body) rescue nil
+      feed = Feedjira.parse(response.body)
       expect(feed.entries.size).to eq 0
     end
 
@@ -2091,13 +2175,13 @@ describe UsersController do
       @topic.assignment.update_attribute :only_visible_to_overrides, true
 
       get "public_feed", params: { feed_code: @user.feed_code }, format: "atom"
-      feed = Atom::Feed.load_feed(response.body) rescue nil
+      feed = Feedjira.parse(response.body)
       expect(feed.entries.map(&:id).join(" ")).not_to include @as2.asset_string
       expect(feed.entries.map(&:id).join(" ")).not_to include @topic.asset_string
 
       @course.enroll_student(@student, section: @other_section, enrollment_state: "active", allow_multiple_enrollments: true)
       get "public_feed", params: { feed_code: @user.feed_code }, format: "atom"
-      feed = Atom::Feed.load_feed(response.body) rescue nil
+      feed = Feedjira.parse(response.body)
       expect(feed.entries.map(&:id).join(" ")).to include @as2.asset_string
       expect(feed.entries.map(&:id).join(" ")).to include @topic.asset_string
     end
@@ -2238,13 +2322,40 @@ describe UsersController do
     end
 
     it "404s, but still shows, on a deleted user for site admins" do
-      course_with_teacher(active_all: 1)
+      course_with_teacher(active_all: 1, user: user_with_pseudonym)
 
       account_admin_user(account: Account.site_admin)
       user_session(@admin)
       @teacher.destroy
 
       get "show", params: { id: @teacher.id }
+      expect(response).to have_http_status :not_found
+      expect(response).to render_template("users/show")
+    end
+
+    it "404s, but still shows, on a deleted user for admins" do
+      course_with_teacher(active_all: 1, user: user_with_pseudonym)
+
+      account_admin_user
+      user_session(@admin)
+      @teacher.destroy
+
+      get "show", params: { id: @teacher.id }
+      expect(response).to have_http_status :not_found
+      expect(response).to render_template("users/show")
+    end
+
+    it "404s, but still shows, on a deleted user in circular merge for admins" do
+      @user1 = user_with_pseudonym(active_all: true, account: @account)
+      @user2 = user_factory(active_all: true, account: @account)
+
+      UserMerge.from(@user1).into(@user2)
+      UserMerge.from(@user2).into(@user1)
+
+      account_admin_user
+      user_session(@admin)
+
+      get "show", params: { id: @user1.id }
       expect(response).to have_http_status :not_found
       expect(response).to render_template("users/show")
     end
@@ -2288,6 +2399,54 @@ describe UsersController do
       get "show", params: { id: @user.id }
       expect(response).to have_http_status :ok
     end
+
+    it "shows a deleted user from the account context if they have a deleted pseudonym for that account" do
+      course_with_teacher(active_all: 1, user: user_with_pseudonym)
+      account_admin_user(active_all: true)
+      user_session(@admin)
+      @teacher.remove_from_root_account(Account.default)
+
+      get "show", params: { account_id: Account.default.id, id: @teacher.id }
+      expect(response).to have_http_status :ok
+    end
+
+    context "cross-shard deleted users" do
+      specs_require_sharding
+
+      before do
+        @shard1.activate do
+          course_with_teacher(active_all: 1, user: user_with_pseudonym)
+        end
+        Account.default.pseudonyms.create!(user: @teacher, unique_id: "teacher-shard1")
+        user_with_pseudonym
+        account_admin_user(user: @user, active_all: true)
+        user_session(@admin)
+        @teacher.remove_from_root_account(Account.default)
+      end
+
+      it "shows a deleted user from the account context if they have a deleted pseudonym for that account" do
+        get "show", params: { account_id: Account.default.id, id: @teacher.id }
+
+        expect(response).to have_http_status :ok
+      end
+
+      it "does not give login ID for another account in json format" do
+        get "show", params: { account_id: Account.default.id, id: @teacher.id, format: :json }
+
+        expect(response).to have_http_status :ok
+        expect(response.parsed_body["login_id"]).to be_nil
+      end
+    end
+
+    it "does not show a deleted user from an account the user doesn't have access to" do
+      course_with_teacher(active_all: 1, user: user_with_pseudonym)
+      account_admin_user(active_all: true, account: account_model)
+      user_session(@admin)
+      @teacher.remove_from_root_account(@course.root_account)
+
+      get "show", params: { account_id: @course.root_account.id, id: @teacher.id }
+      expect(response).to have_http_status :unauthorized
+    end
   end
 
   describe "PUT 'update'" do
@@ -2297,7 +2456,7 @@ describe UsersController do
       user_session(@user)
       put "update", params: { id: other_user.id }, format: "json"
       expect(response.body).not_to include "secret"
-      expect(response).to have_http_status :unauthorized
+      expect(response).to have_http_status :forbidden
     end
 
     it "overwrites stuck sis fields" do
@@ -2333,7 +2492,7 @@ describe UsersController do
         post "masquerade", params: { user_id: user2.id }
         expect(response).to be_redirect
 
-        expect(admin.associated_shards(:shadow)).to be_include(@shard1)
+        expect(admin.associated_shards(:shadow)).to include(@shard1)
       end
     end
 
@@ -2349,7 +2508,7 @@ describe UsersController do
         post "masquerade", params: { user_id: user2.id }
         expect(response).not_to be_redirect
 
-        expect(admin.associated_shards(:shadow)).not_to be_include(@shard1)
+        expect(admin.associated_shards(:shadow)).not_to include(@shard1)
       end
     end
 
@@ -2365,7 +2524,7 @@ describe UsersController do
         post "masquerade", params: { user_id: user2.id }
         expect(response).to be_redirect
 
-        expect(admin.associated_shards(:shadow)).not_to be_include(@shard1)
+        expect(admin.associated_shards(:shadow)).not_to include(@shard1)
       end
     end
   end
@@ -2411,16 +2570,14 @@ describe UsersController do
       kaltura_client
     end
 
-    let(:media_source_fetcher) do
-      media_source_fetcher = instance_double(MediaSourceFetcher)
-      expect(MediaSourceFetcher).to receive(:new).with(kaltura_client).and_return(media_source_fetcher)
-      media_source_fetcher
-    end
+    let(:media_source_fetcher) { instance_double(MediaSourceFetcher) }
 
     before do
       account = Account.create!
       course_with_student(active_all: true, account:)
       user_session(@student)
+
+      expect(MediaSourceFetcher).to receive(:new).with(kaltura_client).and_return(media_source_fetcher)
     end
 
     it "passes type and media_type params down to the media fetcher" do
@@ -3028,13 +3185,173 @@ describe UsersController do
   end
 
   describe "#pandata_events_token" do
-    it "returns bad_request if called without an access token" do
-      user_factory(active_all: true)
-      user_session(@user)
-      get "pandata_events_token"
-      assert_status(400)
-      json = response.parsed_body
-      expect(json["message"]).to eq "Access token required"
+    subject do
+      @request.env["HTTP_AUTHORIZATION"] = "Bearer #{access_token.full_token}"
+      get "pandata_events_token", params: { app_key: }
+    end
+
+    let(:user) do
+      user_with_pseudonym(active_user: true, username: "test1@example.com", password: "test1234")
+      @user
+    end
+    let(:developer_key) { DeveloperKey.create! }
+    let(:access_token) { user.access_tokens.create!(developer_key:) }
+    let(:endpoint) { "https://example.com" }
+    let(:app_key) { "VALID" }
+    let(:credentials) do
+      {
+        valid_key: "VALID",
+        valid_secret: "secret",
+        valid_secret_alg: :HS256,
+        invalid_key: "INVALID",
+        invalid_secret: "secret"
+      }.with_indifferent_access
+    end
+
+    before do
+      enable_developer_key_account_binding!(developer_key)
+      allow(Setting).to receive(:get).and_call_original
+      allow(Setting).to receive(:get).with("pandata_events_token_allowed_developer_key_ids", "").and_return(developer_key.global_id.to_s)
+      allow(Setting).to receive(:get).with("pandata_events_token_prefixes", "ios,android").and_return("valid")
+      allow(PandataEvents).to receive_messages(credentials:, endpoint:)
+    end
+
+    context "with logged-in user but no access token" do
+      subject { get "pandata_events_token" }
+
+      before do
+        user_session(user)
+      end
+
+      it "returns bad_request" do
+        subject
+        assert_status(400)
+        json = response.parsed_body
+        expect(json["message"]).to eq "Access token required"
+      end
+    end
+
+    context "with wrong developer key" do
+      before do
+        allow(Setting).to receive(:get).with("pandata_events_token_allowed_developer_key_ids", "").and_return("")
+      end
+
+      it "returns forbidden" do
+        subject
+        assert_forbidden
+        json = response.parsed_body
+        expect(json["message"]).to eq "Developer key not authorized"
+      end
+    end
+
+    context "with invalid app key" do
+      let(:app_key) { "INVALID" }
+
+      it "returns bad request" do
+        subject
+        assert_status(400)
+        json = response.parsed_body
+        expect(json["message"]).to eq "Invalid app key"
+      end
+    end
+
+    it "succeeds" do
+      subject
+      assert_status(200)
+    end
+
+    it "returns the PandataEvents endpoint" do
+      subject
+      expect(response.parsed_body["url"]).to eq endpoint
+    end
+
+    context "auth token" do
+      let(:token) { CanvasSecurity.decode_jwt(response.parsed_body["auth_token"], ["secret"]) }
+
+      it "contains the app key as iss" do
+        subject
+        expect(token["iss"]).to eq app_key
+      end
+
+      it "contains the user id as sub" do
+        subject
+        expect(token["sub"]).to eq user.global_id
+      end
+
+      it "has exp that matches expires_at" do
+        subject
+        exp = DateTime.strptime(token["exp"].to_s, "%s")
+        expires_at = DateTime.strptime(response.parsed_body["expires_at"].to_s, "%Q")
+        expect(exp.to_s).to eq expires_at.to_s
+      end
+    end
+
+    context "props token" do
+      let(:token) { CanvasSecurity.decode_jwt(response.parsed_body["props_token"], ["secret"]) }
+
+      it "contains the user id" do
+        subject
+        expect(token["user_id"]).to eq user.global_id
+      end
+
+      it "contains the shard id" do
+        subject
+        expect(token["shard"]).to eq Shard.current.id
+      end
+
+      it "contains the root account id" do
+        subject
+        expect(token["root_account_id"]).to eq Account.default.id
+      end
+
+      it "contains the root account uuid" do
+        subject
+        expect(token["root_account_uuid"]).to eq Account.default.uuid
+      end
+    end
+
+    context "expires_at" do
+      it "is an epoch timestamp in ms" do
+        subject
+        expires_at = response.parsed_body["expires_at"]
+        expect(expires_at).to be_a Float
+        expires_at_date = DateTime.strptime(expires_at.to_s, "%Q")
+        expect(expires_at_date).to be_a DateTime
+      end
+
+      it "is ~1 day from now" do
+        subject
+        expires_at = response.parsed_body["expires_at"]
+        expect(DateTime.strptime(expires_at.to_s, "%Q").utc).to be_within(1.minute).of(1.day.from_now)
+      end
+    end
+
+    context "after multiple requests" do
+      specs_require_cache(:redis_cache_store)
+
+      it "still has exp that matches expires_at" do
+        expires_at = nil
+        Timecop.travel(5.minutes.ago) do
+          @request.env["HTTP_AUTHORIZATION"] = "Bearer #{access_token.full_token}"
+          get "pandata_events_token", params: { app_key: }
+
+          token = CanvasSecurity.decode_jwt(response.parsed_body["auth_token"], ["secret"])
+          exp = DateTime.strptime(token["exp"].to_s, "%s").to_s
+          expires_at = DateTime.strptime(response.parsed_body["expires_at"].to_s, "%Q").to_s
+
+          expect(exp).to eq expires_at
+        end
+
+        @request.env["HTTP_AUTHORIZATION"] = "Bearer #{access_token.full_token}"
+        get "pandata_events_token", params: { app_key: }
+
+        token = CanvasSecurity.decode_jwt(response.parsed_body["auth_token"], ["secret"])
+        exp2 = DateTime.strptime(token["exp"].to_s, "%s").to_s
+        expires_at2 = DateTime.strptime(response.parsed_body["expires_at"].to_s, "%Q").to_s
+
+        expect(expires_at).not_to eq expires_at2
+        expect(exp2).to eq expires_at2
+      end
     end
   end
 
@@ -3052,7 +3369,7 @@ describe UsersController do
       user_session(admin)
 
       delete "destroy", params: { id: user.id }, format: :json
-      expect(response).to have_http_status :unauthorized
+      expect(response).to have_http_status :forbidden
     end
 
     it "allows siteadmin users" do
@@ -3070,8 +3387,17 @@ describe UsersController do
     let(:user2) { user_with_pseudonym(active_all: true) }
     let(:admin) { account_admin_user(active_all: true)  }
 
-    before do
+    def add_mobile_access_token(user)
       user.access_tokens.create!
+
+      @sns_client = double
+      allow(DeveloperKey).to receive(:sns).and_return(@sns_client)
+      expect(@sns_client).to receive(:create_platform_endpoint).and_return(endpoint_arn: "arn")
+      user.access_tokens.each_with_index { |ac, i| ac.notification_endpoints.create!(token: "token #{i}") }
+    end
+
+    before do
+      add_mobile_access_token(user)
     end
 
     it "rejects unauthenticated users" do
@@ -3083,7 +3409,7 @@ describe UsersController do
       user_session(user2)
 
       delete "terminate_sessions", params: { id: user.id }, format: :json
-      expect(response).to have_http_status :unauthorized
+      expect(response).to have_http_status :forbidden
     end
 
     it "allows admin to terminate sessions" do
@@ -3094,6 +3420,39 @@ describe UsersController do
 
       expect(user.reload.last_logged_out).not_to be_nil
       expect(user.access_tokens.take.permanent_expires_at).to be <= Time.zone.now
+    end
+
+    it "allows admin to expire mobile sessions" do
+      user_session(admin)
+      starting_notification_endpoints_count = user.notification_endpoints.count
+      expect(starting_notification_endpoints_count).to be > 0
+      delete "expire_mobile_sessions", format: :json
+
+      expect(response).to have_http_status :ok
+      expect(user.reload.access_tokens.take.permanent_expires_at).to be <= Time.zone.now
+      expect(user.reload.notification_endpoints.count).to be < starting_notification_endpoints_count
+    end
+
+    it "allows admin to expire mobile sessions for one user" do
+      add_mobile_access_token(user2)
+      user_session(admin)
+      delete "expire_mobile_sessions", params: { id: user.id }, format: :json
+
+      expect(response).to have_http_status :ok
+      expect(user.reload.access_tokens.take.permanent_expires_at).to be <= Time.zone.now
+      expect(user2.reload.access_tokens.take.permanent_expires_at).to be_nil
+    end
+
+    it "only expires access tokens associated to mobile app developer keys" do
+      dev_key = DeveloperKey.create!
+      user2.access_tokens.create!(developer_key: dev_key)
+
+      user_session(admin)
+      delete "expire_mobile_sessions", format: :json
+
+      expect(response).to have_http_status :ok
+      expect(user.reload.access_tokens.take.permanent_expires_at).to be <= Time.zone.now
+      expect(user2.reload.access_tokens.take.permanent_expires_at).to be_nil
     end
   end
 
@@ -3110,7 +3469,7 @@ describe UsersController do
       @user1 = @user
       @user2 = user_factory(active_all: true)
       put "settings", params: { id: @user2.id, collapse_course_nav: true }, format: "json"
-      assert_unauthorized
+      assert_forbidden
     end
 
     it "updates collapse_course_nav preference to true" do

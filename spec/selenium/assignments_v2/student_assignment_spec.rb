@@ -17,11 +17,12 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_relative "./page_objects/student_assignment_page_v2"
+require_relative "page_objects/student_assignment_page_v2"
 require_relative "../common"
 require_relative "../rcs/pages/rce_next_page"
 
 describe "as a student" do
+  specs_require_sharding
   include RCENextPage
   include_context "in-process server selenium tests"
 
@@ -41,6 +42,8 @@ describe "as a student" do
         # truthy setting
         Account.default.settings[:restrict_quantitative_data] = { value: true, locked: true }
         Account.default.save!
+        @course.restrict_quantitative_data = true
+        @course.save!
       end
 
       context "not submitted" do
@@ -57,7 +60,7 @@ describe "as a student" do
           StudentAssignmentPageV2.visit(@course, assignment)
           wait_for_ajaximations
 
-          expect(f("body")).not_to contain_jqcss("span:contains('#{assignment.points_possible}'))")
+          expect(f("body")).not_to contain_jqcss("span:contains('#{assignment.points_possible}')")
         end
       end
 
@@ -75,9 +78,9 @@ describe "as a student" do
           user_session(@student)
           StudentAssignmentPageV2.visit(@course, assignment)
           wait_for_ajaximations
-          expect(f("span.selected-submission-grade").text).to include("A-")
+          expect(f("span.selected-submission-grade").text).to include("A−")
           expect(f("span.selected-submission-grade").text).not_to include("9")
-          expect(f("span[data-testid='grade-display']").text).to include("A-")
+          expect(f("span[data-testid='grade-display']").text).to include("A−")
           expect(f("span[data-testid='grade-display']").text).not_to include("9")
         end
 
@@ -202,9 +205,9 @@ describe "as a student" do
           StudentAssignmentPageV2.visit(@course, assignment)
           wait_for_ajaximations
           # making sure 9 does not show implicitly makes sure 90% does not show as well
-          expect(f("span.selected-submission-grade").text).to include("A-")
+          expect(f("span.selected-submission-grade").text).to include("A−")
           expect(f("span.selected-submission-grade").text).not_to include("9")
-          expect(f("span[data-testid='grade-display']").text).to include("A-")
+          expect(f("span[data-testid='grade-display']").text).to include("A−")
           expect(f("span[data-testid='grade-display']").text).not_to include("9")
         end
 
@@ -222,8 +225,8 @@ describe "as a student" do
           StudentAssignmentPageV2.visit(@course, assignment)
           wait_for_ajaximations
           # making sure 9 does not show implicitly makes sure 90% does not show as well
-          expect(f("span.selected-submission-grade").text).to include("A-")
-          expect(f("span[data-testid='grade-display']").text).to include("A-")
+          expect(f("span.selected-submission-grade").text).to include("A−")
+          expect(f("span[data-testid='grade-display']").text).to include("A−")
         end
 
         it "still shows grade as letter_grade for letter_grade grading type" do
@@ -240,8 +243,8 @@ describe "as a student" do
           StudentAssignmentPageV2.visit(@course, assignment)
           wait_for_ajaximations
           # making sure 9 does not show implicitly makes sure 90% does not show as well
-          expect(f("span.selected-submission-grade").text).to include("A-")
-          expect(f("span[data-testid='grade-display']").text).to include("A-")
+          expect(f("span.selected-submission-grade").text).to include("A−")
+          expect(f("span[data-testid='grade-display']").text).to include("A−")
         end
 
         it "still shows grade as complete/incomplete for pass_fail grading type" do
@@ -292,7 +295,7 @@ describe "as a student" do
       end
 
       it "shows submission workflow tracker status as Inprogress with no submission" do
-        expect(StudentAssignmentPageV2.submission_workflow_tracker).to include_text("IN PROGRESS")
+        expect(StudentAssignmentPageV2.submission_workflow_tracker).to include_text("In Progress")
       end
 
       it "shows assignment title" do
@@ -342,12 +345,12 @@ describe "as a student" do
         expect(StudentAssignmentPageV2.late_pill).to be_displayed
       end
 
-      it "changes the submit assignment button to try again button after the first submission is made" do
-        expect(StudentAssignmentPageV2.try_again_button).to be_displayed
+      it "changes the submit assignment button to new attempt button after the first submission is made" do
+        expect(StudentAssignmentPageV2.new_attempt_button).to be_displayed
       end
 
       it "shows submission workflow tracker status as submitted after the student submits" do
-        expect(StudentAssignmentPageV2.submission_workflow_tracker).to include_text("SUBMITTED")
+        expect(StudentAssignmentPageV2.submission_workflow_tracker).to include_text("Submitted")
       end
 
       it "shows the file name of the submitted file and an option to download" do
@@ -375,21 +378,21 @@ describe "as a student" do
       end
 
       it "shows submission workflow tracker status as review feedback after the student is graded" do
-        expect(StudentAssignmentPageV2.submission_workflow_tracker).to include_text("REVIEW FEEDBACK")
+        expect(StudentAssignmentPageV2.submission_workflow_tracker).to include_text("Review Feedback")
       end
 
       it "shows Cancel Attempt X button when a subsequent submission is in progress but not submitted" do
-        StudentAssignmentPageV2.try_again_button.click
+        StudentAssignmentPageV2.new_attempt_button.click
 
         expect(StudentAssignmentPageV2.cancel_attempt_button).to be_displayed
       end
 
       it "cancels attempt when Cancel Attempt button is selected during subsequent attempt" do
-        StudentAssignmentPageV2.try_again_button.click
-        expect(StudentAssignmentPageV2.submission_workflow_tracker).to include_text("IN PROGRESS")
+        StudentAssignmentPageV2.new_attempt_button.click
+        expect(StudentAssignmentPageV2.submission_workflow_tracker).to include_text("In Progress")
         StudentAssignmentPageV2.cancel_attempt_button.click
 
-        expect(StudentAssignmentPageV2.submission_workflow_tracker).to include_text("REVIEW FEEDBACK")
+        expect(StudentAssignmentPageV2.submission_workflow_tracker).to include_text("Review Feedback")
       end
     end
 
@@ -1195,7 +1198,7 @@ describe "as a student" do
           expect(StudentAssignmentPageV2.comment_container).to include_text("great job!")
         end
 
-        it "allows the student to complete a group peer review with a rubric by completing the rubric and submitting", skip: "flaky" do
+        it "allows the student to complete a group peer review with a rubric by completing the rubric and submitting" do
           rubric_model
           @association = @rubric.associate_with(@peer_review_assignment, @course, purpose: "grading", use_for_grading: true)
           @peer_review_assignment.assign_peer_review(@student1, @student2)

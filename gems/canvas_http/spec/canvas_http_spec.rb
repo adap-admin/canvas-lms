@@ -21,7 +21,7 @@
 require "spec_helper"
 require "webmock"
 require "tempfile"
-require "multipart"
+require "legacy_multipart"
 
 WebMock.enable!
 
@@ -276,21 +276,13 @@ describe "CanvasHttp" do
   end
 
   describe "#insecure_host?" do
-    around do |example|
-      old_filters = CanvasHttp.blocked_ip_filters
-      CanvasHttp.blocked_ip_filters = -> { ["127.0.0.1/8", "42.42.42.42/16"] }
-      example.call
-    ensure
-      CanvasHttp.blocked_ip_filters = old_filters
-    end
-
     it "checks for insecure hosts" do
       expect(CanvasHttp.insecure_host?("example.com")).to be false
       expect(CanvasHttp.insecure_host?("localhost")).to be true
       expect(CanvasHttp.insecure_host?("127.0.0.1")).to be true
-      expect(CanvasHttp.insecure_host?("42.42.42.42")).to be true
-      expect(CanvasHttp.insecure_host?("42.42.1.1")).to be true
-      expect(CanvasHttp.insecure_host?("42.1.1.1")).to be false
+      expect(CanvasHttp.insecure_host?("192.168.0.0")).to be true
+      expect(CanvasHttp.insecure_host?("192.168.1.2")).to be true
+      expect(CanvasHttp.insecure_host?("192.198.0.0")).to be false
     end
 
     it "raises an error when URL is not resolveable" do
@@ -334,6 +326,10 @@ describe "CanvasHttp" do
   end
 
   describe ".validate_url" do
+    it "raises an ArgumentError when passed a nil url" do
+      expect { CanvasHttp.validate_url(nil) }.to raise_error(ArgumentError)
+    end
+
     it "accepts a valid url" do
       value, _ = CanvasHttp.validate_url("http://example.com")
       expect(value).to eq "http://example.com"

@@ -18,7 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 require_relative "../helpers/calendar2_common"
-require_relative "./pages/calendar_other_calendars_page"
+require_relative "pages/calendar_other_calendars_page"
 
 describe "calendar2" do
   include_context "in-process server selenium tests"
@@ -89,7 +89,7 @@ describe "calendar2" do
       Timecop.freeze(Time.zone.local(2022, 9, 5, 10, 5, 0)) do
         @subaccount1.calendar_events.create!(title: event_title, start_at: 0.days.from_now)
 
-        @student.set_preference(:enabled_account_calendars, [@subaccount1, @subaccount2])
+        @student.set_preference(:enabled_account_calendars, [@subaccount1.id, @subaccount2.id])
         user_session(@student)
 
         get "/calendar2#view_name=month&view_start=2022-09-05"

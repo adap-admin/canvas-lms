@@ -17,9 +17,9 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {getByText, getAllByText, waitFor} from '@testing-library/dom'
+import {getByText, findByText, getAllByText, waitFor} from '@testing-library/dom'
 import doFetchApi from '@canvas/do-fetch-api-effect'
-import {updateModuleItem} from '@canvas/context-modules/jquery/utils'
+import {updateModuleItem} from '../jquery/utils'
 import publishOneModuleHelperModule from '../utils/publishOneModuleHelper'
 import {initBody, makeModuleWithItems} from './testHelpers'
 
@@ -39,8 +39,8 @@ const {
 
 jest.mock('@canvas/do-fetch-api-effect')
 
-jest.mock('@canvas/context-modules/jquery/utils', () => {
-  const originalModule = jest.requireActual('@canvas/context-modules/jquery/utils')
+jest.mock('../jquery/utils', () => {
+  const originalModule = jest.requireActual('../jquery/utils')
   return {
     __esmodule: true,
     ...originalModule,
@@ -118,12 +118,13 @@ describe('publishOneModuleHelper', () => {
     it('calls batchUpdateOneModuleApiCall with the correct argumets', () => {
       const courseId = 1
       const moduleId = 1
-      unpublishModule(courseId, moduleId)
+      const skipItems = false
+      unpublishModule(courseId, moduleId, skipItems)
       expect(spy).toHaveBeenCalledWith(
         courseId,
         moduleId,
         false,
-        false,
+        skipItems,
         'Unpublishing module and items',
         'Module and items unpublished'
       )
@@ -449,9 +450,11 @@ describe('publishOneModuleHelper', () => {
     beforeEach(() => {
       makeModuleWithItems(2, 'Lesson 2', [217, 219], false)
     })
-    it('renders the ContextModulesPublishIcon', () => {
+    it('renders the ContextModulesPublishIcon', async () => {
       renderContextModulesPublishIcon(1, 2, true, false, 'loading message')
-      expect(getByText(document.body, 'Lesson 2 Module publish options')).toBeInTheDocument()
+      expect(
+        await findByText(document.body, 'Lesson 2 module publish options, published')
+      ).toBeInTheDocument()
     })
   })
 

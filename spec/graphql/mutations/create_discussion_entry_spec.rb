@@ -24,6 +24,7 @@ RSpec.describe Mutations::CreateDiscussionEntry do
   before(:once) do
     course_with_teacher(active_all: true)
     student_in_course(active_all: true)
+    teacher_in_course(active_all: true)
     discussion_topic_model({ context: @course, discussion_type: DiscussionTopic::DiscussionTypes::THREADED })
   end
 
@@ -32,7 +33,6 @@ RSpec.describe Mutations::CreateDiscussionEntry do
     message: nil,
     parent_entry_id: nil,
     file_id: nil,
-    include_reply_preview: nil,
     is_anonymous_author: nil,
     quoted_entry_id: nil
   )
@@ -43,7 +43,6 @@ RSpec.describe Mutations::CreateDiscussionEntry do
           message: "#{message}"
           #{"parentEntryId: #{parent_entry_id}" unless parent_entry_id.nil?}
           #{"fileId: #{file_id}" unless file_id.nil?}
-          #{"includeReplyPreview: #{include_reply_preview}" unless include_reply_preview.nil?}
           #{"quotedEntryId: #{quoted_entry_id}" unless quoted_entry_id.nil?}
           #{"isAnonymousAuthor: #{is_anonymous_author}" unless is_anonymous_author.nil?}
           }) {
@@ -135,7 +134,6 @@ RSpec.describe Mutations::CreateDiscussionEntry do
     expect(result.dig("data", "createDiscussionEntry", "discussionEntry", "message")).to eq entry.message
     expect(result.dig("data", "createDiscussionEntry", "discussionEntry", "parentId")).to eq parent_entry.id.to_s
     expect(entry.root_entry_id).to eq root_entry.id
-    expect(entry.include_reply_preview?).to be false
   end
 
   it "adds an attachment when creating a discussion entry" do
@@ -150,43 +148,114 @@ RSpec.describe Mutations::CreateDiscussionEntry do
     expect(entry.reload.attachment_id).to eq attachment.id
   end
 
-  context "include reply preview" do
-    it "cannot be a root entry" do
-      result = run_mutation(discussion_topic_id: @topic.id, message: "Howdy Hey", include_reply_preview: true)
-      expect(result["errors"]).to be_nil
-      expect(result.dig("data", "createDiscussionEntry", "errors")).to be_nil
+  it "allows teachers to attach even with allow_student_forum_attachments set to false" do
+    @course.update!(allow_student_forum_attachments: false)
+    attachment = attachment_with_context(@teacher)
+    attachment.update!(user: @teacher)
+    result = run_mutation({ discussion_topic_id: @topic.id, message: "howdy", file_id: attachment.id }, @teacher)
+    expect(result["errors"]).to be_nil
+    expect(result.dig("data", "createDiscussionEntry", "errors")).to be_nil
 
-      entry = @topic.discussion_entries.last
-      expect(entry.include_reply_preview?).to be false
+    entry = @topic.discussion_entries.last
+    expect(result.dig("data", "createDiscussionEntry", "discussionEntry", "attachment", "_id")).to eq attachment.id.to_s
+    expect(entry.reload.attachment_id).to eq attachment.id
+  end
+
+  context "when :discussion_checkpoints is enabled" do
+    before do
+      Account.default.enable_feature!(:discussion_checkpoints)
+      @topic = DiscussionTopic.create_graded_topic!(course: @course, title: "Checkpointed Discussion")
+      @topic.reply_to_entry_required_count = 2
+      @topic.save!
+      @assignment = @topic.assignment
+      @assignment.update!(has_sub_assignments: true)
+      @assignment.sub_assignments.create!(context: @course, sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC, points_possible: 5, due_at: 3.days.from_now)
+      @assignment.sub_assignments.create!(context: @course, sub_assignment_tag: CheckpointLabels::REPLY_TO_ENTRY, points_possible: 10, due_at: 5.days.from_now)
     end
 
-    it "can be a reply to a root entry" do
-      root_entry = @topic.discussion_entries.create!(message: "parent entry", user: @teacher, discussion_topic: @topic)
-      result = run_mutation(discussion_topic_id: @topic.id, message: "Howdy Hey", include_reply_preview: true, parent_entry_id: root_entry.id)
+    context "mySubAssignmentSubmissions" do
+      def checkpoints_mutation_str(
+        discussion_topic_id: nil,
+        message: nil,
+        parent_entry_id: nil,
+        file_id: nil,
+        is_anonymous_author: nil,
+        quoted_entry_id: nil
+      )
+        <<~GQL
+          mutation {
+            createDiscussionEntry(input: {
+              discussionTopicId: #{discussion_topic_id}
+              message: "#{message}"
+              #{"parentEntryId: #{parent_entry_id}" unless parent_entry_id.nil?}
+              #{"fileId: #{file_id}" unless file_id.nil?}
+              #{"quotedEntryId: #{quoted_entry_id}" unless quoted_entry_id.nil?}
+              #{"isAnonymousAuthor: #{is_anonymous_author}" unless is_anonymous_author.nil?}
+              }) {
+              discussionEntry {
+                _id
+                message
+                parentId
+                attachment {
+                  _id
+                }
+              }
+              mySubAssignmentSubmissions {
+                _id
+                submissionStatus
+                subAssignmentTag
+                submittedAt
+              }
+              errors {
+                message
+                attribute
+              }
+            }
+          }
+        GQL
+      end
 
-      expect(result["errors"]).to be_nil
-      expect(result.dig("data", "createDiscussionEntry", "errors")).to be_nil
+      def run_checkpoints_mutation(opts = {}, current_user = @student)
+        result = CanvasSchema.execute(
+          checkpoints_mutation_str(**opts),
+          context: {
+            current_user:,
+            request: ActionDispatch::TestRequest.create
+          }
+        )
+        result.to_h.with_indifferent_access
+      end
 
-      entry = @topic.discussion_entries.last
-      expect(entry.include_reply_preview?).to be true
-    end
+      it "returns empty array for teachers" do
+        result = run_checkpoints_mutation({ discussion_topic_id: @topic.id, message: "my root reply" }, @teacher)
+        expect(result["errors"]).to be_nil
+        expect(result.dig("data", "createDiscussionEntry", "errors")).to be_nil
+        my_assignment_submissions = result.dig("data", "createDiscussionEntry", "mySubAssignmentSubmissions")
+        expect(my_assignment_submissions).to be_empty
+      end
 
-    it "does set on reply to a child reply" do
-      root_entry = @topic.discussion_entries.create!(message: "root entry", user: @teacher, discussion_topic: @topic)
-      parent_entry = @topic.discussion_entries.create!(message: "parent entry", user: @teacher, discussion_topic: @topic, parent_entry: root_entry)
-      run_mutation(discussion_topic_id: @topic.id, message: "child entry", parent_entry_id: parent_entry.id, include_reply_preview: true)
+      it "returns mySubAssignmentSubmissions data for student root replies for checkpointed discussions" do
+        result = run_checkpoints_mutation(discussion_topic_id: @topic.id, message: "my root reply")
+        expect(result["errors"]).to be_nil
+        expect(result.dig("data", "createDiscussionEntry", "errors")).to be_nil
+        my_assignment_submissions = result.dig("data", "createDiscussionEntry", "mySubAssignmentSubmissions")
+        expect(my_assignment_submissions.size).to eq 2
+        reply_to_topic_submission = my_assignment_submissions.find { |s| s["subAssignmentTag"] == CheckpointLabels::REPLY_TO_TOPIC }
+        reply_to_entry_submission = my_assignment_submissions.find { |s| s["subAssignmentTag"] == CheckpointLabels::REPLY_TO_ENTRY }
+        expect(reply_to_topic_submission["submissionStatus"]).to eq "submitted"
+        expect(reply_to_entry_submission["submissionStatus"]).to eq "unsubmitted"
+      end
 
-      entry = @topic.discussion_entries.last
-      expect(entry.include_reply_preview?).to be true
-    end
+      it "returns reply_to_entry as submitted when student has met the required count" do
+        root_entry = @topic.discussion_entries.create!(message: "root entry", user: @student, discussion_topic: @topic)
+        @topic.discussion_entries.create!(message: "first child entry", user: @student, discussion_topic: @topic, parent_entry: root_entry)
 
-    it "allows creating with include reply preview as false" do
-      root_entry = @topic.discussion_entries.create!(message: "root entry", user: @teacher, discussion_topic: @topic)
-      parent_entry = @topic.discussion_entries.create!(message: "parent entry", user: @teacher, discussion_topic: @topic, parent_entry: root_entry)
-      run_mutation(discussion_topic_id: @topic.id, message: "child entry", parent_entry_id: parent_entry.id, include_reply_preview: false)
-
-      entry = @topic.discussion_entries.last
-      expect(entry.include_reply_preview?).to be false
+        result = run_checkpoints_mutation(discussion_topic_id: @topic.id, message: "my third child entry", parent_entry_id: root_entry.id)
+        expect(result.dig("data", "createDiscussionEntry", "errors")).to be_nil
+        my_assignment_submissions = result.dig("data", "createDiscussionEntry", "mySubAssignmentSubmissions")
+        reply_to_entry_submission = my_assignment_submissions.find { |s| s["subAssignmentTag"] == CheckpointLabels::REPLY_TO_ENTRY }
+        expect(reply_to_entry_submission["submissionStatus"]).to eq "submitted"
+      end
     end
   end
 
@@ -238,6 +307,15 @@ RSpec.describe Mutations::CreateDiscussionEntry do
       result = run_mutation(discussion_topic_id: @topic.id, message: "this should fail", file_id: attachment.id)
       expect(result.dig("data", "createDiscussionEntry")).to be_nil
       expect(result.dig("errors", 0, "message")).to eq "not found"
+    end
+
+    it "returns validation_error when user cannot attach" do
+      attachment = attachment_with_context(@student)
+      attachment.update!(user: @student)
+      @course.update!(allow_student_forum_attachments: false)
+      result = run_mutation(discussion_topic_id: @topic.id, message: "howdy", file_id: attachment.id)
+      expect(result.dig("data", "createDiscussionEntry", "discussionEntry")).to be_nil
+      expect(result.dig("data", "createDiscussionEntry", "errors", 0, "message")).to eq "Insufficient attach permissions"
     end
   end
 end

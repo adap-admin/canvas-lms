@@ -16,4 +16,12 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import './setup'
+// Eventually when the feature flag is retired
+// we can divorce from these shenanigans
+if (document.getElementById('instui_content_migrations')) {
+  import('./instui_setup')
+} else {
+  import('./setup')
+}
+
+export default () => {}

@@ -194,11 +194,11 @@ describe CalendarEvent do
         res = @event.to_ics(in_own_calendar: false)
         expect(res).not_to be_nil
         expect(res.dtstart.tz_utc).to be true
-        expect(res.dtstart.strftime("%Y-%m-%dT%H:%M:%S")).to eq Time.zone.parse("Sep 3 2008 11:55am").in_time_zone("UTC").strftime("%Y-%m-%dT%H:%M:00")
+        expect(res.dtstart.strftime("%Y-%m-%dT%H:%M:%S")).to eq Time.zone.parse("Sep 3 2008 11:55am").utc.strftime("%Y-%m-%dT%H:%M:00")
         expect(res.dtend.tz_utc).to be true
-        expect(res.dtend.strftime("%Y-%m-%dT%H:%M:%S")).to eq Time.zone.parse("Sep 3 2008 12:00pm").in_time_zone("UTC").strftime("%Y-%m-%dT%H:%M:00")
+        expect(res.dtend.strftime("%Y-%m-%dT%H:%M:%S")).to eq Time.zone.parse("Sep 3 2008 12:00pm").utc.strftime("%Y-%m-%dT%H:%M:00")
         expect(res.dtstamp.tz_utc).to be true
-        expect(res.dtstamp.strftime("%Y-%m-%dT%H:%M:%S")).to eq Time.zone.parse("Sep 3 2008 12:05pm").in_time_zone("UTC").strftime("%Y-%m-%dT%H:%M:00")
+        expect(res.dtstamp.strftime("%Y-%m-%dT%H:%M:%S")).to eq Time.zone.parse("Sep 3 2008 12:05pm").utc.strftime("%Y-%m-%dT%H:%M:00")
       end
 
       it "returns data for events with times in correct tz" do
@@ -209,11 +209,11 @@ describe CalendarEvent do
         res = @event.to_ics(in_own_calendar: false)
         expect(res).not_to be_nil
         expect(res.dtstart.tz_utc).to be true
-        expect(res.dtstart.strftime("%Y-%m-%dT%H:%M:%S")).to eq Time.zone.parse("Sep 3 2008 11:55am").in_time_zone("UTC").strftime("%Y-%m-%dT%H:%M:00")
+        expect(res.dtstart.strftime("%Y-%m-%dT%H:%M:%S")).to eq Time.zone.parse("Sep 3 2008 11:55am").utc.strftime("%Y-%m-%dT%H:%M:00")
         expect(res.dtend.tz_utc).to be true
-        expect(res.dtend.strftime("%Y-%m-%dT%H:%M:%S")).to eq Time.zone.parse("Sep 3 2008 12:00pm").in_time_zone("UTC").strftime("%Y-%m-%dT%H:%M:00")
+        expect(res.dtend.strftime("%Y-%m-%dT%H:%M:%S")).to eq Time.zone.parse("Sep 3 2008 12:00pm").utc.strftime("%Y-%m-%dT%H:%M:00")
         expect(res.dtend.tz_utc).to be true
-        expect(res.dtstamp.strftime("%Y-%m-%dT%H:%M:%S")).to eq Time.zone.parse("Sep 3 2008 12:05pm").in_time_zone("UTC").strftime("%Y-%m-%dT%H:%M:00")
+        expect(res.dtstamp.strftime("%Y-%m-%dT%H:%M:%S")).to eq Time.zone.parse("Sep 3 2008 12:05pm").utc.strftime("%Y-%m-%dT%H:%M:00")
       end
 
       it "does not fail with no date for all_day event" do
@@ -445,7 +445,7 @@ describe CalendarEvent do
         end
 
         it "sends to participants", priority: "1" do
-          expect(@event1.messages_sent).to be_include("New Event Created")
+          expect(@event1.messages_sent).to include("New Event Created")
           expect(@users).to include(@student.id)
         end
 
@@ -475,7 +475,7 @@ describe CalendarEvent do
           end
 
           it "sends to participants", priority: "1" do
-            expect(@event1.messages_sent).to be_include("Event Date Changed")
+            expect(@event1.messages_sent).to include("Event Date Changed")
             expect(@users).to include(@student.id)
           end
 
@@ -605,7 +605,7 @@ describe CalendarEvent do
 
       it "notifies admins and observers when a user reserves a group appointment" do
         reservation = @appointment2.reserve_for(@group, @student1)
-        expect(reservation.messages_sent).to be_include("Appointment Reserved By User")
+        expect(reservation.messages_sent).to include("Appointment Reserved By User")
         expect(reservation.messages_sent["Appointment Reserved By User"].map(&:user_id).sort.uniq).to eql (@course.instructors.map(&:id) + [@observer.id]).sort
       end
 
@@ -613,7 +613,7 @@ describe CalendarEvent do
         reservation = @appointment.reserve_for(@student1, @student1)
         reservation.updating_user = @student1
         reservation.destroy
-        expect(reservation.messages_sent).to be_include("Appointment Canceled By User")
+        expect(reservation.messages_sent).to include("Appointment Canceled By User")
         expect(reservation.messages_sent["Appointment Canceled By User"].map(&:user_id).sort.uniq).to eql (@course.instructors.map(&:id) + [@observer.id]).sort
       end
     end
@@ -696,7 +696,6 @@ describe CalendarEvent do
 
       appointment.participants_per_appointment = 2
       appointment.save!
-      expect(appointment.read_attribute(:participants_per_limit)).to be_nil
       expect(appointment.override_participants_per_appointment?).to be_falsey
       expect(appointment.participants_per_appointment).to be 2
     end

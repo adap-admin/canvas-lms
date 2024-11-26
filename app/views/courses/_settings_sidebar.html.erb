@@ -16,6 +16,9 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 %>
 
+<% js_bundle :settings_sidebar
+   css_bundle :settings_sidebar
+%>
 <% blueprint_subscription ||= nil %>
 <% show_publish_controls ||= false %>
 <% if blueprint_subscription %>
@@ -39,7 +42,7 @@
       <h4>
         <%= t('headers.course_status', %{Course Status}) %>
       </h4>
-      <%= render :partial => 'publish_buttons', :locals => {redirect_to_settings: true} %>
+      <div class="course_publish_button" id="course_publish_button"></div>
     </div>
   <% end %>
 
@@ -56,7 +59,7 @@
     <% end %>
   <% end %>
 
-  <% if can_do(@context, @current_user, :change_course_state, :manage_courses_conclude) %>
+  <% if can_do(@context, @current_user, :manage_courses_conclude) %>
     <% if @context.completed? %>
       <%= form_tag context_url(@context, :context_unconclude_url) do %>
         <button class="Button Button--link Button--link--has-divider Button--course-settings" type="submit">
@@ -135,16 +138,16 @@
     <tbody>
       <% @all_roles.each do |base_role| %>
         <tr>
-          <td><%= base_role[:plural_label] %>:</td>
+          <th><%= base_role[:plural_label] %>:</th>
           <td><%= n(user_count(base_role[:count])) %></td>
         </tr>
         <% base_role[:custom_roles].each do |cr|
            next if skip_custom_role?(cr)
         %>
           <tr>
-            <td>
+            <th>
               <%= cr[:label] %><% if cr[:workflow_state] == 'inactive' %> (<%= t('role.inactive', 'inactive') %>)<% end %>:
-            </td>
+            </th>
             <td><%= n(user_count(cr[:count])) %></td>
           </tr>
         <% end %>

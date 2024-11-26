@@ -27,6 +27,8 @@ module Api::V1::Assignment
   include SubmittablesGradingPeriodProtection
   include Api::V1::PlannerOverride
 
+  ALL_DATES_LIMIT = 25
+
   PRELOADS = %i[external_tool_tag
                 duplicate_of
                 rubric
@@ -133,6 +135,11 @@ module Api::V1::Assignment
 
     if opts[:override_dates] && !assignment.new_record?
       assignment = assignment.overridden_for(user)
+      if assignment.has_sub_assignments?
+        assignment.sub_assignments = assignment.sub_assignments.map do |sub_assignment|
+          sub_assignment.overridden_for(user)
+        end
+      end
     end
 
     fields = assignment.new_record? ? API_ASSIGNMENT_NEW_RECORD_FIELDS : API_ALLOWED_ASSIGNMENT_OUTPUT_FIELDS
@@ -143,7 +150,13 @@ module Api::V1::Assignment
     end
 
     hash = api_json(assignment, user, session, fields)
-    hash["secure_params"] = assignment.secure_params if assignment.has_attribute?(:lti_context_id)
+
+    description = api_user_content(hash["description"],
+                                   @context || assignment.context,
+                                   user,
+                                   opts[:preloaded_user_content_attachments] || {})
+
+    hash["secure_params"] = assignment.secure_params(include_description: description.present?) if assignment.has_attribute?(:lti_context_id)
     hash["lti_context_id"] = assignment.lti_context_id if assignment.has_attribute?(:lti_context_id)
     hash["course_id"] = assignment.context_id
     hash["name"] = assignment.title
@@ -152,7 +165,7 @@ module Api::V1::Assignment
     hash["due_date_required"] = assignment.due_date_required?
     hash["max_name_length"] = assignment.max_name_length
     hash["allowed_attempts"] = -1 if assignment.allowed_attempts.nil?
-    paced_course = Course.find_by(id: assignment.context_id)&.enable_course_paces?
+    paced_course = assignment.course.account.feature_enabled?(:course_paces) && Course.find_by(id: assignment.context_id)&.enable_course_paces?
     hash["in_paced_course"] = paced_course if paced_course
 
     unless opts[:exclude_response_fields].include?("in_closed_grading_period")
@@ -161,6 +174,15 @@ module Api::V1::Assignment
 
     hash["grades_published"] = assignment.grades_published? if opts[:include_grades_published]
     hash["graded_submissions_exist"] = assignment.graded_submissions_exist?
+
+    if opts[:include_checkpoints] && assignment.root_account.feature_enabled?(:discussion_checkpoints)
+      hash["has_sub_assignments"] = assignment.has_sub_assignments?
+      hash["checkpoints"] = assignment.sub_assignments.map { |sub_assignment| Checkpoint.new(sub_assignment, user).as_json }
+    end
+
+    if assignment.checkpoint?
+      hash["sub_assignment_tag"] = assignment.sub_assignment_tag
+    end
 
     if opts[:overrides].present?
       hash["overrides"] = assignment_overrides_json(opts[:overrides], user)
@@ -217,10 +239,7 @@ module Api::V1::Assignment
     # use already generated hash['description'] because it is filtered by
     # Assignment#filter_attributes_for_user when the assignment is locked
     unless opts[:exclude_response_fields].include?("description")
-      hash["description"] = api_user_content(hash["description"],
-                                             @context || assignment.context,
-                                             user,
-                                             opts[:preloaded_user_content_attachments] || {})
+      hash["description"] = description
     end
 
     can_manage = assignment.context.grants_any_right?(user, :manage, :manage_grades, :manage_assignments, :manage_assignments_edit)
@@ -235,8 +254,9 @@ module Api::V1::Assignment
       tool_attributes = {
         "url" => external_tool_tag.url,
         "new_tab" => external_tool_tag.new_tab,
+        "external_data" => external_tool_tag.external_data,
         "resource_link_id" => assignment.lti_resource_link_id,
-        "external_data" => external_tool_tag.external_data
+        "resource_link_title" => assignment.primary_resource_link&.title
       }
       tool_attributes.merge!(external_tool_tag.attributes.slice("content_type", "content_id")) if external_tool_tag.content_id
       tool_attributes["custom_params"] = assignment.primary_resource_link&.custom
@@ -343,16 +363,23 @@ module Api::V1::Assignment
       )
     end
 
-    if opts[:include_all_dates] && assignment.assignment_overrides
-      override_count = if assignment.assignment_overrides.loaded?
-                         assignment.assignment_overrides.count(&:active?)
-                       else
-                         assignment.assignment_overrides.active.count
-                       end
-      if override_count < Setting.get("assignment_all_dates_too_many_threshold", "25").to_i
-        hash["all_dates"] = assignment.dates_hash_visible_to(user)
-      else
-        hash["all_dates_count"] = override_count
+    if opts[:include_all_dates]
+      overrides = assignment.has_sub_assignments? ? assignment.sub_assignment_overrides : assignment.assignment_overrides
+
+      if overrides
+        override_count = overrides.loaded? ? overrides.count(&:active?) : overrides.active.count
+
+        if assignment.has_sub_assignments? && override_count < ALL_DATES_LIMIT
+          hash["all_dates"] = []
+
+          assignment.sub_assignments.each do |sub_assignment|
+            hash["all_dates"].concat(sub_assignment.dates_hash_visible_to(user))
+          end
+        elsif override_count < ALL_DATES_LIMIT
+          hash["all_dates"] = assignment.dates_hash_visible_to(user)
+        else
+          hash["all_dates_count"] = override_count
+        end
       end
     end
 
@@ -385,6 +412,7 @@ module Api::V1::Assignment
     end
 
     hash["only_visible_to_overrides"] = value_to_boolean(assignment.only_visible_to_overrides)
+    hash["visible_to_everyone"] = assignment.visible_to_everyone
 
     if opts[:include_visibility]
       hash["assignment_visibility"] = (opts[:assignment_visibilities] || assignment.students_with_visibility.pluck(:id).uniq).map(&:to_s)
@@ -455,7 +483,15 @@ module Api::V1::Assignment
                            (submission.nil? || submission.attempts_left.nil? || submission.attempts_left > 0)
     end
 
+    if opts[:include_ab_guid]
+      hash["ab_guid"] = assignment.ab_guid.presence || assignment.ab_guid_through_rubric
+    end
+
     hash["restrict_quantitative_data"] = assignment.restrict_quantitative_data?(user, true) || false
+
+    if opts[:migrated_urls_content_migration_id]
+      hash["migrated_urls_content_migration_id"] = opts[:migrated_urls_content_migration_id]
+    end
 
     hash
   end
@@ -564,13 +600,13 @@ module Api::V1::Assignment
     end
 
     calc_grades = calculate_grades ? value_to_boolean(calculate_grades) : true
-    DueDateCacher.recompute(prepared_create[:assignment], update_grades: calc_grades, executing_user: user)
+    SubmissionLifecycleManager.recompute(prepared_create[:assignment], update_grades: calc_grades, executing_user: user)
     response
   rescue ActiveRecord::RecordInvalid
     false
   end
 
-  def update_api_assignment(assignment, assignment_params, user, context = assignment.context)
+  def update_api_assignment(assignment, assignment_params, user, context = assignment.context, opts = {})
     return :forbidden unless grading_periods_allow_submittable_update?(assignment, assignment_params)
 
     # Trying to change the "everyone" due date when the assignment is restricted to a specific section
@@ -601,7 +637,80 @@ module Api::V1::Assignment
     if @overrides_affected.to_i > 0 || cached_due_dates_changed
       assignment.clear_cache_key(:availability)
       assignment.quiz.clear_cache_key(:availability) if assignment.quiz?
-      DueDateCacher.recompute(prepared_update[:assignment], update_grades: true, executing_user: user)
+      SubmissionLifecycleManager.recompute(prepared_update[:assignment], update_grades: true, executing_user: user)
+    end
+
+    # At present, when an assignment linked to a LTI tool is copied, there is no way for canvas
+    # to know what resouces the LTI tool needs copied as well. New Quizzes has a problem
+    # when an assignment linked to a New Quiz is copied, none of the content referenced in the RCE
+    # html is moved to the destination course. This code block gives New Quizzes the ability
+    # to let canvas know what additional assets need to be copied.
+    # Note: this is intended to be a short term solution to resolve an ongoing production issue.
+    url = assignment_params["migrated_urls_report_url"]
+    if url.present?
+      res = CanvasHttp.get(url)
+      data = JSON.parse(res.body)
+
+      unless data.empty?
+        copy_values = {}
+        source_course = nil
+
+        migration_type = "course_copy_importer"
+        plugin = Canvas::Plugin.find(migration_type)
+        content_migration = context.content_migrations.build(
+          user:,
+          context:,
+          migration_type:,
+          initiated_source: :new_quizzes
+        )
+
+        data.each_key do |key|
+          import_object = Context.find_asset_by_url(key)
+
+          next unless import_object.respond_to?(:context) && import_object.context.is_a?(Course)
+
+          if import_object.is_a?(WikiPage)
+            copy_values[:wiki_pages] ||= []
+            copy_values[:wiki_pages] << import_object
+            source_course ||= import_object.context
+          elsif import_object.is_a?(Attachment)
+            copy_values[:attachments] ||= []
+            copy_values[:attachments] << import_object
+            source_course ||= import_object.context
+          end
+        end
+
+        return response if source_course.nil?
+
+        content_migration.source_course = source_course
+        use_global_identifiers = content_migration.use_global_identifiers?
+
+        copy_values.transform_values! do |import_objects|
+          import_objects.map do |import_object|
+            CC::CCHelper.create_key(import_object, global: use_global_identifiers)
+          end
+        end
+
+        content_migration.update_migration_settings({
+                                                      import_quizzes_next: false,
+                                                      source_course_id: source_course.id
+                                                    })
+        content_migration.workflow_state = "created"
+        content_migration.migration_settings[:import_immediately] = false
+        content_migration.save
+
+        copy_options = ContentMigration.process_copy_params(copy_values, global_identifiers: use_global_identifiers)
+        content_migration.migration_settings[:migration_ids_to_import] ||= {}
+        content_migration.migration_settings[:migration_ids_to_import][:copy] = copy_options
+        content_migration.copy_options = copy_options
+        content_migration.save
+
+        content_migration.shard.activate do
+          content_migration.queue_migration(plugin)
+        end
+
+        opts[:migrated_urls_content_migration_id] = content_migration.global_id
+      end
     end
 
     response
@@ -731,6 +840,14 @@ module Api::V1::Assignment
       assignment.assignment_group = assignment.context.assignment_groups.where(id: ag_id).first
     end
 
+    if update_params.key?("ab_guid")
+      assignment.ab_guid.clear
+      ab_guids = update_params.delete("ab_guid").presence
+      Array(ab_guids).each do |guid|
+        assignment.ab_guid << guid if guid.present?
+      end
+    end
+
     if update_params.key?("group_category_id") && !assignment.group_category_deleted_with_submissions?
       gc_id = update_params.delete("group_category_id").presence
       assignment.group_category = assignment.context.group_categories.where(id: gc_id).first
@@ -828,6 +945,14 @@ module Api::V1::Assignment
       end
     end
 
+    if assignment_params.key?("alignment_cloned_successfully") && assignment.root_account.feature_enabled?(:course_copy_alignments)
+      if value_to_boolean(assignment_params[:alignment_cloned_successfully])
+        assignment.finish_alignment_cloning
+      else
+        assignment.fail_to_clone_alignment
+      end
+    end
+
     if assignment_params.key?("migrated_successfully")
       if value_to_boolean(assignment_params[:migrated_successfully])
         assignment.finish_migrating
@@ -922,7 +1047,7 @@ module Api::V1::Assignment
   # the current user is an observer
   def current_user_and_observed(opts = { include_observed: false })
     user_and_observees = Array(@current_user)
-    if opts[:include_observed] && @context_enrollment && @context_enrollment.observer?
+    if opts[:include_observed] && (@context_enrollment&.observer? || @current_user.enrollments.of_observer_type.active.where(course: @context).exists?)
       user_and_observees.concat(ObserverEnrollment.observed_students(@context, @current_user).keys)
     end
     user_and_observees
@@ -998,7 +1123,11 @@ module Api::V1::Assignment
     end
 
     if external_tool_tag_attributes&.include?(:url)
-      assignment.lti_resource_link_url = external_tool_tag_attributes[:url]
+      assignment.lti_resource_link_url = external_tool_tag_attributes[:url].presence
+    end
+
+    if external_tool_tag_attributes&.include?(:title)
+      assignment.lti_resource_link_title = external_tool_tag_attributes[:title].presence
     end
 
     if assignment.external_tool?
@@ -1115,7 +1244,7 @@ module Api::V1::Assignment
 
   def clear_tool_settings_tools?(assignment, assignment_params)
     assignment.assignment_configuration_tool_lookups.present? &&
-      assignment_params["submission_types"]&.present? &&
+      assignment_params["submission_types"].present? &&
       (
         assignment.submission_types.split(",").none? { |t| assignment_params["submission_types"].include?(t) } ||
         assignment_params["submission_types"].blank?
@@ -1148,7 +1277,8 @@ module Api::V1::Assignment
       { "allowed_extensions" => strong_anything },
       { "integration_data" => strong_anything },
       { "external_tool_tag_attributes" => strong_anything },
-      ({ "submission_types" => strong_anything } if should_update_submission_types)
+      ({ "submission_types" => strong_anything } if should_update_submission_types),
+      { "ab_guid" => strong_anything },
     ].compact
   end
 

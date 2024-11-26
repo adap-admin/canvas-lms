@@ -23,6 +23,7 @@ import $ from 'jquery'
 import Backbone from '@canvas/backbone'
 import template from '../../jst/ExternalContentReturnView.handlebars'
 import iframeAllowances from '@canvas/external-apps/iframeAllowances'
+import {handleExternalContentMessages} from '../../messages'
 
 extend(ExternalContentReturnView, Backbone.View)
 
@@ -32,6 +33,13 @@ function ExternalContentReturnView() {
   this.removeDialog = this.removeDialog.bind(this)
   this.handleAlertBlur = this.handleAlertBlur.bind(this)
   return ExternalContentReturnView.__super__.constructor.apply(this, arguments)
+}
+
+function focusOnOpen() {
+  const titleClose = $(this).parent().find('.ui-dialog-titlebar-close')
+  if (titleClose.length) {
+    titleClose.trigger('focus')
+  }
 }
 
 ExternalContentReturnView.prototype.template = template
@@ -80,15 +88,8 @@ ExternalContentReturnView.prototype.attach = function () {
 
 ExternalContentReturnView.prototype.toJSON = function () {
   const json = ExternalContentReturnView.__super__.toJSON.apply(this, arguments)
-  let ref
   json.allowances = iframeAllowances()
   json.launch_url = this.model.launchUrl(this.launchType, this.launchParams)
-  json.shouldRenderForwardingIframe =
-    typeof ENV !== 'undefined' && ENV !== null
-      ? (ref = ENV.FEATURES) != null
-        ? ref.lti_platform_storage
-        : void 0
-      : void 0
   return json
 }
 
@@ -105,18 +106,18 @@ ExternalContentReturnView.prototype.afterRender = function () {
       height: settings.selection_height,
       resizable: true,
       close: this.removeDialog,
+      open: focusOnOpen,
+      modal: true,
+      zIndex: 1000,
     })
   }
 }
 
 ExternalContentReturnView.prototype.attachLtiEvents = function () {
-  $(window).on('externalContentReady', this._contentReady)
-  return $(window).on('externalContentCancel', this._contentCancel)
-}
-
-ExternalContentReturnView.prototype.detachLtiEvents = function () {
-  $(window).off('externalContentReady', this._contentReady)
-  return $(window).off('externalContentCancel', this._contentCancel)
+  this.detachLtiEvents = handleExternalContentMessages({
+    ready: this._contentReady,
+    cancel: this._contentCancel,
+  })
 }
 
 ExternalContentReturnView.prototype.removeDialog = function () {
@@ -124,13 +125,13 @@ ExternalContentReturnView.prototype.removeDialog = function () {
   return this.remove()
 }
 
-ExternalContentReturnView.prototype._contentReady = function (event, data) {
+ExternalContentReturnView.prototype._contentReady = function (data) {
   this.trigger('ready', data)
   return this.removeDialog()
 }
 
-ExternalContentReturnView.prototype._contentCancel = function (event, data) {
-  this.trigger('cancel', data)
+ExternalContentReturnView.prototype._contentCancel = function () {
+  this.trigger('cancel', {})
   return this.removeDialog()
 }
 

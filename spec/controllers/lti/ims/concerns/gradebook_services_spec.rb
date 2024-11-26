@@ -95,45 +95,21 @@ module Lti
           end
         end
 
-        context "the ags_improved_course_concluded_response_codes flag is enabled" do
-          before(:once) do
-            Account.site_admin.enable_feature!(:ags_improved_course_concluded_response_codes)
-          end
-
-          it "responds with 422 if course is hard concluded" do
-            context.update!(workflow_state: "completed")
-            get :index, params: valid_params
-            expect(response).to have_http_status(:unprocessable_entity)
-          end
-
-          it "responds with 422 if course end date has passed" do
-            context.update!(start_at: Time.now - 2.days, conclude_at: Time.now - 1.day, restrict_enrollments_to_course_dates: true)
-            get :index, params: valid_params
-            expect(response).to have_http_status(:unprocessable_entity)
-          end
-
-          it "still responds with a 404 if an invalid course_id is passed" do
-            get :index, params: valid_params.merge({ course_id: Course.last.id + 1 })
-            expect(response).to have_http_status(:not_found)
-          end
+        it "responds with 422 if course is hard concluded" do
+          context.update!(workflow_state: "completed")
+          get :index, params: valid_params
+          expect(response).to have_http_status(:unprocessable_entity)
         end
 
-        context "the ags_improved_course_concluded_response_codes flag is disabled" do
-          before(:once) do
-            Account.site_admin.disable_feature!(:ags_improved_course_concluded_response_codes)
-          end
+        it "responds with 422 if course end date has passed" do
+          context.update!(start_at: 2.days.ago, conclude_at: 1.day.ago, restrict_enrollments_to_course_dates: true)
+          get :index, params: valid_params
+          expect(response).to have_http_status(:unprocessable_entity)
+        end
 
-          it "responds with a 404 if the course is hard concluded" do
-            context.update!(workflow_state: :completed)
-            get :index, params: valid_params
-            expect(response).to have_http_status(:not_found)
-          end
-
-          it "responds with a 404 if the course end has passed" do
-            context.update!(start_at: Time.now - 2.days, conclude_at: Time.now - 1.day, restrict_enrollments_to_course_dates: true)
-            get :index, params: valid_params
-            expect(response).to have_http_status(:not_found)
-          end
+        it "still responds with a 404 if an invalid course_id is passed" do
+          get :index, params: valid_params.merge({ course_id: Course.last.id + 1 })
+          expect(response).to have_http_status(:not_found)
         end
 
         context "with user not in context" do
@@ -242,7 +218,7 @@ module Lti
           let(:valid_params) { { course_id: context.id, userId: user.id, line_item_id: line_item.id } }
 
           it "is ignored" do
-            expect_any_instance_of(Assignment).not_to receive(:prepare_for_ags_if_needed!)
+            expect_any_instance_of(Assignment).not_to receive(:migrate_to_1_3_if_needed!)
             get :index, params: valid_params
           end
         end
@@ -266,7 +242,7 @@ module Lti
           let(:valid_params) { { course_id: context.id, userId: user.id, resourceLinkId: assignment.lti_context_id } }
 
           it "fixes up line items on assignment" do
-            expect_any_instance_of(Assignment).to receive(:prepare_for_ags_if_needed!)
+            expect_any_instance_of(Assignment).to receive(:migrate_to_1_3_if_needed!)
             get :index, params: valid_params
           end
         end

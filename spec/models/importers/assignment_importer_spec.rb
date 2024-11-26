@@ -22,6 +22,142 @@ require_relative "../../import_helper"
 require_relative "../../lti2_spec_helper"
 
 describe "Importing assignments" do
+  let(:migration_id) { "ib4834d160d180e2e91572e8b9e3b1bc6" }
+  let(:default_input_assignment_hash) do
+    {
+      "migration_id" => migration_id,
+      "assignment_group_migration_id" => "i2bc4b8ea8fac88f1899e5e95d76f3004",
+      "grading_standard_migration_id" => nil,
+      "rubric_migration_id" => nil,
+      "rubric_id" => nil,
+      "quiz_migration_id" => nil,
+      "workflow_state" => "published",
+      "title" => "",
+      "grading_type" => "points",
+      "submission_types" => "none",
+      "peer_reviews" => false,
+      "automatic_peer_reviews" => false,
+      "muted" => false,
+      "due_at" => 1_401_947_999_000,
+      "peer_reviews_due_at" => 1_401_947_999_000,
+      "position" => 6,
+      "peer_review_count" => 0
+    }
+  end
+  let(:date_shift_options_settings) do
+    {
+      migration_settings: {
+        date_shift_options: {
+          old_start_date: "2023-01-01",
+          old_end_date: "2023-12-31",
+          new_start_date: "2024-01-01",
+          new_end_date: "2024-12-31"
+        }
+      }
+    }
+  end
+
+  describe "assignment field setting" do
+    describe "time_zone_edited" do
+      context "when time_zone_edited provided" do
+        let(:expected_time_zone_edited) { "Mountain Time (US & Canada)" }
+        let(:input_hash) { { **default_input_assignment_hash, time_zone_edited: expected_time_zone_edited } }
+
+        it "should set time_zone_edited" do
+          course_model
+          migration = @course.content_migrations.create!
+          Importers::AssignmentImporter.import_from_migration(input_hash, @course, migration)
+          assignment = @course.assignments.where(migration_id:).first
+          expect(assignment.time_zone_edited).to eq expected_time_zone_edited
+        end
+      end
+
+      context "when time_zone_edited is missing" do
+        let(:input_hash) { { **default_input_assignment_hash } }
+
+        it "should set time_zone_edited" do
+          course_model
+          migration = @course.content_migrations.create!
+          Importers::AssignmentImporter.import_from_migration(input_hash, @course, migration)
+          assignment = @course.assignments.where(migration_id:).first
+          expect(assignment.time_zone_edited).to be_blank
+        end
+      end
+    end
+
+    describe "import_from_migration date shift saving method" do
+      subject { Importers::AssignmentImporter.import_from_migration(default_input_assignment_hash, course, migration, item) }
+
+      let(:course) { course_model }
+      let(:migration) { course.content_migrations.create! }
+      let(:item) { course.assignments.temp_record }
+
+      context "when FF pre_date_shift_for_assignment_importing enabled" do
+        before do
+          Account.site_admin.enable_feature!(:pre_date_shift_for_assignment_importing)
+        end
+
+        it "should use the try_to_save_with_date_shift method" do
+          expect(Importers::AssignmentImporter)
+            .to receive(:try_to_save_with_date_shift).with(kind_of(Assignment), migration).and_call_original
+          subject
+        end
+
+        describe "skip_schedule_peer_reviews" do
+          before do
+            allow(item).to receive(:skip_schedule_peer_reviews=)
+          end
+
+          context "when migration contains date_shift_options" do
+            let(:migration) { course.content_migrations.create!(date_shift_options_settings) }
+
+            it "should not set the skip_schedule_peer_reviews before save" do
+              expect(item).to_not receive(:skip_schedule_peer_reviews=)
+              subject
+            end
+          end
+
+          context "when migration not contains date_shift_options" do
+            it "should not set the skip_schedule_peer_reviews before save" do
+              expect(item).to_not receive(:skip_schedule_peer_reviews=)
+              subject
+            end
+          end
+        end
+      end
+
+      context "when FF pre_date_shift_for_assignment_importing disabled" do
+        it "should not use the try_to_save_with_date_shift method" do
+          expect(Importers::AssignmentImporter).to_not receive(:try_to_save_with_date_shift)
+          subject
+        end
+
+        describe "skip_schedule_peer_reviews" do
+          before do
+            allow(item).to receive(:skip_schedule_peer_reviews=)
+          end
+
+          context "when migration contains date_shift_options" do
+            let(:migration) { course.content_migrations.create!(date_shift_options_settings) }
+
+            it "should set the skip_schedule_peer_reviews before save" do
+              expect(item).to receive(:skip_schedule_peer_reviews=).with(true).ordered
+              expect(item).to receive(:skip_schedule_peer_reviews=).with(nil).ordered
+              subject
+            end
+          end
+
+          context "when migration not contains date_shift_options" do
+            it "should not set skip_schedule_peer_reviews but cleanup with nil" do
+              expect(item).to receive(:skip_schedule_peer_reviews=).with(nil)
+              subject
+            end
+          end
+        end
+      end
+    end
+  end
+
   SYSTEMS.each do |system|
     next unless import_data_exists? system, "assignment"
 
@@ -85,43 +221,47 @@ describe "Importing assignments" do
     expect(ra.hide_outcome_results).to be true
   end
 
-  it "imports group category into existing group with same name when marked as a group assignment" do
-    file_data = get_import_data("", "assignment")
-    context = get_import_context("")
-    assignment_hash = file_data.find { |h| h["migration_id"] == "4469882339232" }.with_indifferent_access
-    migration = context.content_migrations.create!
-    context.group_categories.create! name: assignment_hash[:group_category]
+  describe "migrate_assignment_group_categories" do
+    context "with feature off" do
+      it "imports group category into existing group with same name when marked as a group assignment" do
+        file_data = get_import_data("", "assignment")
+        context = get_import_context("")
+        assignment_hash = file_data.find { |h| h["migration_id"] == "4469882339232" }.with_indifferent_access
+        migration = context.content_migrations.create!
+        gc = context.group_categories.create! name: assignment_hash[:group_category]
 
-    Importers::AssignmentImporter.import_from_migration(assignment_hash, context, migration)
-    a = Assignment.where(migration_id: assignment_hash[:migration_id]).first
-    expect(a).to be_has_group_category
-    expect(a.group_category.name).to eq assignment_hash[:group_category]
+        Importers::AssignmentImporter.import_from_migration(assignment_hash, context, migration)
+        a = Assignment.where(migration_id: assignment_hash[:migration_id]).first
+        expect(a).to be_has_group_category
+        expect(a.group_category).to eq gc
+      end
+    end
+
+    context "with feature on" do
+      before do
+        Account.default.enable_feature!(:migrate_assignment_group_categories)
+      end
+
+      it "copies group category" do
+        file_data = get_import_data("", "assignment")
+        context = get_import_context("")
+        assignment_hash = file_data.find { |h| h["migration_id"] == "4469882339232" }.with_indifferent_access
+        migration = context.content_migrations.create!
+
+        Importers::AssignmentImporter.import_from_migration(assignment_hash, context, migration)
+        a = Assignment.where(migration_id: assignment_hash[:migration_id]).first
+        expect(a).to be_has_group_category
+        expect(a.group_category.name).to eq "A Team"
+        expect(context.group_categories.where(name: "Project Groups")).to be_empty
+      end
+    end
   end
 
   it "infers the default name when importing a nameless assignment" do
     course_model
     migration = @course.content_migrations.create!
-    nameless_assignment_hash = {
-      "migration_id" => "ib4834d160d180e2e91572e8b9e3b1bc6",
-      "assignment_group_migration_id" => "i2bc4b8ea8fac88f1899e5e95d76f3004",
-      "grading_standard_migration_id" => nil,
-      "rubric_migration_id" => nil,
-      "rubric_id" => nil,
-      "quiz_migration_id" => nil,
-      "workflow_state" => "published",
-      "title" => "",
-      "grading_type" => "points",
-      "submission_types" => "none",
-      "peer_reviews" => false,
-      "automatic_peer_reviews" => false,
-      "muted" => false,
-      "due_at" => 1_401_947_999_000,
-      "peer_reviews_due_at" => 1_401_947_999_000,
-      "position" => 6,
-      "peer_review_count" => 0
-    }
-    Importers::AssignmentImporter.import_from_migration(nameless_assignment_hash, @course, migration)
-    assignment = @course.assignments.where(migration_id: "ib4834d160d180e2e91572e8b9e3b1bc6").first
+    Importers::AssignmentImporter.import_from_migration(default_input_assignment_hash, @course, migration)
+    assignment = @course.assignments.where(migration_id:).first
     expect(assignment.title).to eq "untitled assignment"
   end
 
@@ -129,7 +269,7 @@ describe "Importing assignments" do
     course_model
     migration = @course.content_migrations.create!
     assign_hash = {
-      "migration_id" => "ib4834d160d180e2e91572e8b9e3b1bc6",
+      "migration_id" => migration_id,
       "assignment_group_migration_id" => "i2bc4b8ea8fac88f1899e5e95d76f3004",
       "workflow_state" => "published",
       "title" => "auto peer review assignment",
@@ -148,7 +288,7 @@ describe "Importing assignments" do
   it "does not schedule auto peer reviews if dates are shifted (it'll be scheduled later)" do
     course_model
     assign_hash = {
-      "migration_id" => "ib4834d160d180e2e91572e8b9e3b1bc6",
+      "migration_id" => migration_id,
       "assignment_group_migration_id" => "i2bc4b8ea8fac88f1899e5e95d76f3004",
       "workflow_state" => "published",
       "title" => "auto peer review assignment",
@@ -171,7 +311,7 @@ describe "Importing assignments" do
     expect(@course).to receive(:turnitin_enabled?).at_least(1).and_return(true)
     migration = @course.content_migrations.create!
     nameless_assignment_hash = {
-      "migration_id" => "ib4834d160d180e2e91572e8b9e3b1bc6",
+      "migration_id" => migration_id,
       "assignment_group_migration_id" => "i2bc4b8ea8fac88f1899e5e95d76f3004",
       "grading_standard_migration_id" => nil,
       "rubric_migration_id" => nil,
@@ -192,7 +332,7 @@ describe "Importing assignments" do
       "turnitin_settings" => "{\"originality_report_visibility\":\"after_due_date\",\"s_paper_check\":\"1\",\"internet_check\":\"0\",\"journal_check\":\"1\",\"exclude_biblio\":\"1\",\"exclude_quoted\":\"0\",\"exclude_type\":\"1\",\"exclude_value\":\"5\",\"submit_papers_to\":\"1\",\"s_view_report\":\"1\"}"
     }
     Importers::AssignmentImporter.import_from_migration(nameless_assignment_hash, @course, migration)
-    assignment = @course.assignments.where(migration_id: "ib4834d160d180e2e91572e8b9e3b1bc6").first
+    assignment = @course.assignments.where(migration_id:).first
     expect(assignment.turnitin_enabled).to be true
     settings = assignment.turnitin_settings
     expect(settings["originality_report_visibility"]).to eq("after_due_date")
@@ -210,7 +350,7 @@ describe "Importing assignments" do
   it "does not explode if it tries to import negative points possible" do
     course_model
     assign_hash = {
-      "migration_id" => "ib4834d160d180e2e91572e8b9e3b1bc6",
+      "migration_id" => migration_id,
       "assignment_group_migration_id" => "i2bc4b8ea8fac88f1899e5e95d76f3004",
       "workflow_state" => "published",
       "title" => "weird negative assignment",
@@ -221,14 +361,14 @@ describe "Importing assignments" do
     migration = @course.content_migrations.create!
     allow(migration).to receive(:date_shift_options).and_return(true)
     Importers::AssignmentImporter.import_from_migration(assign_hash, @course, migration)
-    assignment = @course.assignments.where(migration_id: "ib4834d160d180e2e91572e8b9e3b1bc6").first
+    assignment = @course.assignments.where(migration_id:).first
     expect(assignment.points_possible).to eq 0
   end
 
   it "does not clear dates if these are null in the source hash" do
     course_model
     assign_hash = {
-      "migration_id" => "ib4834d160d180e2e91572e8b9e3b1bc6",
+      "migration_id" => migration_id,
       "assignment_group_migration_id" => "i2bc4b8ea8fac88f1899e5e95d76f3004",
       "workflow_state" => "published",
       "title" => "date clobber or not",
@@ -259,6 +399,37 @@ describe "Importing assignments" do
     expect(AnonymousOrModerationEvent.last.user).to eq migration.user
   end
 
+  context "when assignments are new quizzes/quiz lti" do
+    subject do
+      new_quiz
+      Importers::AssignmentImporter.import_from_migration(assignment_hash, course, migration)
+      new_quiz.reload
+    end
+
+    let(:course) { course_model }
+    let(:migration) { course.content_migrations.create! }
+    let(:new_quiz) do
+      new_quizzes_assignment(course:, title: "Some New Quiz", migration_id:)
+    end
+    let(:assignment_hash) do
+      {
+        migration_id:,
+        workflow_state: "published",
+        title: "Tool Assignment",
+        submission_types: "external_tool",
+      }
+    end
+
+    it "sets the content tag workflow state back to active when a previously deleted quiz lti assignment is re-imported back into the course" do
+      subject
+      new_quiz.destroy
+      new_quiz.save!
+      Importers::AssignmentImporter.import_from_migration(assignment_hash, course, migration)
+      new_quiz.reload
+      expect(new_quiz.external_tool_tag).to be_active
+    end
+  end
+
   context "when assignments use an LTI tool" do
     subject do
       assignment # trigger create
@@ -276,16 +447,16 @@ describe "Importing assignments" do
         unlock_at: 1.day.ago,
         lock_at: 1.day.from_now,
         peer_reviews_due_at: 2.days.from_now,
-        migration_id: "ib4834d160d180e2e91572e8b9e3b1bc6",
+        migration_id:,
         submission_types: "external_tool",
-        external_tool_tag_attributes: { url: tool.url, content: tool },
+        external_tool_tag_attributes: { url: tool.url, content: tool, new_tab: tool_current_tab },
         points_possible: 10
       )
     end
 
     let(:assignment_hash) do
       {
-        "migration_id" => "ib4834d160d180e2e91572e8b9e3b1bc6",
+        "migration_id" => migration_id,
         "assignment_group_migration_id" => "i2bc4b8ea8fac88f1899e5e95d76f3004",
         "workflow_state" => "published",
         "title" => "Tool Assignment",
@@ -297,9 +468,12 @@ describe "Importing assignments" do
         "lock_at" => nil,
         "unlock_at" => nil,
         "external_tool_url" => tool_url,
-        "external_tool_id" => tool_id
+        "external_tool_id" => tool_id,
+        "external_tool_new_tab" => tool_new_tab
       }
     end
+    let(:tool_current_tab) { false }
+    let(:tool_new_tab) { false }
 
     context "and a matching tool is installed in the destination" do
       let(:tool) { external_tool_model(context: course.root_account) }
@@ -320,6 +494,64 @@ describe "Importing assignments" do
         it "updates the URL" do
           expect { subject }.to change { assignment.external_tool_tag.url }.from(tool.url).to tool_url
         end
+      end
+
+      context "and there is no new_tab setting" do
+        let(:tool_current_tab) { false }
+        let(:tool_new_tab) { nil }
+
+        it "does not change the setting" do
+          expect { subject }.not_to change { assignment.external_tool_tag.new_tab }.from(false)
+        end
+      end
+
+      context "and the new_tab setting is the same as the tool" do
+        let(:tool_current_tab) { false }
+        let(:tool_new_tab) { false }
+
+        it "does not change the setting" do
+          expect { subject }.not_to change { assignment.external_tool_tag.new_tab }.from(false)
+        end
+      end
+
+      context "but the matching tool has a different new_tab setting" do
+        context "when the old setting is false and the new is true" do
+          let(:tool_current_tab) { false }
+          let(:tool_new_tab) { true }
+
+          it "updates the setting to true" do
+            expect { subject }.to change { assignment.external_tool_tag.new_tab }.from(false).to true
+          end
+        end
+
+        context "when the old setting is true and the new is false" do
+          let(:tool_current_tab) { true }
+          let(:tool_new_tab) { false }
+
+          it "updates the setting to false" do
+            expect { subject }.to change { assignment.external_tool_tag.new_tab }.from(true).to false
+          end
+        end
+      end
+    end
+
+    context "when previously deleted LTI assignment is re-imported" do
+      let(:tool) { external_tool_model(context: course.root_account) }
+      let(:tool_id) { tool.id }
+      let(:tool_url) { tool.url }
+
+      before do
+        assignment
+        Importers::AssignmentImporter.import_from_migration(assignment_hash, course, migration)
+        assignment.reload
+        assignment.destroy
+        assignment.save!
+      end
+
+      it "un-deletes content tag" do
+        expect(assignment.external_tool_tag).to be_deleted
+        subject
+        expect(assignment.external_tool_tag).to be_active
       end
     end
 
@@ -345,7 +577,7 @@ describe "Importing assignments" do
           unlock_at: 1.day.ago,
           lock_at: 1.day.from_now,
           peer_reviews_due_at: 2.days.from_now,
-          migration_id: "ib4834d160d180e2e91572e8b9e3b1bc6"
+          migration_id:
         )
       end
 
@@ -370,7 +602,6 @@ describe "Importing assignments" do
       end
 
       describe "line item creation" do
-        let(:migration_id) { "ib4834d160d180e2e91572e8b9e3b1bc6" }
         let(:course) { Course.create! }
         let(:migration) { course.content_migrations.create! }
         let(:assignment) do
@@ -581,6 +812,31 @@ describe "Importing assignments" do
           end
         end
       end
+
+      context "when previously deleted LTI assignment is re-imported" do
+        let(:line_item) { assignment.line_items.first }
+        let(:resource_link) { assignment.lti_resource_links.first }
+
+        before do
+          assignment
+          Importers::AssignmentImporter.import_from_migration(assignment_hash, course, migration)
+          assignment.reload
+          assignment.destroy
+          assignment.save!
+        end
+
+        it "un-deletes resource links" do
+          expect(line_item).to be_deleted
+          subject
+          expect(line_item.reload).to be_active
+        end
+
+        it "un-deletes line items" do
+          expect(resource_link).to be_deleted
+          subject
+          expect(resource_link.reload).to be_active
+        end
+      end
     end
   end
 
@@ -672,7 +928,6 @@ describe "Importing assignments" do
   describe "similarity_detection_tool" do
     include_context "lti2_spec_helper"
 
-    let(:migration_id) { "ib4834d160d180e2e91572e8b9e3b1bc6" }
     let(:resource_type_code) { "123" }
     let(:vendor_code) { "abc" }
     let(:product_code) { "qrx" }
@@ -714,6 +969,8 @@ describe "Importing assignments" do
       end
 
       it "creates a assignment_configuration_tool_lookup" do
+        allow(Lti::ToolProxy)
+          .to receive(:find_active_proxies_for_context_by_vendor_code_and_product_code) { [tool_proxy] }
         assignment
         Importers::AssignmentImporter.import_from_migration(assign_hash, course, migration)
         assignment.reload
@@ -734,38 +991,100 @@ describe "Importing assignments" do
         expect(assignment.assignment_configuration_tool_lookups.count).to eq 1
       end
 
-      it "creates assignment_configuration_tool_lookups with the proper context_type" do
-        actl1 = assignment.assignment_configuration_tool_lookups.create!(
-          tool_vendor_code: vendor_code,
-          tool_product_code: product_code,
-          tool_resource_type_code: resource_type_code,
+      it "clears out extra tool settings" do
+        allow(Lti::ToolProxy)
+          .to receive(:find_active_proxies_for_context_by_vendor_code_and_product_code) { [tool_proxy] }
+        assignment.assignment_configuration_tool_lookups.create!(
+          tool_vendor_code: "extra_vendor_code",
+          tool_product_code: "extra_product_code",
+          tool_resource_type_code: "extra_resource_type_code",
           tool_type: "Lti::MessageHandler",
-          context_type: "Account"
+          context_type: "Course"
         )
-
         Importers::AssignmentImporter.import_from_migration(assign_hash, @course, migration)
         assignment.reload
-        expect(assignment.assignment_configuration_tool_lookups.count).to eq 2
-        new_actls = assignment.assignment_configuration_tool_lookups.reject do |actl|
-          actl.id == actl1.id
+        expect(assignment.assignment_configuration_tool_lookups.count).to eq 1
+        tool_lookup = assignment.assignment_configuration_tool_lookups.first
+        expect(tool_lookup.tool_vendor_code).to eq vendor_code
+        expect(tool_lookup.tool_product_code).to eq product_code
+        expect(tool_lookup.tool_resource_type_code).to eq resource_type_code
+        expect(tool_lookup.tool_type).to eq "Lti::MessageHandler"
+        expect(tool_lookup.context_type).to eq "Course"
+      end
+
+      context "when similarity_detection_tool is empty in hash" do
+        let(:empty_similarity_tool_assign_hash) do
+          assign_hash[:similarity_detection_tool] = nil
+          assign_hash
         end
-        expect(new_actls.map(&:context_type)).to eq(["Course"])
+
+        before do
+          allow(Lti::ToolProxy)
+            .to receive(:find_active_proxies_for_context_by_vendor_code_and_product_code) { [tool_proxy] }
+          assignment.assignment_configuration_tool_lookups.create!(
+            tool_vendor_code: vendor_code,
+            tool_product_code: product_code,
+            tool_resource_type_code: resource_type_code,
+            tool_type: "Lti::MessageHandler",
+            context_type: "Account"
+          )
+        end
+
+        context "when import is not master migration" do
+          it "does not remove ACTLs on empty similarity_detection_tool" do
+            Importers::AssignmentImporter.import_from_migration(empty_similarity_tool_assign_hash, @course, migration)
+            assignment.reload
+            expect(assignment.assignment_configuration_tool_lookups.count).to eq 1
+            tool_lookup = assignment.assignment_configuration_tool_lookups.first
+            expect(tool_lookup.tool_vendor_code).to eq vendor_code
+            expect(tool_lookup.tool_product_code).to eq product_code
+            expect(tool_lookup.tool_resource_type_code).to eq resource_type_code
+          end
+        end
+
+        context "when import is a master migration" do
+          let(:migration) { double("Migration") }
+          let(:master_course_subscription) { double("MasterCourseSubscription") }
+          let(:item) { double("Item") }
+          let(:content_tag) { double("ContentTag", downstream_changes: ["none"]) }
+
+          let(:master_migration) do
+            migration = course.content_migrations.create!
+            allow_any_instance_of(Assignment).to receive(:mark_as_importing!)
+            allow(migration).to receive_messages(for_master_course_import?: true, master_course_subscription:)
+            allow(master_course_subscription).to receive(:content_tag_for).with(assignment).and_return(content_tag)
+            migration
+          end
+
+          it "removes ACTLs on empty similarity_detection_tool" do
+            Importers::AssignmentImporter.import_from_migration(empty_similarity_tool_assign_hash, @course, master_migration)
+            assignment.reload
+            expect(assignment.assignment_configuration_tool_lookups.count).to eq 0
+          end
+        end
       end
     end
 
     it "sets the vendor/product/resource_type codes" do
+      allow(Lti::ToolProxy)
+        .to receive(:find_active_proxies_for_context_by_vendor_code_and_product_code) { [tool_proxy] }
       course_model
       migration = @course.content_migrations.create!
       assignment = @course.assignments.create!(title: "test", due_at: Time.now, unlock_at: 1.day.ago, lock_at: 1.day.from_now, peer_reviews_due_at: 2.days.from_now, migration_id:)
       Importers::AssignmentImporter.import_from_migration(assign_hash, @course, migration)
       assignment.reload
+      expect(assignment.assignment_configuration_tool_lookups.count).to eq 1
       tool_lookup = assignment.assignment_configuration_tool_lookups.first
       expect(tool_lookup.tool_vendor_code).to eq vendor_code
       expect(tool_lookup.tool_product_code).to eq product_code
       expect(tool_lookup.tool_resource_type_code).to eq resource_type_code
+      expect(tool_lookup.tool_type).to eq "Lti::MessageHandler"
+      expect(tool_lookup.context_type).to eq "Course"
     end
 
     it "sets the tool_type to 'LTI::MessageHandler'" do
+      allow(Lti::ToolProxy)
+        .to receive(:find_active_proxies_for_context_by_vendor_code_and_product_code) { [tool_proxy] }
       course_model
       migration = @course.content_migrations.create!
       assignment = @course.assignments.create!(title: "test", due_at: Time.now, unlock_at: 1.day.ago, lock_at: 1.day.from_now, peer_reviews_due_at: 2.days.from_now, migration_id:)
@@ -776,6 +1095,8 @@ describe "Importing assignments" do
     end
 
     it "sets the visibility" do
+      allow(Lti::ToolProxy)
+        .to receive(:find_active_proxies_for_context_by_vendor_code_and_product_code) { [tool_proxy] }
       course_model
       migration = @course.content_migrations.create!
       assignment = @course.assignments.create!(title: "test", due_at: Time.now, unlock_at: 1.day.ago, lock_at: 1.day.from_now, peer_reviews_due_at: 2.days.from_now, migration_id:)
@@ -804,7 +1125,6 @@ describe "Importing assignments" do
   end
 
   describe "post_policy" do
-    let(:migration_id) { "ib4834d160d180e2e91572e8b9e3b1bc6" }
     let(:course) { Course.create! }
     let(:migration) { course.content_migrations.create! }
     let(:assignment_hash) do
@@ -853,7 +1173,6 @@ describe "Importing assignments" do
   end
 
   describe "post_to_sis" do
-    let(:migration_id) { "ib4834d160d180e2e91572e8b9e3b1bc6" }
     let(:course) { Course.create! }
     let(:account) { course.account }
     let(:migration) { course.content_migrations.create! }
@@ -908,6 +1227,424 @@ describe "Importing assignments" do
       Importers::AssignmentImporter.import_from_migration(assignment_hash, course, migration)
       imported_assignment.reload
       expect(imported_assignment.post_to_sis).to eq(assignment_hash["post_to_sis"])
+    end
+  end
+
+  describe "#try_to_save_with_date_shift" do
+    subject do
+      Importers::AssignmentImporter.try_to_save_with_date_shift(item, migration)
+    end
+
+    let(:course) { Course.create! }
+    let(:migration) { course.content_migrations.create!(date_shift_options_settings) }
+    # This is not saved at this point, so there is no id
+    let(:item) { course.assignments.temp_record }
+    let(:original_date) { Time.zone.parse("2023-06-01") }
+    # With the given date shift options, this is the expected date
+    let(:expected_date) { Time.zone.parse("2024-05-30") }
+    let(:deletable_error_fields) { %i[due_at lock_at unlock_at peer_reviews_due_at needs_update_cached_due_dates] }
+
+    context "when there is no date_shift_options on migration" do
+      let(:migration) { super().tap { |m| m.migration_settings.delete(:date_shift_options) } }
+
+      before do
+        item.update!(
+          due_at: original_date,
+          lock_at: original_date,
+          unlock_at: original_date,
+          peer_reviews_due_at: original_date,
+          needs_update_cached_due_dates: false
+        )
+      end
+
+      it "should not change the due_at field" do
+        expect(subject.due_at).to eq(original_date)
+      end
+
+      it "should not change the lock_at field" do
+        expect(subject.lock_at).to eq(original_date)
+      end
+
+      it "should not change the unlock_at field" do
+        expect(subject.unlock_at).to eq(original_date)
+      end
+
+      it "should not change the peer_reviews_due_at field" do
+        expect(subject.peer_reviews_due_at).to eq(original_date)
+      end
+
+      it "should not change the needs_update_cached_due_dates field" do
+        expect(subject.needs_update_cached_due_dates).to be_falsey
+      end
+
+      it "should early return" do
+        expect(Importers::CourseContentImporter).not_to receive(:shift_date_options)
+        subject
+      end
+    end
+
+    context "when setting due_at field" do
+      context "when field is given" do
+        before do
+          item.update!(due_at: original_date)
+        end
+
+        it "should shift the date" do
+          expect(subject.due_at).to eq(expected_date)
+        end
+      end
+
+      context "when date is invalid after shifting" do
+        let(:title) { "test title" }
+
+        before do
+          item.update!(title:)
+          item.due_at = original_date
+          item.errors.add(:due_at, "a validation error message")
+
+          allow(item).to receive(:invalid?).and_return(true)
+          deletable_error_fields.each { |attr| allow(item.errors).to receive(:delete).with(attr) }
+        end
+
+        it "should keep the original incoming date" do
+          expect(subject.due_at).to eq(original_date)
+        end
+
+        it "should clear the date error field" do
+          expect(item.errors).to receive(:delete).with(:due_at)
+          subject
+        end
+
+        it "should add a warning to the migration on record with id" do
+          subject
+          expected_issue_message = "Couldn't adjust dates on assignment #{title} (ID #{item.id})"
+          issues = migration.migration_issues
+          expect(issues.count).to eq(1)
+          expect(migration.migration_issues.first.description).to eq(expected_issue_message)
+        end
+      end
+
+      context "when field is missing" do
+        it "should shift the date" do
+          expect(subject.due_at).to be_nil
+        end
+      end
+    end
+
+    context "when setting lock_at field" do
+      context "when field is given" do
+        before do
+          item.update!(lock_at: original_date)
+        end
+
+        it "should shift the date" do
+          expect(subject.lock_at).to eq(expected_date)
+        end
+      end
+
+      context "when date is invalid after shifting" do
+        let(:title) { "test title" }
+
+        before do
+          item.update!(title:)
+          item.lock_at = original_date
+          item.errors.add(:lock_at, "a validation error message")
+
+          allow(item).to receive(:invalid?).and_return(true)
+          deletable_error_fields.each { |attr| allow(item.errors).to receive(:delete).with(attr) }
+        end
+
+        it "should keep the original incoming date" do
+          expect(subject.lock_at).to eq(original_date)
+        end
+
+        it "should clear the date error field" do
+          expect(item.errors).to receive(:delete).with(:lock_at)
+          subject
+        end
+
+        it "should add a warning to the migration on record with id" do
+          subject
+          expected_issue_message = "Couldn't adjust dates on assignment #{title} (ID #{item.id})"
+          issues = migration.migration_issues
+          expect(issues.count).to eq(1)
+          expect(migration.migration_issues.first.description).to eq(expected_issue_message)
+        end
+      end
+
+      context "when field is missing" do
+        it "should shift the date" do
+          expect(subject.lock_at).to be_nil
+        end
+      end
+    end
+
+    context "when setting unlock_at field" do
+      context "when field is given" do
+        before do
+          item.update!(unlock_at: original_date)
+        end
+
+        it "should shift the date" do
+          expect(subject.unlock_at).to eq(expected_date)
+        end
+      end
+
+      context "when date is invalid after shifting" do
+        let(:title) { "test title" }
+
+        before do
+          item.update!(title:)
+          item.unlock_at = original_date
+          item.errors.add(:unlock_at, "a validation error message")
+
+          allow(item).to receive(:invalid?).and_return(true)
+          deletable_error_fields.each { |attr| allow(item.errors).to receive(:delete).with(attr) }
+        end
+
+        it "should keep the original incoming date" do
+          expect(subject.unlock_at).to eq(original_date)
+        end
+
+        it "should clear the date error field" do
+          expect(item.errors).to receive(:delete).with(:unlock_at)
+          subject
+        end
+
+        it "should add a warning to the migration on record with id" do
+          subject
+          expected_issue_message = "Couldn't adjust dates on assignment #{title} (ID #{item.id})"
+          issues = migration.migration_issues
+          expect(issues.count).to eq(1)
+          expect(migration.migration_issues.first.description).to eq(expected_issue_message)
+        end
+      end
+
+      context "when field is missing" do
+        it "should shift the date" do
+          expect(subject.unlock_at).to be_nil
+        end
+      end
+    end
+
+    context "when setting peer_reviews_due_at field" do
+      context "when field is given" do
+        before do
+          item.update!(peer_reviews_due_at: original_date)
+        end
+
+        it "should shift the date" do
+          expect(subject.peer_reviews_due_at).to eq(expected_date)
+        end
+      end
+
+      context "when date is invalid after shifting" do
+        let(:title) { "test title" }
+
+        before do
+          item.update!(title:)
+          item.peer_reviews_due_at = original_date
+          item.errors.add(:peer_reviews_due_at, "a validation error message")
+
+          allow(item).to receive(:invalid?).and_return(true)
+          deletable_error_fields.each { |attr| allow(item.errors).to receive(:delete).with(attr) }
+        end
+
+        it "should keep the original incoming date" do
+          expect(subject.peer_reviews_due_at).to eq(original_date)
+        end
+
+        it "should clear the date error field" do
+          expect(item.errors).to receive(:delete).with(:peer_reviews_due_at)
+          subject
+        end
+
+        it "should add a warning to the migration on record with id" do
+          subject
+          expected_issue_message = "Couldn't adjust dates on assignment #{title} (ID #{item.id})"
+          issues = migration.migration_issues
+          expect(issues.count).to eq(1)
+          expect(migration.migration_issues.first.description).to eq(expected_issue_message)
+        end
+      end
+
+      context "when field is missing" do
+        it "should shift the date" do
+          expect(subject.peer_reviews_due_at).to be_nil
+        end
+      end
+    end
+
+    context "when setting needs_update_cached_due_dates field" do
+      context "when field is given" do
+        before do
+          item.update!(needs_update_cached_due_dates: true)
+        end
+
+        it "should shift the date" do
+          expect(subject.needs_update_cached_due_dates).to be_truthy
+        end
+      end
+
+      context "when date is invalid after shifting" do
+        let(:title) { "test title" }
+
+        before do
+          item.update!(title:)
+          item.needs_update_cached_due_dates = false
+          item.errors.add(:needs_update_cached_due_dates, "a validation error message")
+
+          allow(item).to receive(:invalid?).and_return(true)
+          deletable_error_fields.each { |attr| allow(item.errors).to receive(:delete).with(attr) }
+        end
+
+        it "should keep the original incoming date" do
+          expect(subject.needs_update_cached_due_dates).to be_falsey
+        end
+
+        it "should clear the date error field" do
+          expect(item.errors).to receive(:delete).with(:needs_update_cached_due_dates)
+          subject
+        end
+
+        it "should add a warning to the migration on record with id" do
+          subject
+          expected_issue_message = "Couldn't adjust dates on assignment #{title} (ID #{item.id})"
+          issues = migration.migration_issues
+          expect(issues.count).to eq(1)
+          expect(migration.migration_issues.first.description).to eq(expected_issue_message)
+        end
+      end
+    end
+  end
+
+  describe "import sub assignments" do
+    subject do
+      Importers::AssignmentImporter.import_from_migration(assignment_hash, course, migration)
+      course.assignments.find_by(migration_id:)
+    end
+
+    let(:course) { Course.create! }
+    let(:account) { course.root_account }
+    let(:migration) { course.content_migrations.create! }
+    let(:assignment_hash) do
+      {
+        migration_id:,
+        title: "with_subassignment",
+        post_to_sis: false,
+        date_shift_options: {
+          remove_dates: true
+        },
+        sub_assignments: [
+          {
+            id: 1337,
+            migration_id: "test_migration_id_1337",
+            title: "sub_assignment1",
+            tag: CheckpointLabels::REPLY_TO_TOPIC,
+          },
+          {
+            title: "sub_assignment2",
+            tag: CheckpointLabels::REPLY_TO_ENTRY,
+          }
+        ],
+      }
+    end
+
+    context "when the discussion_checkpoints feature flag is on" do
+      before do
+        account.enable_feature!(:discussion_checkpoints)
+      end
+
+      it "imports the two sub assignments from the hash" do
+        expect(subject.sub_assignments.length).to eq(2)
+      end
+
+      it "sets the has_sub_assignments" do
+        expect(subject.has_sub_assignments).to be_truthy
+      end
+
+      it "sets the proper tags for the sub assignments" do
+        expect(subject.sub_assignments.pluck(:sub_assignment_tag)).to match_array([CheckpointLabels::REPLY_TO_TOPIC, CheckpointLabels::REPLY_TO_ENTRY])
+      end
+
+      it "sets the same context for sub assignments" do
+        expect(subject.sub_assignments.all? { |sub_assignment| sub_assignment.context == subject.context }).to be_truthy
+      end
+
+      it "handles nil sub assignments" do
+        assignment_hash[:sub_assignments] = nil
+
+        expect(subject.sub_assignments.length).to eq(0)
+      end
+
+      it "handles empty sub assignments" do
+        assignment_hash[:sub_assignments] = []
+
+        expect(subject.sub_assignments.length).to eq(0)
+      end
+
+      it "raises error if any sub assignment is invalid" do
+        assignment_hash[:sub_assignments] = assignment_hash[:sub_assignments] + [{ title: "sub_assignment1" }]
+
+        expect do
+          subject
+        end.to raise_error(ActiveRecord::RecordInvalid)
+      end
+    end
+
+    context "when the discussion_checkpoints feature flag is off" do
+      it "does not import sub assignments" do
+        expect(subject.sub_assignments.length).to eq(0)
+      end
+    end
+
+    describe ".find_or_create_sub_assignment" do
+      subject do
+        Importers::AssignmentImporter.find_or_create_sub_assignment(sub_assignment_hash, parent_item)
+      end
+
+      let(:parent_item) { course.assignments.create!(title: "parent_assignment") }
+      let(:sub_assignment_hash) { assignment_hash[:sub_assignments].first }
+
+      context "when a sub assignment already exists with the same id" do
+        before do
+          @existing_sub_assignment = parent_item.sub_assignments.create!(
+            id: sub_assignment_hash[:id],
+            title: "sub_assignment1",
+            sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC,
+            context: parent_item.context
+          )
+        end
+
+        it "does not create a new sub assignment" do
+          expect(subject).to eq(@existing_sub_assignment)
+        end
+      end
+
+      context "when a sub assignment already exists with the same migration id" do
+        before do
+          @existing_sub_assignment = parent_item.sub_assignments.create!(
+            migration_id: sub_assignment_hash[:migration_id],
+            title: "sub_assignment1",
+            sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC,
+            context: parent_item.context
+          )
+        end
+
+        it "returns that sub assignment" do
+          expect(subject).to eq(@existing_sub_assignment)
+        end
+      end
+
+      context "when a sub assignment does not exist" do
+        it "creates a new sub assignment model instance" do
+          expect(subject.id).to be_nil
+        end
+
+        it "properly sets parent_assignment_id" do
+          expect(subject.parent_assignment_id).to eq(parent_item.id)
+        end
+      end
     end
   end
 end

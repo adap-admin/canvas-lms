@@ -18,14 +18,13 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require "atom"
-
 # @API Discussion Topics
 class DiscussionEntriesController < ApplicationController
   before_action :require_context_and_read_access, except: :public_feed
 
   def show
     @entry = @context.discussion_entries.find(params[:id]).tap { |e| e.current_user = @current_user }
+    page_has_instui_topnav
     if @entry.deleted?
       flash[:notice] = t :deleted_entry_notice, "That entry has been deleted"
       redirect_to named_context_url(@context, :context_discussion_topic_url, @entry.discussion_topic_id)
@@ -40,7 +39,7 @@ class DiscussionEntriesController < ApplicationController
 
   def create
     @topic = @context.discussion_topics.active.find(params[:discussion_entry].delete(:discussion_topic_id))
-    params[:discussion_entry].delete :remove_attachment rescue nil
+    params[:discussion_entry].delete(:remove_attachment)
     parent_id = params[:discussion_entry].delete(:parent_id)
 
     entry_params = params.require(:discussion_entry).permit(:message, :plaintext_message)
@@ -166,17 +165,10 @@ class DiscussionEntriesController < ApplicationController
       @discussion_entries = @topic.entries_for_feed(@current_user, request.format == :rss)
       respond_to do |format|
         format.atom do
-          feed = Atom::Feed.new do |f|
-            f.title = t :posts_feed_title, "%{title} Posts Feed", title: @topic.title
-            f.links << Atom::Link.new(href: polymorphic_url([@context, @topic]), rel: "self")
-            f.updated = Time.now
-            f.id = polymorphic_url([@context, @topic])
-          end
-          feed.entries << @topic.to_atom
-          @discussion_entries.sort_by(&:updated_at).each do |e|
-            feed.entries << e.to_atom
-          end
-          render plain: feed.to_xml
+          title = t :posts_feed_title, "%{title} Posts Feed", title: @topic.title
+          link = polymorphic_url([@context, @topic])
+
+          render plain: AtomFeedHelper.render_xml(title:, link:, entries: [@topic, *@discussion_entries.sort_by(&:updated_at)])
         end
         format.rss do
           @entries = [@topic] + @discussion_entries

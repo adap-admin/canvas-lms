@@ -27,6 +27,7 @@ const onDeleteRequested = jest.fn()
 
 const testProps = {
   gradingScheme: MOCK_COURSE_GRADING_SCHEME,
+  archivedGradingSchemesEnabled: false,
   disableEdit: false,
   disableDelete: false,
   onEditRequested,

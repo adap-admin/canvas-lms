@@ -20,7 +20,6 @@
 
 class EnrollmentTerm < ActiveRecord::Base
   DEFAULT_TERM_NAME = "Default Term"
-
   include Workflow
 
   belongs_to :root_account, class_name: "Account"
@@ -102,22 +101,22 @@ class EnrollmentTerm < ActiveRecord::Base
   end
 
   def default_term?
-    read_attribute(:name) == EnrollmentTerm::DEFAULT_TERM_NAME
+    self["name"] == EnrollmentTerm::DEFAULT_TERM_NAME
   end
 
   def name
     if default_term?
       EnrollmentTerm.i18n_default_term_name
     else
-      read_attribute(:name)
+      super
     end
   end
 
   def name=(new_name)
     if new_name == EnrollmentTerm.i18n_default_term_name
-      write_attribute(:name, DEFAULT_TERM_NAME)
+      super(DEFAULT_TERM_NAME)
     else
-      write_attribute(:name, new_name)
+      super
     end
   end
 
@@ -197,13 +196,17 @@ class EnrollmentTerm < ActiveRecord::Base
   end
 
   def consistent_account_associations
-    if read_attribute(:grading_period_group_id).present? && (root_account_id != grading_period_group.account_id)
+    if grading_period_group_id && (root_account_id != grading_period_group.account_id)
       errors.add(:grading_period_group, t("cannot be associated with a different account"))
     end
   end
 
+  def filter_courses_by_term
+    "/accounts/#{root_account_id}?enrollment_term_id=#{id}"
+  end
+
   scope :active, -> { where("enrollment_terms.workflow_state<>'deleted'") }
-  scope :ended, -> { where("enrollment_terms.end_at < ?", Time.now.utc) }
+  scope :ended, -> { where(enrollment_terms: { end_at: ...Time.now.utc }) }
   scope :started, -> { where("enrollment_terms.start_at IS NULL OR enrollment_terms.start_at < ?", Time.now.utc) }
   scope :not_ended, -> { where("enrollment_terms.end_at IS NULL OR enrollment_terms.end_at >= ?", Time.now.utc) }
   scope :not_started, -> { where("enrollment_terms.start_at IS NOT NULL AND enrollment_terms.start_at > ?", Time.now.utc) }
@@ -220,9 +223,9 @@ class EnrollmentTerm < ActiveRecord::Base
         update_all_grading_period_scores:,
         run_immediately: true
       )
-      # DueDateCacher handles updating the cached grading_period_id on submissions.
+      # SubmissionLifecycleManager handles updating the cached grading_period_id on submissions.
       # run_immediately: true because we're already in a delayed job
-      DueDateCacher.recompute_course(course, run_immediately: true) if update_all_grading_period_scores
+      SubmissionLifecycleManager.recompute_course(course, run_immediately: true) if update_all_grading_period_scores
     end
   end
 

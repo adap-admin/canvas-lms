@@ -22,17 +22,23 @@ class Mutations::CreateDiscussionEntry < Mutations::BaseMutation
   graphql_name "CreateDiscussionEntry"
 
   argument :discussion_topic_id, ID, required: true, prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func("DiscussionTopic")
+  argument :file_id, ID, required: false, prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func("Attachment")
   argument :message, String, required: true
   argument :parent_entry_id, ID, required: false, prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func("DiscussionEntry")
-  argument :file_id, ID, required: false, prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func("Attachment")
-  argument :include_reply_preview, Boolean, required: false
+
   argument :is_anonymous_author, Boolean, required: false
   argument :quoted_entry_id, ID, required: false, prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func("DiscussionEntry")
 
   field :discussion_entry, Types::DiscussionEntryType, null: true
+  field :my_sub_assignment_submissions, [Types::SubmissionType], null: true
   def resolve(input:)
     topic = DiscussionTopic.find(input[:discussion_topic_id])
     raise ActiveRecord::RecordNotFound unless topic.grants_right?(current_user, session, :read)
+
+    # if the user is writing a threaded reply when the allow threaded replies feature is disabled
+    if !topic.threaded? && !input[:parent_entry_id].nil?
+      return validation_error(I18n.t("Threaded replies are not allowed in this context"))
+    end
 
     association = topic.discussion_entries
     entry = build_entry(association, input[:message], topic, !!input[:is_anonymous_author])
@@ -40,7 +46,6 @@ class Mutations::CreateDiscussionEntry < Mutations::BaseMutation
     if input[:parent_entry_id]
       parent_entry = topic.discussion_entries.find(input[:parent_entry_id])
       entry.parent_entry = parent_entry
-      entry.include_reply_preview = input[:include_reply_preview].present?
     end
 
     if input[:quoted_entry_id] && DiscussionEntry.find(input[:quoted_entry_id])
@@ -51,13 +56,31 @@ class Mutations::CreateDiscussionEntry < Mutations::BaseMutation
       attachment = Attachment.find(input[:file_id])
       raise ActiveRecord::RecordNotFound unless attachment.user == current_user
 
+      topic_context = topic.context
+      unless topic.grants_right?(current_user, session, :attach) ||
+             (topic_context.respond_to?(:allow_student_forum_attachments) &&
+               topic_context.allow_student_forum_attachments &&
+               topic_context.grants_right?(current_user, session, :post_to_forum) &&
+               topic.available_for?(current_user)
+             )
+
+        return validation_error(I18n.t("Insufficient attach permissions"))
+      end
+
       entry.attachment = attachment
     end
 
     entry.save!
     entry.delete_draft
 
-    { discussion_entry: entry }
+    obj = { discussion_entry: entry, my_sub_assignment_submissions: [] }
+
+    if has_sub_assignment_submissions?(current_user, topic)
+      checkpoint_submissions = topic.assignment&.sub_assignment_submissions&.active&.where(user_id: current_user)
+      obj[:my_sub_assignment_submissions] = checkpoint_submissions
+    end
+
+    obj
   rescue ActiveRecord::RecordNotFound
     raise GraphQL::ExecutionError, "not found"
   rescue InsufficientPermissionsError
@@ -70,6 +93,17 @@ class Mutations::CreateDiscussionEntry < Mutations::BaseMutation
     raise InsufficientPermissionsError unless entry.grants_right?(current_user, session, :create)
 
     entry
+  end
+
+  def has_sub_assignment_submissions?(current_user, topic)
+    # if group discussion context is not a course, then there will be no assignment nor submissions
+    return false if topic.context.is_a?(Group) && !topic.context.context.is_a?(Course)
+
+    course_id = topic.context.is_a?(Course) ? topic.context.id : topic.context.context.id
+
+    # for graded group discussions, .assignment for the root topic and for each child topic is the same
+    # assignment
+    topic.assignment&.reload&.has_sub_assignments? && current_user.student_enrollments.where(course_id:).exists?
   end
 
   class InsufficientPermissionsError < StandardError; end

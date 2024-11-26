@@ -18,10 +18,11 @@
 
 import React from 'react'
 import {act, render, waitFor} from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import doFetchApi from '@canvas/do-fetch-api-effect'
-import {updateModuleItem} from '@canvas/context-modules/jquery/utils'
+import {updateModuleItem} from '../../jquery/utils'
 import ContextModulesPublishIcon from '../ContextModulesPublishIcon'
-import {initBody, makeModuleWithItems} from '@canvas/context-modules/__tests__/testHelpers'
+import {initBody, makeModuleWithItems} from '../../__tests__/testHelpers'
 
 jest.mock('@canvas/do-fetch-api-effect')
 jest.mock('@canvas/context-modules/jquery/utils', () => {
@@ -79,7 +80,7 @@ describe('ContextModulesPublishIcon', () => {
       const {container, getByText} = render(
         <ContextModulesPublishIcon {...defaultProps} published={false} />
       )
-      expect(getByText('Lesson 2 Module publish options')).toBeInTheDocument()
+      expect(getByText('Lesson 2 module publish options, unpublished')).toBeInTheDocument()
       expect(container.querySelector('[name="IconUnpublished"]')).toBeInTheDocument()
     })
 
@@ -87,7 +88,7 @@ describe('ContextModulesPublishIcon', () => {
       const {container, getByText} = render(
         <ContextModulesPublishIcon {...defaultProps} published={true} />
       )
-      expect(getByText('Lesson 2 Module publish options')).toBeInTheDocument()
+      expect(getByText('Lesson 2 module publish options, published')).toBeInTheDocument()
       expect(container.querySelector('[name="IconPublish"]')).toBeInTheDocument()
     })
   })
@@ -99,14 +100,15 @@ describe('ContextModulesPublishIcon', () => {
     expect(getByText('Publish module and all items')).toBeInTheDocument()
     expect(getByText('Publish module only')).toBeInTheDocument()
     expect(getByText('Unpublish module and all items')).toBeInTheDocument()
+    expect(getByText('Unpublish module only')).toBeInTheDocument()
   })
 
   it('calls publishAll when clicked publish all menu item is clicked', async () => {
     const {getByRole, getByText} = render(<ContextModulesPublishIcon {...defaultProps} />)
-    const menuButton = getByRole('button', {name: 'Lesson 2 Module publish options'})
-    act(() => menuButton.click())
+    const menuButton = getByRole('button', {name: 'Lesson 2 module publish options, published'})
+    menuButton.click()
     const publishButton = getByText('Publish module and all items')
-    act(() => publishButton.click())
+    publishButton.click()
     await waitFor(() => expect(getByText('Publishing module and items')).toBeInTheDocument())
     expect(doFetchApi).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -120,10 +122,10 @@ describe('ContextModulesPublishIcon', () => {
 
   it('calls publishModuleOnly when clicked publish module menu item is clicked', async () => {
     const {getByRole, getByText} = render(<ContextModulesPublishIcon {...defaultProps} />)
-    const menuButton = getByRole('button', {name: 'Lesson 2 Module publish options'})
-    act(() => menuButton.click())
+    const menuButton = getByRole('button', {name: 'Lesson 2 module publish options, published'})
+    menuButton.click()
     const publishButton = getByText('Publish module only')
-    act(() => publishButton.click())
+    publishButton.click()
     await waitFor(() => expect(getByText('Publishing module')).toBeInTheDocument())
     expect(doFetchApi).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -137,10 +139,10 @@ describe('ContextModulesPublishIcon', () => {
 
   it('calls unpublishAll when clicked unpublish all items is clicked', async () => {
     const {getByRole, getByText} = render(<ContextModulesPublishIcon {...defaultProps} />)
-    const menuButton = getByRole('button', {name: 'Lesson 2 Module publish options'})
-    act(() => menuButton.click())
+    const menuButton = getByRole('button', {name: 'Lesson 2 module publish options, published'})
+    menuButton.click()
     const publishButton = getByText('Unpublish module and all items')
-    act(() => publishButton.click())
+    publishButton.click()
     await waitFor(() => expect(getByText('Unpublishing module and items')).toBeInTheDocument())
     expect(doFetchApi).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -152,15 +154,32 @@ describe('ContextModulesPublishIcon', () => {
     expect(getByText('Module and items unpublished')).toBeInTheDocument()
   })
 
+  it('calls unpublishModuleOnly when unpublish module only is clicked', async () => {
+    const {getByRole, getByText} = render(<ContextModulesPublishIcon {...defaultProps} />)
+    const menuButton = getByRole('button', {name: 'Lesson 2 module publish options, published'})
+    menuButton.click()
+    const publishButton = getByText('Unpublish module only')
+    publishButton.click()
+    await waitFor(() => expect(getByText('Unpublishing module')).toBeInTheDocument())
+    expect(doFetchApi).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'PUT',
+        path: PUBLISH_URL,
+        body: {module: {published: false, skip_content_tags: true}},
+      })
+    )
+    expect(getByText('Module unpublished')).toBeInTheDocument()
+  })
+
   it('calls updateModuleItem when publishing', async () => {
     const fetchPromise = new Promise(resolve => {
       const {getByRole, getByText} = render(
         <ContextModulesPublishIcon {...defaultProps} published={false} />
       )
       const menuButton = getByRole('button')
-      act(() => menuButton.click())
+      menuButton.click()
       const publishButton = getByText('Publish module and all items')
-      act(() => publishButton.click())
+      publishButton.click()
       waitFor(() => {
         expect(updateModuleItem).toHaveBeenCalledWith(
           expect.objectContaining({assignment_17: expect.any(Object)}),
@@ -197,9 +216,9 @@ describe('ContextModulesPublishIcon', () => {
         <ContextModulesPublishIcon {...defaultProps} published={true} />
       )
       const menuButton = getByRole('button')
-      act(() => menuButton.click())
+      menuButton.click()
       const publishButton = getByText('Unpublish module and all items')
-      act(() => publishButton.click())
+      userEvent.click(publishButton)
       waitFor(() => {
         expect(updateModuleItem).toHaveBeenCalledWith(
           expect.objectContaining({assignment_17: expect.any(Object)}),
@@ -242,9 +261,9 @@ describe('ContextModulesPublishIcon', () => {
         <ContextModulesPublishIcon {...defaultProps} published={true} />
       )
       const menuButton = getByRole('button')
-      act(() => menuButton.click())
+      menuButton.click()
       const publishButton = getByText('Unpublish module and all items')
-      act(() => publishButton.click())
+      userEvent.click(publishButton)
       waitFor(() => {
         expect(window.modules.updatePublishMenuDisabledState).toHaveBeenCalledWith(true)
       })

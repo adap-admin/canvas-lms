@@ -45,6 +45,10 @@ def hasGraphqlFiles(buildConfig) {
   return buildConfig[STAGE_NAME].value('graphqlFiles')
 }
 
+def hasErbFiles(buildConfig) {
+  return buildConfig[STAGE_NAME].value('erbFiles')
+}
+
 def hasJsFiles(buildConfig) {
   return buildConfig[STAGE_NAME_POST_BUILD].value('jsFiles')
 }
@@ -69,10 +73,11 @@ def preBuild(stageConfig) {
   stageConfig.value('groovyFiles', git.changedFiles(['.*.groovy', 'Jenkinsfile.*'], 'HEAD^'))
   stageConfig.value('yarnFiles', git.changedFiles(['package.json', 'yarn.lock'], 'HEAD^'))
   stageConfig.value('graphqlFiles', git.changedFiles(['app/graphql'], 'HEAD^'))
+  stageConfig.value('erbFiles', git.changedFiles(['.erb'], 'HEAD^'))
   stageConfig.value('addedOrDeletedSpecFiles', sh(script: 'git diff --name-only --diff-filter=AD HEAD^..HEAD | grep "_spec.rb"', returnStatus: true) == 0)
 
   dir(env.LOCAL_WORKDIR) {
-    stageConfig.value('bundleFiles', sh(script: 'git diff --name-only HEAD^..HEAD | grep -E "Gemfile|gemspec|bundler_lockfile_extensions"', returnStatus: true) == 0)
+    stageConfig.value('bundleFiles', sh(script: 'git diff --name-only HEAD^..HEAD | grep -E "Gemfile|gemspec"', returnStatus: true) == 0)
     stageConfig.value('specFiles', sh(script: "${WORKSPACE}/build/new-jenkins/spec-changes.sh", returnStatus: true) == 0)
   }
 

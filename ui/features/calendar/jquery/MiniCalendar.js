@@ -18,7 +18,7 @@
 
 import $ from 'jquery'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import _ from 'underscore'
+import {defaults} from 'lodash'
 import calendarDefaults from '../CalendarDefaults'
 import 'jquery-tinypubsub'
 
@@ -29,7 +29,7 @@ export default class MiniCalendar {
     this.mainCalendar = mainCalendar
     this.calendar = $(selector)
     this.calendar.fullCalendar(
-      _.defaults(
+      defaults(
         {
           height: 185,
           buttonSRText: {
@@ -59,6 +59,7 @@ export default class MiniCalendar {
         'Calendar/currentDate': this.gotoDate,
         'CommonEvent/eventDeleted': this.eventSaved,
         'CommonEvent/eventSaved': this.eventSaved,
+        'CommonEvent/eventsSavedFromSeries': this.eventsSavedFromSeries,
       })
     )
   }
@@ -103,6 +104,10 @@ export default class MiniCalendar {
   visibleContextListChanged = _list => this.refetchEvents()
 
   eventSaved = () => this.refetchEvents()
+
+  eventsSavedFromSeries = () => {
+    this.refetchEvents()
+  }
 
   refetchEvents = () => {
     if (!this.calendar.is(':visible')) return

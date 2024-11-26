@@ -22,7 +22,7 @@ import {extend} from '@canvas/backbone/utils'
 import $ from 'jquery'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import ValidatedFormView from '@canvas/forms/backbone/views/ValidatedFormView'
-import htmlEscape from 'html-escape'
+import htmlEscape from '@instructure/html-escape'
 import template from '../../jst/Quotas.handlebars'
 import '@canvas/rails-flash-notifications'
 
@@ -65,6 +65,7 @@ QuotasView.prototype.initialize = function () {
   }
   this.on('success', this.submitSuccess)
   this.on('fail', this.submitFail)
+  this.model.on('change', this.render, this)
   return QuotasView.__super__.initialize.apply(this, arguments)
 }
 

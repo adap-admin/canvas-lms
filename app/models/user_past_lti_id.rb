@@ -58,7 +58,7 @@ class UserPastLtiId < ActiveRecord::Base
       past_lti_id = past_lti_ids[user.id]
       association = user.association(:past_lti_ids)
       association.loaded!
-      past_lti_id = past_lti_id.nil? ? UserPastLtiId.none : past_lti_id
+      past_lti_id = UserPastLtiId.none if past_lti_id.nil?
       association.target.concat(past_lti_id)
       past_lti_id.each { |lti_id| association.set_inverse_instance(lti_id) }
     end
@@ -67,7 +67,7 @@ class UserPastLtiId < ActiveRecord::Base
   def self.uuid_for_user_in_context(user, context)
     if user && context
       context.shard.activate do
-        user.past_lti_ids.where(context:).take&.user_uuid || user.uuid
+        user.past_lti_ids.find_by(context:)&.user_uuid || user.uuid
       end
     else
       user.uuid

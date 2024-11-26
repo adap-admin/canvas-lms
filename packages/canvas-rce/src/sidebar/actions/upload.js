@@ -230,6 +230,8 @@ export function mediaUploadComplete(error, uploadData) {
         type: uploadedFile.type,
         title: uploadedFile.title || uploadedFile.name,
         id: mediaObject.media_object.attachment_id,
+        uuid: mediaObject.media_object.uuid,
+        contextType: mediaObject.media_object.context_type,
       }
       dispatch(removePlaceholdersFor(uploadedFile.name))
       embedUploadResult(embedData, 'media')
@@ -310,7 +312,9 @@ export function uploadToMediaFolder(tabContext, fileMetaProps) {
         if (fileMetaProps.domObject) {
           delete fileMetaProps.domObject.preview // don't need this anymore
         }
-        dispatch(uploadPreflight(tabContext, {...fileMetaProps, bookmark}))
+        return dispatch(uploadPreflight(tabContext, {...fileMetaProps, bookmark})).then(results => {
+          return results
+        })
       })
       .catch(e => {
         // Get rid of any placeholder that might be there.
@@ -460,6 +464,7 @@ export function uploadPreflight(tabContext, fileMetaProps) {
         })
         .then(results => {
           dispatch(allUploadCompleteActions(results, fileMetaProps, contextType))
+          return results
         })
         .catch(err => {
           // This may or may not be necessary depending on the upload

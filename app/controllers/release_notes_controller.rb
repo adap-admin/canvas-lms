@@ -150,7 +150,7 @@ class ReleaseNotesController < ApplicationController
   end
 
   def allowed_langs
-    Setting.get("release_notes_langs", "en,es,pt,nn,nl,zh").split(",")
+    Setting.get("release_notes_langs", "en,es,pt,fr-CA,no,nl,sv,zh").split(",")
   end
 
   def allowed_envs
@@ -158,7 +158,7 @@ class ReleaseNotesController < ApplicationController
   end
 
   def latest_limit
-    Setting.get("release_notes_latest_limit", "10").to_i
+    10
   end
 
   def include_langs?

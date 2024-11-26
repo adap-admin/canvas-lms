@@ -18,6 +18,8 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
+require_relative "../lti_1_3_spec_helper"
+
 describe DeveloperKeysController do
   let(:test_domain_root_account) { Account.create! }
   let(:site_admin_key) { DeveloperKey.create!(name: "Site Admin Key", visible: false) }
@@ -72,8 +74,6 @@ describe DeveloperKeysController do
         end
 
         it "does not include non-siteadmin keys" do
-          Account.site_admin.enable_feature!(:site_admin_keys_only)
-
           site_admin_key = DeveloperKey.create!
           DeveloperKey.create!(account: Account.default)
 
@@ -87,16 +87,22 @@ describe DeveloperKeysController do
           expect(assigns[:js_env][:validLtiScopes]).to eq TokenScopes::LTI_SCOPES
         end
 
+        context "when the platform_notification_service feature flag is disabled" do
+          before do
+            Account.default.disable_feature!(:platform_notification_service)
+          end
+
+          it "excludes the platform_notification_service scope" do
+            get "index", params: { account_id: Account.site_admin.id }
+            expect(assigns[:js_env][:validLtiScopes]).to eq TokenScopes::LTI_SCOPES.except(TokenScopes::LTI_PNS_SCOPE)
+          end
+        end
+
         it "includes all valid LTI placements in js env" do
           # enable conference placement
           Account.site_admin.enable_feature! :conference_selection_lti_placement
           get "index", params: { account_id: Account.site_admin.id }
-          expect(assigns.dig(:js_env, :validLtiPlacements)).to match_array Lti::ResourcePlacement::PLACEMENTS
-        end
-
-        it 'includes the "includes parameter" release flag' do
-          get "index", params: { account_id: Account.site_admin.id }
-          expect(assigns.dig(:js_env, :includesFeatureFlagEnabled)).to be false
+          expect(assigns.dig(:js_env, :validLtiPlacements)).to match_array Lti::ResourcePlacement.public_placements(Account.site_admin)
         end
 
         describe "js bundles" do
@@ -470,6 +476,33 @@ describe DeveloperKeysController do
         expect(expected_id).to eq root_account_key.global_id
       end
 
+      context "an overlay exists for one of the keys" do
+        # bring in tool_configuration
+        include_context "lti_1_3_spec_helper"
+        let(:developer_key) do
+          developer_key_model(account: test_domain_root_account, public_jwk_url: "http://example.com", is_lti_key: true)
+        end
+        let(:overlay) do
+          Lti::Overlay.create!(account: test_domain_root_account,
+                               registration: tool_configuration.lti_registration,
+                               updated_by: user_model,
+                               data: {
+                                 "placements" => {
+                                   "course_navigation" => {
+                                     "text" => "some great little text"
+                                   }
+                                 }
+                               })
+        end
+
+        it "applies the overlay to the returned configuration" do
+          overlay
+          get "index", params: { account_id: test_domain_root_account.id }, format: :json
+          result = json_parse.first.dig("tool_configuration", "extensions", 0, "settings", "placements")
+          expect(result.find { |p| p["placement"] == "course_navigation" }["text"]).to eq "some great little text"
+        end
+      end
+
       context 'with "inherited" parameter' do
         it "does not include account developer keys" do
           root_account_key
@@ -529,11 +562,14 @@ describe DeveloperKeysController do
     end
 
     describe "Should be able to create developer key" do
+      include_context "lti_1_3_spec_helper"
+
       let(:create_params) do
         {
           account_id: test_domain_root_account.id,
           developer_key: {
-            redirect_uri: "http://example.com/sdf"
+            redirect_uri: "http://example.com/sdf",
+            name: "test tool"
           }
         }
       end
@@ -545,7 +581,7 @@ describe DeveloperKeysController do
 
       it "is dev keys plus 1 key" do
         post "create", params: create_params
-        expect(test_domain_root_account.developer_keys.all.count).to be 1
+        expect(test_domain_root_account.developer_keys.count).to be 1
       end
     end
 

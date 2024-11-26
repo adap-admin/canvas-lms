@@ -21,6 +21,7 @@ const GENERIC_ERROR_CODE = 'error'
 const UNSUPPORTED_SUBJECT_ERROR_CODE = 'unsupported_subject'
 const WRONG_ORIGIN_ERROR_CODE = 'wrong_origin'
 const BAD_REQUEST_ERROR_CODE = 'bad_request'
+const UNAUTHORIZED_ERROR_CODE = 'unauthorized'
 
 export interface ResponseMessages {
   sendResponse: (contents?: {}) => void
@@ -29,7 +30,8 @@ export interface ResponseMessages {
   sendGenericError: (message?: string | undefined) => void
   sendBadRequestError: (message: any) => void
   sendWrongOriginError: () => void
-  sendUnsupportedSubjectError: () => void
+  sendUnsupportedSubjectError: (message?: string | undefined) => void
+  sendUnauthorizedError: () => void
   isResponse: (message: any) => boolean
 }
 
@@ -38,25 +40,25 @@ const buildResponseMessages = ({
   origin,
   subject,
   message_id,
-  toolOrigin,
+  sourceToolInfo,
 }: {
   targetWindow: Window | null
   origin: string
   subject: unknown
   message_id: unknown
-  toolOrigin: unknown
+  sourceToolInfo: unknown
 }): ResponseMessages => {
   const sendResponse = (contents = {}) => {
     const message: {
       subject: string
       message_id?: unknown
-      toolOrigin?: unknown
+      sourceToolInfo?: unknown
     } = {subject: `${subject}.response`}
     if (message_id) {
       message.message_id = message_id
     }
-    if (toolOrigin) {
-      message.toolOrigin = toolOrigin
+    if (sourceToolInfo) {
+      message.sourceToolInfo = sourceToolInfo
     }
     if (targetWindow) {
       targetWindow.postMessage({...message, ...contents}, origin)
@@ -90,8 +92,12 @@ const buildResponseMessages = ({
     sendError(WRONG_ORIGIN_ERROR_CODE)
   }
 
-  const sendUnsupportedSubjectError = () => {
-    sendError(UNSUPPORTED_SUBJECT_ERROR_CODE)
+  const sendUnsupportedSubjectError = (message?: string) => {
+    sendError(UNSUPPORTED_SUBJECT_ERROR_CODE, message)
+  }
+
+  const sendUnauthorizedError = () => {
+    sendError(UNAUTHORIZED_ERROR_CODE)
   }
 
   const isResponse = message => !!message.data?.subject?.endsWith('.response')
@@ -104,6 +110,7 @@ const buildResponseMessages = ({
     sendBadRequestError,
     sendWrongOriginError,
     sendUnsupportedSubjectError,
+    sendUnauthorizedError,
     isResponse,
   }
 }

@@ -305,6 +305,18 @@ describe SIS::CSV::UserImporter do
       )
       expect(user.reload.pronouns).to eq "he/him"
     end
+
+    it "does not add pronouns when the option is turned off" do
+      @account.settings[:can_add_pronouns] = false
+      @account.save!
+
+      process_csv_data_cleanly(
+        "user_id,login_id,full_name,status,pronouns",
+        "user_1,user1,tom riddle,active,He/Him"
+      )
+      user = Pseudonym.by_unique_id("user1").first.user
+      expect(user.pronouns).to be_nil
+    end
   end
 
   describe "declared_user_type" do
@@ -800,7 +812,7 @@ describe SIS::CSV::UserImporter do
           "user_id,login_id,first_name,last_name,email,status",
           "user_1,user1,User,Uno,user1@example.com,active"
         )
-        @cc = Pseudonym.where(account_id: @account, sis_user_id: "user_1").take.communication_channels.take
+        @cc = Pseudonym.find_by(account_id: @account, sis_user_id: "user_1").communication_channels.take
         @cc.bounce_count = 3
         @cc.save!
         expect(Pseudonym.where(account_id: @account, sis_user_id: "user_1").first.user.email).to eq "user1@example.com"
@@ -1040,6 +1052,36 @@ describe SIS::CSV::UserImporter do
     expect(Message.where(communication_channel_id: user2.email_channel, notification_id: notification).first).not_to be_nil
   end
 
+  it "does not send merge opportunity notifications on reactivation when suppress_notifications = true" do
+    @account.settings[:suppress_notifications] = true
+    @account.save!
+    Notification.create(name: "Merge Email Communication Channel", category: "Registration")
+    user1 = User.create!(name: "User Uno")
+    user1.pseudonyms.create!(unique_id: "user1", account: @account)
+    communication_channel(user1, { username: "user1@example.com", active_cc: true })
+
+    process_csv_data_cleanly(
+      "user_id,login_id,first_name,last_name,email,status",
+      "user_2,user2,User,Dos,user1@example.com,deleted"
+    )
+    user2 = Pseudonym.by_unique_id("user2").first.user
+    expect(user1).not_to eq user2
+    expect(user1.last_name).to eq "Uno"
+    expect(user2.last_name).to eq "Dos"
+    expect(user1.pseudonyms.count).to eq 1
+    expect(user2.pseudonyms.count).to eq 1
+    expect(user2.pseudonyms.first.communication_channel_id).not_to be_nil
+    expect(user1.email_channel).not_to eq user2.email_channel
+    expect(Message.count).to eq 0
+
+    process_csv_data_cleanly(
+      "user_id,login_id,first_name,last_name,email,status",
+      "user_2,user2,User,Dos,user1@example.com,active"
+    )
+    user2.reload
+    expect(Message.count).to eq 0
+  end
+
   it "does not send merge opportunity notifications if the conflicting cc is retired or unconfirmed" do
     notification = Notification.create(name: "Merge Email Communication Channel", category: "Registration")
     u1 = User.create! { |u| u.workflow_state = "registered" }
@@ -1051,10 +1093,10 @@ describe SIS::CSV::UserImporter do
       "user_1,user1,User,Uno,user1@example.com,active"
     )
     user1 = Pseudonym.by_unique_id("user1").first.user
-    expect([u1, u2]).not_to be_include(user1)
+    expect([u1, u2]).not_to include(user1)
     expect(user1.communication_channels.length).to eq 1
     expect(user1.email).to eq "user1@example.com"
-    expect([cc1, cc2]).not_to be_include(user1.email_channel)
+    expect([cc1, cc2]).not_to include(user1.email_channel)
     expect(Message.where(communication_channel_id: user1.email_channel, notification_id: notification).first).to be_nil
   end
 
@@ -1338,7 +1380,7 @@ describe SIS::CSV::UserImporter do
       "user_id,login_id,first_name,last_name,email,status",
       "user_1,user1,User,Uno,user1@example.com,active"
     )
-    u = @account.pseudonyms.where(sis_user_id: "user_1").take.user
+    u = @account.pseudonyms.find_by(sis_user_id: "user_1").user
     pseudonym2 = u.pseudonyms.create!(account: @account, unique_id: "other_login@example.com")
     process_csv_data_cleanly(
       "course_id,user_id,role,section_id,status,associated_user_id,start_date,end_date",
@@ -1491,7 +1533,7 @@ describe SIS::CSV::UserImporter do
     )
     c = @account.courses.where(sis_source_id: "test_1").first
     g = c.groups.create(name: "group1")
-    p = @account.pseudonyms.where(sis_user_id: "user_1").take
+    p = @account.pseudonyms.find_by(sis_user_id: "user_1")
     u = p.user
     gm = g.group_memberships.create(user: u, workflow_state: "accepted")
     expect(gm.workflow_state).to eq "accepted"

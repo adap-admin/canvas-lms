@@ -20,7 +20,7 @@
 
 module Factories
   def rubric_model(opts = {})
-    @rubric = factory_with_protected_attributes(Rubric, valid_rubric_attributes.merge(opts))
+    @rubric = Rubric.create!(valid_rubric_attributes.merge(opts))
   end
 
   def valid_rubric_attributes
@@ -57,6 +57,51 @@ module Factories
         ratings: [
           { description: "Pass", points: 2, id: "rat1", criterion_id: "crit2" },
           { description: "Fail", points: 0, id: "rat2", criterion_id: "crit2" }
+        ] },
+    ]
+  end
+
+  def largest_rubric_data
+    [
+      { description: "small Crit1",
+        long_description: "This is a long description 1",
+        points: 10,
+        id: "crit3",
+        ratings: [
+          { description: "A", points: 10, id: "rat1-1", criterion_id: "crit3" },
+          { description: "B", points: 7, id: "rat2-1", criterion_id: "crit3" },
+          { description: "F", points: 0, id: "rat3-1", criterion_id: "crit3" }
+        ] },
+      { description: "samll Crit2",
+        long_description: "This is a long description 2",
+        points: 10,
+        id: "crit4",
+        ratings: [
+          { description: "A", points: 10, id: "rat1-2", criterion_id: "crit4" },
+          { description: "B", points: 7, id: "rat2-2", criterion_id: "crit4" },
+          { description: "F", points: 0, id: "rat3-2", criterion_id: "crit4" }
+        ] },
+      { description: "samll Crit2",
+        long_description: "This is a long description 3",
+        points: 10,
+        id: "crit5",
+        ratings: [
+          { description: "A", points: 10, id: "rat1-3", criterion_id: "crit5" },
+          { description: "B", points: 7, id: "rat2-3", criterion_id: "crit5" },
+          { description: "F", points: 0, id: "rat3-3", criterion_id: "crit5" }
+        ] },
+    ]
+  end
+
+  def smallest_rubric_data
+    [
+      { description: "smallest Crit1",
+        points: 10,
+        id: "crit5",
+        ratings: [
+          { description: "A", points: 10, id: "rat1", criterion_id: "crit8" },
+          { description: "B", points: 7, id: "rat2", criterion_id: "crit8" },
+          { description: "F", points: 0, id: "rat3", criterion_id: "crit8" }
         ] },
     ]
   end

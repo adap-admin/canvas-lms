@@ -31,6 +31,13 @@ describe Message do
     end
   end
 
+  describe "#notification_targets" do
+    it "returns an empty array when path_type is 'twitter' and no twitter service exists" do
+      message_model(path_type: "twitter", user: user_factory(active_all: true))
+      expect(@message.notification_targets).to eq []
+    end
+  end
+
   describe "#populate body" do
     it "saves an html body if a template exists" do
       expect_any_instance_of(Message).to receive(:apply_html_template).and_return("template")
@@ -66,7 +73,7 @@ describe Message do
     it "has a sane body" do
       @au = AccountUser.create(account: account_model)
       msg = generate_message(:account_user_notification, :email, @au)
-      expect(msg.html_body.scan(/<html dir="ltr" lang="en">/).length).to eq 1
+      expect(msg.html_body.scan('<html dir="ltr" lang="en">').length).to eq 1
       expect(msg.html_body.index("<!DOCTYPE")).to eq 0
     end
 
@@ -115,7 +122,7 @@ describe Message do
       allow(ActiveRecord::Base).to receive(:maximum_text_length).and_return(3)
       assignment_model(title: "this is a message")
       msg = generate_message(:assignment_created, :email, @assignment)
-      msg.body = msg.body + ("1" * 64.kilobyte)
+      msg.body = msg.body + ("1" * 64.kilobytes)
       expect(msg.valid?).to be_truthy
       expect(msg.body).to eq "message preview unavailable"
       msg.save!
@@ -236,6 +243,31 @@ describe Message do
         expect(@topic).to be_anonymous
         expect(@message.from_name).to eq(@discussion_entry.author_name)
       end
+
+      it "returns root account outgoing_email_default_name if message is inside a summary notification" do
+        account = Account.default
+        account.settings[:outgoing_email_default_name] = "The Root Account Default Name"
+        account.save!
+        expect(account.reload.settings[:outgoing_email_default_name]).to eq "The Root Account Default Name"
+        discussion_topic_model
+        @topic.update(anonymous_state: "full_anonymity")
+        @discussion_entry = @topic.discussion_entries.create!(user: user_model)
+        notification_model(name: "Summaries", category: "Summaries")
+        message_model(context: @discussion_entry, notification_id: @notification.id, notification_name: "Summaries")
+        expect(@topic).to be_anonymous
+        expect(@message.from_name).to eq "The Root Account Default Name"
+      end
+
+      it "returns HostUrl outgoing_email_default_name if message is inside a summary notification" do
+        HostUrl.outgoing_email_default_name = "The Host Url Default Name"
+        discussion_topic_model
+        @topic.update(anonymous_state: "full_anonymity")
+        @discussion_entry = @topic.discussion_entries.create!(user: user_model)
+        notification_model(name: "Summaries", category: "Summaries")
+        message_model(context: @discussion_entry, notification_id: @notification.id, notification_name: "Summaries")
+        expect(@topic).to be_anonymous
+        expect(@message.from_name).to eq "The Host Url Default Name"
+      end
     end
   end
 
@@ -273,7 +305,7 @@ describe Message do
       m3 = message_model(workflow_state: "sending", user: user_factory)
       expect(Message.in_state(:bounced)).to eq [m1]
       expect(Message.in_state([:bounced, :sent]).sort_by(&:id)).to eq [m1, m2].sort_by(&:id)
-      expect(Message.in_state([:bounced, :sent])).not_to be_include(m3)
+      expect(Message.in_state([:bounced, :sent])).not_to include(m3)
     end
 
     it "is able to search on its context" do
@@ -283,12 +315,12 @@ describe Message do
     end
 
     it "has a list of messages to dispatch" do
-      message_model(dispatch_at: Time.now - 1, workflow_state: "staged", to: "somebody", user: user_factory)
+      message_model(dispatch_at: 1.second.ago, workflow_state: "staged", to: "somebody", user: user_factory)
       expect(Message.to_dispatch).to eq [@message]
     end
 
     it "does not have a message to dispatch if the message's delay moves it to the future" do
-      message_model(dispatch_at: Time.now - 1, to: "somebody")
+      message_model(dispatch_at: 1.second.ago, to: "somebody")
       @message.stage
       expect(Message.to_dispatch).to eq []
     end
@@ -319,10 +351,10 @@ describe Message do
   end
 
   it "goes back to the staged state if sending fails" do
-    message_model(dispatch_at: Time.now - 1, workflow_state: "sending", to: "somebody", updated_at: Time.now.utc - 11.minutes, user: user_factory)
+    message_model(dispatch_at: 1.second.ago, workflow_state: "sending", to: "somebody", updated_at: Time.now.utc - 11.minutes, user: user_factory)
     @message.errored_dispatch
     expect(@message.workflow_state).to eq "staged"
-    expect(@message.dispatch_at).to be > Time.now + 4.minutes
+    expect(@message.dispatch_at).to be > 4.minutes.from_now
   end
 
   describe "#deliver" do
@@ -396,7 +428,7 @@ describe Message do
     it "logs stats on deliver" do
       allow(InstStatsd::Statsd).to receive(:increment)
       account = account_model
-      @message = message_model(dispatch_at: Time.now - 1,
+      @message = message_model(dispatch_at: 1.second.ago,
                                notification_name: "my_name",
                                workflow_state: "staged",
                                to: "somebody",
@@ -841,15 +873,15 @@ describe Message do
     let(:partition) { { "created_at" => DateTime.new(2020, 8, 25) } }
 
     it "uses the specific partition table" do
-      expect(Message.in_partition(partition).to_sql).to match(/^SELECT "messages_2020_35"\.\* FROM .*"messages_2020_35"$/)
+      expect(Message.in_partition(partition).to_sql).to match(/^SELECT "messages_2020_35".* FROM .*"messages_2020_35"$/)
     end
 
     it "can be chained" do
-      expect(Message.in_partition(partition).where(id: 3).to_sql).to match(/^SELECT "messages_2020_35"\.\* FROM .*"messages_2020_35" WHERE "messages_2020_35"."id" = 3$/)
+      expect(Message.in_partition(partition).where(id: 3).to_sql).to match(/^SELECT "messages_2020_35".* FROM .*"messages_2020_35" WHERE "messages_2020_35"."id" = 3$/)
     end
 
     it "has no side-effects on other scopes" do
-      expect(Message.in_partition(partition).unscoped.to_sql).to match(/^SELECT "messages"\.\* FROM .*"messages"$/)
+      expect(Message.in_partition(partition).unscoped.to_sql).to match(/^SELECT "messages".* FROM .*"messages"$/)
     end
   end
 

@@ -98,7 +98,7 @@ module Canvas
     #   Use these options in your serializer implementation using
     #   #serializer_option(key)
     def initialize(object, options = {})
-      super(object, options)
+      super
       @controller = options[:controller]
       @sideloads = options.fetch(:includes, []).map(&:to_s)
       @serializer_options = options.fetch(:serializer_options, {})
@@ -111,11 +111,9 @@ module Canvas
       @controller.send(:stringify_json_ids?)
     end
 
-    # Overriding to allow for "links" hash.
+    # Overriding to build the "links" hash how we want.
     # You should probably NOT override this method in your own serializer.
-    # This will be going away once ActiveModel::Serializer has support for
-    # the "links" style.
-    def associations
+    def associations(options = {})
       associations = self.class._associations
       included_associations = filter(associations.keys)
       associations.each_with_object({}) do |(name, association), hash|
@@ -124,10 +122,10 @@ module Canvas
             hash["links"] ||= {}
             hash["links"][association.name] = serialize_ids association
           elsif association.embed_objects? && association.embed_in_root?
-            hash[association.embedded_key] = build_serializer(association).serializable_object
+            hash[association.embedded_key] = serialize association, options
           elsif association.embed_objects?
             hash["links"] ||= {}
-            hash["links"][association.embedded_key] = serialize association
+            hash["links"][association.embedded_key] = serialize association, options
           end
         end
       end
@@ -142,7 +140,7 @@ module Canvas
     # method.
     def as_json(options = {})
       root = options[:root]
-      hash = super(options)
+      hash = super
       response = root ? (hash[root] || hash) : hash
       response = response[self.root] || response
       stringify!(response)
@@ -154,7 +152,7 @@ module Canvas
     # have a method named "quiz" available to your class, so you don't have to
     # use object if you don't want to.
     def self.inherited(klass)
-      super(klass)
+      super
       resource_name = klass.name.demodulize.underscore.downcase.split("_serializer").first
       klass.send(:alias_method, resource_name.to_sym, :object)
     end
@@ -242,9 +240,9 @@ module Canvas
                                   else
                                     instance.empty?
                                   end
-        send("#{name}_url".to_sym) unless instance_does_not_exist
+        send(:"#{name}_url") unless instance_does_not_exist
       elsif instance.present?
-        send("#{name}_url".to_sym)
+        send(:"#{name}_url")
       end
     end
 

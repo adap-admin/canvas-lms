@@ -31,6 +31,38 @@ export interface ExternalToolMenuItem {
   onAction: () => void
 }
 
+interface ExternalToolData {
+  id: string;
+  on_by_default?: boolean | null;
+  favorite?: boolean | null;
+}
+
+export function externalToolsForToolbar<T extends ExternalToolData>(tools: T[]): T[] {
+  // Limit of not on_by_default but favorited tools is 2
+  const favorited = tools.filter(it => it.favorite && !it.on_by_default).slice(0, 2) || []
+  const onByDefault = tools.filter(it => it.on_by_default && it.favorite) || []
+
+  const set = new Map<string, T>()
+
+  // Remove possible overlaps between favorited and onByDefault, otherwise
+  // we'd have duplicate buttons in the toolbar.
+  for (const toolInfo of favorited.concat(onByDefault)) {
+    set.set(toolInfo.id, toolInfo)
+  }
+
+  return Array.from(set.values()).sort((a, b) => {
+    if (a.on_by_default && !b.on_by_default) {
+      return -1;
+    } else if (!a.on_by_default && b.on_by_default) {
+      return 1;
+    } else {
+      // This *should* always be a string, but there might be cases where it isn't,
+      // especially when this method is used outside of TypeScript files.
+      return a.id.toString().localeCompare(b.id.toString(), undefined, {numeric: true})
+    }
+  })
+}
+
 /**
  * Helper class for the connection between an external tool registration and a particular TinyMCE instance.
  */
@@ -90,6 +122,10 @@ export class RceToolWrapper {
 
   get use_tray(): boolean | null | undefined {
     return this.toolInfo.use_tray
+  }
+
+  get on_by_default() {
+    return this.toolInfo.on_by_default
   }
 
   asToolbarButton() {

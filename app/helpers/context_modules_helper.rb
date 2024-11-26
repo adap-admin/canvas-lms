@@ -19,37 +19,12 @@
 #
 
 module ContextModulesHelper
-  include Api::V1::ContextModule
   include CyoeHelper
-
-  def translated_content_type(content_type)
-    case content_type
-    when :Announcement
-      I18n.t("Announcement")
-    when :Assignment
-      I18n.t("Assignment")
-    when :Attachment
-      I18n.t("Attachment")
-    when :ContextExternalTool
-      I18n.t("External Tool")
-    when :ContextModuleSubHeader
-      I18n.t("Context Module Sub Header")
-    when :DiscussionTopic
-      I18n.t("Discussion Topic")
-    when :ExternalUrl
-      I18n.t("External Url")
-    when :"Quizzes::Quiz", :Quiz
-      I18n.t("Quiz")
-    when :WikiPage
-      I18n.t("Page")
-    else
-      I18n.t("Unknown Content Type")
-    end
-  end
+  include ApplicationHelper
 
   def cache_if_module(context_module, viewable, can_add, can_edit, can_delete, is_student, can_view_unpublished, user, context, &)
     if context_module
-      visible_assignments = user ? user.assignment_and_quiz_visibilities(context) : []
+      visible_assignments = user ? user.learning_object_visibilities(context) : []
       cache_key_items = ["context_module_render_22_",
                          context_module.cache_key,
                          viewable,
@@ -58,6 +33,7 @@ module ContextModulesHelper
                          can_delete,
                          is_student,
                          can_view_unpublished,
+                         @module_ids_with_overrides&.include?(context_module.id),
                          true,
                          Time.zone,
                          Digest::SHA256.hexdigest([visible_assignments, @section_visibility].join("/"))]
@@ -136,7 +112,11 @@ module ContextModulesHelper
   end
 
   def preload_modules_content(modules)
-    ActiveRecord::Associations.preload(modules, content_tags: :content)
+    modules.each_slice(1000) do |slice|
+      ActiveRecord::Associations.preload(slice, content_tags: { content: %i[context external_tool_tag current_lookup wiki] })
+      assignmentable_content = slice.map(&:content_tags).flatten.select(&:can_have_assignment?)
+      ActiveRecord::Associations.preload(assignmentable_content, content: { assignment: :context }) unless assignmentable_content.empty?
+    end
     preload_can_unpublish(@context, modules) if @can_view
   end
 
@@ -176,6 +156,13 @@ module ContextModulesHelper
     end
 
     module_data[:items_data] = items_data
+
+    if @is_child_course && !is_student &&
+       @context.account.feature_enabled?(:modules_page_hide_blueprint_lock_icon_for_children)
+      module_data[:items_restrictions] =
+        MasterCourses::MasterContentTag.fetch_module_item_restrictions_for_child(module_data[:items].map(&:id))
+      module_data[:items_restrictions].transform_values!(&:any?)
+    end
     module_data
   end
 
@@ -185,6 +172,6 @@ module ContextModulesHelper
       return is_student ? I18n.t("Quiz") : I18n.t("New Quiz")
     end
 
-    translated_content_type(item.content_type.to_sym)
+    Context.translated_content_type(item.content_type)
   end
 end

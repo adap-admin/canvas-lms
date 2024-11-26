@@ -54,9 +54,9 @@ class Mutations::CreateSubmission < Mutations::BaseMutation
            prepare: GraphQLHelpers.relay_or_legacy_ids_prepare_func("Attachment")
   argument :media_id, ID, required: false
   argument :resource_link_lookup_uuid, String, required: false
+  argument :student_id, ID, required: false
   argument :submission_type, Types::OnlineSubmissionType, required: true
   argument :url, String, required: false
-  argument :student_id, ID, required: false
 
   field :submission, Types::SubmissionType, null: true
 
@@ -65,6 +65,8 @@ class Mutations::CreateSubmission < Mutations::BaseMutation
     assignment = assignment.overridden_for(current_user)
     context = assignment.context
     submission_type = input[:submission_type]
+
+    InstStatsd::Statsd.increment("submission.graphql.create.proxy_submit") if input[:student_id].present?
 
     verify_authorized_action!(assignment, :read)
     if input[:student_id]
@@ -126,25 +128,34 @@ class Mutations::CreateSubmission < Mutations::BaseMutation
     when "online_upload"
       owning_user = nil
       if input[:student_id]
-        owning_user =
-          User
-          .joins(:submissions)
-          .where(submissions: { assignment: })
-          .find(input[:student_id])
+        owning_user = assignment.submissions.find_by(user_id: input[:student_id])&.user
         submission_params[:proxied_student] = owning_user
       else
         owning_user = current_user
       end
       file_ids = (input[:file_ids] || []).compact.uniq
+      error_files = []
+      attachments = []
+      file_ids.each do |file_id|
+        attachment = Attachment.active.where(context_type: "User", context_id: owning_user&.id).find_by(id: file_id)
+        attachment ||= Attachment.active.where(
+          context_type: "Group",
+          context_id: GroupMembership.where(workflow_state: "accepted", user_id: [owning_user&.id, owning_user&.global_id]).select(:group_id)
+        ).find_by(id: file_id)
 
-      attachments = owning_user&.submittable_attachments&.active&.where(id: file_ids) || []
-      unless file_ids.size == attachments.size
-        attachment_ids = attachments.map(&:id)
+        if attachment
+          attachments << attachment
+        else
+          error_files << file_id
+        end
+      end
+
+      if error_files.present?
         return(
           validation_error(
             I18n.t(
               "No attachments found for the following ids: %{ids}",
-              { ids: file_ids - attachment_ids.map(&:to_s) }
+              { ids: error_files }
             ),
             attribute: "file_ids"
           )

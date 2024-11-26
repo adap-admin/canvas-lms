@@ -23,15 +23,6 @@ describe GraphQLController do
     student_in_course(user: user_with_pseudonym)
   end
 
-  let(:federation_query_params) do
-    {
-      query: "query ($representations: [_Any!]!) { _entities(representations: $representations) { ...on Course { name } } }",
-      variables: {
-        representations: [{ __typename: "Course", id: "Q291cnNlLTE=" }]
-      }
-    }
-  end
-
   context "graphiql" do
     it "requires a user" do
       get :graphiql
@@ -74,12 +65,6 @@ describe GraphQLController do
       post :execute, params: { query: '{ course(id: "1") { id } }' }, format: :json
       expect(response.parsed_body["errors"]).to be_blank
       expect(response.parsed_body["data"]).not_to be_blank
-    end
-
-    it "does not handle Apollo Federation queries" do
-      post :execute, params: federation_query_params, format: :json
-      expect(response.parsed_body["errors"]).not_to be_blank
-      expect(response.parsed_body["data"]).to be_blank
     end
 
     it "logs a page view for CreateSubmission" do
@@ -165,6 +150,34 @@ describe GraphQLController do
         create_discussion_entry("Post 2")
         expect(AssetUserAccess.last.participate_score).to eq 2.0
       end
+
+      it "correctly sets the course context for a Live event" do
+        allow(LiveEvents).to receive(:post_event)
+        course_with_teacher(active_all: true)
+        student_in_course(active_all: true)
+        discussion_topic_model({ context: @course, discussion_type: DiscussionTopic::DiscussionTypes::THREADED })
+
+        user_session(@teacher)
+
+        expect(LiveEvents).to receive(:post_event).with(hash_including({
+                                                                         event_name: "discussion_entry_created"
+                                                                       })) do |payload|
+          # Add an expectation to check the context within the payload
+          expect(payload[:text]).to eq("Post 1")
+          expect(payload[:user_id]).to eq(@teacher.id.to_s)
+
+          # The post_event method in the live_events.rb uses the materialized_context to set the liveEvent context before sending it
+          # This only gets run if the LiveEvents is configured, so tests like this are only able to capture the information that goes to that method
+          # This tests the context that the LiveEvent is set to right before it is sent out
+          # The context must be retrieved here because it will get set to nil after the event is sent
+          live_event_context = LiveEvents.get_context
+          expect(live_event_context[:context_type]).to eq "Course"
+          expect(live_event_context[:context_id]).to eq @course.id.to_s
+          expect(live_event_context[:context_account_id]).to eq @course.account.id.to_s
+        end
+
+        create_discussion_entry("Post 1")
+      end
     end
 
     context "datadog metrics" do
@@ -191,10 +204,10 @@ describe GraphQLController do
             }
           GQL
           post :execute, params: { query: test_query }, format: :json
-          expect_increment("graphql.operation.count", operation_name: "GetStuff", domain: "test.host", operation_md5: String)
-          expect_increment("graphql.query.count", operation_name: "GetStuff", field: "course", operation_md5: String)
-          expect_increment("graphql.query.count", operation_name: "GetStuff", field: "assignment", operation_md5: String)
-          expect_increment("graphql.query.count", operation_name: "GetStuff", field: "legacyNode", operation_md5: String)
+          expect_increment("graphql.operation.count", operation_name: "GetStuff")
+          expect_increment("graphql.query.count", operation_name: "GetStuff", field: "course")
+          expect_increment("graphql.query.count", operation_name: "GetStuff", field: "assignment")
+          expect_increment("graphql.query.count", operation_name: "GetStuff", field: "legacyNode")
         end
 
         it "counts unnamed operations" do
@@ -206,9 +219,9 @@ describe GraphQLController do
             }
           GQL
           post :execute, params: { query: test_query }, format: :json
-          expect_increment("graphql.operation.count", operation_name: "unnamed", domain: "test.host", operation_md5: String)
-          expect_increment("graphql.query.count", operation_name: "unnamed", field: "course", operation_md5: String)
-          expect_increment("graphql.query.count", operation_name: "unnamed", field: "assignment", operation_md5: String)
+          expect_increment("graphql.operation.count", operation_name: "unnamed")
+          expect_increment("graphql.query.count", operation_name: "unnamed", field: "course")
+          expect_increment("graphql.query.count", operation_name: "unnamed", field: "assignment")
         end
 
         it "counts each mutation top-level field" do
@@ -224,9 +237,9 @@ describe GraphQLController do
             }
           GQL
           post :execute, params: { query: test_query }, format: :json
-          expect_increment("graphql.operation.count", operation_name: "unnamed", domain: "test.host", operation_md5: String)
-          expect_increment("graphql.mutation.count", operation_name: "unnamed", field: "createAssignment", operation_md5: String)
-          expect_increment("graphql.mutation.count", operation_name: "unnamed", field: "updateAssignment", operation_md5: String)
+          expect_increment("graphql.operation.count", operation_name: "unnamed")
+          expect_increment("graphql.mutation.count", operation_name: "unnamed", field: "createAssignment")
+          expect_increment("graphql.mutation.count", operation_name: "unnamed", field: "updateAssignment")
         end
       end
 
@@ -238,49 +251,9 @@ describe GraphQLController do
             }
           GQL
           post :execute, params: { query: test_query }, format: :json
-          expect_increment("graphql.operation.count", operation_name: "3rdparty", domain: "test.host")
+          expect_increment("graphql.operation.count", operation_name: "3rdparty")
           expect_increment("graphql.query.count", operation_name: "3rdparty", field: "course")
         end
-      end
-    end
-  end
-
-  describe "subgraph_execute" do
-    context "with authentication" do
-      around do |example|
-        InstAccess.with_config(signing_key: signing_priv_key) do
-          example.run
-        end
-      end
-
-      let(:token_signing_keypair) { OpenSSL::PKey::RSA.new(2048) }
-      let(:signing_priv_key) { token_signing_keypair.to_s }
-      let(:token) { InstAccess::Token.for_user(user_uuid: @student.uuid, account_uuid: @student.account.uuid) }
-
-      it "handles standard queries" do
-        request.headers["Authorization"] = "Bearer #{token.to_unencrypted_token_string}"
-        post :subgraph_execute, params: { query: '{ course(id: "1") { id } }' }, format: :json
-        expect(response.parsed_body["errors"]).to be_blank
-        expect(response.parsed_body["data"]).not_to be_blank
-      end
-
-      it "handles Apollo Federation queries" do
-        request.headers["Authorization"] = "Bearer #{token.to_unencrypted_token_string}"
-        post :subgraph_execute, params: federation_query_params, format: :json
-        expect(response.parsed_body["errors"]).to be_blank
-      end
-    end
-
-    describe "without authentication" do
-      it "services subgraph introspection queries" do
-        post :subgraph_execute, params: { query: "query FederationSubgraphIntrospection { _service { sdl } }" }, format: :json
-        expect(response.parsed_body["errors"]).to be_blank
-        expect(response.parsed_body["data"]).not_to be_blank
-      end
-
-      it "rejects other queries" do
-        post :subgraph_execute, params: federation_query_params, format: :json
-        expect(response).to be_unauthorized
       end
     end
   end

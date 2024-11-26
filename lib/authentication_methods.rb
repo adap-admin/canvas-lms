@@ -22,6 +22,12 @@ module AuthenticationMethods
   class AccessTokenError < RuntimeError
   end
 
+  class RevokedAccessTokenError < RuntimeError
+  end
+
+  class ExpiredAccessTokenError < RuntimeError
+  end
+
   class AccessTokenScopeError < RuntimeError
   end
 
@@ -42,10 +48,12 @@ module AuthenticationMethods
   end
 
   def load_pseudonym_from_inst_access_token(token_string)
-    token = ::AuthenticationMethods::InstAccessToken.parse(token_string)
-    return false unless token
+    @token = ::AuthenticationMethods::InstAccessToken.parse(token_string)
+    return false unless @token
 
-    auth_context = ::AuthenticationMethods::InstAccessToken.load_user_and_pseudonym_context(token, @domain_root_account)
+    auth_context = ::AuthenticationMethods::InstAccessToken.load_user_and_pseudonym_context(@token, @domain_root_account)
+
+    raise AccessTokenError unless ::AuthenticationMethods::InstAccessToken.usable_developer_key?(@token, @domain_root_account)
 
     @current_user = auth_context[:current_user]
     @current_pseudonym = auth_context[:current_pseudonym]
@@ -56,11 +64,15 @@ module AuthenticationMethods
       @real_current_pseudonym = auth_context[:real_current_pseudonym]
       logger.warn "[AUTH] #{@real_current_user.name}(#{@real_current_user.id}) impersonating #{@current_user.name} on page #{request.url}"
     end
-    @authenticated_with_jwt = @authenticated_with_inst_access_token = true
+    @authenticated_with_jwt = true
+  end
+
+  def services_jwt_auth_allowed
+    false
   end
 
   def load_pseudonym_from_jwt
-    return unless api_request?
+    return unless api_request? || services_jwt_auth_allowed
 
     token_string = AuthenticationMethods.access_token(request)
     return unless token_string.present?
@@ -136,8 +148,11 @@ module AuthenticationMethods
     token_string = AuthenticationMethods.access_token(request)
 
     if token_string
-      @access_token = AccessToken.authenticate(token_string)
-      raise AccessTokenError unless @access_token
+      @access_token = AccessToken.authenticate(token_string, load_pseudonym_from_access_token: true)
+
+      raise ExpiredAccessTokenError if @access_token&.expired?
+      raise RevokedAccessTokenError if @access_token&.deleted?
+      raise AccessTokenError unless @access_token&.usable?
 
       account = access_token_account(@domain_root_account, @access_token)
       raise AccessTokenError unless @access_token.authorized_for_account?(account)
@@ -206,6 +221,15 @@ module AuthenticationMethods
              @current_pseudonym.cas_ticket_expired?(session[:cas_session])
 
             logger.info "[AUTH] Invalidating session: CAS ticket expired - #{session[:cas_session]}."
+            invalidate_session
+            return
+          end
+
+          if @current_pseudonym &&
+             session[:oidc_id_token_iss] &&
+             Pseudonym.oidc_session_expired?(session)
+
+            logger.info "[AUTH] Invalidating session: OIDC token expired."
             invalidate_session
             return
           end
@@ -383,26 +407,16 @@ module AuthenticationMethods
   def render_json_unauthorized
     add_www_authenticate_header if api_request? && !@current_user
 
-    if Account.site_admin.feature_enabled?(:api_auth_error_updates)
-      if @current_user
-        code = :forbidden
-        status = "unauthorized"
-        message = I18n.t("lib.auth.not_authorized", "user not authorized to perform that action")
-      else
-        code = :unauthorized
-        status = "unauthenticated"
-        message = I18n.t("lib.auth.authentication_required", "user authorization required")
-      end
+    if @current_user
+      code = :forbidden
+      status = "unauthorized"
+      message = I18n.t("lib.auth.not_authorized", "user not authorized to perform that action")
     else
       code = :unauthorized
-      if @current_user
-        status = I18n.t("lib.auth.status_unauthorized", "unauthorized")
-        message = I18n.t("lib.auth.not_authorized", "user not authorized to perform that action")
-      else
-        status = I18n.t("lib.auth.status_unauthenticated", "unauthenticated")
-        message = I18n.t("lib.auth.authentication_required", "user authorization required")
-      end
+      status = "unauthenticated"
+      message = I18n.t("lib.auth.authentication_required", "user authorization required")
     end
+
     render status: code, json: { status:, errors: [{ message: }] }
   end
 

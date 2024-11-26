@@ -17,7 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-environment_configuration(defined?(config) && config) do |config|
+Rails.application.configure do
   # Settings specified here will take precedence over those in config/application.rb
 
   # The production environment is meant for finished, "live" apps.
@@ -68,6 +68,11 @@ environment_configuration(defined?(config) && config) do |config|
   config.active_record.dump_schema_after_migration = false
 
   config.eager_load = true
+
+  config.force_ssl = true
+  # We redirect at the apache layer; no reason to do it twice
+  # We have historically not set hsts for subdomains, and don't want to increase the possibility of breakage
+  config.ssl_options = { redirect: false, hsts: { subdomains: false } }
 
   # eval <env>-local.rb if it exists
   Dir[File.dirname(__FILE__) + "/" + File.basename(__FILE__, ".rb") + "-*.rb"].each { |localfile| eval(File.new(localfile).read, nil, localfile, 1) } # rubocop:disable Security/Eval

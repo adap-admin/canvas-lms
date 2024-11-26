@@ -16,7 +16,7 @@
 #
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
-require_relative "./state_poller"
+require_relative "state_poller"
 
 module CustomWaitMethods
   # #initialize and #to_s are overwritten to allow message customization
@@ -52,30 +52,41 @@ module CustomWaitMethods
   # If we're looking for the loading image, we can't just do a normal assertion, because the image
   # could end up getting loaded too quickly.
   def wait_for_transient_element(selector)
+    puts "wait for transient element #{selector}"
     driver.execute_script(<<~JS)
       window.__WAIT_FOR_LOADING_IMAGE = 0
       window.__WAIT_FOR_LOADING_IMAGE_CALLBACK = null
 
       var _checkAddedNodes = function(addedNodes) {
-        for(var newNode of addedNodes) {
-          if(newNode.matches('#{selector}') || newNode.querySelector('#{selector}')) {
-            window.__WAIT_FOR_LOADING_IMAGE = 1
+        try {
+          for(var newNode of addedNodes) {
+            if (!([Node.ELEMENT_NODE, Node.DOCUMENT_NODE, Node.DOCUMENT_FRAGMENT_NODE].includes(newNode.nodeType))) continue
+            if (newNode.matches('#{selector}') || newNode.querySelector('#{selector}')) {
+              window.__WAIT_FOR_LOADING_IMAGE = 1
+            }
           }
+        } catch (e) {
+          console.error('CHECK ADDED NODES FAILED'); console.error(e)
         }
       }
 
       var _checkRemovedNodes = function(removedNodes) {
-        if(window.__WAIT_FOR_LOADING_IMAGE !== 1) {
-          return
-        }
-
-        for(var newNode of removedNodes) {
-          if(newNode.matches('#{selector}') || newNode.querySelector('#{selector}')) {
-            observer.disconnect()
-
-            window.__WAIT_FOR_LOADING_IMAGE = 2
-            window.__WAIT_FOR_LOADING_IMAGE_CALLBACK && window.__WAIT_FOR_LOADING_IMAGE_CALLBACK()
+        try {
+          if(window.__WAIT_FOR_LOADING_IMAGE !== 1) {
+            return
           }
+
+          for(var newNode of removedNodes) {
+            if (!([Node.ELEMENT_NODE, Node.DOCUMENT_NODE, Node.DOCUMENT_FRAGMENT_NODE].includes(newNode.nodeType))) continue
+            if (newNode.matches('#{selector}') || newNode.querySelector('#{selector}')) {
+              observer.disconnect()
+
+              window.__WAIT_FOR_LOADING_IMAGE = 2
+              window.__WAIT_FOR_LOADING_IMAGE_CALLBACK && window.__WAIT_FOR_LOADING_IMAGE_CALLBACK()
+            }
+          }
+        } catch (e) {
+          console.error('CHECK REMOVED NODES FAILED'); console.error(e)
         }
       }
 
@@ -109,7 +120,9 @@ module CustomWaitMethods
     bridge = driver if bridge.nil?
 
     res = StatePoller.await(0) { bridge.execute_script(AJAX_REQUESTS_SCRIPT) || 0 }
-    raise SlowCodePerformance, "AJAX requests not done after #{res[:spent]}s: #{res[:got]}" if res[:got] > 0
+    if res[:got] > 0 && !NoRaiseTimeoutsWhileDebugging.ever_run_a_debugger?
+      raise SlowCodePerformance, "AJAX requests not done after #{res[:spent]}s: #{res[:got]}"
+    end
   end
 
   # NOTE: for "$.timers" see https://github.com/jquery/jquery/blob/6c2c7362fb18d3df7c2a7b13715c2763645acfcb/src/effects.js#L638
@@ -132,6 +145,22 @@ module CustomWaitMethods
   def wait_for_ajaximations(bridge = nil)
     wait_for_ajax_requests(bridge)
     wait_for_animations(bridge)
+  end
+
+  DIALOG_COUNT_SCRIPT = "return document.querySelectorAll('[role=dialog]').length"
+
+  # ensure InstUI React modals are properly closed
+  def wait_for_dialog_close(bridge = nil)
+    bridge = driver if bridge.nil?
+
+    if (count = bridge.execute_script(DIALOG_COUNT_SCRIPT)) > 1
+      raise SlowCodePerformance, "Multiple dialogs found: #{count}"
+    end
+
+    res = StatePoller.await(0) { bridge.execute_script(DIALOG_COUNT_SCRIPT) || 0 }
+    if res[:got] > 0
+      raise SlowCodePerformance, "Dialog did not close within #{res[:spent]}s: found #{res[:got]} dialogs"
+    end
   end
 
   def wait_for_initializers(bridge = nil)
@@ -263,5 +292,15 @@ module CustomWaitMethods
     end
   rescue Selenium::WebDriver::Error::NoSuchElementError
     true
+  end
+
+  def wait_for_block_editor(parent_element = nil)
+    parent_element ||= f("#content")
+    keep_trying_until do
+      disable_implicit_wait { f(".block-editor-editor", parent_element) }
+    rescue => e
+      puts e.inspect
+      false
+    end
   end
 end

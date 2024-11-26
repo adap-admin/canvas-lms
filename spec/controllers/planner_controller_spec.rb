@@ -56,6 +56,14 @@ describe PlannerController do
         expect(response).to be_successful
       end
 
+      it "renders unauthorized if student in limited access account" do
+        @course.root_account.enable_feature!(:allow_limited_access_for_students)
+        @course.account.settings[:enable_limited_access_for_students] = true
+        @course.account.save!
+        get :index
+        expect(response.code.to_i).to be 401
+      end
+
       it "checks the planner cache" do
         found_planner_meta_request = false
         found_planner_items_request = false
@@ -152,7 +160,7 @@ describe PlannerController do
         json = json_parse(response.body)
         event_ids = json.select { |thing| thing["plannable_type"] == "calendar_event" }.pluck("plannable_id")
 
-        my_event_id = @course.default_section.calendar_events.where(parent_calendar_event_id: event).pluck(:id).first
+        my_event_id = @course.default_section.calendar_events.where(parent_calendar_event_id: event).pick(:id)
         expect(event_ids).not_to include event.id
         expect(event_ids).to include my_event_id
 
@@ -184,6 +192,22 @@ describe PlannerController do
         expect(response_json.select { |i| i["plannable_type"] == "announcement" }.pluck("plannable_id")).to eq [a1.id]
       end
 
+      it "differentiated modules: only shows section specific announcements to students who can view them" do
+        Account.site_admin.enable_feature! :selective_release_backend
+        a1 = @course.announcements.create!(message: "for the defaults")
+        a1.update!(only_visible_to_overrides: true)
+        a1.assignment_overrides.create!(set: @course.default_section)
+        sec2 = @course.course_sections.create!
+        a2 = @course.announcements.create!(message: "for my favorites")
+        a2.update!(only_visible_to_overrides: true)
+
+        a2.assignment_overrides.create!(set: sec2)
+
+        get :index
+        response_json = json_parse(response.body)
+        expect(response_json.select { |i| i["plannable_type"] == "announcement" }.pluck("plannable_id")).to eq [a1.id]
+      end
+
       it "shows planner overrides created on quizzes" do
         quiz = quiz_model(course: @course, due_at: 1.day.from_now)
         PlannerOverride.create!(plannable_id: quiz.id, plannable_type: Quizzes::Quiz, user_id: @student.id)
@@ -202,6 +226,31 @@ describe PlannerController do
         disc_json = response_json.find { |rj| rj["plannable_id"] == discussion.id }
         expect(disc_json["planner_override"]["plannable_id"]).to eq discussion.id
         expect(disc_json["planner_override"]["plannable_type"]).to eq "discussion_topic"
+      end
+
+      context "ungraded discussions" do
+        before do
+          @discussion = discussion_topic_model(context: @course, title: "discussion ghost", delayed_post_at: 3.days.ago, lock_at: 3.days.from_now, todo_date: 1.day.from_now)
+          PlannerOverride.create!(plannable_id: @discussion.id, plannable_type: DiscussionTopic, user_id: @student.id)
+        end
+
+        it "includes ungraded discussions for students" do
+          get :index, params: { filter: "all_ungraded_todo_items", context_codes: ["course_#{@course.id}"] }
+          response_json = json_parse(response.body)
+          expect(response_json.pluck("plannable").pluck("title")).to include @discussion.title
+        end
+
+        context "delayed post discussion" do
+          before do
+            @discussion.update!(delayed_post_at: 1.day.from_now, workflow_state: "post_delayed")
+          end
+
+          it "includes delayed post discussions for students" do
+            get :index, params: { filter: "all_ungraded_todo_items", context_codes: ["course_#{@course.id}"] }
+            response_json = json_parse(response.body)
+            expect(response_json.pluck("plannable").pluck("title")).to include @discussion.title
+          end
+        end
       end
 
       it "shows planner overrides created on wiki pages" do
@@ -313,7 +362,6 @@ describe PlannerController do
 
       describe "account calendars" do
         before do
-          Account.site_admin.enable_feature!(:account_calendars_planner_support)
           Account.default.account_calendar_visible = true
           Account.default.save!
           @sub_account1 = Account.default.sub_accounts.create!(name: "SA-1", account_calendar_visible: true)
@@ -337,13 +385,6 @@ describe PlannerController do
           expect(default_account_event["plannable"]["title"]).to eq @default_account_event.title
         end
 
-        it "does not show account calendar events if the feature flag is disabledd" do
-          Account.site_admin.disable_feature!(:account_calendars_planner_support)
-          get :index
-          response_json = json_parse(response.body)
-          expect(response_json).to eq []
-        end
-
         it "does not show calendar events for hidden account calendars" do
           Account.default.account_calendar_visible = false
           Account.default.save!
@@ -362,11 +403,11 @@ describe PlannerController do
           expect(sub_account_event["plannable"]["title"]).to eq @sub_account_event.title
         end
 
-        it "returns unauthorized if the context_code is not visible" do
+        it "returns forbidden if the context_code is not visible" do
           @sub_account1.account_calendar_visible = false
           @sub_account1.save!
           get :index, params: { context_codes: [@sub_account1.asset_string] }
-          assert_unauthorized
+          assert_forbidden
         end
 
         it "does not include account calendar events by default when filtering by context_codes" do
@@ -391,6 +432,18 @@ describe PlannerController do
           expect(sub_account_event["plannable"]["title"]).to eq @sub_account_event.title
           expect(default_account_event["plannable"]["title"]).to eq @default_account_event.title
           expect(course_event["plannable"]["title"]).to eq course_ac_event.title
+        end
+
+        context "with sharding" do
+          specs_require_sharding
+
+          it "allows user to request trusted accounts on another shard" do
+            @account = Account.default
+            @shard2.activate do
+              get :index, params: { context_codes: ["account_#{@account.global_id}"] }
+              expect(response).to be_successful
+            end
+          end
         end
       end
 
@@ -511,12 +564,12 @@ describe PlannerController do
           expect(response_hash.length).to be 6
         end
 
-        it "returns unauthorized if the user doesn't have read permission on a context_code" do
+        it "returns forbidden if the user doesn't have read permission on a context_code" do
           course_with_teacher(active_all: true)
           assignment_model(course: @course, due_at: 1.day.from_now)
 
           get :index, params: { context_codes: [@course.asset_string] }
-          assert_unauthorized
+          assert_forbidden
         end
 
         it "filters ungraded_todo_items" do
@@ -591,7 +644,7 @@ describe PlannerController do
             )
           end
 
-          it "returns unauthorized if the course isn't public syllabus" do
+          it "returns forbidden if the course isn't public syllabus" do
             user_session(user_factory)
             get :index, params: {
               filter: "all_ungraded_todo_items",
@@ -599,7 +652,7 @@ describe PlannerController do
               start_date: 2.weeks.ago.iso8601,
               end_date: 2.weeks.from_now.iso8601
             }
-            assert_unauthorized
+            assert_forbidden
           end
         end
 
@@ -756,7 +809,7 @@ describe PlannerController do
           it "orders assignments with no overrides correctly" do
             assignment1 = assignment_model(course: @course, due_at: Time.zone.now)
             assignment2 = assignment_model(course: @course, due_at: 2.days.from_now)
-            DueDateCacher.recompute_course(@course, run_immediately: true)
+            SubmissionLifecycleManager.recompute_course(@course, run_immediately: true)
 
             get :index, params: { start_date: 2.weeks.ago.iso8601, end_date: 2.weeks.from_now.iso8601 }
             response_json = json_parse(response.body)
@@ -771,7 +824,7 @@ describe PlannerController do
             assignment2 = assignment_model(course: @course, due_at: 2.days.from_now)
             assign2_override_due_at = Time.zone.now
             create_adhoc_override_for_assignment(assignment2, @student, { due_at: assign2_override_due_at })
-            DueDateCacher.recompute_course(@course, run_immediately: true)
+            SubmissionLifecycleManager.recompute_course(@course, run_immediately: true)
 
             get :index, params: { start_date: 2.weeks.ago.iso8601, end_date: 2.weeks.from_now.iso8601 }
             response_json = json_parse(response.body)
@@ -801,7 +854,7 @@ describe PlannerController do
             topic2_assign = topic2.assignment
             topic2_assign.due_at = 2.days.ago
             topic2_assign.save!
-            DueDateCacher.recompute_course(@course, run_immediately: true)
+            SubmissionLifecycleManager.recompute_course(@course, run_immediately: true)
 
             get :index, params: { start_date: 2.weeks.ago.iso8601, end_date: 2.weeks.from_now.iso8601 }
             response_json = json_parse(response.body)
@@ -819,7 +872,7 @@ describe PlannerController do
             wiki_page_assignment_model(course: @course)
             @page.todo_date = Time.zone.now
             @page.save!
-            DueDateCacher.recompute_course(@course, run_immediately: true)
+            SubmissionLifecycleManager.recompute_course(@course, run_immediately: true)
 
             get :index, params: { start_date: 2.weeks.ago.iso8601, end_date: 2.weeks.from_now.iso8601 }
             response_json = json_parse(response.body)
@@ -1005,7 +1058,11 @@ describe PlannerController do
         end
 
         it "shows new activity when a new discussion topic has been created" do
-          get :index, params: { start_date: @start_date, end_date: @end_date }
+          # the queries behind this be expensive, there is a 1.minute cache on some of them, we'll do our first get
+          # in a time longer ago than the cache length
+          Timecop.freeze(2.minutes.ago) do
+            get :index, params: { start_date: @start_date, end_date: @end_date }
+          end
           discussion_topic_model(context: @course, todo_date: 1.day.from_now)
           get :index, params: { start_date: @start_date, end_date: @end_date }
           topic_json = json_parse(response.body).find { |j| j["plannable_id"] == @topic.id && j["plannable_type"] == "discussion_topic" }
@@ -1076,7 +1133,7 @@ describe PlannerController do
           assign_json = json_parse(response.body).find { |j| j["plannable_id"] == @assignment.id && j["plannable_type"] == "assignment" }
           expect(assign_json["new_activity"]).to be true
 
-          submission.mark_read(@student)
+          submission.reload.mark_item_read("comment")
           get :index, params: { start_date: @start_date, end_date: @end_date }
           assign_json = json_parse(response.body).find { |j| j["plannable_id"] == @assignment.id && j["plannable_type"] == "assignment" }
           expect(assign_json["new_activity"]).to be false
@@ -1108,6 +1165,22 @@ describe PlannerController do
           response_json = json_parse(response.body)
           expect(response_json.length).to eq 1
           expect(response_json.first["plannable"]["id"]).to eq @assignment2.id
+        end
+
+        it "returns items with new submission comments with html tags if use_html_comments is true" do
+          @sub = @assignment2.submit_homework(@student)
+          @sub.add_comment(comment: "<div>hello</div>", author: @teacher)
+          get :index, params: { filter: "new_activity", use_html_comment: true }
+          response_json = json_parse(response.body)
+          expect(response_json.first["submissions"]["feedback"]["comment"]).to eq("<div>hello</div>")
+        end
+
+        it "returns items with new submission comments without html tags if use_html_comments is false" do
+          @sub = @assignment2.submit_homework(@student)
+          @sub.add_comment(comment: "<div>hello</div>", author: @teacher)
+          get :index, params: { filter: "new_activity" }
+          response_json = json_parse(response.body)
+          expect(response_json.first["submissions"]["feedback"]["comment"]).to eq("hello")
         end
 
         it "marks submitted stuff within start and end dates" do
@@ -1300,6 +1373,46 @@ describe PlannerController do
           expect(note["plannable"]["title"]).to eq pn.title
         end
       end
+
+      context "discussion checkpoints FF" do
+        before :once do
+          @course.root_account.enable_feature!(:discussion_checkpoints)
+          @reply_to_topic, @reply_to_entry = graded_discussion_topic_with_checkpoints(context: @course)
+        end
+
+        before do
+          user_session(@student)
+        end
+
+        it "includes discussion checkpoints when FF enabled" do
+          get :index
+          response_json = json_parse(response.body)
+          items = response_json.map { |i| [i["plannable_type"], i["plannable"]["id"]] }
+          expect(items).to include ["sub_assignment", @reply_to_topic.id]
+          expect(items).to include ["sub_assignment", @reply_to_entry.id]
+        end
+
+        it "does not include discussion checkpoints when FF disabled" do
+          @course.root_account.disable_feature!(:discussion_checkpoints)
+          get :index
+          response_json = json_parse(response.body)
+          items = response_json.map { |i| [i["plannable_type"], i["plannable"]["id"]] }
+          expect(items).not_to include ["sub_assignment", @reply_to_topic.id]
+          expect(items).not_to include ["sub_assignment", @reply_to_entry.id]
+        end
+
+        it "returns sub_assignments with the 'new_activity' param" do
+          @reply_to_topic.submit_homework @student, body: "Test reply to topic for student"
+
+          get :index, params: { filter: "new_activity" }
+          res = json_parse(response.body)[0]
+
+          expect(res["plannable_id"]).to eq @reply_to_topic.id
+          expect(res["plannable"]["read_state"]).to eq "unread"
+          expect(res["plannable_type"]).to eq "sub_assignment"
+          expect(res["new_activity"]).to be true
+        end
+      end
     end
   end
 
@@ -1329,6 +1442,11 @@ describe PlannerController do
         other_course.enroll_student(@observer, enrollment_state: "active")
         get :index, params: { observed_user_id: @student.to_param, context_codes: [other_course.asset_string] }
         assert_unauthorized
+      end
+
+      it "does not require context_codes if all visible courses are requested" do
+        get :index, params: { observed_user_id: @student.to_param, include: %w[all_courses] }
+        expect(response).to be_successful
       end
 
       it "allows an observer to query their observed user's planner items for valid context_codes" do

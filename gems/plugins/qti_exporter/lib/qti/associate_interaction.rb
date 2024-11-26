@@ -24,7 +24,7 @@ module Qti
     include Canvas::Migration::XMLHelper
 
     def initialize(opts)
-      super(opts)
+      super
       @question[:matches] = []
       @question[:question_type] = "matching_question"
       # to mark whether it's bb8/vista/respondus_matching if needed
@@ -139,7 +139,7 @@ module Qti
         match_mig_id = nil
         if (match = r_if.at_css("match"))
           answer_mig_id = get_node_att(match, "variable", "identifier")
-          match_mig_id = match.at_css("baseValue[baseType=identifier]").text rescue nil
+          match_mig_id = match.at_css("baseValue[baseType=identifier]")&.text
         end
         next unless (answer = answer_map[answer_mig_id])
 
@@ -216,7 +216,7 @@ module Qti
       # the left side's choiceInteraction corresponds to the index of the matched right-side item.
       left = @doc.css("div.RESPONSE_BLOCK choiceInteraction").size
       right = @doc.css("div.RIGHT_MATCH_BLOCK div").size
-      return unless left > 0 && right > 0
+      return false unless left > 0 && right > 0
 
       @doc.css("div.RESPONSE_BLOCK div").size == left &&
         @doc.css("responseProcessing responseCondition match").size == left &&

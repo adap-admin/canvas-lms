@@ -25,14 +25,14 @@ describe MediaObject do
 
   context "loading with legacy support" do
     it "loads by either media_id or old_media_id" do
-      mo = factory_with_protected_attributes(MediaObject, media_id: "0_abcdefgh", old_media_id: "1_01234567", context: @course)
+      mo = MediaObject.create!(media_id: "0_abcdefgh", old_media_id: "1_01234567", context: @course)
 
       expect(MediaObject.by_media_id("0_abcdefgh").first).to eq mo
       expect(MediaObject.by_media_id("1_01234567").first).to eq mo
     end
 
     it "does not find an arbitrary MediaObject when given a nil id" do
-      factory_with_protected_attributes(MediaObject, media_id: "0_abcdefgh", context: @course)
+      MediaObject.create!(media_id: "0_abcdefgh", context: @course)
       expect(MediaObject.by_media_id(nil).first).to be_nil
     end
 
@@ -42,21 +42,6 @@ describe MediaObject do
   end
 
   describe ".build_media_objects" do
-    it "deletes attachments created temporarily for import" do
-      folder = Folder.assert_path(CC::CCHelper::MEDIA_OBJECTS_FOLDER, @course)
-      @a1 = attachment_model(folder:, uploaded_data: stub_file_data("video1.mp4", nil, "video/mp4"))
-      @a2 = attachment_model(context: @course, uploaded_data: stub_file_data("video1.mp4", nil, "video/mp4"))
-      data = {
-        entries: [
-          { originalId: @a1.id, },
-          { originalId: @a2.id, },
-        ],
-      }
-      MediaObject.build_media_objects(data, Account.default.id)
-      expect(@a1.reload.file_state).to eq "deleted"
-      expect(@a2.reload.file_state).to eq "available"
-    end
-
     it "builds media objects from attachment_id" do
       @a1 = attachment_model(context: @course, uploaded_data: stub_file_data("video1.mp4", nil, "video/mp4"))
       @a3 = attachment_model(context: @course, uploaded_data: stub_file_data("video1.mp4", nil, "video/mp4"))
@@ -101,6 +86,34 @@ describe MediaObject do
       run_jobs
       obj = MediaObject.by_media_id("test").first
       expect(obj.context).to eq @user
+    end
+  end
+
+  describe ".ensure_attachment_media_info" do
+    it "fixes associated attachments in a weird state" do
+      file_data = fixture_file_upload("292.mp3", "audio/mpeg", true)
+      a1 = attachment_model(context: @course, uploaded_data: file_data, media_entry_id: "m-unicorns")
+      client = double("kaltura_client")
+      expect(CanvasKaltura::ClientV3).to receive_messages(new: client)
+      url = "http://example.com/video1.mp3"
+      media_sources = [{
+        size: "283",
+        isOriginal: "0",
+        fileExt: "mp3",
+        url:,
+        content_type: "audio/mpeg"
+      }]
+      expect(client).to receive_messages(media_sources:)
+      mo = @course.media_objects.create!(attachment_id: a1, media_id: "m-unicorns", title: "video1.mp3", media_type: "video/*")
+      course_model
+      attachment_model(context: @course, uploaded_data: file_data)
+      a1.update!(root_attachment_id: @attachment.id, content_type: "unknown/unknown", workflow_state: "pending_upload", display_name: "video1", media_entry_id: nil)
+      a1.update_columns(filename: nil)
+
+      expect(CanvasHttp).to receive_messages(validate_url: [nil, URI.parse(url)])
+      expect(CanvasHttp).to receive(:get).with(url).and_yield(FakeHttpResponse.new("200", File.read(file_data)))
+      mo.ensure_attachment_media_info
+      expect(a1.reload.attributes).to include({ "filename" => match("292.mp3"), "content_type" => "audio/mpeg", "workflow_state" => "processed", "media_entry_id" => mo.media_id, "display_name" => "video1.mp3" })
     end
   end
 
@@ -355,7 +368,20 @@ describe MediaObject do
               expect(@mo.grants_right?(@ta, :add_captions)).to be true
             end
 
+            it "does allow course non-admin users to add_captions to attachments if they don't have manage_course_content_add but own media object" do
+              RoleOverride.create!(
+                permission: "manage_course_content_add",
+                enabled: false,
+                role: ta_role,
+                account: @course.root_account
+              )
+
+              expect(@mo.attachment).to be_nil
+              expect(@mo.grants_right?(@ta, :add_captions)).to be true
+            end
+
             it "does not allow course non-admin users to add_captions to attachments if they don't have manage_course_content_add" do
+              @mo.user = user_factory
               RoleOverride.create!(
                 permission: "manage_course_content_add",
                 enabled: false,
@@ -379,14 +405,25 @@ describe MediaObject do
               expect(@mo.grants_right?(@ta, :delete_captions)).to be true
             end
 
-            it "does not allow course non-admin users to delete_captions to attachments if they don't have manage_course_content_delete" do
+            it "does allow course non-admin users to delete_captions to attachments if they don't have manage_course_content_delete but own media object" do
               RoleOverride.create!(
                 permission: "manage_course_content_delete",
                 enabled: false,
                 role: ta_role,
                 account: @course.root_account
               )
+              expect(@mo.attachment).to be_nil
+              expect(@mo.grants_right?(@ta, :delete_captions)).to be true
+            end
 
+            it "does not allow course non-admin users to delete_captions to attachments if they don't have manage_course_content_delete" do
+              @mo.user = user_factory
+              RoleOverride.create!(
+                permission: "manage_course_content_delete",
+                enabled: false,
+                role: ta_role,
+                account: @course.root_account
+              )
               expect(@mo.attachment).to be_nil
               expect(@mo.grants_right?(@ta, :delete_captions)).to be false
             end
@@ -397,6 +434,24 @@ describe MediaObject do
       context "with granular_permissions_manage_course_content feature flag disabled" do
         before do
           @course.root_account.disable_feature!(:granular_permissions_manage_course_content)
+        end
+
+        context "with media_links_use_attachment_id feature flag enabled" do
+          before do
+            Account.site_admin.enable_feature!(:media_links_use_attachment_id)
+          end
+
+          it "allows teachers to add captions if they have permission to update attachment" do
+            course_with_teacher
+            second_course = Course.create!(name: "second course")
+
+            mo = media_object(context: second_course)
+            mo.user = nil
+            mo.attachment = attachment_model
+
+            expect(mo.grants_right?(@teacher, :add_captions)).to be true
+            expect(mo.grants_right?(@teacher, :delete_captions)).to be true
+          end
         end
 
         it "allows course admin users to add_captions to userless objects" do
@@ -445,19 +500,63 @@ describe MediaObject do
         end
       end
     end
+
+    context "when context_root_account is nil" do
+      before do
+        @mo = media_object
+        @mo.update!(
+          user: nil,
+          context: nil
+        )
+        @not_logged_in_user = nil
+      end
+
+      context "with granular_permissions_manage_course_content feature flag enabled" do
+        before do
+          @course.root_account.enable_feature!(:granular_permissions_manage_course_content)
+        end
+
+        it "does not error when context_root_account is nil" do
+          expect { @mo.grants_right?(@not_logged_in_user, :add_captions) }.not_to raise_error
+          expect { @mo.grants_right?(@not_logged_in_user, :delete_captions) }.not_to raise_error
+          expect(@mo.grants_right?(@not_logged_in_user, :add_captions)).to be false
+          expect(@mo.grants_right?(@not_logged_in_user, :delete_captions)).to be false
+        end
+      end
+
+      context "with granular_permissions_manage_course_content feature flag disabled" do
+        before do
+          @course.root_account.disable_feature!(:granular_permissions_manage_course_content)
+        end
+
+        it "does not error when context_root_account is nil" do
+          expect { @mo.grants_right?(@not_logged_in_user, :add_captions) }.not_to raise_error
+          expect { @mo.grants_right?(@not_logged_in_user, :delete_captions) }.not_to raise_error
+          expect(@mo.grants_right?(@not_logged_in_user, :add_captions)).to be false
+          expect(@mo.grants_right?(@not_logged_in_user, :delete_captions)).to be false
+        end
+      end
+    end
   end
 
   describe ".add_media_files" do
+    before do
+      @attachment = Attachment.new
+      @kaltura_media_file_handler = double("KalturaMediaFileHandler")
+      allow(KalturaMediaFileHandler).to receive(:new).and_return(@kaltura_media_file_handler)
+    end
+
     it "delegates to the KalturaMediaFileHandler to make a bulk upload to kaltura" do
-      kaltura_media_file_handler = double("KalturaMediaFileHandler")
-      expect(KalturaMediaFileHandler).to receive(:new).and_return(kaltura_media_file_handler)
-
-      attachments = [Attachment.new]
       wait_for_completion = true
+      expect(@kaltura_media_file_handler).to receive(:add_media_files).with([@attachment], wait_for_completion).and_return(:retval)
+      expect(MediaObject.add_media_files(@attachment, wait_for_completion)).to eq :retval
+    end
 
-      expect(kaltura_media_file_handler).to receive(:add_media_files).with(attachments, wait_for_completion).and_return(:retval)
+    it "doesn't try to upload when all attachments have media objects already" do
+      @attachment.media_entry_id = media_object.media_id
 
-      expect(MediaObject.add_media_files(attachments, wait_for_completion)).to eq :retval
+      expect(@kaltura_media_file_handler).not_to receive(:add_media_files)
+      MediaObject.add_media_files(@attachment, false)
     end
   end
 
@@ -501,21 +600,19 @@ describe MediaObject do
     before do
       @mock_kaltura = double("CanvasKaltura::ClientV3")
       allow(CanvasKaltura::ClientV3).to receive(:new).and_return(@mock_kaltura)
-      allow(@mock_kaltura).to receive(:startSession).and_return(nil)
-      allow(@mock_kaltura).to receive(:media_sources).and_return(
-        [{ height: "240",
-           bitrate: "382",
-           isOriginal: "0",
-           width: "336",
-           content_type: "video/mp4",
-           containerFormat: "isom",
-           url: "https://kaltura.example.com/some/url",
-           size: "204",
-           fileExt: "mp4" }]
-      )
-      allow(@mock_kaltura).to receive(:mediaGet).and_return(media_object)
-      allow(@mock_kaltura).to receive(:mediaTypeToSymbol).and_return("video")
-      allow(@mock_kaltura).to receive(:flavorAssetGetByEntryId).and_return([])
+      allow(@mock_kaltura).to receive_messages(startSession: nil,
+                                               media_sources: [{ height: "240",
+                                                                 bitrate: "382",
+                                                                 isOriginal: "0",
+                                                                 width: "336",
+                                                                 content_type: "video/mp4",
+                                                                 containerFormat: "isom",
+                                                                 url: "https://kaltura.example.com/some/url",
+                                                                 size: "204",
+                                                                 fileExt: "mp4" }],
+                                               mediaGet: media_object,
+                                               mediaTypeToSymbol: "video",
+                                               flavorAssetGetByEntryId: [])
     end
 
     it "keeps the current title if already set" do
@@ -553,7 +650,7 @@ describe MediaObject do
       expect { @media_object.process_retrieved_details(@mock_entry, @media_type, @assets) }.not_to change { Attachment.count }
     end
 
-    it "does create an attachment if there isn't one and there should be" do
+    it "creates an attachment if there isn't one and there should be" do
       @media_object.attachment.update(media_entry_id: "maybe")
       @media_object.update(attachment_id: nil)
       @media_object.process_retrieved_details(@mock_entry, @media_type, @assets)
@@ -570,7 +667,7 @@ describe MediaObject do
 
     it "marks the attachment as processed when media_sources exist" do
       @media_object.process_retrieved_details(@mock_entry, @media_type, @assets)
-      expect(@media_object.attachment.workflow_state).to eq("processed")
+      expect(@media_object.attachment.reload.workflow_state).to eq("processed")
     end
 
     it "marks the correct attachment as processed if one is specified" do
@@ -578,7 +675,7 @@ describe MediaObject do
       @media_object.current_attachment = att
       @media_object.process_retrieved_details(@mock_entry, @media_type, @assets)
       att.reload
-      expect(@media_object.attachment.workflow_state).to eq("pending_upload")
+      expect(@media_object.attachment.reload.workflow_state).to eq("pending_upload")
       expect(att.workflow_state).to eq("processed")
     end
 
@@ -591,7 +688,7 @@ describe MediaObject do
 
   describe ".guaranteed_title" do
     before :once do
-      @mo = media_object
+      @mo = media_object_model
       @mo.title = nil
       @mo.user_entered_title = nil
     end
@@ -608,6 +705,47 @@ describe MediaObject do
     it "returns the user_entered_title if available" do
       @mo.user_entered_title = "User title"
       expect(@mo.guaranteed_title).to eq "User title"
+    end
+  end
+
+  describe "#attachments_by_media_id" do
+    it "returns attachments with the given media_id" do
+      attachment = media_object.attachment
+      other_attachment = attachment_model(media_entry_id: media_object.media_id)
+      attachment_model(media_entry_id: "something else")
+      expect(media_object.attachments_by_media_id).to match_array([attachment, other_attachment])
+    end
+
+    it "returns soft-deleted attachments with the given media_id" do
+      attachment = media_object.attachment
+      attachment.destroy
+      other_attachment = attachment_model(media_entry_id: media_object.media_id)
+      attachment_model(media_entry_id: "something else")
+      expect(media_object.attachments_by_media_id).to match_array([attachment, other_attachment])
+    end
+  end
+
+  context "validations" do
+    it "validates auto_caption_status" do
+      expect do
+        MediaObject.create!(
+          context: @course,
+          title: "uploaded_video.mp4",
+          media_id: "m-somejunkhere",
+          media_type: "video",
+          auto_caption_status: "non_existent_status"
+        )
+      end.to raise_error(ActiveRecord::RecordInvalid)
+
+      expect do
+        MediaObject.create!(
+          context: @course,
+          title: "uploaded_video.mp4",
+          media_id: "m-somejunkhere",
+          media_type: "video",
+          auto_caption_status: "failed_captions"
+        )
+      end.not_to raise_error
     end
   end
 end

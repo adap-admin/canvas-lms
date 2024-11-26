@@ -47,6 +47,8 @@ The [External Tools Create API documentation](https://canvas.instructure.com/doc
 
 Once a tool has been added to Canvas in the form of a `ContextExternalTool` record it can be launched.
 
+Instructure-owned tools needing to bulk update settings on existing LTI 1.1 tools can use `BulkToolUpdater` in `instructure_misc_plugin`; talk to the Interop team.
+
 ## Tool Launches
 For a conceptual overview of LTI 1.1 launches, see [LTI 1.1 Launches](doc/lti_manual/05_lti_1_1_launches.md)
 
@@ -108,7 +110,7 @@ The client can then make a follow-up request to the `sessionless_launch` endpoin
 
 **Action Summary**
 
-While these actions differ in a few ways, they each perform similar steps do launch the LTI tool. Each of the above actions to the following:
+While these actions differ in a few ways, they each perform similar steps to launch the LTI tool. Each of the above actions do the following:
 
 **I. Lookup the correct ContextExternalTool record**.
 

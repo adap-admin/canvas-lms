@@ -31,8 +31,13 @@
 #           "type": "string"
 #         },
 #         "value": {
-#           "description": "The value for the name of the entry within a GradingStandard.  The entry represents the lower bound of the range for the entry. This range includes the value up to the next entry in the GradingStandard, or 100 if there is no upper bound. The lowest value will have a lower bound range of 0.",
+#           "description": "The value for the name of the entry within a GradingStandard. The entry represents the lower bound of the range for the entry. This range includes the value up to the next entry in the GradingStandard, or the maximum value for the scheme if there is no upper bound. The lowest value will have a lower bound range of 0.",
 #           "example": 0.9,
+#           "type": "integer"
+#         },
+#         "calculated_value": {
+#           "description": "The value that will be used to compare against a grade. For percentage based grading schemes, this is a number from 0 - 100 representing a percent. For point based grading schemes, this is the lower bound of points to achieve the grade.",
+#           "example": 90,
 #           "type": "integer"
 #         }
 #       }
@@ -63,6 +68,16 @@
 #           "example": 1,
 #           "type": "integer"
 #         },
+#         "points_based": {
+#           "description": "whether this is a points-based standard",
+#           "example": false,
+#           "type": "boolean"
+#         },
+#         "scaling_factor": {
+#           "description": "the factor by which to scale a score. 1 for percentage based schemss and the max value of points for points based schemes. This number cannot be changed for percentage based schemes.",
+#           "example": 1.0,
+#           "type": "number"
+#         },
 #         "grading_scheme": {
 #           "description": "A list of GradingSchemeEntry that make up the Grading Standard as an array of values with the scheme name and value",
 #           "example": [{"name":"A", "value":0.9}, {"name":"B", "value":0.8}, {"name":"C", "value":0.7}, {"name":"D", "value":0.6}],
@@ -81,23 +96,17 @@ class GradingStandardsApiController < ApplicationController
   # @API Create a new grading standard
   # Create a new grading standard
   #
-  # If grading_scheme_entry arguments are omitted, then a default grading scheme
-  # will be set. The default scheme is as follows:
-  #      "A" : 94,
-  #      "A-" : 90,
-  #      "B+" : 87,
-  #      "B" : 84,
-  #      "B-" : 80,
-  #      "C+" : 77,
-  #      "C" : 74,
-  #      "C-" : 70,
-  #      "D+" : 67,
-  #      "D" : 64,
-  #      "D-" : 61,
-  #      "F" : 0,
-  #
   # @argument title [Required, String]
   #   The title for the Grading Standard.
+  #
+  # @argument points_based [Boolean]
+  #   Whether or not a grading scheme is points based.
+  #   Defaults to false.
+  #
+  # @argument scaling_factor [Integer]
+  #   The factor by which to scale a percentage into a points based scheme grade.
+  #   This is the maximum number of points possible in the grading scheme.
+  #   Defaults to 1. Not required for percentage based grading schemes.
   #
   # @argument grading_scheme_entry[][name] [Required, String]
   #   The name for an entry value within a GradingStandard that describes the range of the value
@@ -117,10 +126,32 @@ class GradingStandardsApiController < ApplicationController
   #     -X POST \
   #     -H 'Authorization: Bearer <token>' \
   #     -d 'title=New standard name' \
-  #     -d 'grading_scheme_entry[][name]=A'
-  #     -d 'grading_scheme_entry[][value]=90'
-  #     -d 'grading_scheme_entry[][name]=B'
-  #     -d 'grading_scheme_entry[][value]=80'
+  #     -d 'points_based=false' \
+  #     -d 'scaling_factor=1.0' \
+  #     -d 'grading_scheme_entry[][name]=A' \
+  #     -d 'grading_scheme_entry[][value]=94' \
+  #     -d 'grading_scheme_entry[][name]=A-' \
+  #     -d 'grading_scheme_entry[][value]=90' \
+  #     -d 'grading_scheme_entry[][name]=B+' \
+  #     -d 'grading_scheme_entry[][value]=87' \
+  #     -d 'grading_scheme_entry[][name]=B' \
+  #     -d 'grading_scheme_entry[][value]=84' \
+  #     -d 'grading_scheme_entry[][name]=B-' \
+  #     -d 'grading_scheme_entry[][value]=80' \
+  #     -d 'grading_scheme_entry[][name]=C+' \
+  #     -d 'grading_scheme_entry[][value]=77' \
+  #     -d 'grading_scheme_entry[][name]=C' \
+  #     -d 'grading_scheme_entry[][value]=74' \
+  #     -d 'grading_scheme_entry[][name]=C-' \
+  #     -d 'grading_scheme_entry[][value]=70' \
+  #     -d 'grading_scheme_entry[][name]=D+' \
+  #     -d 'grading_scheme_entry[][value]=67' \
+  #     -d 'grading_scheme_entry[][name]=D' \
+  #     -d 'grading_scheme_entry[][value]=64' \
+  #     -d 'grading_scheme_entry[][name]=D-' \
+  #     -d 'grading_scheme_entry[][value]=61' \
+  #     -d 'grading_scheme_entry[][name]=F' \
+  #     -d 'grading_scheme_entry[][value]=0'
   #
   # @example_response
   #   {
@@ -184,12 +215,14 @@ class GradingStandardsApiController < ApplicationController
   private
 
   def build_grading_scheme(params)
-    grading_standard_params = params.permit("title")
+    grading_standard_params = params.permit("title", "points_based", "scaling_factor")
     grading_standard_params["standard_data"] = {}
     grading_standard_params["standard_data"].permit!
+
     params["grading_scheme_entry"]&.each_with_index do |scheme, index|
       grading_standard_params["standard_data"]["scheme_#{index}"] = scheme.permit(:name, :value)
     end
+
     grading_standard_params
   end
 end

@@ -18,16 +18,13 @@
  */
 
 import React from 'react'
-import ReactDOM from 'react-dom'
 import {ScreenReaderContent} from '@instructure/ui-a11y-content'
 import {IconButton} from '@instructure/ui-buttons'
 import {IconMoreSolid, IconOffLine} from '@instructure/ui-icons'
 import {Grid} from '@instructure/ui-grid'
-import {ApplyTheme} from '@instructure/ui-themeable'
+import {InstUISettingsProvider} from '@instructure/emotion'
 import {Menu} from '@instructure/ui-menu'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import {ApolloProvider} from 'react-apollo'
-import {createClient} from '@canvas/apollo'
 import {isPostable} from '@canvas/grading/SubmissionHelper'
 import AsyncComponents from '../../AsyncComponents'
 import ColumnHeader from './ColumnHeader'
@@ -35,6 +32,9 @@ import SecondaryDetailLine from './SecondaryDetailLine'
 import {Link} from '@instructure/ui-link'
 import {Text} from '@instructure/ui-text'
 import type {CamelizedAssignment, PartialStudent} from '@canvas/grading/grading.d'
+import {showMessageStudentsWithObserversModal} from '../../../shared/MessageStudentsWithObserversModal'
+import {MSWLaunchContext} from '@canvas/message-students-dialog/react/MessageStudentsWhoDialog'
+import useStore from '../../stores'
 
 const {Separator: MenuSeparator, Item: MenuItem, Group: MenuGroup} = Menu as any
 
@@ -96,6 +96,7 @@ export type AssignmentColumnHeaderProps = {
     onSelect: (onExited: any) => void
   }
   reuploadSubmissionsAction: any
+  rubricAssessmentImportsExportsEnabled: boolean
   setDefaultGradeAction: {
     disabled: boolean
     onSelect: (cb: any) => Promise<void>
@@ -236,36 +237,29 @@ export default class AssignmentColumnHeader extends ColumnHeader<
     }
 
     if (this.props.showMessageStudentsWithObserversDialog) {
-      const mountPoint = document.querySelector(
-        "[data-component='MessageStudentsWithObserversModal']"
-      )
-      if (mountPoint != null) {
-        const MessageStudentsWhoDialog =
-          await AsyncComponents.loadMessageStudentsWithObserversDialog()
-
-        const props = {
-          ...options,
-          onClose: () => {
-            ReactDOM.unmountComponentAtNode(mountPoint)
-            this.focusAtEnd()
-          },
-          onSend: this.handleSendMessageStudentsWho,
-          messageAttachmentUploadFolderId: this.props.messageAttachmentUploadFolderId,
-          userId: this.props.userId,
-        }
-
-        ReactDOM.render(
-          <ApolloProvider client={createClient()}>
-            <MessageStudentsWhoDialog {...props} />
-          </ApolloProvider>,
-          mountPoint
-        )
+      const props = {
+        assignment: options.assignment,
+        launchContext: MSWLaunchContext.ASSIGNMENT_CONTEXT,
+        students: options.students,
+        courseId: options.assignment.courseId,
+        onClose: () => {},
+        onSend: this.handleSendMessageStudentsWho,
+        messageAttachmentUploadFolderId: this.props.messageAttachmentUploadFolderId,
+        userId: this.props.userId,
+        pointsBasedGradingScheme: this.props.pointsBasedGradingScheme,
       }
+
+      showMessageStudentsWithObserversModal(props, this.focusAtEnd)
     } else {
       const MessageStudentsWhoDialog = await AsyncComponents.loadMessageStudentsWhoDialog()
 
       MessageStudentsWhoDialog.show(options, this.focusAtEnd)
     }
+  }
+
+  selectBulkRubricExport() {
+    const {toggleRubricAssessmentExportModal} = useStore.getState()
+    toggleRubricAssessmentExportModal(true, this.props.allStudents.length, this.props.assignment)
   }
 
   activeStudentDetails() {
@@ -274,7 +268,8 @@ export default class AssignmentColumnHeader extends ColumnHeader<
       .filter(student => !student.isInactive && !student.isTestStudent)
 
     return activeStudents.map(student => {
-      const {excused, grade, latePolicyStatus, score, submittedAt, redoRequest} = student.submission
+      const {excused, grade, latePolicyStatus, score, submittedAt, redoRequest, workflowState} =
+        student.submission
       return {
         excused,
         grade,
@@ -285,6 +280,7 @@ export default class AssignmentColumnHeader extends ColumnHeader<
         score,
         sortableName: student.sortableName,
         submittedAt,
+        workflowState,
       }
     })
   }
@@ -293,7 +289,7 @@ export default class AssignmentColumnHeader extends ColumnHeader<
     const assignment = this.props.assignment
 
     return (
-      <ApplyTheme
+      <InstUISettingsProvider
         theme={{smallPaddingHorizontal: '0', smallFontSize: '0.75rem', smallHeight: '1rem'}}
       >
         <Link ref={this.bindAssignmentLink} href={assignment.htmlUrl} isWithinText={false}>
@@ -301,7 +297,7 @@ export default class AssignmentColumnHeader extends ColumnHeader<
             <span className="assignment-name">{assignment.name}</span>
           </Text>
         </Link>
-      </ApplyTheme>
+      </InstUISettingsProvider>
     )
   }
 
@@ -412,6 +408,7 @@ export default class AssignmentColumnHeader extends ColumnHeader<
 
         {this.props.postGradesAction.enabledForUser && (
           <MenuItem
+            id="post-grades"
             disabled={!this.props.postGradesAction.hasGradesOrCommentsToPost}
             onSelect={this.postGrades}
           >
@@ -467,8 +464,24 @@ export default class AssignmentColumnHeader extends ColumnHeader<
         {this.props.postGradesAction.enabledForUser && <MenuSeparator />}
 
         {this.props.postGradesAction.enabledForUser && (
-          <MenuItem onSelect={this.showGradePostingPolicy}>
+          <MenuItem id="save-grade-posting-policy" onSelect={this.showGradePostingPolicy}>
             {I18n.t('Grade Posting Policy')}
+          </MenuItem>
+        )}
+
+        {this.props.rubricAssessmentImportsExportsEnabled && (
+          <MenuItem onSelect={() => this.selectBulkRubricExport()}>
+            {I18n.t('Bulk Download Rubrics')}
+          </MenuItem>
+        )}
+        {this.props.rubricAssessmentImportsExportsEnabled && (
+          <MenuItem
+            onSelect={() => {
+              const {toggleRubricAssessmentImportTray} = useStore.getState()
+              toggleRubricAssessmentImportTray(true, this.props.assignment)
+            }}
+          >
+            {I18n.t('Import Rubrics')}
           </MenuItem>
         )}
       </Menu>

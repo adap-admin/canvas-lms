@@ -258,9 +258,9 @@ describe Quizzes::QuizzesController do
         expect(assigns[:js_env][:FLAGS][:DIRECT_SHARE_ENABLED]).to be(true)
       end
 
-      describe "with manage_content permission disabled" do
+      describe "with manage_course_content_add permission disabled" do
         before do
-          RoleOverride.create!(context: @course.account, permission: "manage_content", role: teacher_role, enabled: false)
+          RoleOverride.create!(context: @course.account, permission: "manage_course_content_add", role: teacher_role, enabled: false)
         end
 
         it "js_env DIRECT_SHARE_ENABLED is false if the course is active" do
@@ -363,7 +363,7 @@ describe Quizzes::QuizzesController do
             expect(controller.js_env[:QUIZZES][:options]).not_to be_nil
             expect(controller.js_env[:QUIZZES][:options].count).to eq(4)
 
-            controller.js_env[:QUIZZES][:options].each do |_, assignment_options|
+            controller.js_env[:QUIZZES][:options].each_value do |assignment_options|
               expect(assignment_options[:can_unpublish]).to be true
             end
           end
@@ -378,7 +378,7 @@ describe Quizzes::QuizzesController do
             expect(controller.js_env[:QUIZZES][:options]).not_to be_nil
             expect(controller.js_env[:QUIZZES][:options].count).to eq(4)
 
-            controller.js_env[:QUIZZES][:options].each do |_, assignment_options|
+            controller.js_env[:QUIZZES][:options].each_value do |assignment_options|
               expect(assignment_options[:can_unpublish]).to be false
             end
           end
@@ -1064,6 +1064,7 @@ describe Quizzes::QuizzesController do
       end
 
       before do
+        allow(RequestContext::Generator).to receive(:request_id).and_return(SecureRandom.uuid)
         user_session(@teacher)
       end
 
@@ -1145,7 +1146,7 @@ describe Quizzes::QuizzesController do
       override = AssignmentOverride.new
       override.title = "ADHOC quiz override"
       override.quiz = @quiz
-      override.lock_at = Time.now + 1.day
+      override.lock_at = 1.day.from_now
       override.lock_at_overridden = true
       override.save!
       override_student = override.assignment_override_students.build
@@ -1998,7 +1999,7 @@ describe Quizzes::QuizzesController do
       expect(quiz.reload.description).to eq "foobar"
     end
 
-    describe "DueDateCacher" do
+    describe "SubmissionLifecycleManager" do
       before do
         user_session(@teacher)
         @quiz = @course.quizzes.build(title: "Update Overrides Quiz", workflow_state: "edited")
@@ -2062,50 +2063,50 @@ describe Quizzes::QuizzesController do
         }
       end
 
-      it "runs DueDateCacher only once when overrides are updated" do
-        due_date_cacher = instance_double(DueDateCacher)
-        allow(DueDateCacher).to receive(:new).and_return(due_date_cacher)
+      it "runs SubmissionLifecycleManager only once when overrides are updated" do
+        submission_lifecycle_manager = instance_double(SubmissionLifecycleManager)
+        allow(SubmissionLifecycleManager).to receive(:new).and_return(submission_lifecycle_manager)
 
-        expect(due_date_cacher).to receive(:recompute).once
+        expect(submission_lifecycle_manager).to receive(:recompute).once
 
         post "update", params: @overrides_only
       end
 
-      it "runs DueDateCacher only once when quiz due date is updated" do
-        due_date_cacher = instance_double(DueDateCacher)
-        allow(DueDateCacher).to receive(:new).and_return(due_date_cacher)
+      it "runs SubmissionLifecycleManager only once when quiz due date is updated" do
+        submission_lifecycle_manager = instance_double(SubmissionLifecycleManager)
+        allow(SubmissionLifecycleManager).to receive(:new).and_return(submission_lifecycle_manager)
 
-        expect(due_date_cacher).to receive(:recompute).once
+        expect(submission_lifecycle_manager).to receive(:recompute).once
 
         post "update", params: @quiz_only
       end
 
-      it "runs DueDateCacher only once when quiz due date and overrides are updated" do
-        due_date_cacher = instance_double(DueDateCacher)
-        allow(DueDateCacher).to receive(:new).and_return(due_date_cacher)
+      it "runs SubmissionLifecycleManager only once when quiz due date and overrides are updated" do
+        submission_lifecycle_manager = instance_double(SubmissionLifecycleManager)
+        allow(SubmissionLifecycleManager).to receive(:new).and_return(submission_lifecycle_manager)
 
-        expect(due_date_cacher).to receive(:recompute).once
+        expect(submission_lifecycle_manager).to receive(:recompute).once
 
         post "update", params: @quiz_and_overrides
       end
 
-      it "runs DueDateCacher when transitioning a 'created' quiz to 'edited'" do
-        due_date_cacher = instance_double(DueDateCacher)
-        allow(DueDateCacher).to receive(:new).and_return(due_date_cacher)
+      it "runs SubmissionLifecycleManager when transitioning a 'created' quiz to 'edited'" do
+        submission_lifecycle_manager = instance_double(SubmissionLifecycleManager)
+        allow(SubmissionLifecycleManager).to receive(:new).and_return(submission_lifecycle_manager)
 
-        expect(due_date_cacher).to receive(:recompute).once
+        expect(submission_lifecycle_manager).to receive(:recompute).once
 
         @quiz.update_attribute(:workflow_state, "created")
         post "update", params: @no_changes
         expect(@quiz.reload).to be_edited
       end
 
-      it "runs DueDateCacher when transitioning from ungraded quiz to graded" do
+      it "runs SubmissionLifecycleManager when transitioning from ungraded quiz to graded" do
         @quiz.update!(quiz_type: "practice_quiz")
-        due_date_cacher = instance_double(DueDateCacher)
-        allow(DueDateCacher).to receive(:new).and_return(due_date_cacher)
+        submission_lifecycle_manager = instance_double(SubmissionLifecycleManager)
+        allow(SubmissionLifecycleManager).to receive(:new).and_return(submission_lifecycle_manager)
 
-        expect(due_date_cacher).to receive(:recompute).once
+        expect(submission_lifecycle_manager).to receive(:recompute).once
 
         post "update", params: {
           course_id: @course.id,
@@ -2116,11 +2117,11 @@ describe Quizzes::QuizzesController do
         }
       end
 
-      it "does not runs DueDateCacher when nothing is updated" do
-        due_date_cacher = instance_double(DueDateCacher)
-        allow(DueDateCacher).to receive(:new).and_return(due_date_cacher)
+      it "does not runs SubmissionLifecycleManager when nothing is updated" do
+        submission_lifecycle_manager = instance_double(SubmissionLifecycleManager)
+        allow(SubmissionLifecycleManager).to receive(:new).and_return(submission_lifecycle_manager)
 
-        expect(due_date_cacher).not_to receive(:recompute)
+        expect(submission_lifecycle_manager).not_to receive(:recompute)
 
         post "update", params: @no_changes
       end
@@ -2180,13 +2181,11 @@ describe Quizzes::QuizzesController do
 
     context "notifications" do
       before :once do
-        @notification = Notification.create(name: "Assignment Due Date Changed")
+        @notification = Notification.create(name: "Assignment Due Date Changed", category: "TestImmediately")
 
         @section = @course.course_sections.create!
 
         communication_channel(@student, { username: "student@instructure.com", active_cc: true })
-        @student.email_channel.notification_policies.create!(notification: @notification,
-                                                             frequency: "immediately")
 
         course_quiz
         @quiz.generate_quiz_data
@@ -2872,8 +2871,7 @@ describe Quizzes::QuizzesController do
         false
       end
       subject.instance_variable_set(:@quiz, @quiz)
-      allow(@quiz).to receive(:require_lockdown_browser?).and_return(false)
-      allow(@quiz).to receive(:ip_filter).and_return(false)
+      allow(@quiz).to receive_messages(require_lockdown_browser?: false, ip_filter: false)
       subject.instance_variable_set(:@course, @course)
       subject.instance_variable_set(:@current_user, @student)
     end
@@ -2900,8 +2898,7 @@ describe Quizzes::QuizzesController do
     end
 
     it "false with wrong IP address" do
-      allow(@quiz).to receive(:ip_filter).and_return(true)
-      allow(@quiz).to receive(:valid_ip?).and_return(false)
+      allow(@quiz).to receive_messages(ip_filter: true, valid_ip?: false)
       allow(subject).to receive(:params).and_return({ take: 1 })
       expect(return_value).to be false
     end

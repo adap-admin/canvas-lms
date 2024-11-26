@@ -17,13 +17,13 @@
  */
 
 import {extend} from '@canvas/backbone/utils'
-import _ from 'underscore'
+import {each, isEmpty, includes, extend as lodashExtend} from 'lodash'
 import Assignment from '@canvas/assignments/backbone/models/Assignment'
 import DialogFormView, {
   isSmallTablet,
   getResponsiveWidth,
 } from '@canvas/forms/backbone/views/DialogFormView'
-import DateValidator from '@canvas/datetime/DateValidator'
+import DateValidator from '@canvas/grading/DateValidator'
 import template from '../../jst/CreateAssignment.handlebars'
 import wrapper from '@canvas/forms/jst/EmptyDialogFormWrapper.handlebars'
 import numberHelper from '@canvas/i18n/numberHelper'
@@ -32,8 +32,16 @@ import round from '@canvas/round'
 import $ from 'jquery'
 import GradingPeriodsAPI from '@canvas/grading/jquery/gradingPeriodsApi'
 import SisValidationHelper from '@canvas/sis/SisValidationHelper'
-import '@canvas/datetime'
-import tz from '@canvas/timezone'
+import {
+  dateString,
+  timeString,
+  unfudgeDateForProfileTimezone,
+  isMidnight,
+} from '@instructure/moment-utils'
+import * as tz from '@instructure/moment-utils'
+import {encodeQueryString} from '@instructure/query-string-encoding'
+import {renderDatetimeField} from '@canvas/datetime/jquery/DatetimeField'
+import CreateEditAssignmentModal from '@canvas/assignments/react/CreateEditAssignmentModal'
 
 const I18n = useI18nScope('CreateAssignmentView')
 
@@ -53,7 +61,7 @@ CreateAssignmentView.prototype.defaults = {
   height: 380,
 }
 
-CreateAssignmentView.prototype.events = _.extend({}, CreateAssignmentView.prototype.events, {
+CreateAssignmentView.prototype.events = lodashExtend({}, CreateAssignmentView.prototype.events, {
   'click .dialog_closer': 'close',
   'click .save_and_publish': 'saveAndPublish',
   'click .more_options': 'moreOptions',
@@ -94,7 +102,7 @@ CreateAssignmentView.prototype.onSaveSuccess = function () {
 
 CreateAssignmentView.prototype.getFormData = function () {
   const data = CreateAssignmentView.__super__.getFormData.apply(this, arguments)
-  const unfudged = $.unfudgeDateForProfileTimezone(data.due_at)
+  const unfudged = unfudgeDateForProfileTimezone(data.due_at)
   if (unfudged != null) {
     data.due_at = this._getDueAt(unfudged)
   }
@@ -121,18 +129,18 @@ CreateAssignmentView.prototype.onSaveFail = function (xhr) {
   return CreateAssignmentView.__super__.onSaveFail.call(this, xhr)
 }
 
-CreateAssignmentView.prototype.moreOptions = function () {
+CreateAssignmentView.prototype.moreOptions = function (data) {
   const valid = ['submission_types', 'name', 'due_at', 'points_possible', 'assignment_group_id']
-  const data = this.getFormData()
   if (this.assignmentGroup) {
     data.assignment_group_id = this.assignmentGroup.get('id')
   }
   const dataParams = {}
-  _.each(data, function (value, key) {
-    if (_.includes(valid, key)) {
+  each(data, function (value, key) {
+    if (includes(valid, key)) {
       return (dataParams[key] = value)
     }
   })
+
   if (dataParams.submission_types === 'online_quiz') {
     const button = this.$('.more_options')
     button.prop('disabled', true)
@@ -149,7 +157,7 @@ CreateAssignmentView.prototype.moreOptions = function () {
       })
   } else {
     const url = this.assignmentGroup ? this.newAssignmentUrl() : this.model.htmlEditUrl()
-    return this.redirectTo(url + '?' + $.param(dataParams))
+    return this.redirectTo(url + '?' + encodeQueryString(dataParams))
   }
 }
 
@@ -170,7 +178,7 @@ CreateAssignmentView.prototype.toJSON = function () {
   const uniqLabel = this.assignmentGroup
     ? 'ag_' + this.assignmentGroup.get('id')
     : 'assign_' + this.model.get('id')
-  _.extend(json, {
+  lodashExtend(json, {
     canChooseType: this.assignmentGroup != null,
     uniqLabel,
     disableDueAt: this.disableDueAt(),
@@ -194,11 +202,11 @@ CreateAssignmentView.prototype.toJSON = function () {
 }
 
 CreateAssignmentView.prototype.currentUserIsAdmin = function () {
-  return _.includes(ENV.current_user_roles, 'admin')
+  return ENV.current_user_is_admin
 }
 
 CreateAssignmentView.prototype.disableDueAt = function () {
-  return _.includes(this.model.frozenAttributes(), 'due_at') || this.model.inClosedGradingPeriod()
+  return includes(this.model.frozenAttributes(), 'due_at') || this.model.inClosedGradingPeriod()
 }
 
 CreateAssignmentView.prototype.openAgain = function () {
@@ -223,23 +231,23 @@ CreateAssignmentView.prototype.openAgain = function () {
       },
     })
   } else if (!timeField.hasClass('hasDatepicker')) {
-    timeField.datetime_field()
+    renderDatetimeField(timeField)
     return timeField.change(function (e) {
       let newDate
       const trimmedInput = $.trim(e.target.value)
       newDate = timeField.data('unfudged-date')
       newDate = trimmedInput === '' ? null : newDate
-      if (tz.isMidnight(newDate)) {
+      if (isMidnight(newDate)) {
         if (ENV.DEFAULT_DUE_TIME) {
           newDate = tz.parse(tz.format(newDate, '%F ' + ENV.DEFAULT_DUE_TIME))
         } else {
           newDate = tz.changeToTheSecondBeforeMidnight(newDate)
         }
       }
-      const dateStr = $.dateString(newDate, {
+      const dateStr = dateString(newDate, {
         format: 'medium',
       })
-      const timeStr = $.timeString(newDate)
+      const timeStr = timeString(newDate)
       return timeField.data('inputdate', newDate).val(dateStr + ' ' + timeStr)
     })
   }
@@ -262,7 +270,7 @@ CreateAssignmentView.prototype.validateBeforeSave = function (data, errors) {
 
 CreateAssignmentView.prototype._validateTitle = function (data, errors) {
   let max_name_length
-  if (_.includes(this.model.frozenAttributes(), 'title')) {
+  if (includes(this.model.frozenAttributes(), 'title')) {
     return errors
   }
   const post_to_sis = data.post_to_sis === '1'
@@ -299,7 +307,7 @@ CreateAssignmentView.prototype._validateTitle = function (data, errors) {
 }
 
 CreateAssignmentView.prototype._validatePointsPossible = function (data, errors) {
-  if (_.includes(this.model.frozenAttributes(), 'points_possible')) {
+  if (includes(this.model.frozenAttributes(), 'points_possible')) {
     return errors
   }
   // eslint-disable-next-line no-restricted-globals
@@ -348,13 +356,13 @@ CreateAssignmentView.prototype._validateDueDate = function (data, errors) {
   data.unlock_at = this.model.unlockAt()
   data.persisted = !this._dueAtHasChanged(data.due_at)
   const dateValidator = new DateValidator({
-    date_range: _.extend({}, validRange),
+    date_range: lodashExtend({}, validRange),
     hasGradingPeriods: !!ENV.HAS_GRADING_PERIODS,
     gradingPeriods: GradingPeriodsAPI.deserializePeriods(ENV.active_grading_periods),
     userIsAdmin: this.currentUserIsAdmin(),
   })
   const errs = dateValidator.validateDatetimes(data)
-  if (_.isEmpty(errs)) {
+  if (isEmpty(errs)) {
     return errors
   }
   // need to override default error message to focus only on due date field for quick add/edit

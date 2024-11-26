@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {GradingStandard} from '@canvas/grading/grading'
+import {GradingStandard} from '@instructure/grading-utils'
 
 export type EnvGradingStandards = EnvGradingStandardsCommon & Partial<EnvGradingStandardsAccount>
 
@@ -27,6 +27,11 @@ export interface EnvGradingStandardsCommon {
   HAS_GRADING_PERIODS: boolean
   DEFAULT_GRADING_STANDARD_DATA: GradingStandard
   CONTEXT_SETTINGS_URL: string
+  COURSE_DEFAULT_GRADING_SCHEME_ID: string | undefined
+  GRADING_SCHEME_UPDATES_ENABLED: boolean
+  CUSTOM_GRADEBOOK_STATUSES_ENABLED: boolean
+  ARCHIVED_GRADING_SCHEMES_ENABLED: boolean
+  DEFAULT_ACCOUNT_GRADING_SCHEME_ENABLED: boolean
 
   /**
    * NOTE: Only present if the context is not Account

@@ -28,17 +28,14 @@ RSpec.shared_context "lti_advantage_shared_examples" do
   let(:deep_linking_return_url) { "http://www.test.cop/success" }
   let(:controller) do
     controller = double("controller")
-    allow(controller).to receive(:request).and_return(request)
-    allow(controller).to receive(:polymorphic_url).and_return(deep_linking_return_url)
+    allow(controller).to receive_messages(request:, polymorphic_url: deep_linking_return_url)
     allow(controller).to receive(:params)
     controller
   end
   # All this setup just so we can stub out controller.*_url methods
   let(:request) do
     request = double("request")
-    allow(request).to receive(:url).and_return("https://localhost")
-    allow(request).to receive(:host).and_return("/my/url")
-    allow(request).to receive(:scheme).and_return("https")
+    allow(request).to receive_messages(url: "https://localhost", host: "/my/url", scheme: "https")
     request
   end
   let(:expander) do
@@ -103,42 +100,42 @@ RSpec.shared_context "lti_advantage_shared_examples" do
   shared_examples_for "lti 1.3 message initialization" do
     it "adds public claims if the tool is public" do
       tool.update!(workflow_state: "public")
-      expect(jws["picture"]).to eq user.avatar_url
+      expect(jws[:post_payload]["picture"]).to eq user.avatar_url
     end
 
     it "does not add public claims if the tool is not public" do
       tool.update!(workflow_state: "private")
-      expect(jws).not_to include "picture"
+      expect(jws[:post_payload]).not_to include "picture"
     end
 
     it "adds include email claims if the tool is include email" do
       tool.update!(workflow_state: "email_only")
-      expect(jws["email"]).to eq user.email
+      expect(jws[:post_payload]["email"]).to eq user.email
     end
 
     it "does not add include email claims if the tool is not include email" do
       user.update!(email: "banana@test.com")
       tool.update!(workflow_state: "private")
-      expect(jws).not_to include "email"
+      expect(jws[:post_payload]).not_to include "email"
     end
 
     it "adds include name claims if the tool is include name" do
       tool.update!(workflow_state: "name_only")
-      expect(jws["name"]).to eq user.name
+      expect(jws[:post_payload]["name"]).to eq user.name
     end
 
     it "does not add include name claims if the tool is not include name" do
       tool.update!(workflow_state: "private")
-      expect(jws).not_to include "name"
+      expect(jws[:post_payload]).not_to include "name"
     end
 
     it "adds private claims" do
-      expect(jws["locale"]).to eq "en"
+      expect(jws[:post_payload]["locale"]).to eq "en"
     end
 
     it "adds security claims" do
       expected_sub = user.lti_id
-      expect(jws["sub"]).to eq expected_sub
+      expect(jws[:post_payload]["sub"]).to eq expected_sub
     end
   end
 end

@@ -60,11 +60,11 @@ class Assignment::BulkUpdate
 
         %w[due_at unlock_at lock_at].each do |date|
           if override_data.key?(date)
-            override.send("#{date}=", override_data[date])
-            override.send("#{date}_overridden=", true)
+            override.send(:"#{date}=", override_data[date])
+            override.send(:"#{date}_overridden=", true)
           else
-            override.send("#{date}=", nil)
-            override.send("#{date}_overridden=", false)
+            override.send(:"#{date}=", nil)
+            override.send(:"#{date}_overridden=", false)
           end
         end
         assignments_to_save << assignment if override.changed?
@@ -115,7 +115,7 @@ class Assignment::BulkUpdate
     Assignment.clear_cache_keys(assignments_to_save, :availability)
     quizzes = assignments_to_save.select(&:quiz?).map(&:quiz)
     Quizzes::Quiz.clear_cache_keys(quizzes, :availability) if quizzes.any?
-    DueDateCacher.recompute_course(@context, assignments: assignments_to_save, update_grades: true, executing_user: @current_user)
+    SubmissionLifecycleManager.recompute_course(@context, assignments: assignments_to_save, update_grades: true, executing_user: @current_user)
 
     progress.complete
     progress.set_results({ "updated_count" => assignments_to_save.size })

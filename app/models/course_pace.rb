@@ -68,8 +68,6 @@ class CoursePace < ActiveRecord::Base
     can :read
   end
 
-  self.ignored_columns += %i[start_date]
-
   def asset_name
     I18n.t("Course Pace")
   end
@@ -135,6 +133,11 @@ class CoursePace < ActiveRecord::Base
 
   def create_publish_progress(run_at: Setting.get("course_pace_publish_interval", "300").to_i.seconds.from_now, enrollment_ids: nil)
     progress = Progress.create!(context: self, tag: "course_pace_publish")
+    run_publish_progress(progress, run_at:, enrollment_ids:)
+    progress
+  end
+
+  def run_publish_progress(progress, run_at: Time.now, enrollment_ids: nil)
     progress.process_job(self,
                          :publish,
                          {
@@ -168,7 +171,7 @@ class CoursePace < ActiveRecord::Base
               assignment = content_tag.assignment
               next unless assignment
 
-              due_at = CanvasTime.fancy_midnight(dates[course_pace_module_item.id].in_time_zone).in_time_zone("UTC")
+              due_at = CanvasTime.fancy_midnight(dates[course_pace_module_item.id].in_time_zone).utc
               user_id = enrollment.user_id
 
               # Check for an old override
@@ -202,6 +205,7 @@ class CoursePace < ActiveRecord::Base
                 current_override.update(due_at:)
               else
                 assignment_override = assignment.assignment_overrides.create!(
+                  title: I18n.t("Course Pacing"),
                   set_type: "ADHOC",
                   due_at_overridden: true,
                   due_at:
@@ -219,10 +223,13 @@ class CoursePace < ActiveRecord::Base
 
       # Clear caches
       Assignment.clear_cache_keys(assignments_to_refresh, :availability)
-      DueDateCacher.recompute_course(course, assignments: assignments_to_refresh, update_grades: true)
+      SubmissionLifecycleManager.recompute_course(course, assignments: assignments_to_refresh, update_grades: true)
 
       # Maintain the weights of the module items
       course_pace_module_items.each(&:restore_attributes)
+
+      # Explicitly complete the progress so we aren't left with any hanging progresses
+      progress.complete! if progress&.running?
 
       # Mark as published
       log_module_items_count
@@ -266,12 +273,12 @@ class CoursePace < ActiveRecord::Base
       if user_id
         course.student_enrollments.where(user_id:)
       elsif course_section_id
-        student_course_pace_user_ids = course.course_paces.where.not(user_id: nil).pluck(:user_id)
+        student_course_pace_user_ids = course.course_paces.not_deleted.where.not(user_id: nil).pluck(:user_id)
         course_section.student_enrollments.where.not(user_id: student_course_pace_user_ids)
       else
-        student_course_pace_user_ids = course.course_paces.where.not(user_id: nil).pluck(:user_id)
+        student_course_pace_user_ids = course.course_paces.not_deleted.where.not(user_id: nil).pluck(:user_id)
         course_section_course_pace_section_ids =
-          course.course_paces.where.not(course_section: nil).pluck(:course_section_id)
+          course.course_paces.not_deleted.where.not(course_section: nil).pluck(:course_section_id)
         course
           .student_enrollments
           .where
@@ -288,7 +295,7 @@ class CoursePace < ActiveRecord::Base
 
     enrollment_start_date = student_enrollment&.start_at || [student_enrollment&.effective_start_at, student_enrollment&.created_at].compact.max
     date = enrollment_start_date || course_section&.start_at || valid_date_range.start_at[:date]
-    today = Date.today
+    today = course.time_zone.today
 
     # always put pace plan dates in the course time zone
     if with_context
@@ -409,7 +416,7 @@ class CoursePace < ActiveRecord::Base
   def log_average_item_duration
     return if course_pace_module_items.empty?
 
-    average_duration = course_pace_module_items.pluck(:duration).sum / course_pace_module_items.length
+    average_duration = course_pace_module_items.pluck(:duration).sum / course_pace_module_items.size
     InstStatsd::Statsd.count("course_pacing.average_assignment_duration", average_duration)
   end
 

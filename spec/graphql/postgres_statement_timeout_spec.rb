@@ -18,7 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require_relative "./graphql_spec_helper"
+require_relative "graphql_spec_helper"
 
 describe "graphql pg statement_timeouts" do
   before(:once) do
@@ -40,23 +40,6 @@ describe "graphql pg statement_timeouts" do
     }
   end
 
-  context "queries" do
-    it "works when fast" do
-      make_stuff_slow
-      expect do
-        CanvasSchema.execute(query, context: { current_user: @teacher })
-      end.not_to raise_error
-    end
-
-    it "fails when slow" do
-      make_stuff_slow
-      Setting.set("graphql_statement_timeout", 1)
-      expect do
-        CanvasSchema.execute(query, context: { current_user: @teacher })
-      end.to raise_error(GraphQLPostgresTimeout::Error)
-    end
-  end
-
   context "mutations" do
     it "works when fast" do
       make_stuff_slow
@@ -71,6 +54,11 @@ describe "graphql pg statement_timeouts" do
       result = CanvasSchema.execute(mutation, context: { current_user: @teacher })
       expect(result.dig("data", "updateAssignment")).to be_nil
       expect(result.dig("errors", 0, "path")).to eq ["updateAssignment"]
+    end
+
+    it "does not surface other StatementInvalid exception details" do
+      allow(Assignment).to receive(:find) { raise ActiveRecord::StatementInvalid, "not a timeout" }
+      expect { CanvasSchema.execute(mutation, context: { current_user: @teacher }) }.to raise_error("not a timeout")
     end
   end
 end

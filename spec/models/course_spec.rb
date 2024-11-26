@@ -48,6 +48,8 @@ describe Course do
         it { is_expected.to have_many(:assignment_post_policies).inverse_of(:course) }
         it { is_expected.to have_many(:feature_flags) }
         it { is_expected.to have_many(:lti_resource_links).class_name("Lti::ResourceLink") }
+
+        it { is_expected.to have_many(:block_editor_templates).class_name("BlockEditorTemplate").inverse_of(:context) }
       end
 
       describe "lti2 proxies" do
@@ -62,10 +64,10 @@ describe Course do
       it_behaves_like "a learning outcome context"
     end
 
-    it "re-runs DueDateCacher if enrollment term changes" do
+    it "re-runs SubmissionLifecycleManager if enrollment term changes" do
       @course.save!
       @course.enrollment_term = EnrollmentTerm.create!(root_account: Account.default, workflow_state: :active)
-      expect(DueDateCacher).to receive(:recompute_course).with(@course)
+      expect(SubmissionLifecycleManager).to receive(:recompute_course).with(@course)
       @course.save!
     end
 
@@ -109,9 +111,9 @@ describe Course do
       }.from(90).to(92)
     end
 
-    it "does not re-run DueDateCacher if enrollment term does not change" do
+    it "does not re-run SubmissionLifecycleManager if enrollment term does not change" do
       @course.save!
-      expect(DueDateCacher).not_to receive(:recompute_course)
+      expect(SubmissionLifecycleManager).not_to receive(:recompute_course)
       @course.save!
     end
 
@@ -168,7 +170,7 @@ describe Course do
       it "returns the grading scheme being used by the course, if one exists" do
         @course.save!
         standard = grading_standard_for(@course)
-        @course.update!(default_grading_standard: standard)
+        @course.update!(grading_standard: standard)
         expect(@course.grading_standard_or_default).to be standard
       end
 
@@ -909,68 +911,6 @@ describe Course do
       # we have to reload the users after each course change here to catch the
       # enrollment changes that are applied directly to the db with update_all
       it "grants delete to the proper individuals" do
-        @course.root_account.disable_feature!(:granular_permissions_manage_courses)
-        @role1 = custom_account_role("managecourses", account: Account.default)
-        @role2 = custom_account_role("managesis", account: Account.default)
-        account_admin_user_with_role_changes(role: @role1, role_changes: { manage_courses: true, change_course_state: true })
-        @admin1 = @admin
-        account_admin_user_with_role_changes(role: @role2, role_changes: { manage_sis: true, change_course_state: true })
-        @admin2 = @admin
-        course_with_teacher(active_all: true)
-        @designer = user_factory(active_all: true)
-        @course.enroll_designer(@designer).accept!
-        @ta = user_factory(active_all: true)
-        @course.enroll_ta(@ta).accept!
-
-        # active, non-sis course
-        expect(@course.grants_right?(@teacher, :delete)).to be_truthy
-        expect(@course.grants_right?(@designer, :delete)).to be_truthy
-        expect(@course.grants_right?(@ta, :delete)).to be_falsey
-        expect(@course.grants_right?(@admin1, :delete)).to be_truthy
-        expect(@course.grants_right?(@admin2, :delete)).to be_falsey
-
-        # active, sis course
-        @course.sis_source_id = "sis_id"
-        @course.save!
-        [@course, @teacher, @designer, @ta, @admin1, @admin2].each(&:reload)
-
-        clear_permissions_cache
-        expect(@course.grants_right?(@teacher, :delete)).to be_falsey
-        expect(@course.grants_right?(@designer, :delete)).to be_falsey
-        expect(@course.grants_right?(@ta, :delete)).to be_falsey
-        expect(@course.grants_right?(@admin1, :delete)).to be_truthy
-        expect(@course.grants_right?(@admin2, :delete)).to be_truthy
-
-        # completed, non-sis course
-        @course.sis_source_id = nil
-        @course.complete!
-        [@course, @teacher, @designer, @ta, @admin1, @admin2].each(&:reload)
-
-        clear_permissions_cache
-        expect(@course.grants_right?(@teacher, :delete)).to be_truthy
-        expect(@course.grants_right?(@designer, :delete)).to be_truthy
-        expect(@course.grants_right?(@ta, :delete)).to be_falsey
-        expect(@course.grants_right?(@admin1, :delete)).to be_truthy
-        expect(@course.grants_right?(@admin2, :delete)).to be_falsey
-        @course.clear_permissions_cache(@user)
-
-        # completed, sis course
-        @course.sis_source_id = "sis_id"
-        @course.save!
-        [@course, @teacher, @designer, @ta, @admin1, @admin2].each(&:reload)
-
-        clear_permissions_cache
-        expect(@course.grants_right?(@teacher, :delete)).to be_falsey
-        expect(@course.grants_right?(@designer, :delete)).to be_falsey
-        expect(@course.grants_right?(@ta, :delete)).to be_falsey
-        expect(@course.grants_right?(@admin1, :delete)).to be_truthy
-        expect(@course.grants_right?(@admin2, :delete)).to be_truthy
-      end
-
-      # we have to reload the users after each course change here to catch the
-      # enrollment changes that are applied directly to the db with update_all
-      it "grants delete to the proper individuals (granular permissions)" do
-        @course.root_account.enable_feature!(:granular_permissions_manage_courses)
         @role1 = custom_account_role("managecourses", account: Account.default)
         @role2 = custom_account_role("managesis", account: Account.default)
         account_admin_user_with_role_changes(role: @role1, role_changes: { manage_courses_delete: true })
@@ -1033,124 +973,7 @@ describe Course do
         expect(@course.grants_right?(@admin2, :delete)).to be_falsey
       end
 
-      # :change_course_state is deprecated
-      it "does not grant delete to anyone without :change_course_state rights (non-granular)" do
-        @course.root_account.disable_feature!(:granular_permissions_manage_courses)
-        @role1 = custom_account_role("managecourses", account: Account.default)
-        @role2 = custom_account_role("managesis", account: Account.default)
-        account_admin_user_with_role_changes(role: @role1, role_changes: { manage_courses: true })
-        @admin1 = @admin
-        account_admin_user_with_role_changes(role: @role2, role_changes: { manage_sis: true })
-        @admin2 = @admin
-        course_with_teacher(active_all: true)
-        @designer = user_factory(active_all: true)
-        @course.enroll_designer(@designer).accept!
-
-        Account.default.role_overrides.create!(role: teacher_role, permission: :change_course_state, enabled: false)
-        Account.default.role_overrides.create!(role: designer_role, permission: :change_course_state, enabled: false)
-
-        # active, non-sis course
-        expect(@course.grants_right?(@teacher, :delete)).to be_falsey
-        expect(@course.grants_right?(@designer, :delete)).to be_falsey
-        expect(@course.grants_right?(@admin1, :delete)).to be_falsey
-        expect(@course.grants_right?(@admin2, :delete)).to be_falsey
-
-        # active, sis course
-        @course.sis_source_id = "sis_id"
-        @course.save!
-        [@course, @teacher, @designer, @admin1, @admin2].each(&:reload)
-
-        clear_permissions_cache
-        expect(@course.grants_right?(@teacher, :delete)).to be_falsey
-        expect(@course.grants_right?(@designer, :delete)).to be_falsey
-        expect(@course.grants_right?(@admin1, :delete)).to be_falsey
-        expect(@course.grants_right?(@admin2, :delete)).to be_falsey
-
-        # completed, non-sis course
-        @course.sis_source_id = nil
-        @course.complete!
-        [@course, @teacher, @designer, @admin1, @admin2].each(&:reload)
-
-        clear_permissions_cache
-        expect(@course.grants_right?(@teacher, :delete)).to be_falsey
-        expect(@course.grants_right?(@designer, :delete)).to be_falsey
-        expect(@course.grants_right?(@admin1, :delete)).to be_falsey
-        expect(@course.grants_right?(@admin2, :delete)).to be_falsey
-        @course.clear_permissions_cache(@user)
-
-        # completed, sis course
-        @course.sis_source_id = "sis_id"
-        @course.save!
-        [@course, @teacher, @designer, @admin1, @admin2].each(&:reload)
-
-        clear_permissions_cache
-        expect(@course.grants_right?(@teacher, :delete)).to be_falsey
-        expect(@course.grants_right?(@designer, :delete)).to be_falsey
-        expect(@course.grants_right?(@admin1, :delete)).to be_falsey
-        expect(@course.grants_right?(@admin2, :delete)).to be_falsey
-      end
-
       it "grants reset_content to the proper individuals" do
-        @course.root_account.disable_feature!(:granular_permissions_manage_courses)
-        @role1 = custom_account_role("managecourses", account: Account.default)
-        @role2 = custom_account_role("managesis", account: Account.default)
-        account_admin_user_with_role_changes(role: @role1, role_changes: { manage_courses: true })
-        @admin1 = @admin
-        account_admin_user_with_role_changes(role: @role2, role_changes: { manage_sis: true })
-        @admin2 = @admin
-        course_with_teacher(active_all: true)
-        @designer = user_factory(active_all: true)
-        @course.enroll_designer(@designer).accept!
-        @ta = user_factory(active_all: true)
-        @course.enroll_ta(@ta).accept!
-
-        # active, non-sis course
-        clear_permissions_cache
-        expect(@course.grants_right?(@teacher, :reset_content)).to be_truthy
-        expect(@course.grants_right?(@designer, :reset_content)).to be_truthy
-        expect(@course.grants_right?(@ta, :reset_content)).to be_falsey
-        expect(@course.grants_right?(@admin1, :reset_content)).to be_truthy
-        expect(@course.grants_right?(@admin2, :reset_content)).to be_falsey
-
-        # active, sis course
-        @course.sis_source_id = "sis_id"
-        @course.save!
-        [@course, @teacher, @designer, @ta, @admin1, @admin2].each(&:reload)
-
-        clear_permissions_cache
-        expect(@course.grants_right?(@teacher, :reset_content)).to be_truthy
-        expect(@course.grants_right?(@designer, :reset_content)).to be_truthy
-        expect(@course.grants_right?(@ta, :reset_content)).to be_falsey
-        expect(@course.grants_right?(@admin1, :reset_content)).to be_truthy
-        expect(@course.grants_right?(@admin2, :reset_content)).to be_falsey
-
-        # completed, non-sis course
-        @course.sis_source_id = nil
-        @course.complete!
-        [@course, @teacher, @designer, @ta, @admin1, @admin2].each(&:reload)
-
-        clear_permissions_cache
-        expect(@course.grants_right?(@teacher, :reset_content)).to be_falsey
-        expect(@course.grants_right?(@designer, :reset_content)).to be_falsey
-        expect(@course.grants_right?(@ta, :reset_content)).to be_falsey
-        expect(@course.grants_right?(@admin1, :reset_content)).to be_truthy
-        expect(@course.grants_right?(@admin2, :reset_content)).to be_falsey
-
-        # completed, sis course
-        @course.sis_source_id = "sis_id"
-        @course.save!
-        [@course, @teacher, @designer, @ta, @admin1, @admin2].each(&:reload)
-
-        clear_permissions_cache
-        expect(@course.grants_right?(@teacher, :reset_content)).to be_falsey
-        expect(@course.grants_right?(@designer, :reset_content)).to be_falsey
-        expect(@course.grants_right?(@ta, :reset_content)).to be_falsey
-        expect(@course.grants_right?(@admin1, :reset_content)).to be_truthy
-        expect(@course.grants_right?(@admin2, :reset_content)).to be_falsey
-      end
-
-      it "grants reset_content to the proper individuals (granular permissions)" do
-        @course.root_account.enable_feature!(:granular_permissions_manage_courses)
         @role1 = custom_account_role("managecourses", account: Account.default)
         @role2 = custom_account_role("managesis", account: Account.default)
         account_admin_user_with_role_changes(role: @role1, role_changes: { manage_courses_reset: true })
@@ -1360,8 +1183,7 @@ describe Course do
           expect(c.grants_right?(@designer, :read)).to be_truthy
         end
 
-        it "does not grant read_user_notes or view_all_grades to designer" do
-          expect(c.grants_right?(@designer, :read_user_notes)).to be_falsey
+        it "does not grant view_all_grades to designer" do
           expect(c.grants_right?(@designer, :view_all_grades)).to be_falsey
         end
       end
@@ -1578,6 +1400,33 @@ describe Course do
         @new_course = @course.reset_content
         expect(fav.reload.context).to eq @new_course
       end
+
+      context "uuid" do
+        it "does not move the uuid to the new course during reset" do
+          orig_uuid = "original_uuid"
+          @course.uuid = orig_uuid
+          @course.save!
+          @course.reload
+
+          new_course = @course.reset_content
+
+          @course.reload
+          expect(@course.uuid).to eq orig_uuid
+          expect(new_course.uuid).to match(/[0-9a-zA-z]{40}/)
+        end
+
+        it "moves the uuid to the new course during reset if feature flag is disabled" do
+          @course.root_account.disable_feature!(:reset_uuid_on_course_reset)
+
+          orig_uuid = "original_uuid"
+          @course.uuid = orig_uuid
+          @course.save!
+          @course.reload
+
+          new_course = @course.reset_content
+          expect(new_course.uuid).to eq orig_uuid
+        end
+      end
     end
 
     context "group_categories" do
@@ -1763,15 +1612,15 @@ describe Course do
       group.add_user(@user1)
       users = @course.users_not_in_groups([group])
       expect(users.size).to eq 2
-      expect(users).not_to be_include(@user1)
+      expect(users).not_to include(@user1)
     end
 
     it "includes users otherwise" do
       group = @course.groups.create
       group.add_user(@user1)
       users = @course.users_not_in_groups([group])
-      expect(users).to be_include(@user2)
-      expect(users).to be_include(@user3)
+      expect(users).to include(@user2)
+      expect(users).to include(@user3)
     end
 
     it "allows ordering by user's sortable name" do
@@ -1987,7 +1836,7 @@ describe Course do
 
     context "vanilla usage" do
       it "returns participating_admins and participating_students" do
-        [@student, @ta, @teach].each { |usr| expect(@course.participants).to be_include(usr) }
+        [@student, @ta, @teach].each { |usr| expect(@course.participants).to include(usr) }
       end
 
       it "uses date-based logic if requested" do
@@ -2031,27 +1880,27 @@ describe Course do
       it "returns participating_admins, participating_students, and observers" do
         participants = @course.participants(include_observers: true)
         [@student, @ta, @teach, @course_level_observer, @student_following_observer].each do |usr|
-          expect(participants).to be_include(usr)
+          expect(participants).to include(usr)
         end
       end
 
       context "excluding specific students" do
         it "rejects observers only following one of the excluded students" do
           partic = @course.participants(include_observers: true, excluded_user_ids: [@student.id, @student_following_observer.id])
-          [@student, @student_following_observer].each { |usr| expect(partic).to_not be_include(usr) }
+          [@student, @student_following_observer].each { |usr| expect(partic).to_not include(usr) }
         end
 
         it "includes admins and course level observers" do
           partic = @course.participants(include_observers: true, excluded_user_ids: [@student.id, @student_following_observer.id])
-          [@ta, @teach, @course_level_observer].each { |usr| expect(partic).to be_include(usr) }
+          [@ta, @teach, @course_level_observer].each { |usr| expect(partic).to include(usr) }
         end
       end
     end
 
     it "excludes some student when passed their id" do
       partic = @course.participants(include_observers: false, excluded_user_ids: [@student.id])
-      [@ta, @teach].each { |usr| expect(partic).to be_include(usr) }
-      expect(partic).to_not be_include(@student)
+      [@ta, @teach].each { |usr| expect(partic).to include(usr) }
+      expect(partic).to_not include(@student)
     end
   end
 
@@ -2089,7 +1938,7 @@ describe Course do
 
       it "enrolls a ta as invited if the course isn't published" do
         expect(@tae).to be_invited
-        expect(@tae.messages_sent).to be_include("Enrollment Registration")
+        expect(@tae.messages_sent).to include("Enrollment Registration")
       end
     end
 
@@ -2106,7 +1955,7 @@ describe Course do
 
       it "enrolls a teacher as invited if the course isn't published" do
         expect(@te).to be_invited
-        expect(@te.messages_sent).to be_include("Enrollment Registration")
+        expect(@te.messages_sent).to include("Enrollment Registration")
       end
     end
 
@@ -2713,8 +2562,7 @@ describe Course do
 
     it "create_attachment uses inst-fs if inst-fs is enabled" do
       @uuid = "1234-abcd"
-      allow(InstFS).to receive(:direct_upload).and_return(@uuid)
-      allow(InstFS).to receive(:enabled?).and_return(true)
+      allow(InstFS).to receive_messages(direct_upload: @uuid, enabled?: true)
       @user = user_factory(active_all: true)
       student_in_course(active_all: true)
 
@@ -2894,7 +2742,7 @@ describe Course do
 
       it "removes ids for tabs not in the default list" do
         @course.tab_configuration = [{ "id" => 912 }]
-        expect(@course.tabs_available(@user).pluck(:id)).not_to be_include(912)
+        expect(@course.tabs_available(@user).pluck(:id)).not_to include(912)
         tab_ids = @course.tabs_available(@user).pluck(:id)
         expect(tab_ids).to eql(default_tab_ids)
         expect(tab_ids.length).to be > 0
@@ -2940,7 +2788,7 @@ describe Course do
           hidden: true
         }]
         tab_ids = @course.tabs_available(@user).pluck(:id)
-        expect(tab_ids).to be_include(Course::TAB_PEOPLE)
+        expect(tab_ids).to include(Course::TAB_PEOPLE)
       end
 
       it "enables the home tab and puts it first if it was hidden" do
@@ -2969,7 +2817,7 @@ describe Course do
 
         tabs = @course.tabs_available(@user, include_external: true).pluck(:label)
 
-        expect(tabs).to be_include("Item Banks")
+        expect(tabs).to include("Item Banks")
       end
 
       describe "with canvas_for_elementary account setting on" do
@@ -3054,8 +2902,28 @@ describe Course do
             @course.save!
 
             tabs = @course.tabs_available(@user, include_external: true).pluck(:label)
-            expect(tabs).to be_include("visible tool")
-            expect(tabs).not_to be_include("hidden tool")
+            expect(tabs).to include("visible tool")
+            expect(tabs).not_to include("hidden tool")
+          end
+
+          it "does include external tools with default disabled which have been manually enabled" do
+            enabled_tool = @course.context_external_tools.create!(
+              url: "http://example.com/1",
+              consumer_key: "key",
+              shared_secret: "abcd",
+              name: "visible tool",
+              course_navigation: {
+                text: "visible tool",
+                url: "http://example.com/1",
+                default: "disabled"
+              }
+            )
+
+            @course.tab_configuration = [{ "id" => enabled_tool.asset_string }]
+            @course.save!
+
+            tabs = @course.tabs_available(@user, include_external: true).pluck(:label)
+            expect(tabs).to include("visible tool")
           end
 
           context "with course_subject_tabs option" do
@@ -3212,7 +3080,7 @@ describe Course do
 
       it "hides unused tabs if not an admin" do
         tab_ids = @course.tabs_available(@user).pluck(:id)
-        expect(tab_ids).not_to be_include(Course::TAB_SETTINGS)
+        expect(tab_ids).not_to include(Course::TAB_SETTINGS)
         expect(tab_ids.length).to be > 0
       end
 
@@ -3226,12 +3094,12 @@ describe Course do
           hidden: true
         }]
         tab_ids = @course.tabs_available(@user).pluck(:id)
-        expect(tab_ids).not_to be_include(Course::TAB_PEOPLE)
+        expect(tab_ids).not_to include(Course::TAB_PEOPLE)
       end
 
       it "shows grades tab for students" do
         tab_ids = @course.tabs_available(@user).pluck(:id)
-        expect(tab_ids).to be_include(Course::TAB_GRADES)
+        expect(tab_ids).to include(Course::TAB_GRADES)
       end
 
       it "includes tabs for active external tools" do
@@ -3256,8 +3124,8 @@ describe Course do
 
         tabs = @course.tabs_available.pluck(:id)
 
-        expect(tabs).to be_include(t1.asset_string)
-        expect(tabs).not_to be_include(t2.asset_string)
+        expect(tabs).to include(t1.asset_string)
+        expect(tabs).not_to include(t2.asset_string)
       end
 
       it "does not include item banks tab for active external tools" do
@@ -3275,7 +3143,7 @@ describe Course do
 
         tabs = @course.tabs_available(@user, include_external: true).pluck(:label)
 
-        expect(tabs).not_to be_include("Item Banks")
+        expect(tabs).not_to include("Item Banks")
       end
 
       context "when 'Item Banks' has been added to the course navigation links" do
@@ -3378,7 +3246,7 @@ describe Course do
 
         tabs = @course.tabs_available(nil, include_external: false).pluck(:id)
 
-        expect(tabs).not_to be_include(t1.asset_string)
+        expect(tabs).not_to include(t1.asset_string)
       end
 
       it "includes message handlers if opt[:include_external] is true" do
@@ -3416,17 +3284,17 @@ describe Course do
         @oe.save!
         @user.reload
         tab_ids = @course.tabs_available(@user).pluck(:id)
-        expect(tab_ids).not_to be_include(Course::TAB_GRADES)
+        expect(tab_ids).not_to include(Course::TAB_GRADES)
       end
 
       it "shows grades tab for observers if they are linked to a student" do
         tab_ids = @course.tabs_available(@user).pluck(:id)
-        expect(tab_ids).to be_include(Course::TAB_GRADES)
+        expect(tab_ids).to include(Course::TAB_GRADES)
       end
 
       it "shows discussion tab for observers by default" do
         tab_ids = @course.tabs_available(@user).pluck(:id)
-        expect(tab_ids).to be_include(Course::TAB_DISCUSSIONS)
+        expect(tab_ids).to include(Course::TAB_DISCUSSIONS)
       end
 
       it "does not show discussion tab for observers without read_forum" do
@@ -3435,7 +3303,7 @@ describe Course do
                              role: observer_role,
                              enabled: false)
         tab_ids = @course.tabs_available(@user).pluck(:id)
-        expect(tab_ids).not_to be_include(Course::TAB_DISCUSSIONS)
+        expect(tab_ids).not_to include(Course::TAB_DISCUSSIONS)
       end
 
       it "recognizes active_course_level_observers" do
@@ -3444,8 +3312,8 @@ describe Course do
         @course_level_observer = observer_enrollment.user
 
         course_observers = @course.active_course_level_observers
-        expect(course_observers).to be_include(@course_level_observer)
-        expect(course_observers).to_not be_include(@oe.user)
+        expect(course_observers).to include(@course_level_observer)
+        expect(course_observers).to_not include(@oe.user)
       end
     end
 
@@ -3705,7 +3573,7 @@ describe Course do
         it "updates all student enrollments with pending and a last update status" do
           @course = course_factory
           make_student_enrollments
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq %w[published error unpublishable error unpublishable unpublishable unpublished unpublished unpublished]
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq %w[published error unpublishable error unpublishable unpublishable unpublished unpublished unpublished]
           expect(@student_enrollments.map(&:grade_publishing_message)).to eq [nil, "cause of this reason", nil, "cause of that reason", nil, nil, nil, nil, nil]
           expect(@student_enrollments.map(&:workflow_state)).to eq (["active"] * 6) + ["inactive"] + (["active"] * 2)
           expect(@student_enrollments.map(&:last_publish_attempt_at)).to eq [nil] * 9
@@ -3714,7 +3582,7 @@ describe Course do
           allow(@plugin).to receive(:enabled?).and_return(true)
           @plugin_settings[:publish_endpoint] = "http://localhost/endpoint"
           @course.publish_final_grades(@user)
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq (["pending"] * 6) + ["unpublished"] + (["pending"] * 2)
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq (["pending"] * 6) + ["unpublished"] + (["pending"] * 2)
           expect(@student_enrollments.map(&:grade_publishing_message)).to eq [nil] * 9
           expect(@student_enrollments.map(&:workflow_state)).to eq (["active"] * 6) + ["inactive"] + (["active"] * 2)
           @student_enrollments.map(&:last_publish_attempt_at).each_with_index do |time, i|
@@ -3865,7 +3733,7 @@ describe Course do
                                                                                expect(enrollments.sort_by(&:id)).to eq @ase.sort_by(&:id)
                                                                                expect(publishing_pseudonym).to eq @pseudonym
                                                                                expect(publishing_user).to eq @user
-                                                                               return [
+                                                                               [
                                                                                  [[@ase[2].id, @ase[5].id],
                                                                                   "post1",
                                                                                   "test/mime1"],
@@ -3879,7 +3747,7 @@ describe Course do
           expect(SSLCommon).to receive(:post_data).with("http://localhost/endpoint", "post1", "test/mime1", {})
           expect(SSLCommon).to receive(:post_data).with("http://localhost/endpoint", "post2", "test/mime2", {})
           @course.send_final_grades_to_endpoint @user
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq %w[unpublishable unpublishable published unpublishable published published unpublished unpublishable published]
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq %w[unpublishable unpublishable published unpublishable published published unpublished unpublishable published]
           expect(@student_enrollments.map(&:grade_publishing_message)).to eq [nil] * 9
         end
 
@@ -3903,7 +3771,7 @@ describe Course do
                   expect(publishing_pseudonym).to eq @pseudonym
                   expect(publishing_user).to eq @user
                   @checked = true
-                  return []
+                  []
                 end
               }
             }
@@ -3931,7 +3799,7 @@ describe Course do
                                                                                expect(publishing_pseudonym).to eq @pseudonym
                                                                                expect(publishing_user).to eq @user
                                                                                @checked = true
-                                                                               return []
+                                                                               []
                                                                              end
                                                                            }
                                                                          })
@@ -3942,7 +3810,7 @@ describe Course do
         it "makes sure grade publishing is enabled" do
           allow(@plugin).to receive(:enabled?).and_return(false)
           expect { @course.send_final_grades_to_endpoint nil }.to raise_error("final grade publishing disabled")
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq (["error"] * 6) + ["unpublished"] + (["error"] * 2)
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq (["error"] * 6) + ["unpublished"] + (["error"] * 2)
           expect(@student_enrollments.map(&:grade_publishing_message)).to eq (["final grade publishing disabled"] * 6) + [nil] + (["final grade publishing disabled"] * 2)
         end
 
@@ -3950,7 +3818,7 @@ describe Course do
           allow(@plugin).to receive(:enabled?).and_return(true)
           @plugin_settings[:publish_endpoint] = ""
           expect { @course.send_final_grades_to_endpoint nil }.to raise_error("endpoint undefined")
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq (["error"] * 6) + ["unpublished"] + (["error"] * 2)
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq (["error"] * 6) + ["unpublished"] + (["error"] * 2)
           expect(@student_enrollments.map(&:grade_publishing_message)).to eq (["endpoint undefined"] * 6) + [nil] + (["endpoint undefined"] * 2)
         end
 
@@ -3963,7 +3831,7 @@ describe Course do
           allow(@plugin).to receive(:enabled?).and_return(true)
           @plugin_settings[:publish_endpoint] = "http://localhost/endpoint"
           expect { @course.send_final_grades_to_endpoint @user }.to raise_error("publishing disallowed for this publishing user")
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq (["error"] * 6) + ["unpublished"] + (["error"] * 2)
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq (["error"] * 6) + ["unpublished"] + (["error"] * 2)
           expect(@student_enrollments.map(&:grade_publishing_message)).to eq (["publishing disallowed for this publishing user"] * 6) + [nil] + (["publishing disallowed for this publishing user"] * 2)
         end
 
@@ -3976,7 +3844,7 @@ describe Course do
           allow(@plugin).to receive(:enabled?).and_return(true)
           @plugin_settings[:publish_endpoint] = "http://localhost/endpoint"
           expect { @course.send_final_grades_to_endpoint @user }.to raise_error("grade publishing requires a grading standard")
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq (["error"] * 6) + ["unpublished"] + (["error"] * 2)
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq (["error"] * 6) + ["unpublished"] + (["error"] * 2)
           expect(@student_enrollments.map(&:grade_publishing_message)).to eq (["grade publishing requires a grading standard"] * 6) + [nil] + (["grade publishing requires a grading standard"] * 2)
         end
 
@@ -3985,7 +3853,7 @@ describe Course do
           @plugin_settings[:publish_endpoint] = "http://localhost/endpoint"
           @plugin_settings[:format_type] = "invalid_Format"
           expect { @course.send_final_grades_to_endpoint @user }.to raise_error("unknown format type: invalid_Format")
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq (["error"] * 6) + ["unpublished"] + (["error"] * 2)
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq (["error"] * 6) + ["unpublished"] + (["error"] * 2)
           expect(@student_enrollments.map(&:grade_publishing_message)).to eq (["unknown format type: invalid_Format"] * 6) + [nil] + (["unknown format type: invalid_Format"] * 2)
         end
 
@@ -4001,7 +3869,7 @@ describe Course do
                                                                                expect(enrollments.sort_by(&:id)).to eq @ase.sort_by(&:id)
                                                                                expect(publishing_pseudonym).to eq @pseudonym
                                                                                expect(publishing_user).to eq @user
-                                                                               return [
+                                                                               [
                                                                                  [[@ase[1].id, @ase[3].id],
                                                                                   "post1",
                                                                                   "test/mime1"],
@@ -4015,7 +3883,7 @@ describe Course do
           expect(SSLCommon).to receive(:post_data).with("http://localhost/endpoint", "post1", "test/mime1", {})
           expect(SSLCommon).to receive(:post_data).with("http://localhost/endpoint", "post2", "test/mime2", {})
           @course.send_final_grades_to_endpoint @user
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq ["unpublishable", published_status, "unpublishable", published_status, published_status, "unpublishable", "unpublished", "unpublishable", published_status]
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq ["unpublishable", published_status, "unpublishable", published_status, published_status, "unpublishable", "unpublished", "unpublishable", published_status]
           expect(@student_enrollments.map(&:grade_publishing_message)).to eq [nil] * 9
         end
 
@@ -4064,7 +3932,7 @@ describe Course do
                                                                                expect(enrollments.sort_by(&:id)).to eq @ase.sort_by(&:id)
                                                                                expect(publishing_pseudonym).to eq @pseudonym
                                                                                expect(publishing_user).to eq @user
-                                                                               return [
+                                                                               [
                                                                                  [[@ase[1].id, @ase[3].id],
                                                                                   "post1",
                                                                                   "test/mime1"],
@@ -4082,7 +3950,7 @@ describe Course do
           expect(SSLCommon).to receive(:post_data).with("http://localhost/endpoint", "post2", "test/mime2", {}).and_raise("waaah fail")
           expect(SSLCommon).to receive(:post_data).with("http://localhost/endpoint", "post3", "test/mime3", {})
           expect { @course.send_final_grades_to_endpoint(@user) }.to raise_error("waaah fail")
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq %w[published published published published error unpublishable unpublished unpublishable error]
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq %w[published published published published error unpublishable unpublished unpublishable error]
           expect(@student_enrollments.map(&:grade_publishing_message)).to eq ([nil] * 4) + ["waaah fail"] + ([nil] * 3) + ["waaah fail"]
         end
 
@@ -4098,7 +3966,7 @@ describe Course do
                                                                                expect(enrollments.sort_by(&:id)).to eq @ase.sort_by(&:id)
                                                                                expect(publishing_pseudonym).to eq @pseudonym
                                                                                expect(publishing_user).to eq @user
-                                                                               return [
+                                                                               [
                                                                                  [[@ase[1].id, @ase[3].id],
                                                                                   "post1",
                                                                                   "test/mime1"],
@@ -4116,7 +3984,7 @@ describe Course do
           expect(SSLCommon).to receive(:post_data).with("http://localhost/endpoint", "post2", "test/mime2", {}).and_raise("waaah fail")
           expect(SSLCommon).to receive(:post_data).with("http://localhost/endpoint", "post3", "test/mime3", {})
           expect { @course.send_final_grades_to_endpoint(@user) }.to raise_error("waaah fail")
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq %w[published error published error error unpublishable unpublished unpublishable error]
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq %w[published error published error error unpublishable unpublished unpublishable error]
           expect(@student_enrollments.map(&:grade_publishing_message)).to eq [nil, "waaah fail", nil, "waaah fail", "waaah fail", nil, nil, nil, "waaah fail"]
         end
 
@@ -4133,7 +4001,7 @@ describe Course do
                                                                            }
                                                                          })
           expect { @course.send_final_grades_to_endpoint(@user) }.to raise_error("waaah fail")
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq %w[error error error error error error unpublished error error]
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq %w[error error error error error error unpublished error error]
           expect(@student_enrollments.map(&:grade_publishing_message)).to eq (["waaah fail"] * 6) + [nil] + (["waaah fail"] * 2)
         end
 
@@ -4149,7 +4017,7 @@ describe Course do
                                                                                expect(enrollments.sort_by(&:id)).to eq @ase.sort_by(&:id)
                                                                                expect(publishing_pseudonym).to eq @pseudonym
                                                                                expect(publishing_user).to eq @user
-                                                                               return [
+                                                                               [
                                                                                  [[@ase[1].id, @ase[3].id],
                                                                                   "post1",
                                                                                   "test/mime1",
@@ -4164,7 +4032,7 @@ describe Course do
           expect(SSLCommon).to receive(:post_data).with("http://localhost/endpoint", "post1", "test/mime1", { "header_param" => "header_value" })
           expect(SSLCommon).to receive(:post_data).with("http://localhost/endpoint", "post2", "test/mime2", {})
           @course.send_final_grades_to_endpoint(@user)
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq %w[unpublishable published unpublishable published published published unpublished unpublishable unpublishable]
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq %w[unpublishable published unpublishable published published published unpublished unpublishable unpublishable]
         end
 
         it "updates enrollment status if no resource provided" do
@@ -4179,7 +4047,7 @@ describe Course do
                                                                                expect(enrollments.sort_by(&:id)).to eq @ase.sort_by(&:id)
                                                                                expect(publishing_pseudonym).to eq @pseudonym
                                                                                expect(publishing_user).to eq @user
-                                                                               return [
+                                                                               [
                                                                                  [[@ase[1].id, @ase[3].id],
                                                                                   nil,
                                                                                   nil],
@@ -4192,7 +4060,7 @@ describe Course do
                                                                          })
           expect(SSLCommon).not_to receive(:post_data)
           @course.send_final_grades_to_endpoint @user
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq %w[unpublishable published unpublishable published published unpublishable unpublished unpublishable published]
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq %w[unpublishable published unpublishable published published unpublishable unpublished unpublishable published]
           expect(@student_enrollments.map(&:grade_publishing_message)).to eq [nil] * 9
         end
       end
@@ -4369,6 +4237,7 @@ describe Course do
         context "when including final grade overrides" do
           before(:once) do
             @course.update!(grading_standard_id: 0)
+            Account.site_admin.disable_feature!(:custom_gradebook_statuses)
           end
 
           before do
@@ -4376,12 +4245,13 @@ describe Course do
             @course.update!(allow_final_grade_override: true)
           end
 
-          def csv_output
+          def csv_output(include_final_grade_overrides: true)
+            @ase.each(&:reload)
             @course.generate_grade_publishing_csv_output(
               @ase,
               @user,
               @pseudonym,
-              include_final_grade_overrides: true
+              include_final_grade_overrides:
             )
           end
 
@@ -4421,6 +4291,42 @@ describe Course do
             enrollment_ids = csv_output[0][0]
             expect(enrollment_ids).not_to include @ase[1].id
           end
+
+          context "when including custom grade statuses" do
+            before do
+              Account.site_admin.enable_feature!(:custom_gradebook_statuses)
+              @custom_grade_status = CustomGradeStatus.create!(name: "new status", color: "#000000", root_account_id: @course.root_account_id, created_by: user_model)
+              @ase[1].scores.find_by(course_score: true).update!(final_score: 0, override_score: 100, custom_grade_status: @custom_grade_status)
+            end
+
+            it "includes custom_grade_status in the csv output" do
+              output = csv_output[0][1]
+              expect(output).to include("custom_grade_status")
+              expect(output).to include(
+                "#{@user.id},U1,#{@course.id},,#{@ase[1].course_section_id},,#{@ase[1].user.id},,#{@ase[1].id},active,100.0,A,#{@custom_grade_status.name}\n"
+              )
+            end
+
+            it "does not include custom_grade_status in the csv output if include_final_grade_overrides is disabled" do
+              @course.update!(allow_final_grade_override: false)
+              output = csv_output(include_final_grade_overrides: false)[0][1]
+              expect(output).to include(
+                "#{@user.id},U1,#{@course.id},,#{@ase[1].course_section_id},,#{@ase[1].user.id},,#{@ase[1].id},active,0.0,F\n"
+              )
+              expect(output).not_to include("custom_grade_status")
+              expect(output).not_to include(@custom_grade_status.name)
+            end
+
+            it "does not include custom_grade_status if feature flag is disabled" do
+              Account.site_admin.disable_feature!(:custom_gradebook_statuses)
+              output = csv_output[0][1]
+              expect(output).to include(
+                "#{@user.id},U1,#{@course.id},,#{@ase[1].course_section_id},,#{@ase[1].user.id},,#{@ase[1].id},active,100.0,A\n"
+              )
+              expect(output).not_to include("custom_grade_status")
+              expect(output).not_to include(@custom_grade_status.name)
+            end
+          end
         end
 
         context "when not including final grade overrides" do
@@ -4433,6 +4339,7 @@ describe Course do
           end
 
           def csv_output
+            @ase.each(&:reload)
             @course.generate_grade_publishing_csv_output(@ase, @user, @pseudonym)
           end
 
@@ -4470,7 +4377,7 @@ describe Course do
           make_student_enrollments
           first_time = Time.now.utc
           second_time = first_time + 2.seconds
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq %w[published error unpublishable error unpublishable unpublishable unpublished unpublished unpublished]
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq %w[published error unpublishable error unpublishable unpublishable unpublished unpublished unpublished]
           @student_enrollments[0].grade_publishing_status = "pending"
           @student_enrollments[0].last_publish_attempt_at = first_time
           @student_enrollments[1].grade_publishing_status = "publishing"
@@ -4484,9 +4391,9 @@ describe Course do
           @student_enrollments[5].grade_publishing_status = "unpublished"
           @student_enrollments[5].last_publish_attempt_at = first_time
           @student_enrollments.map(&:save)
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq %w[pending publishing pending publishing published unpublished unpublished unpublished unpublished]
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq %w[pending publishing pending publishing published unpublished unpublished unpublished unpublished]
           @course.expire_pending_grade_publishing_statuses(first_time)
-          expect(@student_enrollments.map(&:reload).map(&:grade_publishing_status)).to eq %w[error error pending publishing published unpublished unpublished unpublished unpublished]
+          expect(@student_enrollments.each(&:reload).map(&:grade_publishing_status)).to eq %w[error error pending publishing published unpublished unpublished unpublished unpublished]
         end
       end
 
@@ -4525,7 +4432,7 @@ describe Course do
                       expect(course).to eq @course
                       expect(publishing_pseudonym).to eq @pseudonym
                       expect(publishing_user).to eq @user
-                      return [[[], "test-jt-data", "application/jtmimetype"]]
+                      [[[], "test-jt-data", "application/jtmimetype"]]
                     end,
           requires_grading_standard: false,
           requires_publishing_pseudonym: true
@@ -4764,7 +4671,7 @@ describe Course do
       @teacher = user_model
       @course.enroll_teacher(@teacher).accept
       tabs = @course.tabs_available(@teacher)
-      expect(tabs.pluck(:id)).not_to be_include(tool.asset_string)
+      expect(tabs.pluck(:id)).not_to include(tool.asset_string)
     end
 
     it "includes external tools if configured on the course" do
@@ -4775,7 +4682,7 @@ describe Course do
       @teacher = user_model
       @course.enroll_teacher(@teacher).accept
       tabs = @course.tabs_available(@teacher)
-      expect(tabs.pluck(:id)).to be_include(tool.asset_string)
+      expect(tabs.pluck(:id)).to include(tool.asset_string)
       tab = tabs.detect { |t| t[:id] == tool.asset_string }
       expect(tab[:label]).to eq tool.settings[:course_navigation][:text]
       expect(tab[:href]).to eq :course_external_tool_path
@@ -4793,7 +4700,7 @@ describe Course do
       @teacher = user_model
       @course.enroll_teacher(@teacher).accept
       tabs = @course.tabs_available(@teacher)
-      expect(tabs.pluck(:id)).to be_include(tool.asset_string)
+      expect(tabs.pluck(:id)).to include(tool.asset_string)
       tab = tabs.detect { |t| t[:id] == tool.asset_string }
       expect(tab[:label]).to eq tool.settings[:course_navigation][:text]
       expect(tab[:href]).to eq :course_external_tool_path
@@ -4811,7 +4718,7 @@ describe Course do
       @teacher = user_model
       @course.enroll_teacher(@teacher).accept
       tabs = @course.tabs_available(@teacher)
-      expect(tabs.pluck(:id)).to be_include(tool.asset_string)
+      expect(tabs.pluck(:id)).to include(tool.asset_string)
       tab = tabs.detect { |t| t[:id] == tool.asset_string }
       expect(tab[:label]).to eq tool.settings[:course_navigation][:text]
       expect(tab[:href]).to eq :course_external_tool_path
@@ -4832,11 +4739,11 @@ describe Course do
       @student.register!
       @course.enroll_student(@student).accept
       tabs = @course.tabs_available(nil)
-      expect(tabs.pluck(:id)).not_to be_include(tool.asset_string)
+      expect(tabs.pluck(:id)).not_to include(tool.asset_string)
       tabs = @course.tabs_available(@student)
-      expect(tabs.pluck(:id)).not_to be_include(tool.asset_string)
+      expect(tabs.pluck(:id)).not_to include(tool.asset_string)
       tabs = @course.tabs_available(@teacher)
-      expect(tabs.pluck(:id)).to be_include(tool.asset_string)
+      expect(tabs.pluck(:id)).to include(tool.asset_string)
       tab = tabs.detect { |t| t[:id] == tool.asset_string }
       expect(tab[:label]).to eq tool.settings[:course_navigation][:text]
       expect(tab[:href]).to eq :course_external_tool_path
@@ -4857,11 +4764,11 @@ describe Course do
       @student.register!
       @course.enroll_student(@student).accept
       tabs = @course.tabs_available(nil)
-      expect(tabs.pluck(:id)).not_to be_include(tool.asset_string)
+      expect(tabs.pluck(:id)).not_to include(tool.asset_string)
       tabs = @course.tabs_available(@student)
-      expect(tabs.pluck(:id)).to be_include(tool.asset_string)
+      expect(tabs.pluck(:id)).to include(tool.asset_string)
       tabs = @course.tabs_available(@teacher)
-      expect(tabs.pluck(:id)).to be_include(tool.asset_string)
+      expect(tabs.pluck(:id)).to include(tool.asset_string)
       tab = tabs.detect { |t| t[:id] == tool.asset_string }
       expect(tab[:label]).to eq tool.settings[:course_navigation][:text]
       expect(tab[:href]).to eq :course_external_tool_path
@@ -4889,16 +4796,16 @@ describe Course do
       @teacher = user_model
       @course.enroll_teacher(@teacher).accept
       tabs = @course.tabs_available(@teacher)
-      expect(tabs.pluck(:id)).to be_include(tool.asset_string)
+      expect(tabs.pluck(:id)).to include(tool.asset_string)
 
       @course.tab_configuration = Course.default_tabs.map { |t| { id: t[:id] } }.insert(1, { id: tool.asset_string, hidden: true })
       @course.save!
       @course = Course.find(@course.id)
       tabs = @course.tabs_available(@teacher)
-      expect(tabs.pluck(:id)).not_to be_include(tool.asset_string)
+      expect(tabs.pluck(:id)).not_to include(tool.asset_string)
 
       tabs = @course.tabs_available(@teacher, for_reordering: true)
-      expect(tabs.pluck(:id)).to be_include(tool.asset_string)
+      expect(tabs.pluck(:id)).to include(tool.asset_string)
     end
 
     it "uses extension default values" do
@@ -5056,7 +4963,7 @@ describe Course do
       user = account_admin_user(account: sub_account)
       course = Course.create!(account: sub_sub_account)
 
-      expect(Course.manageable_by_user(user.id).map(&:id)).to be_include(course.id)
+      expect(Course.manageable_by_user(user.id).map(&:id)).to include(course.id)
 
       user.account_users.first.destroy!
       expect(Course.manageable_by_user(user.id)).to_not be_exists
@@ -5069,7 +4976,7 @@ describe Course do
       e = course.teacher_enrollments.first
       e.accept
 
-      expect(Course.manageable_by_user(user.id).map(&:id)).to be_include(course.id)
+      expect(Course.manageable_by_user(user.id).map(&:id)).to include(course.id)
     end
 
     it "includes courses the user is actively enrolled in as a ta" do
@@ -5079,7 +4986,7 @@ describe Course do
       e = course.ta_enrollments.first
       e.accept
 
-      expect(Course.manageable_by_user(user.id).map(&:id)).to be_include(course.id)
+      expect(Course.manageable_by_user(user.id).map(&:id)).to include(course.id)
     end
 
     it "includes courses the user is actively enrolled in as a designer" do
@@ -5087,7 +4994,7 @@ describe Course do
       user = user_with_pseudonym
       course.enroll_designer(user).accept
 
-      expect(Course.manageable_by_user(user.id).map(&:id)).to be_include(course.id)
+      expect(Course.manageable_by_user(user.id).map(&:id)).to include(course.id)
     end
 
     it "does not include courses the user is enrolled in when the enrollment is non-active" do
@@ -5366,7 +5273,7 @@ describe Course do
         @course.student_view_student
         @admin = account_admin_user
         visible_enrollments = @course.apply_enrollment_visibility(@course.student_enrollments, @admin)
-        expect(visible_enrollments.map(&:user)).to be_include(@course.student_view_student)
+        expect(visible_enrollments.map(&:user)).to include(@course.student_view_student)
       end
 
       it "is safely empty for a nil user" do
@@ -5381,12 +5288,12 @@ describe Course do
         @course.enroll_user(@admin, "ObserverEnrollment")
 
         visible_enrollments = @course.apply_enrollment_visibility(@course.student_enrollments, @admin)
-        expect(visible_enrollments.map(&:user)).to be_include(@course.student_view_student)
+        expect(visible_enrollments.map(&:user)).to include(@course.student_view_student)
       end
 
       it "returns student view students to student view students" do
         visible_enrollments = @course.apply_enrollment_visibility(@course.student_enrollments, @course.student_view_student)
-        expect(visible_enrollments.map(&:user)).to be_include(@course.student_view_student)
+        expect(visible_enrollments.map(&:user)).to include(@course.student_view_student)
       end
     end
 
@@ -5433,6 +5340,35 @@ describe Course do
                              role: student_role,
                              enabled: false)
         expect(@course.enrollment_visibility_level_for(@student1, @course.section_visibilities_for(@student1), require_message_permission: true)).to be :restricted
+      end
+    end
+
+    context "section_visibilities_for" do
+      before :once do
+        @course.root_account.enable_feature!(:temporary_enrollments)
+        temporary_enrollment_pairing = TemporaryEnrollmentPairing.create!(root_account: @course.root_account, created_by: @teacher)
+        @temp_enrollment = @course.enroll_teacher(
+          @teacher,
+          section: @other_section,
+          temporary_enrollment_source_user_id: @ta.id,
+          temporary_enrollment_pairing_id: temporary_enrollment_pairing.id,
+          limit_privileges_to_course_section: true,
+          allow_multiple_enrollments: true
+        )
+      end
+
+      it "filters out sections from non active temporary enrolments" do
+        @temp_enrollment.enrollment_state.update(state: "inactive")
+
+        section_ids = @course.section_visibilities_for(@teacher).pluck(:course_section_id)
+        expect(section_ids).to match_array([@course.default_section.id])
+      end
+
+      it "returns temp enrollment section if enrollment_state of that is active" do
+        @temp_enrollment.enrollment_state.update(state: "active")
+
+        section_ids = @course.section_visibilities_for(@teacher).pluck(:course_section_id)
+        expect(section_ids).to match_array([@course.default_section.id, @other_section.id])
       end
     end
   end
@@ -5516,7 +5452,7 @@ describe Course do
       e1.conclude
       @course.sync_homeroom_enrollments
       expect(@course.enrollments.where(user_id: @student.id).size).to eq 2
-      e2 = @course.enrollments.where(user_id: @student.id, role_id: role.id).take
+      e2 = @course.enrollments.find_by(user_id: @student.id, role_id: role.id)
       expect(e2.role_id).to eq role.id
       expect(e2.start_at).to eq e1.start_at
       expect(e2.end_at).to eq e1.end_at
@@ -5771,7 +5707,7 @@ describe Course do
 
       student_view_student = student_view_course.student_view_student
 
-      expect(student_view_course.enrollments.map(&:user_id)).to be_include(student_view_student.id)
+      expect(student_view_course.enrollments.map(&:user_id)).to include(student_view_student.id)
     end
 
     it "does not create a section if a section already exists" do
@@ -5780,7 +5716,7 @@ describe Course do
       expect(not_default_section).not_to be_default_section
       student_view_student = student_view_course.student_view_student
       expect(student_view_course.reload.course_sections.active.count).to be 1
-      expect(not_default_section.enrollments.map(&:user_id)).to be_include(student_view_student.id)
+      expect(not_default_section.enrollments.map(&:user_id)).to include(student_view_student.id)
     end
 
     it "creates and return the student view student for a course" do
@@ -5889,7 +5825,7 @@ describe Course do
     it "generates a code on demand for existing self enrollment courses" do
       Course.where(id: @course).update_all(self_enrollment: true)
       c1.reload
-      expect(c1.read_attribute(:self_enrollment_code)).to be_nil
+      expect(c1["self_enrollment_code"]).to be_nil
       expect(c1.self_enrollment_code).not_to be_nil
       expect(c1.self_enrollment_code).to match(/\A[A-Z0-9]{6}\z/)
     end
@@ -5901,8 +5837,8 @@ describe Course do
     end
 
     before do
-      @course.write_attribute(:workflow_state, "available")
-      @course.write_attribute(:is_public, true)
+      @course.workflow_state = "available"
+      @course.is_public = true
     end
 
     it "can be read by a nil user if public and available" do
@@ -5910,14 +5846,14 @@ describe Course do
     end
 
     it "cannot be read by a nil user if public but not available" do
-      @course.write_attribute(:workflow_state, "created")
+      @course.workflow_state = "created"
       expect(@course.check_policy(nil)).to eq []
     end
 
     describe "when course is unpublished" do
       before do
-        @course.write_attribute(:workflow_state, "claimed")
-        @course.write_attribute(:is_public, false)
+        @course.workflow_state = "claimed"
+        @course.is_public = false
       end
 
       let_once(:user) { user_model }
@@ -5935,7 +5871,7 @@ describe Course do
 
     describe "when course is not public" do
       before do
-        @course.write_attribute(:is_public, false)
+        @course.is_public = false
       end
 
       let_once(:user) { user_model }
@@ -5969,16 +5905,7 @@ describe Course do
 
         it { is_expected.to include :read_prior_roster }
         it { is_expected.to include :view_all_grades }
-
-        it "without granular permissions" do
-          @course.root_account.disable_feature!(:granular_permissions_manage_courses)
-          expect(subject).to include :delete
-        end
-
-        it "with granular permissions" do
-          @course.root_account.enable_feature!(:granular_permissions_manage_courses)
-          expect(subject).not_to include :delete
-        end
+        it { is_expected.not_to include :delete }
       end
     end
 
@@ -5999,19 +5926,19 @@ describe Course do
         expect(@course.grants_right?(@user, :direct_share)).to be(true)
       end
 
-      it "returns true for teacher with manage_content" do
+      it "returns true for teacher with manage_course_content_add" do
         teacher_in_course(active_all: true)
         expect(@course.grants_right?(@teacher, :direct_share)).to be(true)
       end
 
-      it "returns false for teacher in active course without manage_content" do
-        RoleOverride.create!(context: @course.account, permission: "manage_content", role: teacher_role, enabled: false)
+      it "returns false for teacher in active course without manage_course_content_add" do
+        RoleOverride.create!(context: @course.account, permission: "manage_course_content_add", role: teacher_role, enabled: false)
         teacher_in_course(active_all: true)
         expect(@course.grants_right?(@teacher, :direct_share)).to be(false)
       end
 
-      it "returns true for teacher in concluded course without manage_content" do
-        RoleOverride.create!(context: @course.account, permission: "manage_content", role: teacher_role, enabled: false)
+      it "returns true for teacher in concluded course without manage_course_content_add" do
+        RoleOverride.create!(context: @course.account, permission: "manage_course_content_add", role: teacher_role, enabled: false)
         @course.complete!
         teacher_in_course
         expect(@course.grants_right?(@teacher, :direct_share)).to be(true)
@@ -6563,7 +6490,7 @@ describe Course do
     end
   end
 
-  context "#unpublishable?" do
+  describe "#unpublishable?" do
     it "is not unpublishable if there are active graded submissions" do
       course_with_teacher(active_all: true)
       @student = student_in_course(active_user: true).user
@@ -6785,22 +6712,44 @@ describe Course do
     before :once do
       course_with_teacher active_all: true
       student_in_course active_enrollment: true
-      @course.context_modules.create!(name: "published")
-      @course.context_modules.create!(name: "unpublished").unpublish!
+      @m1 = @course.context_modules.create!(name: "published 1")
+      @m2 = @course.context_modules.create!(name: "published 2")
+      @m3 = @course.context_modules.create!(name: "unpublished", workflow_state: "unpublished")
     end
 
     it "shows published modules to students" do
-      expect(@course.modules_visible_to(@student).map(&:name)).to match_array %w[published]
+      expect(@course.modules_visible_to(@student).pluck(:name)).to contain_exactly("published 1", "published 2")
     end
 
     it "shows all modules to teachers" do
-      expect(@course.modules_visible_to(@teacher).map(&:name)).to match_array %w[published unpublished]
+      expect(@course.modules_visible_to(@teacher).pluck(:name)).to contain_exactly("published 1", "published 2", "unpublished")
     end
 
     it "shows all modules to teachers even when course is concluded" do
       @course.complete!
       expect(@course.grants_right?(@teacher, :manage_content)).to be(false)
-      expect(@course.modules_visible_to(@teacher).map(&:name)).to match_array %w[published unpublished]
+      expect(@course.modules_visible_to(@teacher).pluck(:name)).to contain_exactly("published 1", "published 2", "unpublished")
+    end
+
+    context "when the selective_release_backend flag is enabled" do
+      before :once do
+        Account.site_admin.enable_feature! :selective_release_backend
+        @m2.assignment_overrides.create!
+      end
+
+      it "shows only modules that don't have overrides to student" do
+        expect(@course.modules_visible_to(@student).pluck(:name)).to contain_exactly("published 1")
+      end
+
+      it "shows published modules with overrides as long as student has an override" do
+        @m2.assignment_overrides.create!(set: @course.default_section)
+        @m3.assignment_overrides.create!(set: @course.default_section)
+        expect(@course.modules_visible_to(@student).pluck(:name)).to contain_exactly("published 1", "published 2")
+      end
+
+      it "shows all modules to teachers regardless of visibility status" do
+        expect(@course.modules_visible_to(@teacher).pluck(:name)).to contain_exactly("published 1", "published 2", "unpublished")
+      end
     end
   end
 
@@ -7705,7 +7654,6 @@ describe Course do
       @wiki_page_tag.trigger_unpublish!
 
       @ids_to_update = @modules_to_update.map(&:id)
-      Account.site_admin.enable_feature!(:module_publish_menu)
     end
 
     context "with publish event" do
@@ -7829,13 +7777,91 @@ describe Course do
 
     describe "with no user" do
       it "calls restrict_quantitative_data with no user" do
-        expect(@course.restrict_quantitative_data?).to be_nil
+        expect(@course.restrict_quantitative_data?).to be false
       end
     end
 
     describe "with feature flag on" do
       before do
         @root.enable_feature!(:restrict_quantitative_data)
+      end
+
+      describe "restrict_quantitative_data_setting_changeable?" do
+        it "returns false if the feature flag is off" do
+          @root.disable_feature!(:restrict_quantitative_data)
+          expect(@course.restrict_quantitative_data_setting_changeable?).to be_falsey
+        end
+
+        it "returns false if the account setting is on and locked and the course setting is on" do
+          @course.settings = @course.settings.merge(restrict_quantitative_data: true)
+          @root.settings[:restrict_quantitative_data] = { locked: true, value: true }
+          expect(@course.restrict_quantitative_data_setting_changeable?).to be_falsey
+        end
+
+        it "returns false if the account setting is off and the course setting is false" do
+          @course.settings = @course.settings.merge(restrict_quantitative_data: false)
+          @root.settings[:restrict_quantitative_data] = { locked: false, value: false }
+          expect(@course.restrict_quantitative_data_setting_changeable?).to be_falsey
+        end
+
+        it "returns true if the account setting is on and unlocked" do
+          @root.settings[:restrict_quantitative_data] = { locked: false, value: true }
+          expect(@course.restrict_quantitative_data_setting_changeable?).to be_truthy
+        end
+
+        it "returns true if the account setting is on and locked and the course setting is false" do
+          @course.settings = @course.settings.merge(restrict_quantitative_data: false)
+          @root.settings[:restrict_quantitative_data] = { locked: true, value: true }
+          expect(@course.restrict_quantitative_data_setting_changeable?).to be_truthy
+        end
+
+        it "returns true if the account setting is off and the course setting is true" do
+          @course.settings = @course.settings.merge(restrict_quantitative_data: true)
+          @root.settings[:restrict_quantitative_data] = { locked: false, value: false }
+          expect(@course.restrict_quantitative_data_setting_changeable?).to be_truthy
+        end
+      end
+
+      context "relation to account restrict_quantitative_data setting" do
+        it "is unaffected by account setting for existing courses" do
+          expect(@course.restrict_quantitative_data).to be false
+          @course.account.settings[:restrict_quantitative_data] = { locked: true, value: true }
+          @course.account.save!
+          @course.reload
+          expect(@course.restrict_quantitative_data).to be false
+        end
+
+        it "sets restrict_quantitative_data to true for newly created courses when account setting is true and locked" do
+          Account.default.settings[:restrict_quantitative_data] = { locked: true, value: true }
+          Account.default.save!
+          crs = Course.create!(account: Account.default)
+          expect(crs.restrict_quantitative_data).to be true
+        end
+
+        it "creates course account association for newly created courses when account setting is true and locked" do
+          @sub_account = Account.create(parent_account: @root, name: "English")
+          @root.settings[:restrict_quantitative_data] = { locked: true, value: true }
+          @root.save!
+
+          crs = Course.create!(account: @sub_account)
+          associated = @sub_account.associated_courses.first
+          expect(associated.id).to eq crs.id
+        end
+
+        it "does not set restrict_quantitative_data for newly created courses when account setting is true and not locked" do
+          Account.default.settings[:restrict_quantitative_data] = { locked: false, value: true }
+          Account.default.save!
+          crs = Course.create!(account: Account.default)
+          expect(crs.restrict_quantitative_data).to be false
+        end
+
+        it "sets restrict_quantitative_data for newly created courses in sub accounts when account setting is true and locked" do
+          @sub_account = Account.create(parent_account: @root, name: "English")
+          @root.settings[:restrict_quantitative_data] = { locked: true, value: true }
+          @root.save!
+          crs = Course.create!(account: @sub_account)
+          expect(crs.restrict_quantitative_data).to be true
+        end
       end
 
       describe "updates metric if setting is enabled/disabled" do
@@ -7874,24 +7900,11 @@ describe Course do
           expect(InstStatsd::Statsd).not_to have_received(:increment).with("course.settings.restrict_quantitative_data.enabled")
           expect(InstStatsd::Statsd).not_to have_received(:increment).with("course.settings.restrict_quantitative_data.disabled")
         end
-
-        it "doesn't increment when account setting propagates enabled" do
-          expect(@course.restrict_quantitative_data).to be false
-          @root.settings[:restrict_quantitative_data] = { locked: true, value: true }
-          @root.save!
-          expect(@course.restrict_quantitative_data).to be true
-          @root.settings[:restrict_quantitative_data] = { locked: true, value: false }
-          @root.save!
-          expect(@course.restrict_quantitative_data).to be false
-
-          expect(InstStatsd::Statsd).not_to have_received(:increment).with("course.settings.restrict_quantitative_data.enabled")
-          expect(InstStatsd::Statsd).not_to have_received(:increment).with("course.settings.restrict_quantitative_data.disabled")
-        end
       end
 
       describe "with setting turned on" do
         before do
-          @course.settings = @course.settings.merge(restrict_quantitative_data: true)
+          @course.restrict_quantitative_data = true
           @course.save!
         end
 
@@ -7964,6 +7977,10 @@ describe Course do
     end
 
     describe "with feature flag off" do
+      it "sets restrict_quantitative_data setting to false by default" do
+        expect(@course.restrict_quantitative_data).to be false
+      end
+
       describe "with setting turned on" do
         before do
           @course.settings = @course.settings.merge(restrict_quantitative_data: true)
@@ -7996,6 +8013,205 @@ describe Course do
           expect(@course.restrict_quantitative_data?(@admin)).to be false
         end
       end
+    end
+  end
+
+  describe "#default_grading_standard" do
+    before do
+      @root = Account.default
+      @course = Account.default.courses.build
+      @course.update(root_account_id: @root.id)
+    end
+
+    def default_scheme(context)
+      gs = GradingStandard.new(context:, title: "My Grading Standard", data: { "A" => 0.94, "B" => 0, })
+      gs.save!
+      gs
+    end
+
+    it "returns nil if no grading standards exist" do
+      expect(@course.default_grading_standard).to be_nil
+    end
+
+    it "returns the default grading standard if one exists" do
+      grading_standard = default_scheme(@course)
+      @course.grading_standard = grading_standard
+      @course.save!
+      expect(@course.default_grading_standard).to eq grading_standard
+    end
+
+    it "returns the account default grading standard if no course default exists" do
+      grading_standard = default_scheme(@course.account)
+      @course.account.grading_standard = grading_standard
+      @course.account.save!
+      expect(@course.default_grading_standard).to eq grading_standard
+    end
+  end
+
+  describe "#grading_standard_enabled" do
+    before do
+      @root = Account.default
+      @course = Account.default.courses.build
+      @course.update(root_account_id: @root.id)
+    end
+
+    def default_scheme(context)
+      gs = GradingStandard.new(context:, title: "My Grading Standard", data: { "A" => 0.94, "B" => 0, })
+      gs.save!
+      gs
+    end
+
+    it "returns false if no grading standards exist" do
+      expect(@course.grading_standard_enabled).to be_falsey
+    end
+
+    it "returns true if a grading standard exists" do
+      @course.grading_standard = default_scheme(@course)
+      @course.save!
+      expect(@course.grading_standard_enabled).to be_truthy
+    end
+
+    it "returns true if the account has a grading standard" do
+      @course.account.grading_standard = default_scheme(@course.account)
+      @course.account.save!
+      expect(@course.grading_standard_enabled).to be_truthy
+    end
+  end
+
+  describe "#course_grading_standard_enabled" do
+    before do
+      @root = Account.default
+      @course = Account.default.courses.build
+      @course.update(root_account_id: @root.id)
+    end
+
+    def default_scheme(context)
+      gs = GradingStandard.new(context:, title: "My Grading Standard", data: { "A" => 0.94, "B" => 0, })
+      gs.save!
+      gs
+    end
+
+    it "returns false if no course grading standard" do
+      expect(@course.course_grading_standard_enabled).to be_falsey
+    end
+
+    it "returns true if a course grading standard exists" do
+      @course.grading_standard = default_scheme(@course)
+      @course.save!
+
+      expect(@course.course_grading_standard_enabled).to be_truthy
+    end
+
+    it "returns false even if the account has a grading standard" do
+      @course.account.grading_standard = default_scheme(@course.account)
+      @course.account.save!
+
+      expect(@course.course_grading_standard_enabled).to be_falsey
+    end
+  end
+
+  describe "#destroy" do
+    it "records deleted_at" do
+      course_model
+      expect { @course.destroy }.to change { @course.reload.deleted_at }.from(nil).to be_truthy
+    end
+  end
+
+  describe "#all_dates" do
+    let(:calendar_event_start_date) { 1.day.from_now }
+    let(:calendar_event_end_date) { 2.days.from_now }
+    let(:assignment_due_at_date) { 3.days.from_now }
+    let(:context_module_unlock_at_date) { 4.days.from_now }
+
+    before do
+      @course = Account.default.courses.build
+      @course.save!
+      @course.calendar_events.create!(title: "an event",
+                                      start_at: calendar_event_start_date,
+                                      end_at: calendar_event_end_date)
+      @course.assignments.create!(due_at: assignment_due_at_date)
+      cm = @course.context_modules.build(name: "some module", unlock_at: context_module_unlock_at_date)
+      cm.save!
+    end
+
+    it "should return all dates" do
+      dates = @course.all_dates
+
+      expect(dates).to include(calendar_event_start_date.to_date)
+      expect(dates).to include(calendar_event_end_date.to_date)
+      expect(dates).to include(assignment_due_at_date.to_date)
+      expect(dates).to include(context_module_unlock_at_date.to_date)
+    end
+  end
+
+  describe "#get_assignment_ids_from_module_items" do
+    let(:course) { Course.create }
+    let(:context_module) { ContextModule.create(course:) }
+    let(:assignment) { assignment_model(course:) }
+    let(:module_item) { context_module.add_item(assignment) }
+
+    it "returns the assignment from the module item" do
+      expect(course.get_assignment_ids_from_module_items([module_item.id])).to eq([assignment.id])
+    end
+
+    it "returns nil if module_items is nil" do
+      expect(course.get_assignment_ids_from_module_items(nil)).to be_nil
+    end
+  end
+
+  describe "#get_assignment_ids_from_modules" do
+    let(:course) { Course.create }
+    let(:context_module) { ContextModule.create(course:) }
+    let(:assignment) { assignment_model(course:) }
+    let(:export) { ContentExport.create(course:) }
+
+    before do
+      context_module.add_item(assignment)
+    end
+
+    it "returns the assignment from the module" do
+      expect(course.get_assignment_ids_from_modules([context_module.id])).to eq([assignment.id])
+    end
+
+    it "returns nil if modules is nil" do
+      expect(course.get_assignment_ids_from_modules(nil)).to be_nil
+    end
+  end
+
+  describe "group and differentiation tag associations" do
+    before(:once) do
+      @course = Course.create!
+      @collaborative_category = GroupCategory.create!(context: @course, name: "Collab Category", non_collaborative: false)
+      @non_collab_category = GroupCategory.create!(context: @course, name: "Tag Category", non_collaborative: true)
+
+      @collaborative_group = Group.create!(context: @course, group_category: @collaborative_category, name: "Collab Group")
+      @differentiation_tag = Group.create!(context: @course, group_category: @non_collab_category, name: "Tag")
+
+      @deleted_collab_group = Group.create!(context: @course, group_category: @collaborative_category, name: "Deleted Collab")
+      @deleted_collab_group.destroy
+
+      @deleted_tag = Group.create!(context: @course, group_category: @non_collab_category, name: "Deleted Tag")
+      @deleted_tag.destroy
+    end
+
+    it "filters group categories by collaborative flag" do
+      expect(@course.group_categories).to contain_exactly(@collaborative_category)
+      expect(@course.differentiation_tag_categories).to contain_exactly(@non_collab_category)
+    end
+
+    it "includes all categories regardless of deleted status" do
+      expect(@course.all_group_categories).to contain_exactly(@collaborative_category)
+      expect(@course.all_differentiation_tag_categories).to contain_exactly(@non_collab_category)
+    end
+
+    it "filters groups by collaborative flag" do
+      expect(@course.groups).to match_array([@collaborative_group, @deleted_collab_group])
+      expect(@course.differentiation_tags).to match_array([@differentiation_tag, @deleted_tag])
+    end
+
+    it "only includes active groups in active associations" do
+      expect(@course.active_groups).to contain_exactly(@collaborative_group)
+      expect(@course.active_differentiation_tags).to contain_exactly(@differentiation_tag)
     end
   end
 end

@@ -22,7 +22,7 @@ module Canvas
     include Canvas::APISerialization
 
     def initialize(object, options = {})
-      super(object, options)
+      super
       @options = options
       @controller = options.fetch(:controller)
       @sideloads  = options.fetch(:includes, [])
@@ -33,7 +33,7 @@ module Canvas
       serializer_class.new(item, @options)
     end
 
-    def serializable_object
+    def serializable_object(...)
       super.map! { |hash| stringify!(hash) }
     end
   end

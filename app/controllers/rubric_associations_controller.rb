@@ -79,30 +79,36 @@ class RubricAssociationsController < ApplicationController
   #
   # @returns RubricAssociation
   def update
-    association_params = if params[:rubric_association]
+    enhanced_rubric_assignments_enabled = Rubric.enhanced_rubrics_assignments_enabled?(@context)
+    association_params = if params[:rubric_association] && !enhanced_rubric_assignments_enabled
                            params[:rubric_association].permit(:use_for_grading, :title, :purpose, :url, :hide_score_total, :bookmarked, :rubric_id)
+                         elsif params[:rubric_association] && enhanced_rubric_assignments_enabled
+                           params[:rubric_association].permit(:use_for_grading, :title, :purpose, :url, :hide_score_total, :bookmarked, :rubric_id, :hide_points, :hide_outcome_results, :use_for_grading)
                          else
                            {}
                          end
 
-    @association = @context.rubric_associations.find(params[:id]) rescue nil
+    @association = @context.rubric_associations.find_by(id: params[:id])
     @association_object = RubricAssociation.get_association_object(params[:rubric_association])
     @association_object = nil unless @association_object && @association_object.try(:context) == @context
     rubric_id = association_params.delete(:rubric_id)
     @rubric = @association ? @association.rubric : Rubric.find(rubric_id)
     # raise "User doesn't have access to this rubric" unless @rubric.grants_right?(@current_user, session, :read)
-    return unless can_manage_rubrics_or_association_object?(@assocation, @association_object)
+    return unless can_manage_rubrics_or_association_object?(@association, @association_object)
     return unless can_update_association?(@association)
 
     # create a new rubric if associating in a different course
     rubric_context = @rubric.context
+    from_different_shard = rubric_context.shard != @context.shard
     if rubric_context != @context && rubric_context.is_a?(Course)
       @rubric = @rubric.dup
       @rubric.rubric_id = rubric_id
+      @rubric.rubric_id = nil if from_different_shard
       @rubric.update_criteria(params[:rubric]) if params[:rubric]
       @rubric.user = @current_user
       @rubric.context = @context
       @rubric.update_mastery_scales(false)
+      @rubric.shard = @context.shard if from_different_shard
       @rubric.save!
     elsif params[:rubric] && @rubric.grants_right?(@current_user, session, :update)
       @rubric.update_criteria(params[:rubric])

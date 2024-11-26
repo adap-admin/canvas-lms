@@ -21,13 +21,13 @@ import React, {useState} from 'react'
 import {Modal} from '@instructure/ui-modal'
 import {Heading} from '@instructure/ui-heading'
 import CanvasDateInput from '@canvas/datetime/react/components/DateInput'
-import moment from 'moment'
 import {MomentInput} from 'moment-timezone'
 import type {Moment} from 'moment-timezone'
-import tz from '@canvas/timezone'
+import * as tz from '@instructure/moment-utils'
 import {View} from '@instructure/ui-view'
 import {Button, CloseButton} from '@instructure/ui-buttons'
 import {useScope as useI18nScope} from '@canvas/i18n'
+import {isoDateFromInput} from '../../../util/DateUtils'
 
 const I18n = useI18nScope('gradebook')
 
@@ -78,7 +78,7 @@ export default function FilterNavDateModal({
       as="form"
       open={isOpen}
       onDismiss={onCloseDateModal}
-      onSubmit={(event: Event) => {
+      onSubmit={event => {
         event.preventDefault()
         onSelectDates(startDateValue, endDateValue)
         onCloseDateModal()
@@ -108,7 +108,7 @@ export default function FilterNavDateModal({
             messages={startDateMessages}
             onSelectedDateChange={(inputObj: MomentInput) => {
               if (inputObj instanceof Date) {
-                const startDate_ = moment(inputObj).toISOString()
+                const startDate_ = isoDateFromInput('start-date', inputObj, ENV?.TIMEZONE)
                 if (endDateValue && startDate_ > endDateValue) {
                   setStartDateMessages([
                     {
@@ -142,7 +142,7 @@ export default function FilterNavDateModal({
             messages={endDateMessages}
             onSelectedDateChange={(inputObj: MomentInput) => {
               if (inputObj instanceof Date) {
-                const endDate_ = moment(inputObj).toISOString()
+                const endDate_ = isoDateFromInput('end-date', inputObj, ENV?.TIMEZONE)
                 if (startDateValue && endDate_ < startDateValue) {
                   setEndDateMessages([
                     {
@@ -168,7 +168,12 @@ export default function FilterNavDateModal({
         <Button onClick={onCloseDateModal} margin="0 x-small 0 0">
           {I18n.t('Cancel')}
         </Button>
-        <Button color="primary" type="submit">
+        <Button
+          id="apply-date-filter" // EVAL-4235
+          color="primary"
+          type="submit"
+          data-testid="apply-date-filter"
+        >
           {I18n.t('Apply')}
         </Button>
       </Modal.Footer>

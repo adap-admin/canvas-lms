@@ -36,22 +36,6 @@ export const fallbackIframeAllowances = [
 ]
 
 /**
- * Declare globals we use in this module
- */
-declare global {
-  interface Window {
-    ENV: {
-      LTI_LAUNCH_FRAME_ALLOWANCES?: string[]
-      a2_student_view?: boolean
-      MAX_MRU_LTI_TOOLS?: number
-    }
-    INST: {
-      editorButtons?: RceLtiToolInfo[]
-    }
-  }
-}
-
-/**
  * Type of the "editor buttons" that come from Canvas.
  *
  * They're actually the available LTI Tool configurations, so we give them a more reasonable name here.
@@ -93,6 +77,7 @@ export interface ExternalToolsEnv {
   editorContent: string | null
 
   insertCode(code: string)
+  replaceCode(code: string)
 }
 
 /**
@@ -202,6 +187,10 @@ export function externalToolsEnvFor(
 
     insertCode(code: string) {
       this.rceWrapper?.insertCode(code)
+    },
+
+    replaceCode(code: string) {
+      this.rceWrapper?.replaceCode(code)
     },
   }
 }

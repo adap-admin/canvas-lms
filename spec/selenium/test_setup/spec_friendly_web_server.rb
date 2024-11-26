@@ -34,7 +34,7 @@ class SpecFriendlyWebServer
     end
 
     def start_server(app, port)
-      @server = Puma::Server.new(app, Puma::Events.stdio)
+      @server = Puma::Server.new(app)
       @server.add_tcp_listener(bind_address, port)
       Thread.new do
         @server.run
@@ -50,7 +50,11 @@ class SpecFriendlyWebServer
       print "Starting web server..."
       max_time = Time.zone.now + timeout
       while Time.zone.now < max_time
-        response = HTTParty.get("http://#{bind_address}:#{port}/health_check") rescue nil
+        begin
+          response = HTTParty.get("http://#{bind_address}:#{port}/health_check")
+        rescue
+          # ignore
+        end
         if response&.success?
           SeleniumDriverSetup.disallow_requests!
           puts " Done!"

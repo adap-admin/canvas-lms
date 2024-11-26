@@ -31,7 +31,8 @@ describe Canvas::Migration::Helpers::SelectiveContentFormatter do
         "tool_profiles" => [{ "title" => "a1", "migration_id" => "a1" }],
         "outcomes" => [{ "title" => "a1", "migration_id" => "a1" }],
         "file_map" => { "oi" => { "title" => "a1", "migration_id" => "a1" } },
-        "assignments" => [{ "title" => "a1", "migration_id" => "a1" }, { "title" => "a2", "migration_id" => "a2", "assignment_group_migration_id" => "a1" }],
+        "assignments" => [{ "title" => "a1", "migration_id" => "a1" },
+                          { "title" => "a2", "migration_id" => "a2", "assignment_group_migration_id" => "a1" }],
         "assignment_groups" => [{ "title" => "a1", "migration_id" => "a1" }],
         "calendar_events" => [],
         "course" => {
@@ -41,14 +42,16 @@ describe Canvas::Migration::Helpers::SelectiveContentFormatter do
         }
       }
       @migration = double
-      allow(@migration).to receive(:migration_type).and_return("common_cartridge_importer")
-      allow(@migration).to receive(:overview_attachment).and_return(@migration)
-      allow(@migration).to receive(:open).and_return(@migration)
-      allow(@migration).to receive(:shard).and_return("1")
-      allow(@migration).to receive(:cache_key).and_return("1")
+      allow(@migration).to receive_messages(
+        migration_type: "common_cartridge_importer",
+        overview_attachment: @migration,
+        open: @migration,
+        shard: "1",
+        cache_key: "1",
+        read: @overview.to_json,
+        context: course_model
+      )
       allow(@migration).to receive(:close)
-      allow(@migration).to receive(:read).and_return(@overview.to_json)
-      allow(@migration).to receive(:context).and_return(course_model)
       @formatter = Canvas::Migration::Helpers::SelectiveContentFormatter.new(@migration, "https://example.com", global_identifiers: true)
     end
 
@@ -61,7 +64,7 @@ describe Canvas::Migration::Helpers::SelectiveContentFormatter do
                                                  { type: "wiki_pages", property: "copy[all_wiki_pages]", title: "Pages", count: 1, sub_items_url: "https://example.com?type=wiki_pages" },
                                                  { type: "context_external_tools", property: "copy[all_context_external_tools]", title: "External Tools", count: 1, sub_items_url: "https://example.com?type=context_external_tools" },
                                                  { type: "tool_profiles", property: "copy[all_tool_profiles]", title: "Tool Profiles", count: 1, sub_items_url: "https://example.com?type=tool_profiles" },
-                                                 { type: "learning_outcomes", property: "copy[all_learning_outcomes]", title: "Learning Outcomes", count: 1 },
+                                                 { type: "learning_outcomes", property: "copy[all_learning_outcomes]", title: "Learning Outcomes", count: 1, sub_items_url: "https://example.com?type=learning_outcomes" },
                                                  { type: "attachments", property: "copy[all_attachments]", title: "Files", count: 1, sub_items_url: "https://example.com?type=attachments" }]
     end
 
@@ -74,47 +77,37 @@ describe Canvas::Migration::Helpers::SelectiveContentFormatter do
       expect(@formatter.get_content_list("attachments").length).to eq 1
     end
 
-    context "selectable_outcomes_in_course_copy enabled" do
+    context "with learning_outcome_groups course data" do
       before do
-        @migration.context.root_account.enable_feature!(:selectable_outcomes_in_course_copy)
+        @overview["learning_outcome_groups"] = [{
+          "title" => "my group",
+          "migration_id" => "g1",
+          "child_groups" => []
+        }]
+        @overview["outcomes"].first["parent_migration_id"] = "g1"
+        allow(@migration).to receive(:read).and_return(@overview.to_json)
       end
 
-      after do
-        @migration.context.root_account.disable_feature!(:selectable_outcomes_in_course_copy)
+      it "arranges an outcome hiearchy" do
+        expect(@formatter.get_content_list("learning_outcomes")).to eq [
+          {
+            type: "learning_outcome_groups",
+            property: "copy[learning_outcome_groups][id_g1]",
+            title: "my group",
+            migration_id: "g1",
+            sub_items: [{
+              type: "learning_outcomes",
+              property: "copy[learning_outcomes][id_a1]",
+              title: "a1",
+              migration_id: "a1"
+            }]
+          }
+        ]
       end
+    end
 
-      context "with learning_outcome_groups course data" do
-        before do
-          @overview["learning_outcome_groups"] = [{
-            "title" => "my group",
-            "migration_id" => "g1",
-            "child_groups" => []
-          }]
-          @overview["outcomes"].first["parent_migration_id"] = "g1"
-          allow(@migration).to receive(:read).and_return(@overview.to_json)
-        end
-
-        it "arranges an outcome hiearchy" do
-          expect(@formatter.get_content_list("learning_outcomes")).to eq [
-            {
-              type: "learning_outcome_groups",
-              property: "copy[learning_outcome_groups][id_g1]",
-              title: "my group",
-              migration_id: "g1",
-              sub_items: [{
-                type: "learning_outcomes",
-                property: "copy[learning_outcomes][id_a1]",
-                title: "a1",
-                migration_id: "a1"
-              }]
-            }
-          ]
-        end
-      end
-
-      it "returns standard outcomes without learning_outcome_groups course data" do
-        expect(@formatter.get_content_list("learning_outcomes").length).to eq 1
-      end
+    it "returns standard outcomes without learning_outcome_groups course data" do
+      expect(@formatter.get_content_list("learning_outcomes").length).to eq 1
     end
 
     it "groups assignments into assignment groups" do
@@ -224,7 +217,6 @@ describe Canvas::Migration::Helpers::SelectiveContentFormatter do
     let(:top_level_items) do
       [{ type: "course_settings", property: "copy[all_course_settings]", title: "Course Settings" },
        { type: "syllabus_body", property: "copy[all_syllabus_body]", title: "Syllabus Body" },
-       { type: "blueprint_settings", property: "copy[all_blueprint_settings]", title: "Blueprint Settings" },
        { type: "context_modules", property: "copy[all_context_modules]", title: "Modules", count: 1, sub_items_url: "https://example.com?type=context_modules" },
        { type: "tool_profiles", property: "copy[all_tool_profiles]", title: "Tool Profiles", count: 1, sub_items_url: "https://example.com?type=tool_profiles" },
        { type: "discussion_topics", property: "copy[all_discussion_topics]", title: "Discussion Topics", count: 1, sub_items_url: "https://example.com?type=discussion_topics" },
@@ -246,10 +238,10 @@ describe Canvas::Migration::Helpers::SelectiveContentFormatter do
       @group = Group.create!(name: "group1", group_category: @category, context: @course)
       @announcement = announcement_model
       @migration = double
-      allow(@migration).to receive(:migration_type).and_return("course_copy_importer")
-      allow(@migration).to receive(:source_course).and_return(@course)
       export = @course.content_exports.create!(export_type: ContentExport::COURSE_COPY)
-      allow(@migration).to receive(:content_export).and_return(export)
+      allow(@migration).to receive_messages(migration_type: "course_copy_importer",
+                                            source_course: @course,
+                                            content_export: export)
       @course_outcome = outcome_model(title: "zebra")
       @account_outcome = outcome_model(outcome_context: @course.account, title: "alpaca")
       @out_group1 = outcome_group_model(title: "striker")
@@ -266,33 +258,18 @@ describe Canvas::Migration::Helpers::SelectiveContentFormatter do
       expect(formatter.get_content_list("announcements").length).to eq 1
     end
 
-    context "with selectable_outcomes_in_course_copy disabled" do
-      before do
-        @course.root_account.disable_feature!(:selectable_outcomes_in_course_copy)
-        allow(@migration).to receive(:context).and_return(course_model)
-      end
-
-      it "lists top-level items" do
-        # groups should not show up even though there are some
-        expect(formatter.get_content_list).to match_array top_level_items
-      end
-
-      it "lists learning outcomes" do
-        outcomes = formatter.get_content_list("learning_outcomes")
-        expect(outcomes.pluck(:title)).to match_array(
-          %w[
-            alpaca
-            moonshine
-            speakeasy
-            zebra
-          ]
-        )
-      end
+    it "lists blueprint_settings when appropriate" do
+      allow(@migration).to receive_messages(user: account_admin_user, context: course_model)
+      allow(MasterCourses::MasterTemplate).to receive(:is_master_course?).and_return(true)
+      expect(formatter.get_content_list).to include({
+                                                      property: "copy[all_blueprint_settings]",
+                                                      title: "Blueprint Settings",
+                                                      type: "blueprint_settings"
+                                                    })
     end
 
     context "with selectable_outcomes_in_course_copy enabled" do
       before do
-        @course.root_account.enable_feature!(:selectable_outcomes_in_course_copy)
         allow(@migration).to receive(:context).and_return(course_model)
       end
 
@@ -366,8 +343,7 @@ describe Canvas::Migration::Helpers::SelectiveContentFormatter do
 
       it "ignores in top-level list" do
         expect(formatter.get_content_list).to eq [{ type: "course_settings", property: "copy[all_course_settings]", title: "Course Settings" },
-                                                  { type: "syllabus_body", property: "copy[all_syllabus_body]", title: "Syllabus Body" },
-                                                  { type: "blueprint_settings", property: "copy[all_blueprint_settings]", title: "Blueprint Settings" }]
+                                                  { type: "syllabus_body", property: "copy[all_syllabus_body]", title: "Syllabus Body" }]
       end
 
       it "ignores in specific item request" do

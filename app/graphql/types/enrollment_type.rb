@@ -43,12 +43,13 @@ module Types
   class EnrollmentFilterInputType < Types::BaseInputObject
     graphql_name "EnrollmentFilterInput"
 
-    argument :types, [EnrollmentTypeType], required: false, default_value: nil
     argument :associated_user_ids,
              [ID],
              prepare: GraphQLHelpers.relay_or_legacy_ids_prepare_func("User"),
              required: false,
              default_value: []
+    argument :states, [EnrollmentWorkflowState], required: false, default_value: nil
+    argument :types, [EnrollmentTypeType], required: false, default_value: nil
   end
 
   class EnrollmentType < ApplicationObjectType
@@ -88,6 +89,13 @@ module Types
     field :state, EnrollmentWorkflowState, method: :workflow_state, null: false
 
     field :type, EnrollmentTypeType, null: false
+
+    field :limit_privileges_to_course_section, Boolean, null: true
+
+    field :sis_import_id, ID, null: true
+    def sis_import_id
+      enrollment.sis_batch_id
+    end
 
     field :grades, GradesType, null: true do
       argument :grading_period_id,

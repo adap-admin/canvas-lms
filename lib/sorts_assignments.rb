@@ -22,12 +22,13 @@ class SortsAssignments
 
   VALID_BUCKETS = %i[past overdue undated ungraded unsubmitted upcoming future].freeze
 
-  def initialize(assignments_scope:, user:, session:, course:, requested_user: nil)
+  def initialize(assignments_scope:, user:, session:, course:, requested_user: nil, include_discussion_checkpoints: false)
     @assignments_scope = assignments_scope
     @user = user
     @session = session
     @course = course
     @requested_user = requested_user
+    @include_discussion_checkpoints = include_discussion_checkpoints
   end
 
   def assignments(bucket, &)
@@ -68,9 +69,9 @@ class SortsAssignments
     @filters ||= {
       has_no_date: ->(scope) { scope.where(submissions: { cached_due_date: nil }) },
       has_date: ->(scope) { scope.where.not(submissions: { cached_due_date: nil }) },
-      past_due: ->(scope) { scope.where("submissions.cached_due_date < ?", @now) },
+      past_due: ->(scope) { scope.where(submissions: { cached_due_date: ...@now }) },
       due_in_future: ->(scope) { scope.where("submissions.cached_due_date IS NULL OR submissions.cached_due_date >= ?", @now) },
-      due_soon: ->(scope) { scope.where("submissions.cached_due_date >= ? AND submissions.cached_due_date <= ?", @now, 1.week.from_now(@now)) },
+      due_soon: ->(scope) { scope.where(submissions: { cached_due_date: @now..1.week.from_now(@now) }) },
       expects_submission: lambda do |additional_excludes: ["external_tool"]|
         ->(scope) { scope.expecting_submission(additional_excludes:) }
       end,
@@ -97,7 +98,14 @@ class SortsAssignments
   end
 
   def assignments_for_students
-    @course.assignments.where(id: assignment_ids).except(:order).joins(:submissions).where(submissions: { user: students })
+    course_assignments = @course.assignments.where(id: assignment_ids)
+    if @include_discussion_checkpoints
+      # We need to use AbstractAssignment instead of its subclass Assignment so that we can merge the query with checkpoint_assignments
+      assignments = AbstractAssignment.where(id: course_assignments)
+      checkpoint_assignments = SubAssignment.active.where(parent_assignment_id: course_assignments)
+      course_assignments = assignments.or(checkpoint_assignments)
+    end
+    course_assignments.except(:order).joins(:submissions).where(submissions: { user: students })
   end
 
   def assignment_ids

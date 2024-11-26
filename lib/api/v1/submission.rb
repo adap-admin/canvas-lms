@@ -47,6 +47,15 @@ module Api::V1::Submission
     # information. Only return it if the caller has permissions.
     hash["body"] = nil if assignment.quiz? && !submission.user_can_read_grade?(current_user)
 
+    if includes.include?("sub_assignment_submissions") && assignment.root_account.feature_enabled?(:discussion_checkpoints)
+      hash["has_sub_assignment_submissions"] = assignment.has_sub_assignments
+      hash["sub_assignment_submissions"] = (assignment.has_sub_assignments &&
+                                           assignment.sub_assignments&.map do |sub_assignment|
+                                             sub_assignment_submission = sub_assignment.submissions.active.find_by(user_id: submission.user_id)
+                                             sub_assignnment_submission_json(sub_assignment_submission, sub_assignment_submission.assignment, current_user, session, context, includes, params, avatars)
+                                           end) || []
+    end
+
     if includes.include?("submission_history")
       if submission.quiz_submission && assignment.quiz && !assignment.quiz.anonymous_survey?
         hash["submission_history"] =
@@ -69,7 +78,7 @@ module Api::V1::Submission
               end
           end
       elsif quizzes_next_submission?(submission)
-        hash["submission_history"] = quizzes_next_submission_history(submission)
+        hash["submission_history"] = quizzes_next_submission_history(submission, current_user)
       else
         histories = submission.submission_history
         ActiveRecord::Associations.preload(histories, :group) if includes.include?("group")
@@ -103,6 +112,11 @@ module Api::V1::Submission
     if includes.include?("submission_comments")
       published_comments = submission.comments_excluding_drafts_for(@current_user)
       hash["submission_comments"] = submission_comments_json(published_comments, current_user)
+    end
+
+    if includes.include?("submission_html_comments")
+      published_comments = submission.comments_excluding_drafts_for(@current_user)
+      hash["submission_html_comments"] = submission_comments_json(published_comments, current_user, use_html_comment: true)
     end
 
     if includes.include?("rubric_assessment") && submission.rubric_assessment &&
@@ -199,6 +213,8 @@ module Api::V1::Submission
     extra_attempts
     posted_at
     redo_request
+    sticker
+    custom_grade_status_id
   ].freeze
   SUBMISSION_JSON_METHODS = %w[late missing seconds_late entered_grade entered_score].freeze
   SUBMISSION_OTHER_FIELDS = %w[attachments discussion_entries proxy_submitter].freeze
@@ -338,6 +354,7 @@ module Api::V1::Submission
 
     if other_fields.include?("proxy_submitter") && attempt.proxy_submission?
       hash["proxy_submitter"] = attempt.proxy_submitter.short_name
+      hash["proxy_submitter_id"] = attempt.proxy_submitter_id
     end
 
     if attempt.submission_type == "basic_lti_launch"
@@ -354,6 +371,8 @@ module Api::V1::Submission
           )
       end
     end
+
+    hash["student_entered_score"] = attempt.student_entered_score if includes.include?("student_entered_score")
 
     hash
   end
@@ -386,6 +405,41 @@ module Api::V1::Submission
     hash[:graded_at] = attempt[:end_at]
 
     hash
+  end
+
+  def sub_assignnment_submission_json(
+    submission,
+    assignment,
+    current_user,
+    session,
+    context = nil,
+    includes = [],
+    params = {},
+    avatars = false
+  )
+
+    json = submission_json(submission, assignment, current_user, session, context, includes, params, avatars)
+
+    # we want to make a clear distinction between a submission and a sub assignment submission, we will do this by
+    # keeping the sub assignment submission json as minimal as possible, only keeping exactly what clients need
+    sub_assignment_json = json.slice(
+      "seconds_late",
+      "custom_grade_status_id",
+      "late_policy_status",
+      "late",
+      "missing",
+      "excused",
+      "entered_grade",
+      "entered_score",
+      "grade",
+      "score",
+      "user_id",
+      "grade_matches_current_submission"
+    )
+    sub_assignment_json["sub_assignment_tag"] = assignment.sub_assignment_tag
+    sub_assignment_json["published_grade"] = submission.published_grade
+    sub_assignment_json["published_score"] = submission.published_score
+    sub_assignment_json
   end
 
   # Create an attachment with a ZIP archive of an assignment's submissions.
@@ -426,7 +480,7 @@ module Api::V1::Submission
     if attachment
       stale = (attachment.locked != anonymous)
       stale ||=
-        (attachment.created_at < Setting.get("submission_zip_ttl_minutes", "60").to_i.minutes.ago)
+        (attachment.created_at < 1.day.ago)
       stale ||=
         attachment.created_at <
         (updated_at || assignment.submissions.maximum(:submitted_at) || attachment.created_at)
@@ -559,9 +613,10 @@ module Api::V1::Submission
       assignment.root_account.feature_enabled?(:quizzes_next_submission_history)
   end
 
-  def quizzes_next_submission_history(submission)
+  def quizzes_next_submission_history(submission, current_user)
     quiz_lti_submission =
       BasicLTI::QuizzesNextVersionedSubmission.new(submission.assignment, submission.user)
-    quiz_lti_submission.grade_history
+    hide_history_scores_on_manual_posting = !submission.grants_right?(current_user, :read_grade)
+    quiz_lti_submission.grade_history(hide_history_scores_on_manual_posting:)
   end
 end

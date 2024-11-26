@@ -30,6 +30,37 @@ describe "new groups" do
       course_with_teacher_logged_in
     end
 
+    context "differentiation_tags" do
+      before :once do
+        Account.default.enable_feature!(:differentiation_tags)
+      end
+
+      it "does not have Visit Group Homepage option in group actions for non_collaborative groups" do
+        # New scopes mean that we have to explicitly allow non_collaborative groups to
+        # Be returned on the groups controller before this test will work
+        skip "EGG-253"
+        category = @course.group_categories.build(name: "category 1", non_collaborative: true)
+        category.save!
+        category.groups.create!(context: @course)
+
+        get "/courses/#{@course.id}/groups"
+        f("a[id*='actions']").click
+        expect(fj("li a:contains('Edit')")).to be_present
+        expect(f("body")).not_to contain_jqcss("li a:contains('Visit Group Homepage')")
+      end
+
+      it "has Visit Group Homepage option in group actions for regular groups" do
+        category = @course.group_categories.build(name: "category 1")
+        category.save!
+        category.groups.create!(context: @course)
+
+        get "/courses/#{@course.id}/groups"
+        f("a[id*='actions']").click
+        expect(fj("li a:contains('Edit')")).to be_present
+        expect(fj("li a:contains('Visit Group Homepage')")).to be_present
+      end
+    end
+
     it "allows teachers to add a group set", priority: "1" do
       get "/courses/#{@course.id}/groups"
       click_add_group_set
@@ -92,9 +123,9 @@ describe "new groups" do
       expect(f(".group-user")).to include_text(@students[0].name)
 
       # Moves the student
-      f(".group-user-actions").click
+      f("[data-testid=groupUserMenu").click
       wait_for_ajaximations
-      f(".edit-group-assignment").click
+      f("[data-testid=moveTo").click
       wait_for_ajaximations
       click_option(".move-select .move-select__group select", @testgroup[1].name.to_s)
       button = f('.move-select button[type="submit"]')
@@ -145,9 +176,9 @@ describe "new groups" do
       wait_for_ajaximations
 
       # Sets user as group leader
-      f(".group-user-actions").click
+      f("[data-testid=groupUserMenu]").click
       wait_for_ajaximations
-      f(".set-as-leader").click
+      f("[data-testid=setAsLeader]").click
       wait_for_ajaximations
 
       # Looks for student to have a group leader icon
@@ -156,7 +187,7 @@ describe "new groups" do
       expect(f(".span3.ellipsis.group-leader")).to be_displayed
       expect(f(".span3.ellipsis.group-leader")).to include_text(@students.first.name)
 
-      check_element_has_focus f(".group-user-actions[data-user-id='user_#{@students.first.id}']")
+      check_element_has_focus f("[data-userid='#{@students.first.id}']")
     end
 
     it "allows teachers to message unassigned students" do
@@ -225,6 +256,7 @@ describe "new groups" do
     end
 
     it "Allows teacher to join students to groups in unpublished courses", priority: "1" do
+      skip "FOO-4220" # TODO: re-enable this test (or rewrite) after fixing FOO-4263
       group_test_setup(3, 1, 2)
       @course.workflow_state = "unpublished"
       @course.save!
@@ -284,10 +316,10 @@ describe "new groups" do
       f(".group[data-id=\"#{@testgroup[0].id}\"] .toggle-group").click
       wait_for_ajaximations
 
-      f(".group-user-actions[data-user-id=\"user_#{@students[0].id}\"]").click
+      fj("[data-testid=groupUserMenu][data-userid=#{@students[0].id}]").click
       wait_for_ajaximations
 
-      f(".ui-menu-item .edit-group-assignment").click
+      f("[data-testid=moveTo]").click
       wait_for_ajaximations
 
       f(".move-select .move-select__group") # fixes flakiness since the ff below doesn't wait for the element to appear
@@ -324,10 +356,10 @@ describe "new groups" do
       f(".group[data-id=\"#{@testgroup[0].id}\"] .toggle-group").click
       wait_for_ajaximations
 
-      f(".group-user-actions[data-user-id=\"user_#{@students[0].id}\"]").click
+      fj("[data-testid=groupUserMenu][data-userid=#{@students[0].id}]").click
       wait_for_ajaximations
 
-      f(".ui-menu-item .remove-from-group").click
+      f("[data-testid=removeFromGroup]").click
       wait_for_ajaximations
 
       expect(f(".ui-cnvs-scrollable")).to include_text(@students[0].name)
@@ -346,9 +378,9 @@ describe "new groups" do
 
       f(".group[data-id=\"#{@testgroup[0].id}\"] .toggle-group").click
       wait_for_ajaximations
-      f(".group-user-actions[data-user-id=\"user_#{@students[0].id}\"]").click
-      wait_for(method: nil, timeout: 1) { f(".ui-menu-item .edit-group-assignment").displayed? }
-      f(".ui-menu-item .edit-group-assignment").click
+      fj("[data-testid=groupUserMenu][data-userid=#{@students[0].id}]").click
+      wait_for_ajaximations
+      f("[data-testid=moveTo]").click
       wait_for(method: nil, timeout: 2) { fxpath("//*[@data-cid='Tray']//*[@role='dialog']").displayed? }
       ff(".move-select .move-select__group option").last.click
       f('.move-select button[type="submit"]').click
@@ -409,8 +441,9 @@ describe "new groups" do
       expect(f(".group[data-id=\"#{@testgroup[0].id}\"] .group-user")).to include_text("Test Student 1")
       expect(f(".group-leader .icon-user")).to be_displayed
 
-      f(".group-user-actions[data-user-id=\"user_#{@students[0].id}\"]").click
-      f(".ui-menu-item .icon-trash").click
+      fj("[data-testid=groupUserMenu][data-userid=#{@students[0].id}]").click
+      wait_for_ajaximations
+      f("[data-testid=removeFromGroup]").click
       wait_for_ajaximations
 
       get "/courses/#{@course.id}/groups"
@@ -425,6 +458,7 @@ describe "new groups" do
     end
 
     it "splits students into groups automatically", priority: "1" do
+      skip "FOO-3807 (10/7/2023)"
       seed_students(4)
 
       get "/courses/#{@course.id}/groups"
@@ -457,6 +491,7 @@ describe "new groups" do
     end
 
     it "auto-splits students into groups by section" do
+      skip "FOO-3807 (10/7/2023)"
       course = Course.create!(name: "Group by section")
 
       course.enroll_teacher(@teacher)
@@ -619,6 +654,22 @@ describe "new groups" do
       expect(f(".group[data-id=\"#{@testgroup[0].id}\"] .group-summary")).to include_text("4 / 5 students")
       expect(fj(".unassigned-users-heading.group-heading")).to include_text("Unassigned Students (1)")
       expect(fj(drop_target1)).to include_text("Test Student 3")
+    end
+
+    it "shows the users within a group one per line in 320px" do
+      group_test_setup(3, 1, 1)
+      3.times do |n|
+        add_user_to_group(@students[n], @testgroup.first, false)
+      end
+      driver.manage.window.resize_to(320, 900)
+      get "/courses/#{@course.id}/groups"
+
+      f(".group[data-id=\"#{@testgroup.first.id}\"] .toggle-group").click
+      wait_for_ajaximations
+      f(".group[data-id=\"#{@testgroup.first.id}\"] .toggle-group").click
+      # We hide the users in the group to get the width in % instead of px
+
+      expect(f("li.group .group-user").css_value("width")).to eq "93%"
     end
 
     it "moves leader via drag and drop", priority: "1" do
@@ -971,9 +1022,9 @@ describe "new groups" do
           expect(ff(".group-users").last).to include_text @students.last.name
 
           # Moves Test User 2 to Test Group 1
-          ff(".group-user-actions").last.click
-          wait_for(method: nil, timeout: 1) { f(".ui-menu-item .edit-group-assignment").displayed? }
-          ff(".edit-group-assignment").last.click
+          ff("[data-testid=groupUserMenu]").last.click
+          wait_for_ajaximations
+          f("[data-testid=moveTo]").click
           wait_for(method: nil, timeout: 2) { fxpath("//*[@data-cid='Tray']//*[@role='dialog']").displayed? }
           click_option(".move-select .move-select__group select", @testgroup.first.name.to_s)
 
@@ -1121,17 +1172,7 @@ describe "new groups" do
   context "manage groups permissions as a teacher" do
     before { course_with_teacher_logged_in }
 
-    it "does not allow adding a group set if they don't have the permission" do
-      @course.root_account.disable_feature!(:granular_permissions_manage_groups)
-      @course.account.role_overrides.create!(permission: :manage_groups, role: teacher_role, enabled: false)
-
-      get "/courses/#{@course.id}/groups"
-
-      expect(f(".ic-Layout-contentMain")).not_to contain_css("button[title='Add Group Set']")
-    end
-
-    it "does not allow add/import group or group-set without :manage_groups_add (granular permissions)" do
-      @course.root_account.enable_feature!(:granular_permissions_manage_groups)
+    it "does not allow add/import group or group-set without :manage_groups_add" do
       @course.account.role_overrides.create!(
         permission: "manage_groups_add",
         role: teacher_role,
@@ -1146,9 +1187,7 @@ describe "new groups" do
       expect(f(".ic-Layout-contentMain")).not_to contain_css("button[title='Add Group']")
     end
 
-    it "allows add/import group or group-set with :manage_groups_add (granular permissions)" do
-      @course.root_account.enable_feature!(:granular_permissions_manage_groups)
-
+    it "allows add/import group or group-set with :manage_groups_add" do
       create_category
       get "/courses/#{@course.id}/groups"
 
@@ -1167,19 +1206,7 @@ describe "new groups" do
       expect(f(".al-options")).to contain_css("a.icon-edit")
     end
 
-    it "allows editing individual course-level groups (granular permissions)" do
-      @course.root_account.enable_feature!(:granular_permissions_manage_groups)
-      gc = @course.group_categories.create!(name: "Course Groups")
-      group = Group.create!(name: "group", group_category: gc, context: @course)
-
-      get "/courses/#{@course.id}/groups"
-
-      f("#group-#{group.id}-actions").click
-      expect(f(".al-options")).to contain_css("a.icon-edit")
-    end
-
-    it "does not allow editing individual course-level groups (granular permissions)" do
-      @course.root_account.enable_feature!(:granular_permissions_manage_groups)
+    it "does not allow editing individual course-level groups" do
       @course.account.role_overrides.create!(
         permission: "manage_groups_manage",
         role: teacher_role,

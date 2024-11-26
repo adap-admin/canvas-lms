@@ -24,6 +24,11 @@ module Types
 
     implements Interfaces::LegacyIDInterface
 
+    field :hide_outcome_results, Boolean, null: false
+    def hide_outcome_results
+      !!object.hide_outcome_results
+    end
+
     field :hide_points, Boolean, null: false
     def hide_points
       !!object.hide_points(current_user)
@@ -37,6 +42,10 @@ module Types
     field :use_for_grading, Boolean, null: false
     def use_for_grading
       !!object.use_for_grading
+    end
+    field :saved_comments, String, null: true
+    def saved_comments
+      object.summary_data&.dig(:saved_comments)&.to_json
     end
   end
 end

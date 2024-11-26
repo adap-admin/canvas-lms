@@ -73,7 +73,6 @@ export const CREATE_CONVERSATION = gql`
     $recipients: [String!]!
     $subject: String
     $tags: [String!]
-    $userNote: Boolean
   ) {
     createConversation(
       input: {
@@ -88,7 +87,6 @@ export const CREATE_CONVERSATION = gql`
         recipients: $recipients
         subject: $subject
         tags: $tags
-        userNote: $userNote
       }
     ) {
       conversations {
@@ -111,7 +109,6 @@ export const ADD_CONVERSATION_MESSAGE = gql`
   mutation AddConversationMessage(
     $attachmentIds: [ID!]
     $body: String!
-    $userNote: Boolean
     $conversationId: ID!
     $includedMessages: [ID!]
     $mediaCommentId: ID
@@ -123,7 +120,6 @@ export const ADD_CONVERSATION_MESSAGE = gql`
       input: {
         attachmentIds: $attachmentIds
         body: $body
-        userNote: $userNote
         conversationId: $conversationId
         includedMessages: $includedMessages
         mediaCommentId: $mediaCommentId
@@ -183,4 +179,47 @@ export const UPDATE_SUBMISSIONS_READ_STATE = gql`
     }
   }
   ${Error.fragment}
+`
+
+export const CREATE_USER_INBOX_LABEL = gql`
+  mutation CreateUserInboxLabel($names: [String!]!) {
+    createUserInboxLabel(input: {names: $names}) {
+      errors {
+        message
+      }
+      inboxLabels
+    }
+  }
+`
+
+export const DELETE_USER_INBOX_LABEL = gql`
+  mutation DeleteUserInboxLabel($names: [String!]!) {
+    deleteUserInboxLabel(input: {names: $names}) {
+      errors {
+        message
+      }
+      inboxLabels
+    }
+  }
+`
+
+export const UPDATE_INBOX_SETTINGS = gql`
+  mutation UpdateMyInboxSettings($input: UpdateMyInboxSettingsInput!) {
+    updateMyInboxSettings(input: $input) {
+      myInboxSettings {
+        _id
+        useSignature
+        signature
+        useOutOfOffice
+        outOfOfficeFirstDate
+        outOfOfficeLastDate
+        outOfOfficeSubject
+        outOfOfficeMessage
+      }
+      errors {
+        attribute
+        message
+      }
+    }
+  }
 `

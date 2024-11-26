@@ -20,12 +20,13 @@
 
 describe Auditors::FeatureFlag do
   let(:request_id) { 42 }
-  let(:feature_name) { "root_account_feature" }
+  let(:feature_name) { "password_complexity" }
 
   before do
-    allow(Feature).to receive(:definitions).and_return({
-                                                         feature_name => Feature.new(feature: feature_name, applies_to: "RootAccount")
-                                                       })
+    allow(Account.site_admin).to receive(:feature_enabled?).with(:instructure_identity_global_flag)
+    allow(Feature).to receive(:definitions).and_return(
+      { feature_name => Feature.new(feature: feature_name, applies_to: "RootAccount") }
+    )
     @flag = Account.site_admin.feature_flags.build
     @flag.feature = feature_name
     @flag.state = "on"
@@ -52,5 +53,11 @@ describe Auditors::FeatureFlag do
     test_err_class = Class.new(StandardError)
     allow(Auditors::ActiveRecord::FeatureFlagRecord).to receive(:create_from_event_stream!).and_raise(test_err_class.new("DB Error"))
     expect { Auditors::FeatureFlag.record(@flag, @user, "on") }.to raise_error(test_err_class)
+  end
+
+  context "root account" do
+    it "sets root_account_id attribute to the global id of the account" do
+      expect(@event.root_account_id).to eq(Account.site_admin.global_id)
+    end
   end
 end

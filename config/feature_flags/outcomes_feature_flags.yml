@@ -8,11 +8,6 @@ outcome_alignment_non_scoring_content:
   environments:
     production:
       state: disabled
-selectable_outcomes_in_course_copy:
-  state: hidden
-  applies_to: RootAccount
-  display_name: "Selectable outcomes during course content migration"
-  description: "Allows learning outcomes to be selectable when migrating course content"
 limit_section_visibility_in_lmgb:
   state: hidden
   applies_to: RootAccount
@@ -32,12 +27,6 @@ account_level_mastery_scales:
     replacing per-outcome criterion ratings & calculation methods
   after_state_change_proc: mastery_scales_after_change_hook
   applies_to: RootAccount
-usage_rights_discussion_topics:
-  state: hidden
-  applies_to: RootAccount
-  display_name: Usage Rights on Discussion Topics
-  description: On courses with usage rights enabled, enforces usage rights
-    selection on discussion topic file attachments
 improved_outcomes_management:
   state: hidden
   applies_to: RootAccount
@@ -62,6 +51,12 @@ improved_lmgb:
       state: disabled
     beta:
       state: disabled
+menu_option_for_outcome_details_page:
+  type: setting
+  state: hidden
+  applies_to: SiteAdmin
+  display_name: Menu Option for Outcome Details Page
+  description: Adds menu option for accessing alignments at the outcome level with Improved Outcomes Management
 outcomes_friendly_description:
   state: hidden
   applies_to: SiteAdmin
@@ -77,9 +72,30 @@ outcome_average_calculation:
   state: allowed_on
   applies_to: RootAccount
   display_name: Outcome Average Calculation Method
-  description: Allows users to use average as a calulcation method for a given outcome.
+  description: Allows users to use average as a calculation method for a given outcome.
 outcome_alignment_summary_with_new_quizzes:
   state: hidden
   applies_to: Course
   display_name: New Quizzes included on Outcome Alignment Summary Tab
   description: New Quizzes outcome alignments are included on the Outcome Alignment Summary Tab, which provides a list of alignments for each outcome in a course.
+outcomes_new_decaying_average_calculation:
+  state: hidden
+  applies_to: RootAccount
+  display_name: Outcomes New Decaying Average Calculation Method
+  description: Allows users to use new decaying average as a calculation method for a given outcome.
+archive_outcomes:
+  state: hidden
+  applies_to: SiteAdmin
+  display_name: Archive Outcomes
+  description: Allows users to archive outcomes and outcome groups no longer in use.
+  after_state_change_proc: archive_outcomes_after_change_hook
+course_copy_alignments:
+  state: hidden
+  applies_to: RootAccount
+  display_name: Course Copy Alignments Clone
+  description: Allow to clone alignments after the course copy process
+prevent_deletion_outcomes_with_os_alignments:
+  state: hidden
+  applies_to: SiteAdmin
+  display_name: Prevent deletion of outcomes with alignments in OS
+  description: This FF is for development purposes only and should not be adjusted without first consulting product and engineering. This flag will prevent deletion of outcomes that have alignments within the outcomes service, which is used for New Quizzes.

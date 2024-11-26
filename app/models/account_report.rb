@@ -21,6 +21,7 @@
 class AccountReport < ActiveRecord::Base
   include Workflow
   include LocaleSelection
+  include CaptureJobIds
 
   belongs_to :account, inverse_of: :account_reports
   belongs_to :user, inverse_of: :account_reports
@@ -28,9 +29,11 @@ class AccountReport < ActiveRecord::Base
   has_many :account_report_runners, inverse_of: :account_report, autosave: false
   has_many :account_report_rows, inverse_of: :account_report, autosave: false
 
+  after_save :abort_incomplete_runners_if_needed
+
   validates :account_id, :user_id, :workflow_state, presence: true
 
-  serialize :parameters, Hash
+  serialize :parameters, type: Hash
 
   attr_accessor :runners
 
@@ -101,17 +104,19 @@ class AccountReport < ActiveRecord::Base
     created? || running?
   end
 
-  def run_report(type = nil)
-    parameters["locale"] = infer_locale(user:, root_account: account)
-    self.report_type ||= type
-    if AccountReport.available_reports[self.report_type]
-      begin
-        AccountReports.generate_report(self)
-      rescue
+  def run_report(type = nil, attempt: 1)
+    shard.activate do
+      parameters["locale"] = infer_locale(user:, root_account: account)
+      self.report_type ||= type
+      if AccountReport.available_reports[self.report_type]
+        begin
+          AccountReports.generate_report(self, attempt:)
+        rescue
+          mark_as_errored
+        end
+      else
         mark_as_errored
       end
-    else
-      mark_as_errored
     end
   end
   handle_asynchronously :run_report,
@@ -119,7 +124,9 @@ class AccountReport < ActiveRecord::Base
                         n_strand: proc { |ar| ["account_reports", ar.account.root_account.global_id] },
                         on_permanent_failure: :mark_as_errored
 
-  def mark_as_errored
+  def mark_as_errored(error = nil)
+    Rails.logger.error("AccountReport failed with error: #{error}") if error
+
     self.workflow_state = :error
     save!
   end
@@ -135,5 +142,16 @@ class AccountReport < ActiveRecord::Base
   def self.available_reports
     # check if there is a reports plugin for this account
     AccountReports.available_reports
+  end
+
+  def abort_incomplete_runners_if_needed
+    if saved_change_to_workflow_state? && (deleted? || aborted? || error?)
+      abort_incomplete_runners
+      delay(priority: Delayed::LOWER_PRIORITY).delete_account_report_rows
+    end
+  end
+
+  def abort_incomplete_runners
+    account_report_runners.incomplete.in_batches.update_all(workflow_state: "aborted", updated_at: Time.now.utc)
   end
 end

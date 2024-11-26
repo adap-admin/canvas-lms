@@ -50,7 +50,7 @@ class GradingPeriod < ActiveRecord::Base
     )
   }
 
-  scope :closed, -> { where("grading_periods.close_date < ?", Time.zone.now) }
+  scope :closed, -> { where(grading_periods: { close_date: ...Time.zone.now }) }
   scope :open, -> { where("grading_periods.close_date IS NULL OR grading_periods.close_date >= ?", Time.zone.now) }
 
   scope :grading_periods_by, lambda { |context_with_ids|
@@ -278,7 +278,7 @@ class GradingPeriod < ActiveRecord::Base
     if course_group?
       course = grading_period_group.course
       course.recompute_student_scores(update_all_grading_period_scores: dates_or_workflow_state_changed)
-      DueDateCacher.recompute_course(course) if dates_or_workflow_state_changed
+      SubmissionLifecycleManager.recompute_course(course) if dates_or_workflow_state_changed
     else
       grading_period_group.recompute_scores_for_each_term(dates_or_workflow_state_changed)
     end

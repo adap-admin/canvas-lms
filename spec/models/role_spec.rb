@@ -152,7 +152,7 @@ describe Role do
     it "does not allow a duplicate active role to be created in the same account" do
       dup_role = @account.roles.new name: "1337 Student"
       dup_role.base_role_type = "StudentEnrollment"
-      expect(dup_role).to be_invalid
+      expect(dup_role).not_to be_valid
       @role.destroy
       expect(dup_role).to be_valid
     end
@@ -331,7 +331,7 @@ describe Role do
           roles_to_test.each do |perm_role|
             role_key_to_test = (mode == "adding") ? :addable_by_user : :deleteable_by_user
             opposite_role_key_to_test = (mode == "adding") ? :deleteable_by_user : :addable_by_user
-            permission_key = (mode == "adding") ? "add_#{perm_role}_to_course".to_sym : "remove_#{perm_role}_from_course"
+            permission_key = (mode == "adding") ? :"add_#{perm_role}_to_course" : "remove_#{perm_role}_from_course"
 
             it "when #{mode} a(n) #{perm_role}" do
               @course.account.role_overrides.create!(role: @role, enabled: true, permission: permission_key)

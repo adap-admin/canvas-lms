@@ -398,7 +398,7 @@ describe SIS::CSV::ImportRefactored do
     end
 
     it "alsoes retry in a new job" do
-      Setting.set("number_of_tries_before_failing", 2)
+      stub_const("SIS::CSV::ImportRefactored::MAX_TRIES", 2)
       allow(InstStatsd::Statsd).to receive(:increment)
       expect_any_instance_of(SIS::CSV::ImportRefactored).to receive(:run_parallel_importer).exactly(6).and_call_original
       expect_any_instance_of(SIS::CSV::ImportRefactored).to receive(:try_importing_segment).exactly(6).and_call_original
@@ -428,6 +428,21 @@ describe SIS::CSV::ImportRefactored do
         "term_id,name,status",
         "T001,Winter13,active"
       )
+    end
+
+    it "is aborted when the batch is aborted" do
+      batch = @account.sis_batches.create!(user: user_model)
+      file = generate_csv_file([
+                                 "term_id,name,status",
+                                 "T001,Fall24,active",
+                                 "T001,Winter25,active"
+                               ])
+      batch.abort_batch
+      SIS::CSV::ImportRefactored.process(@account, { files: [file], batch: })
+
+      batch.parallel_importers.each do |parallel_importer|
+        expect(parallel_importer.workflow_state).to eq "aborted"
+      end
     end
   end
 end

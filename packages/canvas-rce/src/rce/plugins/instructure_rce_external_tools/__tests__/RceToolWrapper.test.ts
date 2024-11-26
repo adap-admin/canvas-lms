@@ -17,7 +17,12 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {addMruToolId, buildToolMenuItems, RceToolWrapper} from '../RceToolWrapper'
+import {
+  addMruToolId,
+  buildToolMenuItems,
+  externalToolsForToolbar,
+  RceToolWrapper,
+} from '../RceToolWrapper'
 import {createDeepMockProxy} from '../../../../util/__tests__/deepMockProxy'
 import {ExternalToolsEditor, externalToolsEnvFor} from '../ExternalToolsEnv'
 import {IconLtiLine, IconLtiSolid} from '@instructure/ui-icons/es/svg'
@@ -350,6 +355,100 @@ describe('RceExternalToolHelper', () => {
       expect(result[0].text).toEqual('AAA tool')
       expect(result[1].text).toEqual('BBB tool')
       expect(result[2].text).toEqual('view all')
+    })
+  })
+
+  describe('externalToolsForToolbar', () => {
+    let fakeEditor: ReturnType<typeof createDeepMockProxy<ExternalToolsEditor>>
+    let tools: RceToolWrapper[]
+    const mruTools = []
+
+    const favoriteTool = new RceToolWrapper(
+      externalToolsEnvFor(fakeEditor),
+      {
+        id: '1',
+        name: 'BBB tool',
+        description: 'this is tool 1',
+        favorite: true,
+        icon_url: '/path/to/cool_icon',
+      },
+      mruTools
+    )
+
+    const favoriteTool2 = new RceToolWrapper(
+      externalToolsEnvFor(fakeEditor),
+      {
+        id: '2',
+        name: 'BBB tool',
+        description: 'this is tool 2',
+        favorite: true,
+        icon_url: '/path/to/cool_icon',
+      },
+      mruTools
+    )
+
+    const favoriteTool3 = new RceToolWrapper(
+      externalToolsEnvFor(fakeEditor),
+      {
+        id: '3',
+        name: 'BBB tool',
+        description: 'this is tool 3',
+        favorite: true,
+        icon_url: '/path/to/cool_icon',
+      },
+      mruTools
+    )
+
+    const onByDefaultTool = new RceToolWrapper(
+      externalToolsEnvFor(fakeEditor),
+      {
+        id: '4',
+        name: 'AAA tool',
+        description: 'this is tool 2',
+        favorite: false,
+        icon_url: '/path/to/cool_icon',
+        on_by_default: true,
+      },
+      mruTools
+    )
+
+    const regularTool = new RceToolWrapper(
+      externalToolsEnvFor(fakeEditor),
+      {
+        id: '5',
+        name: 'a great tool',
+        description: 'tool 3',
+        favorite: false,
+        on_by_default: false,
+        icon_url: '/path/to/cool_icon',
+      },
+      mruTools
+    )
+
+    const favoriteAndOn = new RceToolWrapper(
+      externalToolsEnvFor(fakeEditor),
+      {
+        id: '6',
+        name: 'a great tool',
+        description: 'tool 4',
+        favorite: true,
+        on_by_default: true,
+        icon_url: '/path/to/cool_icon',
+      },
+      mruTools
+    )
+
+    beforeEach(() => {
+      fakeEditor = createDeepMockProxy<ExternalToolsEditor>()
+      tools = [favoriteTool, favoriteAndOn, onByDefaultTool, favoriteTool2, favoriteTool3, regularTool, favoriteTool]
+    })
+
+    it('pulls out both favorite and on_by_default tools and deduplicates', () => {
+      const result = externalToolsForToolbar(tools)
+
+      expect(result.map(e => e.id)).toStrictEqual(
+        [favoriteAndOn, favoriteTool, favoriteTool2].map(e => e.id)
+      )
     })
   })
 })

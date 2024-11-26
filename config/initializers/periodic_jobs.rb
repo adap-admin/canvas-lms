@@ -71,28 +71,28 @@ class PeriodicJobs
   end
 end
 
-def with_each_job_cluster(klass, method, *args, jitter: nil, local_offset: false)
+def with_each_job_cluster(klass, method, *, jitter: nil, local_offset: false)
   DatabaseServer.send_in_each_region(
     PeriodicJobs,
     :with_each_shard_by_database_in_region,
     { singleton: "periodic:region: #{klass}.#{method}" },
     klass,
     method,
-    *args,
+    *,
     jitter:,
     local_offset:,
     connection_class: Delayed::Backend::ActiveRecord::AbstractJob
   )
 end
 
-def with_each_shard_by_database(klass, method, *args, jitter: nil, local_offset: false, error_callback: nil)
+def with_each_shard_by_database(klass, method, *, jitter: nil, local_offset: false, error_callback: nil)
   DatabaseServer.send_in_each_region(
     PeriodicJobs,
     :with_each_shard_by_database_in_region,
     { singleton: "periodic:region: #{klass}.#{method}" },
     klass,
     method,
-    *args,
+    *,
     jitter:,
     local_offset:,
     connection_class: ActiveRecord::Base,
@@ -108,7 +108,7 @@ Rails.configuration.after_initialize do
     Delayed::Periodic.cron "ActiveRecord::SessionStore::Session.delete_all", "*/5 * * * *" do
       callback = -> { Canvas::Errors.capture_exception(:periodic_job, $ERROR_INFO) }
       Shard.with_each_shard(exception: callback) do
-        ActiveRecord::SessionStore::Session.where("updated_at < ?", expire_after.seconds.ago).delete_all
+        ActiveRecord::SessionStore::Session.where(updated_at: ...expire_after.seconds.ago).delete_all
       end
     end
   end
@@ -158,15 +158,15 @@ Rails.configuration.after_initialize do
     IncomingMailProcessor::Instrumentation.process
   end
 
-  Delayed::Periodic.cron "ErrorReport.destroy_error_reports", "2-59/5 * * * *" do
-    cutoff = Setting.get("error_reports_retain_for", 3.months.to_s).to_i
+  Delayed::Periodic.cron "ErrorReport.destroy_error_reports", "2-59/15 * * * *" do
+    cutoff = 3.months
     if cutoff > 0
       with_each_shard_by_database(ErrorReport, :destroy_error_reports, cutoff.seconds.ago)
     end
   end
 
   Delayed::Periodic.cron "Delayed::Job::Failed.cleanup_old_jobs", "0 * * * *" do
-    cutoff = Setting.get("failed_jobs_retain_for", 3.months.to_s).to_i
+    cutoff = 3.months
     if cutoff > 0
       with_each_job_cluster(Delayed::Job::Failed, :cleanup_old_jobs, cutoff.seconds.ago)
     end
@@ -179,6 +179,16 @@ Rails.configuration.after_initialize do
 
   Delayed::Periodic.cron "Attachment.do_notifications", "*/10 * * * *", priority: Delayed::LOW_PRIORITY do
     with_each_shard_by_database(Attachment, :do_notifications)
+  end
+
+  unless ApplicationController.test_cluster?
+    Delayed::Periodic.cron "Attachments::GarbageCollector::ContentExportAndMigrationContextType.delete_content", "37 1 * * *" do
+      with_each_shard_by_database(Attachments::GarbageCollector::ContentExportAndMigrationContextType, :delete_content, jitter: 30.minutes, local_offset: true)
+    end
+
+    Delayed::Periodic.cron "Attachments::GarbageCollector::ContentExportContextType.delete_content", "37 3 * * *" do
+      with_each_shard_by_database(Attachments::GarbageCollector::ContentExportContextType, :delete_content, jitter: 30.minutes, local_offset: true)
+    end
   end
 
   Delayed::Periodic.cron "Ignore.cleanup", "45 23 * * *" do
@@ -267,6 +277,18 @@ Rails.configuration.after_initialize do
     end
   end
 
+  Delayed::Periodic.cron "AuthenticationProvider::OpenIDConnect::DiscoveryRefresher.refresh_providers", "15 1 * * *" do
+    with_each_shard_by_database(AuthenticationProvider::OpenIDConnect::DiscoveryRefresher, :refresh_providers, local_offset: true)
+  end
+
+  Delayed::Periodic.cron "AuthenticationProvider::OpenIDConnect::JwksRefresher.refresh_providers", "25 1,13 * * *" do
+    with_each_shard_by_database(AuthenticationProvider::OpenIDConnect::JwksRefresher, :refresh_providers, local_offset: true)
+  end
+
+  Delayed::Periodic.cron "AuthenticationProvider::LDAP.ensure_tls_cert_validity", "30 0 * * *" do
+    with_each_shard_by_database(AuthenticationProvider::LDAP, :ensure_tls_cert_validity, local_offset: true)
+  end
+
   Delayed::Periodic.cron "SisBatchError.cleanup_old_errors", "*/15 * * * *", priority: Delayed::LOW_PRIORITY do
     with_each_shard_by_database(SisBatchError, :cleanup_old_errors)
   end
@@ -287,15 +309,23 @@ Rails.configuration.after_initialize do
     with_each_shard_by_database(MissingPolicyApplicator, :apply_missing_deductions)
   end
 
-  Delayed::Periodic.cron "Assignment.clean_up_duplicating_assignments", "*/5 * * * *", priority: Delayed::LOW_PRIORITY do
+  Delayed::Periodic.cron "ConcludedGradingStandardSetter.preserve_grading_standard_inheritance", "*/5 * * * *", priority: Delayed::LOW_PRIORITY do
+    with_each_shard_by_database(ConcludedGradingStandardSetter, :preserve_grading_standard_inheritance)
+  end
+
+  Delayed::Periodic.cron "Assignment.clean_up_duplicating_assignments", "*/15 * * * *", priority: Delayed::LOW_PRIORITY do
     with_each_shard_by_database(Assignment, :clean_up_duplicating_assignments)
   end
 
-  Delayed::Periodic.cron "Assignment.clean_up_importing_assignments", "*/5 * * * *", priority: Delayed::LOW_PRIORITY do
+  Delayed::Periodic.cron "Assignment.clean_up_cloning_alignments", "*/15 * * * *", priority: Delayed::LOW_PRIORITY do
+    with_each_shard_by_database(Assignment, :clean_up_cloning_alignments)
+  end
+
+  Delayed::Periodic.cron "Assignment.clean_up_importing_assignments", "*/15 * * * *", priority: Delayed::LOW_PRIORITY do
     with_each_shard_by_database(Assignment, :clean_up_importing_assignments)
   end
 
-  Delayed::Periodic.cron "Assignment.clean_up_migrating_assignments", "*/5 * * * *", priority: Delayed::LOW_PRIORITY do
+  Delayed::Periodic.cron "Assignment.clean_up_migrating_assignments", "*/15 * * * *", priority: Delayed::LOW_PRIORITY do
     with_each_shard_by_database(Assignment, :clean_up_migrating_assignments)
   end
 

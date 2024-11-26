@@ -21,13 +21,12 @@
 Bundler.require "redis"
 
 class ActiveSupport::Cache::HaStore < ActiveSupport::Cache::RedisCacheStore
-  include ActiveSupport::Cache::SafeRedisRaceCondition
-
   def initialize(consul_datacenters: nil,
                  consul_event: nil,
-                 **additional_options)
-    super(**additional_options)
-    options[:lock_timeout] ||= 5
+                 lock_timeout: 5,
+                 **)
+    super(**)
+    options[:lock_timeout] = lock_timeout
     options[:consul_datacenters] = consul_datacenters
     options[:consul_event] = consul_event
   end
@@ -63,7 +62,7 @@ class ActiveSupport::Cache::HaStore < ActiveSupport::Cache::RedisCacheStore
 
   def validate_consul_event
     key = SecureRandom.uuid
-    patience = Setting.get("ha_store_validate_consul_event_patience", 15).to_f
+    patience = 15
     write(key, 1, expires_in: patience * 2)
     delete(key, skip_local: true)
     # yes, really, a sleep. we need to run on the same node because we only wrote

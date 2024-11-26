@@ -59,14 +59,12 @@ describe DynamicSettings do
     it "must pass through timeout settings to the underlying library" do
       DynamicSettings.config = valid_config.merge({
                                                     "connect_timeout" => 1,
-                                                    "send_timeout" => 2,
-                                                    "receive_timeout" => 3,
+                                                    "timeout" => 2
                                                   })
 
       options = Diplomat.configuration.options
       expect(options[:request][:open_timeout]).to eq 1
-      expect(options[:request][:write_timeout]).to eq 2
-      expect(options[:request][:read_timeout]).to eq 3
+      expect(options[:request][:timeout]).to eq 2
     end
 
     it "must capture the environment name when supplied" do
@@ -75,22 +73,6 @@ describe DynamicSettings do
                                                   })
 
       expect(DynamicSettings.environment).to eq "foobar"
-    end
-  end
-
-  describe ".fallback_data =" do
-    it "must provide indifferent access on resulting proxy" do
-      DynamicSettings.fallback_data = { foo: "bar" }
-      proxy = DynamicSettings.root_fallback_proxy
-      expect(proxy["foo"]).to eq "bar"
-      expect(proxy[:foo]).to eq "bar"
-    end
-
-    it "must clear the fallback when passed nil" do
-      DynamicSettings.fallback_data = { foo: "bar" }
-      DynamicSettings.fallback_data = nil
-      proxy = DynamicSettings.root_fallback_proxy
-      expect(proxy["foo"]).to be_nil
     end
   end
 

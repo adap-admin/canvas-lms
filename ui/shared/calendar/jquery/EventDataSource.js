@@ -17,7 +17,7 @@
  */
 
 import $ from 'jquery'
-import _ from 'lodash'
+import {reject, maxBy, isEmpty, partition, minBy} from 'lodash'
 import fcUtil from './fcUtil'
 import commonEventFactory from './CommonEvent/index'
 import '@canvas/jquery/jquery.ajaxJSON'
@@ -27,6 +27,7 @@ import moment from 'moment'
 export default class EventDataSource {
   constructor(contexts) {
     this.eventSaved = this.eventSaved.bind(this)
+    this.eventsSavedFromSeries = this.eventsSavedFromSeries.bind(this)
     this.eventDeleted = this.eventDeleted.bind(this)
     this.eventWithId = this.eventWithId.bind(this)
     this.clearCache = this.clearCache.bind(this)
@@ -75,10 +76,17 @@ export default class EventDataSource {
     // all.) This might end up being confusing.
     $.subscribe('CommonEvent/eventDeleted', this.eventDeleted)
     $.subscribe('CommonEvent/eventSaved', this.eventSaved)
+    $.subscribe('CommonEvent/eventsSavedFromSeries', this.eventsSavedFromSeries)
   }
 
   eventSaved(event) {
     return this.addEventToCache(event)
+  }
+
+  eventsSavedFromSeries(events) {
+    events.seriesEvents.forEach(event => {
+      this.addEventToCache(event)
+    })
   }
 
   eventDeleted(event) {
@@ -104,6 +112,12 @@ export default class EventDataSource {
       participants: {},
       fetchedAppointmentGroups: null,
     }
+    this.resetContexts()
+  }
+
+  // clear the calendar event cache w/o clearing appointment group data
+  resetContexts() {
+    this.cache.contexts = {}
     this.contexts.forEach(contextInfo => {
       this.cache.contexts[contextInfo.asset_string] = {
         events: {},
@@ -128,7 +142,7 @@ export default class EventDataSource {
   removeCachedReservation(event) {
     const cached_ag = this.cache.appointmentGroups[event.appointment_group_id]
     if (cached_ag) {
-      cached_ag.reserved_times = _.reject(
+      cached_ag.reserved_times = reject(
         cached_ag.reserved_times,
         reservation => reservation.id === event.id
       )
@@ -171,7 +185,7 @@ export default class EventDataSource {
 
   addEventToCache(event) {
     if (event.old_context_code) {
-      delete this.cache.contexts[event.old_context_code].events[event.id]
+      delete this.cache.contexts[event.old_context_code]?.events[event.id]
       delete event.old_context_code
     }
     // Split by comma, for the odd case where #contextCode() returns a comma seprated list
@@ -195,18 +209,24 @@ export default class EventDataSource {
   }
 
   eventInRange(event, start, end) {
-    let ref
+    // Want dated, have dated. but when comparing to the range, remember
+    // that we made start/end be unwrapped values (down in getEvents), so
+    // unwrap event.originalStart/originalEndDate too before comparing.
     if (!event.originalStart && !start) {
       // want undated, have undated, include it
       return true
     } else if (!event.originalStart || !start) {
       // want undated, have dated (or vice versa), skip it
       return false
+    } else if (event.originalStart && event.originalEndDate) {
+      // Returns true if the event date range contains dates between start date and end date.
+      return (
+        start <= fcUtil.unwrap(event.originalEndDate) && fcUtil.unwrap(event.originalStart) <= end
+      )
     } else {
-      // want dated, have dated. but when comparing to the range, remember
-      // that we made start/end be unwrapped values (down in getEvents), so
-      // unwrap event.originalStart too before comparing
-      return start <= (ref = fcUtil.unwrap(event.originalStart)) && ref < end
+      // Assignments, Planner Items or Planner notes don't have an end date
+      const originalStart = fcUtil.unwrap(event.originalStart)
+      return start <= originalStart && originalStart < end
     }
   }
 
@@ -474,12 +494,12 @@ export default class EventDataSource {
           }
         })
 
-        if (!_.isEmpty(dates)) {
-          upperBounds.push(_.max(dates))
+        if (!isEmpty(dates)) {
+          upperBounds.push(maxBy(dates))
         }
       }
-      if (!_.isEmpty(upperBounds)) {
-        nextPageDate = fcUtil.clone(_.min(upperBounds))
+      if (!isEmpty(upperBounds)) {
+        nextPageDate = fcUtil.clone(minBy(upperBounds))
         end = fcUtil.unwrap(nextPageDate)
       }
       contexts.forEach(context => {
@@ -514,10 +534,13 @@ export default class EventDataSource {
       context => !context.match(/^appointment_group_/)
     )
     eventDataSources.push(['/api/v1/calendar_events', this.assignmentParams(params)])
+    if (ENV.CALENDAR?.SHOW_CHECKPOINTS) {
+      eventDataSources.push(['/api/v1/calendar_events', this.assignmentParams(params, true)])
+    }
     if (ENV.STUDENT_PLANNER_ENABLED) {
       eventDataSources.push(['/api/v1/planner_notes', params])
     }
-    const [admin_contexts, student_contexts] = _.partition(
+    const [admin_contexts, student_contexts] = partition(
       params.context_codes,
       cc => ENV.CALENDAR?.MANAGE_CONTEXTS?.indexOf(cc) >= 0
     )
@@ -554,21 +577,22 @@ export default class EventDataSource {
     if (ag_ids.length > 0) {
       p.appointment_group_ids = ag_ids.join(',')
     }
-    p.include = ['web_conference', 'series_natural_language']
+    p.include = ['web_conference', 'series_head', 'series_natural_language']
     return p
   }
 
-  assignmentParams(params) {
+  assignmentParams(params, subAssignment = false) {
     // We only want to see assignments from courses that do not use Course Pacing, unless the
     // user is a student in the course. In that case, they should see their assignments on the calendar
     if (ENV.CALENDAR?.CONTEXTS) {
       params.context_codes = ENV.CALENDAR.CONTEXTS.filter(
         context =>
           params.context_codes.includes(context.asset_string) &&
-          (!context.course_pacing_enabled || context.can_make_reservation)
+          (!context.course_pacing_enabled || context.user_is_student)
       ).map(context => context.asset_string)
     }
-    return {type: 'assignment', ...params}
+    const type = subAssignment ? 'sub_assignment' : 'assignment'
+    return {...params, type}
   }
 
   getParticipants(appointmentGroup, registrationStatus, cb) {

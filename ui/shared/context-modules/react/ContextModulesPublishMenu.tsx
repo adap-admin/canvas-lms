@@ -17,10 +17,9 @@
  */
 
 import React, {useCallback, useEffect, useState} from 'react'
-import {CanvasId, CanvasProgress} from './types'
+import type {CanvasId, CanvasProgress} from './types'
 import {
-  IconMiniArrowDownLine,
-  IconPublishLine,
+  IconArrowOpenDownLine,
   IconPublishSolid,
   IconUnpublishedLine,
   // @ts-ignore
@@ -92,7 +91,7 @@ const ContextModulesPublishMenu = ({courseId, runningProgressId, disabled}: Prop
     if (isPublishing) {
       return <Spinner renderTitle={I18n.t('Loading')} size="x-small" />
     } else {
-      return <IconPublishLine size="x-small" color="success" />
+      return <IconPublishSolid size="x-small" color="success" />
     }
   }
 
@@ -267,6 +266,12 @@ const ContextModulesPublishMenu = ({courseId, runningProgressId, disabled}: Prop
     setIsModalOpen(true)
   }
 
+  const unpublishModuleOnly = () => {
+    setShouldPublishModules(false)
+    setShouldSkipModuleItems(true)
+    setIsModalOpen(true)
+  }
+
   const modalTitle = () => {
     if (shouldPublishModules) {
       if (shouldSkipModuleItems) {
@@ -274,8 +279,22 @@ const ContextModulesPublishMenu = ({courseId, runningProgressId, disabled}: Prop
       } else {
         return I18n.t('Publish all modules and items')
       }
+    } else if (shouldSkipModuleItems) {
+      return I18n.t('Unpublish modules only')
     } else {
       return I18n.t('Unpublish all modules and items')
+    }
+  }
+  const modalContinueButtonId = () => {
+    // Impact requested id's be added for these elements as well as the menu items below
+    if (shouldPublishModules) {
+      if (shouldSkipModuleItems) {
+        return 'publish_module_only_continue_button'
+      } else {
+        return 'publish_all_continue_button'
+      }
+    } else {
+      return 'unpublish_all_continue_button'
     }
   }
 
@@ -285,20 +304,23 @@ const ContextModulesPublishMenu = ({courseId, runningProgressId, disabled}: Prop
         placement="bottom"
         trigger={
           <Button renderIcon={statusIcon}>
-            {I18n.t('Publish All')} <IconMiniArrowDownLine size="x-small" />
+            {I18n.t('Publish All')} <IconArrowOpenDownLine size="x-small" />
           </Button>
         }
         show={isPublishing ? false : undefined}
         disabled={disabled}
       >
-        <MenuItem onClick={publishAll}>
+        <MenuItem onClick={publishAll} id="publish_all_menu_item">
           <IconPublishSolid color="success" /> {I18n.t('Publish all modules and items')}
         </MenuItem>
-        <MenuItem onClick={publishModuleOnly}>
+        <MenuItem onClick={publishModuleOnly} id="publish_module_only_menu_item">
           <IconPublishSolid color="success" /> {I18n.t('Publish modules only')}
         </MenuItem>
-        <MenuItem onClick={unpublishAll}>
+        <MenuItem onClick={unpublishAll} id="unpublish_all_menu_item">
           <IconUnpublishedLine /> {I18n.t('Unpublish all modules and items')}
+        </MenuItem>
+        <MenuItem onClick={unpublishModuleOnly} id="unpublish_module_only_menu_item">
+          <IconUnpublishedLine /> {I18n.t('Unpublish modules only')}
         </MenuItem>
       </Menu>
       {isModalOpen && (
@@ -314,6 +336,7 @@ const ContextModulesPublishMenu = ({courseId, runningProgressId, disabled}: Prop
           progressId={progressId}
           progressCurrent={currentProgress}
           title={modalTitle()}
+          continueButtonId={modalContinueButtonId()}
           mode={shouldPublishModules ? 'publish' : 'unpublish'}
         />
       )}

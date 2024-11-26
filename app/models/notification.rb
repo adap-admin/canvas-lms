@@ -19,12 +19,12 @@
 #
 
 class Notification < Switchman::UnshardedRecord
-  include Workflow
   include TextHelper
 
   TYPES_TO_SHOW_IN_FEED = [
     # Assignment
     "Assignment Created",
+    "Checkpoints Created",
     "Assignment Changed",
     "Assignment Due Date Changed",
     "Assignment Due Date Override Changed",
@@ -56,6 +56,8 @@ class Notification < Switchman::UnshardedRecord
     invitation
     student_appointment_signups
     submission_comment
+    discussion
+    discussion_entry
   ].freeze
 
   ALLOWED_PUSH_NOTIFICATION_TYPES = [
@@ -88,7 +90,9 @@ class Notification < Switchman::UnshardedRecord
     "Submission Graded",
     "Submission Needs Grading",
     "Upcoming Assignment Alert",
-    "Web Conference Invitation"
+    "Web Conference Invitation",
+    "New Discussion Topic",
+    "New Discussion Entry"
   ].freeze
 
   NON_CONFIGURABLE_TYPES = %w[Migration Registration Summaries Alert].freeze
@@ -135,21 +139,9 @@ class Notification < Switchman::UnshardedRecord
   has_many :notification_policy_overrides, inverse_of: :notification, dependent: :destroy
   before_save :infer_default_content
 
-  scope :to_show_in_feed, -> { where("messages.category='TestImmediately' OR messages.notification_name IN (?)", TYPES_TO_SHOW_IN_FEED) }
-
   validates :name, uniqueness: true
 
   after_create { self.class.reset_cache! }
-
-  workflow do
-    state :active do
-      event :deactivate, transitions_to: :inactive
-    end
-
-    state :inactive do
-      event :reactivate, transitions_to: :active
-    end
-  end
 
   def self.all_cached
     @all ||= all.to_a.each(&:readonly!)
@@ -165,7 +157,7 @@ class Notification < Switchman::UnshardedRecord
     # graphql types cannot have spaces we have used underscores
     # and we don't allow editing system notification types
     @configurable_types ||= YAML.safe_load(ERB.new(File.read(Canvas::MessageHelper.find_message_path("notification_types.yml"))).result)
-                                .map(&:first).map(&:last)
+                                .pluck("category")
                                 .reject { |type| type.include?("DEPRECATED") }
                                 .map { |c| c.gsub(/\s/, "_") } - NON_CONFIGURABLE_TYPES
   end
@@ -203,12 +195,24 @@ class Notification < Switchman::UnshardedRecord
   # options - a hash of extra options to merge with the options used to build the Message
   #
   def create_message(asset, to_list, options = {})
+    if asset.respond_to?(:account)
+      return if asset.account&.root_account&.suppress_notifications?
+    end
+
+    if asset.respond_to?(:context) && asset.context.respond_to?(:root_account)
+      return if asset.context&.root_account&.suppress_notifications?
+    end
+
+    if asset.respond_to?(:context) && asset.context.respond_to?(:account)
+      return if asset.context.account&.root_account&.suppress_notifications?
+    end
+
     preload_asset_roles_if_needed(asset)
 
     NotificationMessageCreator.new(self, asset, options.merge(to_list:)).create_message
   end
 
-  TYPES_TO_PRELOAD_CONTEXT_ROLES = ["Assignment Created", "Assignment Due Date Changed"].freeze
+  TYPES_TO_PRELOAD_CONTEXT_ROLES = ["Assignment Created", "Checkpoints Created", "Assignment Due Date Changed"].freeze
   def preload_asset_roles_if_needed(asset)
     if TYPES_TO_PRELOAD_CONTEXT_ROLES.include?(name)
       case asset
@@ -365,12 +369,15 @@ class Notification < Switchman::UnshardedRecord
   # (it's actually just the titleized message template filename)
   def names
     t "names.manually_created_access_token_created", "Manually Created Access Token Created"
+    t "names.access_token_created_on_behalf_of_user", "Access Token Created On Behalf Of User"
+    t "names.access_token_deleted", "Access Token Deleted"
     t "names.account_user_notification", "Account User Notification"
     t "names.account_user_registration", "Account User Registration"
     t "Annotation Notification"
     t "Annotation Teacher Notification"
     t "names.assignment_changed", "Assignment Changed"
     t "names.assignment_created", "Assignment Created"
+    t "names.checkpoints_created", "Checkpoints Created"
     t "names.assignment_due_date_changed", "Assignment Due Date Changed"
     t "names.assignment_due_date_override_changed", "Assignment Due Date Override Changed"
     t "names.assignment_graded", "Assignment Graded"
@@ -414,6 +421,7 @@ class Notification < Switchman::UnshardedRecord
     t "names.new_user", "New User"
     t "names.pseudonym_registration", "Pseudonym Registration"
     t "names.pseudonym_registration_done", "Pseudonym Registration Done"
+    t "names.account_verification", "Account Verification"
     t "names.report_generated", "Report Generated"
     t "names.report_generation_failed", "Report Generation Failed"
     t "names.rubric_assessment_invitation", "Rubric Assessment Invitation"

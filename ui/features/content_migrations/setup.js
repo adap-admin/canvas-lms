@@ -47,6 +47,7 @@ import ExternalContentReturnView from '@canvas/external-tools/backbone/views/Ext
 import ExternalTool from '@canvas/external-tools/backbone/models/ExternalTool'
 import OverwriteAssessmentContentView from '@canvas/content-migrations/backbone/views/subviews/OverwriteAssessmentContentView'
 import ImportQuizzesNextView from '@canvas/content-migrations/backbone/views/ImportQuizzesNextView'
+import extensions from '@canvas/bundles/extensions'
 import processMigrationContentItem from './processMigrationContentItem'
 import {subscribe} from 'jquery-tinypubsub'
 
@@ -168,6 +169,8 @@ ConverterViewControl.register({
       model: ConverterViewControl.getModel(),
       quizzesNextEnabled: ENV.QUIZZES_NEXT_ENABLED,
       migrationDefault: ENV.NEW_QUIZZES_MIGRATION_DEFAULT,
+      disableNQMigrationCheckbox: !ENV.QUIZZES_NEXT_ENABLED || ENV.NEW_QUIZZES_MIGRATION_REQUIRED,
+      unattachedBankMigrationsEnabled: ENV.NEW_QUIZZES_UNATTACHED_BANK_MIGRATIONS,
       questionBank: null,
     }),
 
@@ -212,6 +215,8 @@ ConverterViewControl.register({
       model: ConverterViewControl.getModel(),
       quizzesNextEnabled: ENV.QUIZZES_NEXT_ENABLED,
       migrationDefault: ENV.NEW_QUIZZES_MIGRATION_DEFAULT,
+      disableNQMigrationCheckbox: !ENV.QUIZZES_NEXT_ENABLED || ENV.NEW_QUIZZES_MIGRATION_REQUIRED,
+      unattachedBankMigrationsEnabled: ENV.NEW_QUIZZES_UNATTACHED_BANK_MIGRATIONS,
       questionBank: null,
     }),
 
@@ -244,6 +249,8 @@ ConverterViewControl.register({
       model: ConverterViewControl.getModel(),
       quizzesNextEnabled: ENV.QUIZZES_NEXT_ENABLED,
       migrationDefault: ENV.NEW_QUIZZES_MIGRATION_DEFAULT,
+      disableNQMigrationCheckbox: !ENV.QUIZZES_NEXT_ENABLED || ENV.NEW_QUIZZES_MIGRATION_REQUIRED,
+      unattachedBankMigrationsEnabled: ENV.NEW_QUIZZES_UNATTACHED_BANK_MIGRATIONS,
       questionBank: questionBankView,
     }),
 
@@ -278,6 +285,8 @@ ConverterViewControl.register({
       model: ConverterViewControl.getModel(),
       quizzesNextEnabled: ENV.QUIZZES_NEXT_ENABLED,
       migrationDefault: ENV.NEW_QUIZZES_MIGRATION_DEFAULT,
+      disableNQMigrationCheckbox: !ENV.QUIZZES_NEXT_ENABLED || ENV.NEW_QUIZZES_MIGRATION_REQUIRED,
+      unattachedBankMigrationsEnabled: ENV.NEW_QUIZZES_UNATTACHED_BANK_MIGRATIONS,
       questionBank: questionBankView,
     }),
 
@@ -323,4 +332,13 @@ function __guard__(value, transform) {
   return typeof value !== 'undefined' && value !== null ? transform(value) : undefined
 }
 
-export default Array.from(ENV.EXTERNAL_TOOLS).map(et => registerExternalTool(et))
+Array.from(ENV.EXTERNAL_TOOLS).forEach(et => registerExternalTool(et))
+
+const loadExtension = extensions['ui/features/content_migrations/setup.js']?.()
+if (loadExtension) {
+  loadExtension
+    .then(extension => extension.default())
+    .catch(error => {
+      throw new Error(`Error loading extension for ui/features/content_migrations/setup.js`, error)
+    })
+}

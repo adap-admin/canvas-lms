@@ -17,12 +17,19 @@
 %>
 
 <% css_bundle :assignments %>
+<% if @assignment.omit_from_final_grade %>
+  <div class="alert alert-info omit-from-final-warning">
+    <%= t("This assignment does not count toward the final grade.") %>
+  </div>
+<% end %>
 <div id='assignment_show'>
   <div class='assignment-title'>
     <div class='title-content'>
-      <h1 class="title">
-        <%= @assignment.title %>
-      </h1>
+      <div style='margin-top: 2rem'>
+        <h1 class="title">
+          <%= @assignment.title %>
+        </h1>
+      </div>
     </div>
     <div class='assignment-buttons'>
       <span style="display: inline-block">

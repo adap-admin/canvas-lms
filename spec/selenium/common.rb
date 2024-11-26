@@ -19,7 +19,6 @@
 #
 require "nokogiri"
 require "selenium-webdriver"
-require "sauce_whisk"
 require_relative "test_setup/custom_selenium_rspec_matchers"
 require_relative "test_setup/selenium_driver_setup"
 require_relative "test_setup/selenium_extensions"
@@ -76,12 +75,6 @@ shared_context "in-process server selenium tests" do
   # set up so you can use rails urls helpers in your selenium tests
   include Rails.application.routes.url_helpers
 
-  prepend_before :all do
-    # building the schema is currently very slow.
-    # this ensures the schema is built before specs are run to avoid timeouts
-    CanvasSchema.graphql_definition
-  end
-
   prepend_before do
     resize_screen_to_standard
     SeleniumDriverSetup.allow_requests!
@@ -116,15 +109,26 @@ shared_context "in-process server selenium tests" do
   before do
     raise "all specs need to use transactional fixtures" unless use_transactional_tests
 
-    allow(HostUrl).to receive(:default_host).and_return(app_host_and_port)
-    allow(HostUrl).to receive(:file_host).and_return(app_host_and_port)
+    allow(HostUrl).to receive_messages(default_host: app_host_and_port,
+                                       file_host: app_host_and_port)
   end
 
   before(:all) do
     ActiveRecord::Base.connection.class.prepend(SynchronizeConnection)
   end
 
+  # this is a common error, there have been many bugs reported to selenium
+  # one example bug https://github.com/SeleniumHQ/selenium/issues/14438
   after do |example|
+    if example.exception&.message&.include?("disconnected: not connected to DevTools")
+      # exit this process to avoid further exceptions
+      puts "Exiting due to browser crash!"
+      puts example.exception.full_message
+      exit!
+    end
+  end
+
+  after do
     begin
       clear_timers!
       # while disallow_requests! would generally get these, there's a small window
@@ -147,37 +151,27 @@ shared_context "in-process server selenium tests" do
     # we don't want to combine this into the above block to avoid x-test pollution
     # if a previous step fails
     begin
-      driver.session_storage.clear
+      clear_session_storage
     rescue Selenium::WebDriver::Error::WebDriverError
       # we want to ignore selenium errors when attempting to wait here
-    end
-
-    if SeleniumDriverSetup.saucelabs_test_run?
-      job_id = driver.session_id
-      job = SauceWhisk::Jobs.fetch job_id
-      old_name = job.name
-      job.name = old_name.prepend(example.metadata[:full_description].to_s + " - ")
-      job.passed = example.exception.nil?
-      job.save
-
-      driver.quit
-      SeleniumDriverSetup.reset!
     end
   end
 
   # logs everything that showed up in the browser console during selenium tests
   after do |example|
-    # safari driver and edge driver do not support driver.manage.logs
-    # don't run for sauce labs smoke tests
-    next if SeleniumDriverSetup.saucelabs_test_run?
-
-    if example.exception
+    # this is a common error, there have been many bugs reported to selenium
+    # one example bug https://github.com/SeleniumHQ/selenium/issues/14438
+    if example.exception && !example.exception.message.include?("disconnected: not connected to DevTools")
       html = f("body").attribute("outerHTML")
       document = Nokogiri::HTML5(html)
       example.metadata[:page_html] = document.to_html
     end
 
-    browser_logs = driver.logs.get(:browser) rescue nil
+    begin
+      browser_logs = driver.logs.get(:browser)
+    rescue
+      # ignore
+    end
 
     # log INSTUI deprecation warnings
     if browser_logs.present?
@@ -208,6 +202,9 @@ shared_context "in-process server selenium tests" do
         "Deprecated use of magic jQueryUI widget markup detected",
         "Uncaught SG: Did not receive drive#about kind when fetching import",
         "Failed prop type",
+        "Warning: Failed propType",
+        "Warning: React.render is deprecated",
+        "Warning: ReactDOMComponent: Do not access .getDOMNode()",
         "Please either add a 'report-uri' directive, or deliver the policy via the 'Content-Security-Policy' header.",
         "isMounted is deprecated. Instead, make sure to clean up subscriptions and pending requests in componentWillUnmount to prevent memory leaks",
         "https://www.gstatic.com/_/apps-viewer/_/js/k=apps-viewer.standalone.en_US",
@@ -230,9 +227,15 @@ shared_context "in-process server selenium tests" do
         "Uncaught Error: Loading chunk", # probably happens when the test ends when the browser is still loading some JS
         "Access to Font at 'http://cdnjs.cloudflare.com/ajax/libs/mathjax/",
         "Access to XMLHttpRequest at 'http://www.example.com/' from origin",
+        "Access to fetch at 'http://canvas.instructure.com/images/messages/avatar-50.png' from origin", # The avatar image fails to load occasionally at the beginning of tests.
+        # It is potentially a request timeout issue but indicated as CORS error by the browser.
         "The user aborted a request", # The server doesn't respond fast enough sometimes and requests can be aborted. For example: when a closing a dialog.
         # Is fixed in Chrome 109, remove this once upgraded to or above Chrome 109 https://bugs.chromium.org/p/chromium/issues/detail?id=1307772
-        "Found a 'popup' attribute. If you are testing the popup API, you must enable Experimental Web Platform Features."
+        "Found a 'popup' attribute. If you are testing the popup API, you must enable Experimental Web Platform Features.",
+        "Uncaught DOMException: play() failed because the user didn't interact with the document first.",
+        "security - Refused to frame 'https://drive.google.com/' because an ancestor violates the following Content Security Policy directive: \"frame-ancestors https://docs.google.com\".",
+        "This file should be served over HTTPS.", # tests are not run over https, this error is expected
+        "Uncaught DOMException: signal is aborted without reason" # Investigate as part of LX-2075
       ].freeze
 
       javascript_errors = browser_logs.select do |e|

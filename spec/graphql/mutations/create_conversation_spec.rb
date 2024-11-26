@@ -54,7 +54,6 @@ RSpec.describe Mutations::CreateConversation do
     media_comment_type: nil,
     context_code: nil,
     conversation_id: nil,
-    user_note: nil,
     tags: nil
   )
     <<~GQL
@@ -71,7 +70,6 @@ RSpec.describe Mutations::CreateConversation do
           #{"mediaCommentType: \"#{media_comment_type}\"" if media_comment_type}
           #{"contextCode: \"#{context_code}\"" if context_code}
           #{"conversationId: \"#{conversation_id}\"" if conversation_id}
-          #{"userNote: #{user_note}" unless user_note.nil?}
           #{"tags: #{tags}" if tags}
         }) {
           conversations {
@@ -147,6 +145,32 @@ RSpec.describe Mutations::CreateConversation do
     ).to eq "yo"
   end
 
+  it "does not send message to concluded users" do
+    concluded_student = User.create
+    concluded_teacher = User.create
+    student_enrollment = @course.enroll_student(concluded_student)
+    teacher_enrollment = @course.enroll_teacher(concluded_teacher)
+    student_enrollment.complete
+    teacher_enrollment.complete
+
+    result = run_mutation(
+      {
+        recipients: [
+          @course.asset_string
+        ],
+        body: "yo",
+        group_conversation: true,
+        context_code: @course.asset_string
+      },
+      @user
+    )
+    expect(result.dig("data", "createConversation", "errors")).to be_nil
+    conversation_id = result.dig("data", "createConversation", "conversations", 0, "conversation", "_id")
+    participants = Conversation.find(conversation_id).conversation_participants.pluck(:user_id)
+    expect(participants).not_to include(concluded_student.id)
+    expect(participants).not_to include(concluded_teacher.id)
+  end
+
   it "creates a conversation with an attachment" do
     new_user = User.create
     attachment = @user.conversation_attachments_folder.attachments.create!(filename: "somefile.doc", context: @user, uploaded_data: StringIO.new("test"))
@@ -197,7 +221,7 @@ RSpec.describe Mutations::CreateConversation do
     expect(result.dig("data", "createConversation", "conversations")).to be_nil
     expect(
       result.dig("data", "createConversation", "errors", 0, "message")
-    ).to eq "Unable to send messages to users in #{@course.name}"
+    ).to eq "Invalid recipients"
   end
 
   it "does not allow creating conversations in concluded courses for teachers" do
@@ -210,6 +234,92 @@ RSpec.describe Mutations::CreateConversation do
     expect(
       result.dig("data", "createConversation", "errors", 0, "message")
     ).to eq "Unable to send messages to users in #{@course.name}"
+  end
+
+  context "soft-concluded course with with active enrollment overrides" do
+    before do
+      course_with_student(active_all: true)
+      @course.enrollment_term.start_at = 2.days.ago
+      @course.enrollment_term.end_at = 1.day.ago
+      @course.restrict_student_future_view = true
+      @course.restrict_student_past_view = true
+      @course.enrollment_term.set_overrides(Account.default, "TeacherEnrollment" => { start_at: 1.day.ago, end_at: 2.days.from_now })
+      @course.enrollment_term.set_overrides(Account.default, "StudentEnrollment" => { start_at: 1.day.ago, end_at: 2.days.from_now })
+      @course.save!
+      @course.enrollment_term.save!
+    end
+
+    it "allows a student to create a new conversation in soft_concluded course if enrollment override is active" do
+      expect(@course.soft_concluded?).to be_truthy
+      result = run_mutation(recipients: [@teacher.id.to_s], body: "yo", context_code: @course.asset_string)
+      expect(result.dig("data", "createConversation", "errors")).to be_nil
+      expect(
+        result.dig("data", "createConversation", "conversations", 0, "conversation", "conversationMessagesConnection", "nodes", 0, "body")
+      ).to eq "yo"
+    end
+
+    it "allows a teacher to create a new conversation in soft_concluded course if enrollment override is active" do
+      expect(@course.soft_concluded?).to be_truthy
+      result = run_mutation({ recipients: [@student.id.to_s], body: "yo", context_code: @course.asset_string }, @teacher)
+      expect(result.dig("data", "createConversation", "errors")).to be_nil
+      expect(
+        result.dig("data", "createConversation", "conversations", 0, "conversation", "conversationMessagesConnection", "nodes", 0, "body")
+      ).to eq "yo"
+    end
+  end
+
+  context "soft concluded course with non-concluded section override" do
+    before do
+      @student1 = course_with_student(active_all: true).user
+      @student2 = course_with_student(active_all: true).user
+      @course.start_at = 2.days.ago
+      @course.conclude_at = 1.day.ago
+      @course.restrict_enrollments_to_course_dates = true
+      @course.save!
+
+      @my_section = @course.course_sections.create!(name: "test section")
+      @my_section.start_at = 1.day.ago
+      @my_section.end_at = 5.days.from_now
+      @my_section.restrict_enrollments_to_section_dates = true
+      @my_section.save!
+
+      @course.enroll_student(@student1,
+                             allow_multiple_enrollments: true,
+                             enrollment_state: "active",
+                             section: @my_section)
+
+      @course.enroll_teacher(@teacher,
+                             allow_multiple_enrollments: true,
+                             enrollment_state: "active",
+                             section: @my_section)
+    end
+
+    it "allows a student to create a new conversation in soft_concluded course if section override is active" do
+      expect(@course.soft_concluded?).to be_truthy
+      result = run_mutation({ recipients: [@teacher.id.to_s], body: "yo", context_code: @course.asset_string }, @student1)
+      expect(result.dig("data", "createConversation", "errors")).to be_nil
+      expect(
+        result.dig("data", "createConversation", "conversations", 0, "conversation", "conversationMessagesConnection", "nodes", 0, "body")
+      ).to eq "yo"
+    end
+
+    it "allows a teacher to create a new conversation in soft_concluded course if section override is active" do
+      expect(@course.soft_concluded?).to be_truthy
+      result = run_mutation({ recipients: [@student1.id.to_s], body: "yo", context_code: @course.asset_string }, @teacher)
+      expect(result.dig("data", "createConversation", "errors")).to be_nil
+      expect(
+        result.dig("data", "createConversation", "conversations", 0, "conversation", "conversationMessagesConnection", "nodes", 0, "body")
+      ).to eq "yo"
+    end
+
+    it "does not allow a student that is not part of the section override to send messages" do
+      expect(@course.soft_concluded?).to be_truthy
+      result = run_mutation({ recipients: [@student.id.to_s], body: "yo", context_code: @course.asset_string }, @student2)
+      expect(result.dig("data", "createConversation", "conversations")).to be_nil
+      expect(
+        result.dig("data", "createConversation", "errors", 0, "message")
+      ).to eq "Unable to send messages to users in #{@course.name}"
+    end
   end
 
   it "does not allow creating conversations in soft concluded courses for students" do
@@ -393,25 +503,6 @@ RSpec.describe Mutations::CreateConversation do
       expect(
         result.dig("data", "createConversation", "errors", 0, "message")
       ).to eql "Invalid recipients"
-    end
-  end
-
-  context "user_notes" do
-    before do
-      Account.default.update_attribute(:enable_user_notes, true)
-      @students = create_users_in_course(@course, 2, account_associations: true, return_type: :record)
-    end
-
-    it "creates user notes" do
-      run_mutation({ recipients: @students.map(&:id).map(&:to_s), body: "yo", subject: "greetings", user_note: true, context_code: @course.asset_string }, @teacher)
-      @students.each { |x| expect(x.user_notes.size).to be(1) }
-      expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.conversation.sent.faculty_journal.react")
-    end
-
-    it "includes the domain root account in the user note" do
-      run_mutation({ recipients: @students.map(&:id).map(&:to_s), body: "hi there", subject: "hi there", user_note: true, context_code: @course.asset_string }, @teacher)
-      note = UserNote.last
-      expect(note.root_account_id).to eql Account.default.id
     end
   end
 

@@ -25,7 +25,7 @@ class AuthenticationProvider::SAML < AuthenticationProvider::Delegated
     "saml"
   end
 
-  def self.enabled?(_account = nil)
+  def self.enabled?(_account = nil, _user = nil)
     true
   end
 
@@ -211,9 +211,8 @@ class AuthenticationProvider::SAML < AuthenticationProvider::Delegated
   end
 
   def login_attribute
-    return "NameID" unless read_attribute(:login_attribute)
+    return "NameID" unless (result = super)
 
-    result = super
     # backcompat
     return "NameID" if result == "nameid"
     return "eduPersonPrincipalName" if result == "eduPersonPrincipalName_stripped"
@@ -223,7 +222,7 @@ class AuthenticationProvider::SAML < AuthenticationProvider::Delegated
 
   def strip_domain_from_login_attribute?
     # backcompat
-    return true if read_attribute(:login_attribute) == "eduPersonPrincipalName_stripped"
+    return true if self["login_attribute"] == "eduPersonPrincipalName_stripped"
 
     !!settings["strip_domain_from_login_attribute"]
   end
@@ -433,6 +432,12 @@ class AuthenticationProvider::SAML < AuthenticationProvider::Delegated
                          HostUrl.context_hosts(account, current_host),
                          include_all_encryption_certificates:)
     prior_configs = Set.new
+
+    sp = entity.roles.last
+    unless aps.empty?
+      sp.authn_requests_signed = true if aps.all?(&:sig_alg)
+      sp.authn_requests_signed = false if aps.none?(&:sig_alg)
+    end
     aps.each do |ap|
       federated_attributes = ap.federated_attributes
       next if federated_attributes.empty?

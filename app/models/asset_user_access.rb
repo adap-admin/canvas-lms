@@ -66,13 +66,13 @@ class AssetUserAccess < ActiveRecord::Base
 
   def display_name
     # repair existing AssetUserAccesses that have bad display_names
-    if read_attribute(:display_name) == asset_code
+    if super == asset_code
       better_display_name = asset_display_name
       if better_display_name != asset_code
         update_attribute(:display_name, better_display_name)
       end
     end
-    read_attribute(:display_name)
+    super
   end
 
   def asset_display_name
@@ -331,20 +331,20 @@ class AssetUserAccess < ActiveRecord::Base
   end
 
   def self.expiration_date
-    cutoff = Setting.get("asset_user_accesses_retain_for", 1.year.to_s).to_i
-    cutoff.seconds.ago
+    2.years.ago
   end
 
+  DELETE_BATCH_SIZE = 10_000
+  DELETE_BATCH_SLEEP = 5
+
   def self.delete_old_records
-    batch_size = Setting.get("asset_user_accesses_delete_batch_size", "10000").to_i
-    batch_sleep = Setting.get("asset_user_accesses_delete_batch_sleep", "0").to_f
     loop do
-      count = AssetUserAccess.connection.with_max_update_limit(batch_size) do
-        where(last_access: ..expiration_date).limit(batch_size).delete_all
+      count = AssetUserAccess.connection.with_max_update_limit(DELETE_BATCH_SIZE) do
+        where(last_access: ..expiration_date).limit(DELETE_BATCH_SIZE).delete_all
       end
       break if count.zero?
 
-      sleep(batch_sleep) if batch_sleep > 0 # rubocop:disable Lint/NoSleep
+      sleep(DELETE_BATCH_SLEEP) # rubocop:disable Lint/NoSleep
     end
   end
 
@@ -352,6 +352,6 @@ class AssetUserAccess < ActiveRecord::Base
 
   def increment(attribute)
     incremented_value = (send(attribute) || 0) + 1
-    send("#{attribute}=", incremented_value)
+    send(:"#{attribute}=", incremented_value)
   end
 end

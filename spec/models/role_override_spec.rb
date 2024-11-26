@@ -494,6 +494,40 @@ describe RoleOverride do
       end
     end
 
+    context "allowed custom site admin role" do
+      let_once(:site_admin_account) { Account.site_admin }
+      let_once(:root_account) { Account.default }
+      let(:role) { custom_account_role("OnTheList", account: site_admin_account) }
+      let(:admin_user) { site_admin_user(role:) }
+
+      before(:once) do
+        Setting.set("allowed_custom_site_admin_roles", "OnTheList")
+      end
+
+      it "permissions are default enabled for descendant non site admin root accounts" do
+        expect(root_account.grants_right?(admin_user, :become_user)).to be_truthy
+        expect(RoleOverride.permission_for(root_account, :become_user, role)[:enabled]).to eq [:self, :descendants]
+      end
+
+      it "is ignored when the permission's account is site admin" do
+        expect(site_admin_account.grants_right?(admin_user, :manage_account_memberships)).to be_falsey
+        expect(RoleOverride.permission_for(site_admin_account, :manage_account_memberships, role)[:enabled]).to be_falsey
+      end
+
+      it "is ignored when the associated account is site admin but the role is not on the allow list" do
+        role = custom_account_role("NotOnTheList", account: site_admin_account)
+        user = site_admin_user(role:)
+        expect(root_account.grants_right?(user, :manage_account_memberships)).to be_falsey
+        expect(RoleOverride.permission_for(root_account, :manage_account_memberships, role)[:enabled]).to be_falsey
+      end
+
+      it "can be disabled / overriden from the default enabled" do
+        Account.site_admin.role_overrides.create!(role:, enabled: false, permission: :become_user)
+        expect(root_account.grants_right?(admin_user, :become_user)).to be_falsey
+        expect(RoleOverride.permission_for(root_account, :become_user, role)[:enabled]).to be_falsey
+      end
+    end
+
     context "sharding" do
       specs_require_sharding
 
@@ -552,29 +586,6 @@ describe RoleOverride do
       # applying to Default Account, should be disabled
       expect(RoleOverride.enabled_for?(Account.default, :manage_role_overrides, role)).to eq []
     end
-
-    context "with account allows" do
-      before :once do
-        @role = Account.default.roles.build(name: "role")
-        @role.base_role_type = "AccountMembership"
-        @role.save!
-        RoleOverride.create!(context: Account.default, permission: "manage_user_notes", role: @role, enabled: true)
-      end
-
-      it "ignores permissions with account_allows off" do
-        expect(RoleOverride.enabled_for?(Account.default, :manage_user_notes, admin_role)).to eq []
-        expect(RoleOverride.enabled_for?(Account.default, :manage_user_notes, @role)).to eq []
-      end
-
-      it "allows with account_allows on" do
-        Account.default.tap do |a|
-          a.enable_user_notes = true
-          a.save!
-        end
-        expect(RoleOverride.enabled_for?(Account.default, :manage_user_notes, admin_role)).to_not eq []
-        expect(RoleOverride.enabled_for?(Account.default, :manage_user_notes, @role)).to_not eq []
-      end
-    end
   end
 
   context "enabled_for_plugin" do
@@ -610,6 +621,24 @@ describe RoleOverride do
   describe "specific permissions" do
     before(:once) do
       account_model
+    end
+
+    describe "manage_temp_enroll" do
+      let(:add_perm) { RoleOverride.permissions[:temporary_enrollments_add] }
+      let(:edit_perm) { RoleOverride.permissions[:temporary_enrollments_edit] }
+      let(:del_perm) { RoleOverride.permissions[:temporary_enrollments_delete] }
+
+      it "is true for AccountAdmin by default" do
+        expect(edit_perm[:true_for]).to match_array ["AccountAdmin"]
+        expect(del_perm[:true_for]).to match_array ["AccountAdmin"]
+        expect(add_perm[:true_for]).to match_array ["AccountAdmin"]
+      end
+
+      it "is available to admin role types" do
+        expect(edit_perm[:available_to]).to match_array %w[AccountAdmin AccountMembership]
+        expect(add_perm[:available_to]).to match_array %w[AccountAdmin AccountMembership]
+        expect(del_perm[:available_to]).to match_array %w[AccountAdmin AccountMembership]
+      end
     end
 
     describe "manage_proficiency_calculations" do

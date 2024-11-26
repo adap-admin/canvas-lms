@@ -22,7 +22,7 @@
 # API for creating and viewing user logins under an account
 class PseudonymsController < ApplicationController
   before_action :get_context, only: [:index, :create]
-  before_action :require_user, only: %i[create show edit update]
+  before_action :require_user, only: %i[create show edit update migrate_login_attribute]
   before_action :reject_student_view_student, only: %i[create show edit update]
   protect_from_forgery except: %i[registration_confirmation change_password forgot_password], with: :exception
 
@@ -111,7 +111,7 @@ class PseudonymsController < ApplicationController
       if @domain_root_account
         @domain_root_account.pseudonyms.active_only.by_unique_id(email).each do |p|
           cc = p.communication_channel if p.communication_channel && p.user
-          cc ||= p.user.communication_channel rescue nil
+          cc ||= p.user.communication_channel
           @ccs << cc
         end
       end
@@ -119,7 +119,7 @@ class PseudonymsController < ApplicationController
 
     @ccs = @ccs.flatten.compact.uniq.select do |cc|
       if cc.user
-        cc.pseudonym ||= cc.user.pseudonym rescue nil
+        cc.pseudonym ||= cc.user.pseudonym
         cc.save if cc.changed?
         found = false
         Shard.partition_by_shard([@domain_root_account.id] + @domain_root_account.trusted_account_ids) do |account_ids|
@@ -151,9 +151,11 @@ class PseudonymsController < ApplicationController
       # Whether the email was actually found or not, we display the same
       # message. Otherwise this form could be used to fish for valid
       # email addresses.
-      flash[:notice] = t("notices.email_sent", "Confirmation email sent to %{email}, make sure to check your spam box", email:)
       @ccs.each(&:forgot_password!)
-      format.html { redirect_to(canvas_login_url) }
+      format.html do
+        flash[:notice] = t("notices.email_sent", "Confirmation email sent to %{email}, make sure to check your spam box", email:)
+        redirect_to(canvas_login_url)
+      end
       format.json { render json: { requested: true } }
       format.js { render json: { requested: true } }
     end
@@ -263,6 +265,26 @@ class PseudonymsController < ApplicationController
   #     * student_other
   #     * teacher
   #
+  # @argument user[existing_user_id] [String]
+  #   A Canvas User ID to identify a user in a trusted account (alternative to `id`,
+  #   `existing_sis_user_id`, or `existing_integration_id`). This parameter is
+  #   not available in OSS Canvas.
+  #
+  # @argument user[existing_integration_id] [String]
+  #   An Integration ID to identify a user in a trusted account (alternative to `id`,
+  #   `existing_user_id`, or `existing_sis_user_id`). This parameter is not
+  #   available in OSS Canvas.
+  #
+  # @argument user[existing_sis_user_id] [String]
+  #   An SIS User ID to identify a user in a trusted account (alternative to `id`,
+  #   `existing_integration_id`, or `existing_user_id`). This parameter is not
+  #   available in OSS Canvas.
+  #
+  # @argument user[trusted_account] [String]
+  #   The domain of the account to search for the user. This field is required when
+  #   identifying a user in a trusted account. This parameter is not available in OSS
+  #   Canvas.
+  #
   # @example_request
   #
   #   #create a facebook login for user with ID 123
@@ -271,6 +293,16 @@ class PseudonymsController < ApplicationController
   #        -F 'login[unique_id]=112233445566' \
   #        -F 'login[authentication_provider_id]=facebook' \
   #        -H 'Authorization: Bearer <token>'
+  #
+  # @example_request
+  #
+  #   #create a login for user in another trusted account:
+  #   curl 'https://<canvas>/api/v1/accounts/<account_id>/logins' \
+  #        -F 'user[existing_user_sis_id]=SIS42' \
+  #        -F 'user[trusted_account]=canvas.example.edu' \
+  #        -F 'login[unique_id]=112233445566' \
+  #        -H 'Authorization: Bearer <token>'
+  #
   def create
     return unless get_user
 
@@ -288,9 +320,9 @@ class PseudonymsController < ApplicationController
     end
 
     @pseudonym = @account.pseudonyms.build(user: @user)
-    return unless authorized_action(@pseudonym, @current_user, :create)
     return unless find_authentication_provider
     return unless update_pseudonym_from_params
+    return unless authorized_action(@pseudonym, @current_user, :create)
 
     @pseudonym.generate_temporary_password unless params[:pseudonym][:password]
     if Pseudonym.unique_constraint_retry { @pseudonym.save_without_session_maintenance }
@@ -402,9 +434,9 @@ class PseudonymsController < ApplicationController
       raise ActiveRecord::RecordNotFound unless @pseudonym.user_id == @user.id
     end
 
-    return unless authorized_action(@pseudonym, @current_user, [:update, :change_password])
     return unless find_authentication_provider
     return unless update_pseudonym_from_params
+    return unless authorized_action(@pseudonym, @current_user, [:update, :change_password])
 
     if @pseudonym.save_without_session_maintenance
       flash[:notice] = t "notices.account_updated", "Account updated!"
@@ -456,6 +488,15 @@ class PseudonymsController < ApplicationController
     else
       render json: @pseudonym.errors, status: :bad_request
     end
+  end
+
+  def migrate_login_attribute
+    return unless get_user
+
+    @pseudonym = @user.pseudonyms.find(params[:id])
+    return render_unauthorized_action unless @pseudonym.migrate_login_attribute(admin_user: @current_user)
+
+    render json: pseudonym_json(@pseudonym, @current_user, session)
   end
 
   protected

@@ -156,6 +156,19 @@ describe SectionsController, type: :request do
       expect(json.size).to eq @course2.course_sections.count
     end
 
+    it "returns only sections matching the search term if provided" do
+      @course1.course_sections.create!(name: "Normal Section 1")
+      @course1.course_sections.create!(name: "Normal Section 2")
+      @course1.course_sections.create!(name: "Advanced Section 1")
+      @course1.course_sections.create!(name: "Advanced Section 2")
+
+      json = api_call(:get,
+                      "/api/v1/courses/#{@course1.id}/sections?search_term=normal",
+                      { controller: "sections", action: "index", course_id: @course1.id, search_term: "normal", format: "json" })
+      expect(json.length).to eq 2
+      expect(json.pluck("name")).to match_array(["Normal Section 1", "Normal Section 2"])
+    end
+
     it "returns permissions if specified" do
       section1 = @course1.default_section
       section2 = @course1.course_sections.create!(name: "Section 2")
@@ -399,7 +412,7 @@ describe SectionsController, type: :request do
       end
 
       it "disallows creating a section" do
-        api_call(:post, @path_prefix, @path_params, {}, {}, expected_status: 401)
+        api_call(:post, @path_prefix, @path_params, {}, {}, expected_status: 403)
       end
     end
 
@@ -510,7 +523,7 @@ describe SectionsController, type: :request do
       end
 
       it "disallows creating a section" do
-        api_call(:post, @path_prefix, @path_params, {}, {}, expected_status: 401)
+        api_call(:post, @path_prefix, @path_params, {}, {}, expected_status: 403)
       end
     end
   end
@@ -609,7 +622,7 @@ describe SectionsController, type: :request do
                  @path_params.merge(id: @section.to_param),
                  { course_section: { name: "New Name" } },
                  {},
-                 expected_status: 401)
+                 expected_status: 403)
       end
     end
 
@@ -717,7 +730,7 @@ describe SectionsController, type: :request do
                  @path_params.merge(id: @section.to_param),
                  { course_section: { name: "New Name" } },
                  {},
-                 expected_status: 401)
+                 expected_status: 403)
       end
     end
   end
@@ -771,7 +784,7 @@ describe SectionsController, type: :request do
       end
 
       it "disallows deleting a section" do
-        api_call(:delete, "#{@path_prefix}/#{@section.id}", @path_params.merge(id: @section.to_param), {}, {}, expected_status: 401)
+        api_call(:delete, "#{@path_prefix}/#{@section.id}", @path_params.merge(id: @section.to_param), {}, {}, expected_status: 403)
       end
     end
 
@@ -806,7 +819,7 @@ describe SectionsController, type: :request do
       end
 
       it "disallows deleting a section" do
-        api_call(:delete, "#{@path_prefix}/#{@section.id}", @path_params.merge(id: @section.to_param), {}, {}, expected_status: 401)
+        api_call(:delete, "#{@path_prefix}/#{@section.id}", @path_params.merge(id: @section.to_param), {}, {}, expected_status: 403)
       end
     end
   end
@@ -825,8 +838,8 @@ describe SectionsController, type: :request do
       end
 
       it "cross-lists a section" do
-        expect(@course.active_course_sections).to be_include(@section)
-        expect(@dest_course.active_course_sections).not_to be_include(@section)
+        expect(@course.active_course_sections).to include(@section)
+        expect(@dest_course.active_course_sections).not_to include(@section)
 
         json = api_call(:post,
                         "/api/v1/sections/#{@section.id}/crosslist/#{@dest_course.id}",
@@ -835,13 +848,13 @@ describe SectionsController, type: :request do
         expect(json["course_id"]).to eq @dest_course.id
         expect(json["nonxlist_course_id"]).to eq @course.id
 
-        expect(@course.reload.active_course_sections).not_to be_include(@section)
-        expect(@dest_course.reload.active_course_sections).to be_include(@section)
+        expect(@course.reload.active_course_sections).not_to include(@section)
+        expect(@dest_course.reload.active_course_sections).to include(@section)
       end
 
       it "doesn't cross-lists a section if override_sis_stickiness set to false" do
-        expect(@course.active_course_sections).to be_include(@section)
-        expect(@dest_course.active_course_sections).not_to be_include(@section)
+        expect(@course.active_course_sections).to include(@section)
+        expect(@dest_course.active_course_sections).not_to include(@section)
 
         json = api_call(:post,
                         "/api/v1/sections/#{@section.id}/crosslist/#{@dest_course.id}",
@@ -850,8 +863,8 @@ describe SectionsController, type: :request do
         expect(json["course_id"]).to eq @course.id
         expect(json["nonxlist_course_id"]).to be_nil
 
-        expect(@course.reload.active_course_sections).to be_include(@section)
-        expect(@dest_course.reload.active_course_sections).not_to be_include(@section)
+        expect(@course.reload.active_course_sections).to include(@section)
+        expect(@dest_course.reload.active_course_sections).not_to include(@section)
       end
 
       it "works with sis IDs" do
@@ -862,8 +875,8 @@ describe SectionsController, type: :request do
         @section.sis_batch_id = @sis_batch.id
         @section.save!
 
-        expect(@course.active_course_sections).to be_include(@section)
-        expect(@dest_course.active_course_sections).not_to be_include(@section)
+        expect(@course.active_course_sections).to include(@section)
+        expect(@dest_course.active_course_sections).not_to include(@section)
 
         json = api_call(:post,
                         "/api/v1/sections/sis_section_id:the_section/crosslist/sis_course_id:dest_course",
@@ -873,8 +886,8 @@ describe SectionsController, type: :request do
         expect(json["nonxlist_course_id"]).to eq @course.id
         expect(json["sis_import_id"]).to eq @sis_batch.id
 
-        expect(@course.reload.active_course_sections).not_to be_include(@section)
-        expect(@dest_course.reload.active_course_sections).to be_include(@section)
+        expect(@course.reload.active_course_sections).not_to include(@section)
+        expect(@dest_course.reload.active_course_sections).to include(@section)
       end
 
       it "fails if the section is deleted" do
@@ -897,6 +910,27 @@ describe SectionsController, type: :request do
                  expected_status: 404)
       end
 
+      it "fails if the destination course is a blueprint" do
+        MasterCourses::MasterTemplate.set_as_master_course(@dest_course)
+        json = api_call(:post,
+                        "/api/v1/sections/#{@section.id}/crosslist/#{@dest_course.id}",
+                        @params.merge(id: @section.to_param, new_course_id: @dest_course.to_param),
+                        {},
+                        {},
+                        expected_status: 403)
+        expect(json["error"]).to eq "cannot crosslist into blueprint courses"
+      end
+
+      it "does not fail if the destination course is a course which was once a blueprint" do
+        MasterCourses::MasterTemplate.set_as_master_course(@dest_course).update_attribute(:workflow_state, "deleted")
+        api_call(:post,
+                 "/api/v1/sections/#{@section.id}/crosslist/#{@dest_course.id}",
+                 @params.merge(id: @section.to_param, new_course_id: @dest_course.to_param),
+                 {},
+                 {},
+                 expected_status: 200)
+      end
+
       it "fails if the destination course is under a different root account" do
         foreign_account = Account.create!
         foreign_course = foreign_account.courses.create!
@@ -917,32 +951,16 @@ describe SectionsController, type: :request do
         expect(json["course"]["id"]).to eql @dest_course.id
       end
 
-      it "does not confirm crosslisting when the caller lacks :manage rights on the destination course" do
-        @course.root_account.disable_feature!(:granular_permissions_manage_courses)
-        account_admin =
-          account_admin_user_with_role_changes(
-            account: @course.root_account,
-            role_changes: {
-              manage_courses: false
-            }
-          )
-        user_session(account_admin)
-        json =
-          api_call(
-            :get,
-            "/courses/#{@course.id}/sections/#{@section.id}/crosslist/confirm/#{@dest_course.id}",
-            @params.merge(
-              action: "crosslist_check",
-              course_id: @course.to_param,
-              section_id: @section.to_param,
-              new_course_id: @dest_course.id
-            )
-          )
+      it "does not confirm crosslisting if the destination course is a blueprint" do
+        MasterCourses::MasterTemplate.set_as_master_course(@dest_course)
+        user_session(@admin)
+        json = api_call(:get,
+                        "/courses/#{@course.id}/sections/#{@section.id}/crosslist/confirm/#{@dest_course.id}",
+                        @params.merge(action: "crosslist_check", course_id: @course.to_param, section_id: @section.to_param, new_course_id: @dest_course.id))
         expect(json["allowed"]).to be false
       end
 
-      it "does not confirm crosslisting when the caller lacks :manage rights on the destination course (granular permissions)" do
-        @course.root_account.enable_feature!(:granular_permissions_manage_courses)
+      it "does not confirm crosslisting when the caller lacks :manage rights on the destination course" do
         account_admin =
           account_admin_user_with_role_changes(
             account: @course.root_account,
@@ -977,7 +995,7 @@ describe SectionsController, type: :request do
                  @params.merge(id: @section.to_param, new_course_id: @dest_course.to_param),
                  {},
                  {},
-                 expected_status: 401)
+                 expected_status: 403)
       end
     end
   end
@@ -997,8 +1015,8 @@ describe SectionsController, type: :request do
       end
 
       it "un-crosslists a section" do
-        expect(@course.active_course_sections).not_to be_include @section
-        expect(@dest_course.active_course_sections).to be_include @section
+        expect(@course.active_course_sections).not_to include @section
+        expect(@dest_course.active_course_sections).to include @section
 
         json = api_call(:delete,
                         "/api/v1/sections/#{@section.id}/crosslist",
@@ -1007,8 +1025,8 @@ describe SectionsController, type: :request do
         expect(json["course_id"]).to eq @course.id
         expect(json["nonxlist_course_id"]).to be_nil
 
-        expect(@course.reload.active_course_sections).to be_include @section
-        expect(@dest_course.reload.active_course_sections).not_to be_include @section
+        expect(@course.reload.active_course_sections).to include @section
+        expect(@dest_course.reload.active_course_sections).not_to include @section
       end
 
       it "doesn't remove course_id" do
@@ -1019,16 +1037,16 @@ describe SectionsController, type: :request do
         expect(json["course_id"]).to eq @section.course_id
         expect(json["nonxlist_course_id"]).not_to be_nil
 
-        expect(@course.reload.active_course_sections).not_to be_include @section
-        expect(@dest_course.reload.active_course_sections).to be_include @section
+        expect(@course.reload.active_course_sections).not_to include @section
+        expect(@dest_course.reload.active_course_sections).to include @section
       end
 
       it "works by SIS ID" do
         @dest_course.update_attribute(:sis_source_id, "dest_course")
         @section.update_attribute(:sis_source_id, "the_section")
 
-        expect(@course.active_course_sections).not_to be_include @section
-        expect(@dest_course.active_course_sections).to be_include @section
+        expect(@course.active_course_sections).not_to include @section
+        expect(@dest_course.active_course_sections).to include @section
 
         json = api_call(:delete,
                         "/api/v1/sections/sis_section_id:the_section/crosslist",
@@ -1037,8 +1055,8 @@ describe SectionsController, type: :request do
         expect(json["course_id"]).to eq @course.id
         expect(json["nonxlist_course_id"]).to be_nil
 
-        expect(@course.reload.active_course_sections).to be_include @section
-        expect(@dest_course.reload.active_course_sections).not_to be_include @section
+        expect(@course.reload.active_course_sections).to include @section
+        expect(@dest_course.reload.active_course_sections).not_to include @section
       end
 
       it "fails if the section is not crosslisted" do
@@ -1091,7 +1109,7 @@ describe SectionsController, type: :request do
                  @params.merge(id: @section.to_param),
                  {},
                  {},
-                 expected_status: 401)
+                 expected_status: 403)
       end
     end
   end

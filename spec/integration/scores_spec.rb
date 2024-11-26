@@ -73,16 +73,20 @@ module Lti::IMS
         [
           {
             type: "file",
-            url: "https://filesamples.com/samples/document/txt/sample1.txt",
+            url: "https://getsamplefiles.com/download/txt/sample-1.txt",
             title: "sample1.txt",
             media_type: "text/html" # different than the mime type from extension
           },
           {
             type: "not",
-            url: "https://filesamples.com/samples/document/txt/sample1.txt",
+            url: "https://getsamplefiles.com/download/txt/sample-1.txt",
             title: "notAFile.txt"
           }
         ]
+      end
+
+      before do
+        allow(CanvasHttp).to receive(:get).with("https://getsamplefiles.com/download/txt/sample-1.txt").and_return("sample data")
       end
 
       def post_instfs_progress(url, params)
@@ -102,8 +106,7 @@ module Lti::IMS
         let(:submitted_at) { 5.minutes.ago.iso8601(3) }
 
         before do
-          allow(InstFS).to receive(:enabled?).and_return(true)
-          allow(InstFS).to receive(:jwt_secrets).and_return(["jwt signing key"])
+          allow(InstFS).to receive_messages(enabled?: true, jwt_secrets: ["jwt signing key"])
           @token = Canvas::Security.create_jwt({}, nil, InstFS.jwt_secret)
           Account.root_accounts.first.enable_feature! :ags_scores_multiple_files
         end

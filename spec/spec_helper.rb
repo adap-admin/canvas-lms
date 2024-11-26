@@ -25,12 +25,13 @@
 # from their use, making things harder to find
 
 begin
-  require "byebug"
+  require "debug"
 rescue LoadError
   nil
 end
 
 require "crystalball"
+require "rspec/openapi"
 
 ENV["RAILS_ENV"] = "test"
 
@@ -97,7 +98,7 @@ module WebMock::API
 end
 
 require "delayed/testing"
-Dir[Rails.root.join("spec/support/**/*.rb")].each { |f| require f }
+Rails.root.glob("spec/support/**/*.rb") { |f| require f }
 require "sharding_spec_helper"
 
 # nuke the db (say, if `rake db:migrate RAILS_ENV=test` created records),
@@ -106,6 +107,7 @@ require "sharding_spec_helper"
 # let/before/example
 TestDatabaseUtils.reset_database! unless ENV["DB_VALIDITY_ENSURED"] == "1"
 TestDatabaseUtils.check_migrations! unless ENV["DB_VALIDITY_ENSURED"] == "1"
+Setting.reset_cache!
 BlankSlateProtection.install!
 GreatExpectations.install!
 
@@ -218,6 +220,8 @@ module RSpec::Rails
         node.attr("checked") == "checked"
       elsif node.respond_to?(:checked?)
         node.checked?
+      else
+        node.attribute("checked")
       end
     end
   end
@@ -303,7 +307,11 @@ module RenderWithHelpers
   end
 
   def render(*args)
-    controller_class = ("#{@controller.controller_path.camelize}Controller".constantize rescue nil) || ApplicationController
+    controller_class = begin
+      "#{@controller.controller_path.camelize}Controller".constantize
+    rescue NameError
+      ApplicationController
+    end
 
     controller_class.instance_variable_set(:@js_env, nil)
     # this extends the controller's helper methods to the view
@@ -342,7 +350,7 @@ module RenderWithHelpers
       file = args.shift
       args = [{ template: file }] + args
     end
-    super(*args)
+    super
   end
 end
 RSpec::Rails::ViewExampleGroup::ExampleMethods.prepend(RenderWithHelpers)
@@ -416,7 +424,7 @@ RSpec.configure do |config|
   config.fail_if_no_examples = true
   config.use_transactional_fixtures = true
   config.use_instantiated_fixtures = false
-  config.fixture_path = Rails.root.join("spec/fixtures")
+  config.fixture_paths = [Rails.root.join("spec/fixtures")]
   config.infer_spec_type_from_file_location!
   config.raise_errors_for_deprecations!
   config.color = true
@@ -451,11 +459,29 @@ RSpec.configure do |config|
     end
   end
 
+  if ENV["OPENAPI"]
+    config.define_derived_metadata(file_path: %r{spec/controllers}) do |metadata|
+      metadata[:attempt_openapi_generation] = true
+    end
+
+    config.after(:example, :attempt_openapi_generation) do |example|
+      OpenApiGenerator.generate(self, example)
+    end
+
+    config.after(:suite) do
+      result_recorder = RSpec::OpenAPI::ResultRecorder.new(RSpec::OpenAPI.path_records)
+      result_recorder.record_results!
+      if result_recorder.errors?
+        error_message = result_recorder.error_message
+        colorizer = RSpec::Core::Formatters::ConsoleCodes
+        RSpec.configuration.reporter.message colorizer.wrap(error_message, :failure)
+      end
+    end
+  end
+
   config.around do |example|
     Rails.logger.info "STARTING SPEC #{example.full_description}"
-    SpecTimeLimit.enforce(example) do
-      example.run
-    end
+    SpecTimeLimit.enforce(example, &example)
   end
 
   def reset_all_the_things!
@@ -477,7 +503,6 @@ RSpec.configure do |config|
     ActiveRecord::Migration.verbose = false
     RequestStore.clear!
     MultiCache.reset
-    Course.enroll_user_call_count = 0
     TermsOfService.skip_automatic_terms_creation = true
     LiveEvents.clear_context!
     $spec_api_tokens = {}
@@ -550,15 +575,15 @@ RSpec.configure do |config|
       super
     end
   end
-  Canvas::Redis.singleton_class.prepend(TrackRedisUsage)
-  Canvas::Redis.redis_used = true
+  CanvasCache::Redis.singleton_class.prepend(TrackRedisUsage)
+  CanvasCache::Redis.redis_used = true
 
   config.before do
-    if Canvas::Redis.redis_enabled? && Canvas::Redis.redis_used
+    if CanvasCache::Redis.enabled? && CanvasCache::Redis.redis_used
       # yes, we really mean to run this dangerous redis command
-      GuardRail.activate(:deploy) { Canvas::Redis.redis.flushdb }
+      GuardRail.activate(:deploy) { CanvasCache::Redis.redis.flushdb(failsafe: nil) }
     end
-    Canvas::Redis.redis_used = false
+    CanvasCache::Redis.redis_used = false
   end
 
   if Canvas::Plugin.value_to_boolean(ENV["N_PLUS_ONE_DETECTION"])
@@ -613,7 +638,7 @@ RSpec.configure do |config|
   end
 
   def fixture_file_upload(path, mime_type = nil, binary = false)
-    Rack::Test::UploadedFile.new(File.join(RSpec.configuration.fixture_path, path), mime_type, binary)
+    Rack::Test::UploadedFile.new(file_fixture(path), mime_type, binary)
   end
 
   def default_uploaded_data
@@ -663,8 +688,8 @@ RSpec.configure do |config|
   def set_cache(new_cache)
     cache_opts = {}
     if new_cache == :redis_cache_store
-      if Canvas::Redis.redis_enabled?
-        cache_opts[:redis] = Canvas::Redis.redis
+      if CanvasCache::Redis.enabled?
+        cache_opts[:redis] = CanvasCache::Redis.redis
       else
         skip "redis required"
       end
@@ -674,9 +699,8 @@ RSpec.configure do |config|
     new_cache ||= :null_store
     new_cache = ActiveSupport::Cache.lookup_store(new_cache, cache_opts)
     allow(Rails).to receive(:cache).and_return(new_cache)
-    allow(ActionController::Base).to receive(:cache_store).and_return(new_cache)
+    allow(ActionController::Base).to receive_messages(cache_store: new_cache, perform_caching: true)
     allow_any_instance_of(ActionController::Base).to receive(:cache_store).and_return(new_cache)
-    allow(ActionController::Base).to receive(:perform_caching).and_return(true)
     allow_any_instance_of(ActionController::Base).to receive(:perform_caching).and_return(true)
     allow(MultiCache).to receive(:cache).and_return(new_cache)
   end
@@ -697,9 +721,8 @@ RSpec.configure do |config|
         yield
       ensure
         allow(Rails).to receive(:cache).and_return(previous_cache)
-        allow(ActionController::Base).to receive(:cache_store).and_return(previous_cache)
+        allow(ActionController::Base).to receive_messages(cache_store: previous_cache, perform_caching: previous_perform_caching)
         allow_any_instance_of(ActionController::Base).to receive(:cache_store).and_return(previous_cache)
-        allow(ActionController::Base).to receive(:perform_caching).and_return(previous_perform_caching)
         allow_any_instance_of(ActionController::Base).to receive(:perform_caching).and_return(previous_perform_caching)
         allow(MultiCache).to receive(:cache).and_return(previous_multicache)
       end
@@ -761,8 +784,8 @@ RSpec.configure do |config|
         @ancestor = ancestor
       end
 
-      def method_missing(sym, *args, &)
-        @ancestor.instance_method(sym).bind_call(@subject, *args, &)
+      def method_missing(sym, ...)
+        @ancestor.instance_method(sym).bind_call(@subject, ...)
       end
     end
 
@@ -810,6 +833,7 @@ RSpec.configure do |config|
     AWS_CONFIG = {
       access_key_id: "stub_id",
       secret_access_key: "stub_key",
+      credentials: Aws::Credentials.new("stub_id", "stub_key"),
       region: "us-east-1",
       stub_responses: true,
       bucket_name: "no-bucket"
@@ -837,10 +861,9 @@ RSpec.configure do |config|
   def s3_storage!(opts = { stubs: true })
     [Attachment, Thumbnail].each do |model|
       model.include(AttachmentStorageSwitcher) unless model.ancestors.include?(AttachmentStorageSwitcher)
-      allow(model).to receive(:current_backend).and_return(AttachmentFu::Backends::S3Backend)
-
-      allow(model).to receive(:s3_storage?).and_return(true)
-      allow(model).to receive(:local_storage?).and_return(false)
+      allow(model).to receive_messages(current_backend: AttachmentFu::Backends::S3Backend,
+                                       s3_storage?: true,
+                                       local_storage?: false)
     end
 
     if opts[:stubs]
@@ -854,10 +877,9 @@ RSpec.configure do |config|
   def local_storage!
     [Attachment, Thumbnail].each do |model|
       model.include(AttachmentStorageSwitcher) unless model.ancestors.include?(AttachmentStorageSwitcher)
-      allow(model).to receive(:current_backend).and_return(AttachmentFu::Backends::FileSystemBackend)
-
-      allow(model).to receive(:s3_storage?).and_return(false)
-      allow(model).to receive(:local_storage?).and_return(true)
+      allow(model).to receive_messages(current_backend: AttachmentFu::Backends::FileSystemBackend,
+                                       s3_storage?: false,
+                                       local_storage?: true)
     end
   end
 
@@ -995,7 +1017,7 @@ module I18nStubs
 end
 I18n.backend.class.prepend(I18nStubs)
 
-Dir[Rails.root.join("{gems,vendor}/plugins/*/spec_canvas/spec_helper.rb")].each { |file| require file }
+Rails.root.glob("{gems,vendor}/plugins/*/spec_canvas/spec_helper.rb") { |file| require file }
 
 Shoulda::Matchers.configure do |config|
   config.integrate do |with|
@@ -1010,12 +1032,20 @@ Shoulda::Matchers.configure do |config|
 end
 
 module DeveloperKeyStubs
-  def get_special_key(default_key_name)
+  @@original_get_special_key = DeveloperKey.method(:get_special_key)
+
+  def original_get_special_key(*, **)
+    @@original_get_special_key.call(*, **)
+  end
+
+  def get_special_key(default_key_name, create_if_missing: true)
     Shard.birth.activate do
       @special_keys ||= {}
 
       # TODO: we have to do this because tests run in transactions
       testkey = DeveloperKey.where(name: default_key_name).first_or_initialize
+      return nil if testkey.new_record? && !create_if_missing
+
       testkey.auto_expire_tokens = false if testkey.new_record?
       testkey.sns_arn = "arn:aws:s3:us-east-1:12345678910:foo/bar"
       testkey.save! if testkey.changed?

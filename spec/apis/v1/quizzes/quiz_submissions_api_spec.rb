@@ -28,8 +28,7 @@ shared_examples_for "Quiz Submissions API Restricted Endpoints" do
     allow(Quizzes::Quiz).to receive(:lockdown_browser_plugin_enabled?).and_return true
 
     fake_plugin = Object.new
-    allow(fake_plugin).to receive(:authorized?).and_return false
-    allow(fake_plugin).to receive(:base).and_return fake_plugin
+    allow(fake_plugin).to receive_messages(authorized?: false, base: fake_plugin)
 
     allow(subject).to receive(:ldb_plugin).and_return fake_plugin
     allow(Canvas::LockdownBrowser).to receive(:plugin).and_return fake_plugin
@@ -38,7 +37,7 @@ shared_examples_for "Quiz Submissions API Restricted Endpoints" do
       attempt: 1
     }
 
-    assert_status(403)
+    assert_forbidden
     expect(response.body).to match(/requires the lockdown browser/i)
   end
 end
@@ -255,7 +254,7 @@ describe Quizzes::QuizSubmissionsApiController, type: :request do
     it "restricts access to itself" do
       student_in_course
       qs_api_index(true)
-      assert_status(401)
+      assert_forbidden
     end
 
     it "includes submissions" do
@@ -364,7 +363,7 @@ describe Quizzes::QuizSubmissionsApiController, type: :request do
     it "denies access by other students" do
       student_in_course
       qs_api_show(true)
-      assert_status(401)
+      assert_forbidden
     end
 
     context "Output" do
@@ -675,7 +674,7 @@ describe Quizzes::QuizSubmissionsApiController, type: :request do
           validation_token: "aaaooeeeee"
         }
 
-        assert_status(403)
+        assert_forbidden
         expect(response.body).to match(/invalid token/)
       end
     end
@@ -780,14 +779,14 @@ describe Quizzes::QuizSubmissionsApiController, type: :request do
     it "rejects a teacher other student" do
       @user = @teacher
       qs_api_time(true)
-      assert_status(401)
+      assert_forbidden
     end
 
     it "rejects another student" do
       enroll_student
       @user = @student
       qs_api_time(true)
-      assert_status(401)
+      assert_forbidden
     end
   end
 end

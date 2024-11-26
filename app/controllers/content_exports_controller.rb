@@ -27,13 +27,14 @@ class ContentExportsController < ApplicationController
   def require_permission
     get_context
     @context ||= @current_user # if we're going through the dashboard
-    return render_unauthorized_action unless @context&.grants_all_rights?(@current_user, :read, :read_as_admin)
+    authorized_action(@context, @current_user, [:read, :read_as_admin], all_rights: true)
   end
 
   def index
     scope = @context.content_exports_visible_to(@current_user).without_epub
     @exports = scope.active.not_for_copy.order("content_exports.created_at DESC")
     @current_export_id = scope.running.first.try(:id)
+    @warning_messages = @context.export_warnings if @context.is_a?(Course)
   end
 
   def show
@@ -62,6 +63,7 @@ class ContentExportsController < ApplicationController
         else
           export.export_type = ContentExport::COMMON_CARTRIDGE
           export.selected_content = { everything: true }
+          export.prepare_new_quizzes_export
         end
       when User
         export.export_type = ContentExport::USER_DATA
@@ -69,7 +71,7 @@ class ContentExportsController < ApplicationController
 
       export.progress = 0
       if export.save
-        export.export
+        export.export unless export.waiting_for_external_tool?
         render_export(export)
       else
         render json: { error_message: t("errors.couldnt_create", "Couldn't create content export.") }

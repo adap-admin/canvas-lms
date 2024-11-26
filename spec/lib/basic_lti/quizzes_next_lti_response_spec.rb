@@ -24,7 +24,7 @@ describe BasicLTI::QuizzesNextLtiResponse do
     @root_account = @course.root_account
     @account = account_model(root_account: @root_account, parent_account: @root_account)
     @course.update_attribute(:account, @account)
-    @user = factory_with_protected_attributes(User, name: "some user", workflow_state: "registered")
+    @user = User.create!(name: "some user", workflow_state: "registered")
     @course.enroll_student(@user)
   end
 
@@ -136,7 +136,7 @@ describe BasicLTI::QuizzesNextLtiResponse do
         before { assignment.update!(points_possible: nil, grading_type:) }
 
         context "and the grading_type requires points" do
-          let(:grading_type) { Assignment::GRADING_TYPES.points }
+          let(:grading_type) { "points" }
 
           it "sets the assignment points_possible to the default" do
             expect { subject }.to change { assignment.reload.points_possible }
@@ -155,7 +155,7 @@ describe BasicLTI::QuizzesNextLtiResponse do
         end
 
         context "and the grading type does not require points" do
-          let(:grading_type) { Assignment::GRADING_TYPES.not_graded }
+          let(:grading_type) { "not_graded" }
 
           it "sets code major to 'failure'" do
             expect(subject.code_major).to eq "failure"
@@ -196,7 +196,7 @@ describe BasicLTI::QuizzesNextLtiResponse do
 
       assignment.update!(
         points_possible: nil,
-        grading_type: Assignment::GRADING_TYPES.not_graded
+        grading_type: "not_graded"
       )
 
       BasicLTI::BasicOutcomes.process_request(tool, xml)
@@ -331,7 +331,7 @@ describe BasicLTI::QuizzesNextLtiResponse do
           BasicLTI::BasicOutcomes.process_request(tool, xml)
 
           submission = assignment.submissions.where(user_id: @user.id).first
-          expect(submission.workflow_state).to eq Submission.workflow_states.pending_review
+          expect(submission.workflow_state).to eq "pending_review"
         end
       end
 

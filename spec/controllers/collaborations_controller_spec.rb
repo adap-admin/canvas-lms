@@ -108,9 +108,76 @@ describe CollaborationsController do
         user: @student
       ).tap { |c| c.update_attribute :url, "http://www.example.com" }
 
-      get "index", params: { course_id: @course.id }
+      gc = group_category
 
-      expect(assigns[:collaborations]).to eq [collab2]
+      valid_group = gc.groups.create!(context: @course, name: "valid")
+      valid_group.add_user(@student, "accepted")
+      valid_collab = @course.collaborations.create!(
+        title: "valid",
+        user: @teacher
+      ).tap do |c|
+        c.update_attribute :url, "http://www.example.com"
+        c.update_members([], [valid_group.id])
+      end
+
+      invalid_group = gc.groups.create!(context: @course, name: "invalid")
+      invalid_group.add_user(@student, "deleted")
+      invalid_collab = @course.collaborations.create!(
+        title: "invalid",
+        user: @teacher
+      ).tap do |c|
+        c.update_attribute :url, "http://www.example.com"
+        c.update_members([], [invalid_group.id])
+      end
+
+      get "index", params: { course_id: @course.id }
+      expect(assigns[:collaborations]).to match_array [collab2, valid_collab]
+      expect(assigns[:collaborations]).not_to include invalid_collab
+    end
+
+    context "with external tools" do
+      render_views
+      let(:course) { @course }
+      let(:url) { "http://www.example.com/launch" }
+      let(:domain) { "example.com" }
+      let(:developer_key_1) { dev_key_model_1_3(account: @course.account) }
+      let(:developer_key_2) { dev_key_model_1_3(account: @course.account) }
+      let(:tool_1) { external_tool_1_3_model(context: @course, developer_key: developer_key_1, opts: { url:, name: "1.3 tool 1" }) }
+      let(:tool_2) { external_tool_1_3_model(context: @course, developer_key: developer_key_2, opts: { url:, name: "1.3 tool 2" }) }
+      let(:content_item_1) do
+        {
+          url: tool_1.url,
+          title: "Lti 1.3 Tool Title 1"
+        }
+      end
+      let(:content_item_2) do
+        {
+          url: tool_2.url,
+          title: "Lti 1.3 Tool Title 2"
+        }
+      end
+
+      it "allows client_id to be available for each collaboration" do
+        user_session(@teacher)
+
+        # Create first collaboration
+        post "create", params: { course_id: @course.id, contentItems: [content_item_1].to_json, tool_id: tool_1.id }
+        collab_1 = Collaboration.find(assigns[:collaboration].id)
+        collab_1.context = @course
+        collab_1.save!
+
+        # Create second collaboration
+        post "create", params: { course_id: @course.id, contentItems: [content_item_2].to_json, tool_id: tool_2.id }
+        collab_2 = Collaboration.find(assigns[:collaboration].id)
+        collab_2.context = @course
+        collab_2.save!
+
+        get "index", params: { course_id: @course.id }
+
+        # Verify client_id for each collaboration
+        expect(response.body).to include("client_id=#{developer_key_1.global_id}")
+        expect(response.body).to include("client_id=#{developer_key_2.global_id}")
+      end
     end
   end
 
@@ -197,6 +264,12 @@ describe CollaborationsController do
       ).tap { |c| c.update_attribute :url, "http://www.example.com" }
     end
 
+    let(:url) { "http://www.example.com/launch" }
+    let(:domain) { "example.com" }
+    let(:developer_key) { dev_key_model_1_3(account: @course.account) }
+    let(:new_tool) { external_tool_1_3_model(context: @course, developer_key:, opts: { url:, name: "1.3 tool" }) }
+    let(:old_tool) { external_tool_model(context: @course, opts: { url:, domain: }) }
+
     context "when the collaboration includes a resource_link_lookup_uuid" do
       subject { get "show", params: { course_id: @course.id, id: collaboration.id } }
 
@@ -211,7 +284,10 @@ describe CollaborationsController do
         )
       end
 
-      before { user_session(@teacher) }
+      before do
+        user_session(@teacher)
+        new_tool
+      end
 
       it "adds the lookup ID to the redirect URL" do
         url = CGI.escape(collaboration[:url])
@@ -221,9 +297,32 @@ describe CollaborationsController do
       end
     end
 
+    context "when the original tool is 1.1 and there is a 1.3 tool" do
+      let(:collaboration) do
+        ExternalToolCollaboration.create!(
+          title: "my collab",
+          user: @teacher,
+          url:,
+          context: @course
+        )
+      end
+
+      before do
+        user_session(@teacher)
+        old_tool
+        new_tool
+      end
+
+      it "migrates the collaboration to 1.3" do
+        get "show", params: { course_id: @course.id, id: collaboration.id }
+        expect(collaboration.reload.resource_link_lookup_uuid).to eq(Lti::ResourceLink.last.lookup_uuid)
+      end
+    end
+
     it "redirects to the lti launch url for ExternalToolCollaborations" do
       course_with_teacher(active_all: true)
       user_session(@teacher)
+      old_tool
       collab = ExternalToolCollaboration.new(
         title: "my collab",
         user: @teacher,
@@ -296,6 +395,7 @@ describe CollaborationsController do
       post "create", params: { course_id: @course.id, collaboration: { collaboration_type: "EtherPad", title: "My Collab" } }
       expect(response).to be_redirect
       expect(assigns[:collaboration]).not_to be_nil
+      expect(assigns[:collaboration].root_account_id).to eq(@course.root_account_id)
       expect(assigns[:collaboration].class).to eql(EtherpadCollaboration)
       expect(assigns[:collaboration].collaboration_type).to eql("EtherPad")
       expect(Collaboration.find(assigns[:collaboration].id)).to be_is_a(EtherpadCollaboration)
@@ -311,22 +411,6 @@ describe CollaborationsController do
             confirmUrl: "http://example.com/confirm/343"
           }
         ]
-      end
-
-      context "when the content item contains a lookup_uuid" do
-        subject do
-          post "create", params: { course_id: @course.id, contentItems: content_items.to_json }
-          Collaboration.find(assigns[:collaboration].id)
-        end
-
-        let(:lookup_uuid) { SecureRandom.uuid }
-        let(:content_items) { super().tap { |c| c.first[:lookup_uuid] = lookup_uuid } }
-
-        before { user_session(@teacher) }
-
-        it "sets the resource_link_lookup_uuid" do
-          expect(subject.resource_link_lookup_uuid).to eq lookup_uuid
-        end
       end
 
       context "with the deep linking extension" do
@@ -437,6 +521,29 @@ describe CollaborationsController do
         collaboration = Collaboration.find(assigns[:collaboration].id)
         expect(collaboration.collaborators.filter_map(&:group_id)).to match_array([group.id])
       end
+
+      context "when tool_id is a 1.3 tool" do
+        before { user_session(@teacher) }
+
+        it "creates a resource link for the collaboration with the url and custom parameters" do
+          tool = external_tool_1_3_model(context: @course)
+          content_items = [{ title: "hi", url: tool.url, custom: { "a" => "b" } }]
+          post "create", params: { course_id: @course.id, contentItems: content_items.to_json, tool_id: tool.id }
+          collaboration = Collaboration.find(assigns[:collaboration].id)
+          lrl = Lti::ResourceLink.find_by(lookup_uuid: collaboration.reload.resource_link_lookup_uuid)
+          expect(lrl.url).to eq(content_items.first[:url])
+          expect(lrl.custom).to eq(content_items.first[:custom])
+        end
+
+        context "when the tool context is not compatible with the collaboration context" do
+          it "returns an unauthorized response" do
+            tool = external_tool_1_3_model(context: account_model)
+            content_items = [{ title: "hi", url: tool.url, custom: { "a" => "b" } }]
+            post "create", params: { course_id: @course.id, contentItems: content_items.to_json, tool_id: tool.id }
+            expect(response).to have_http_status(:bad_request)
+          end
+        end
+      end
     end
   end
 
@@ -461,22 +568,6 @@ describe CollaborationsController do
             confirmUrl: "http://example.com/confirm/343"
           }
         ]
-      end
-
-      context "when the content item contains a lookup_uuid" do
-        subject do
-          put "update", params: { id: collaboration.id, course_id: @course.id, contentItems: content_items.to_json }
-          Collaboration.find(assigns[:collaboration].id)
-        end
-
-        let(:lookup_uuid) { SecureRandom.uuid }
-        let(:content_items) { super().tap { |c| c.first[:lookup_uuid] = lookup_uuid } }
-
-        before { user_session(@teacher) }
-
-        it "updates the resource_link_lookup_uuid" do
-          expect(subject.resource_link_lookup_uuid).to eq lookup_uuid
-        end
       end
 
       it "updates a collaboration using content-item" do
@@ -549,6 +640,56 @@ describe CollaborationsController do
         collaboration = Collaboration.find(assigns[:collaboration].id)
 
         expect(collaboration.collaborators.filter_map(&:group_id)).to match_array([group.id])
+      end
+
+      context "when a tool_id for an LTI 1.3 tool is passed in" do
+        subject do
+          put "update", params: { id: collaboration.id, course_id: @course.id, contentItems: content_items.to_json, tool_id: tool.id }
+        end
+
+        let(:tool_context) { @course.account }
+        let(:tool) { external_tool_1_3_model(context: tool_context) }
+        let(:content_items) { [{ title: "hi", url: tool.url, custom: { "a" => "b" } }] }
+
+        before { user_session(@teacher) }
+
+        context "when the collaboration has a resource_link_lookup_uiud" do
+          it "updates the url and custom parameters in the resource link" do
+            lrl = Lti::ResourceLink.create_with(@course, tool, nil, collaboration.url)
+            collaboration.update! resource_link_lookup_uuid: lrl.lookup_uuid
+            subject
+
+            expect(collaboration.reload.resource_link_lookup_uuid).to eq(lrl.lookup_uuid)
+            expect(lrl.reload.url).to eq(content_items.first[:url])
+            expect(lrl.custom).to eq(content_items.first[:custom])
+          end
+        end
+
+        context "when the collaboration does not have a resource_link_lookup_uuid" do
+          it "creates a resource link for the collaboration with the url and custom parameters" do
+            subject
+            lrl = Lti::ResourceLink.find_by(lookup_uuid: collaboration.reload.resource_link_lookup_uuid)
+            expect(lrl.url).to eq(content_items.first[:url])
+            expect(lrl.custom).to eq(content_items.first[:custom])
+          end
+
+          context "when the tool context is not compatible with the collaboration context" do
+            let(:tool_context) { account_model }
+
+            it "returns a 'bad request' response" do
+              subject
+              expect(response).to have_http_status(:bad_request)
+            end
+          end
+
+          context "when the tool is not compatible with the URL" do
+            it "returns a 'bad request' response" do
+              content_items.first[:url] = "http://some-other-url.com"
+              subject
+              expect(response).to have_http_status(:bad_request)
+            end
+          end
+        end
       end
     end
   end

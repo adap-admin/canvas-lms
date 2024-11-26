@@ -89,9 +89,9 @@ class Lti::ToolConfigurationsApiController < ApplicationController
   # @returns ToolConfiguration
   def create
     developer_key_redirect_uris
-    tool_config = Lti::ToolConfiguration.create_tool_config_and_key!(account, tool_configuration_params)
+    tool_config = Lti::ToolConfiguration.create_tool_config_and_key!(account, tool_configuration_params, tool_configuration_redirect_uris)
     update_developer_key!(tool_config, developer_key_redirect_uris)
-    render json: Lti::ToolConfigurationSerializer.new(tool_config)
+    render json: Lti::ToolConfigurationSerializer.new(tool_config, include_warnings: true)
   end
 
   # @API Update Tool configuration
@@ -128,14 +128,16 @@ class Lti::ToolConfigurationsApiController < ApplicationController
   # @returns ToolConfiguration
   def update
     tool_config = developer_key.tool_configuration
-    tool_config.update!(
+    update_params = {
       settings: tool_configuration_params[:settings]&.to_unsafe_hash&.deep_merge(manual_custom_fields),
       disabled_placements: tool_configuration_params[:disabled_placements],
-      privacy_level: tool_configuration_params[:privacy_level]
-    )
-    update_developer_key!(tool_config)
+      redirect_uris: tool_configuration_redirect_uris,
+    }
+    update_params[:privacy_level] = tool_configuration_params[:privacy_level] unless tool_configuration_params[:privacy_level].nil?
+    tool_config.update!(update_params)
+    update_developer_key!(tool_config, params.dig(:developer_key, :redirect_uris))
 
-    render json: Lti::ToolConfigurationSerializer.new(tool_config)
+    render json: Lti::ToolConfigurationSerializer.new(tool_config, include_warnings: true)
   end
 
   # @API Show Tool configuration
@@ -143,7 +145,15 @@ class Lti::ToolConfigurationsApiController < ApplicationController
   #
   # @returns ToolConfiguration
   def show
-    render json: Lti::ToolConfigurationSerializer.new(developer_key.tool_configuration)
+    if developer_key.ims_registration.present?
+      render json: ({
+        tool_configuration: {
+          settings: developer_key.lti_registration.canvas_configuration(context: @context)
+        }
+      })
+    else
+      render json: Lti::ToolConfigurationSerializer.new(developer_key.tool_configuration)
+    end
   end
 
   # @API Show Tool configuration
@@ -169,13 +179,14 @@ class Lti::ToolConfigurationsApiController < ApplicationController
     }.stringify_keys
   end
 
-  def update_developer_key!(tool_config, redirect_uris = nil)
+  def update_developer_key!(tool_config, redirect_uris)
     developer_key = tool_config.developer_key
     developer_key.redirect_uris = redirect_uris unless redirect_uris.nil?
     developer_key.public_jwk = tool_config.settings["public_jwk"]
     developer_key.public_jwk_url = tool_config.settings["public_jwk_url"]
     developer_key.oidc_initiation_url = tool_config.settings["oidc_initiation_url"]
     developer_key.is_lti_key = true
+    developer_key.current_user = @current_user
     developer_key.update!(developer_key_params)
   end
 
@@ -208,16 +219,26 @@ class Lti::ToolConfigurationsApiController < ApplicationController
   def developer_key_params
     return {} if params[:developer_key].blank?
 
-    params.require(:developer_key).permit(:name, :email, :notes, :redirect_uris, :test_cluster_only, :client_credentials_audience, scopes: [])
+    params.require(:developer_key).permit(:name, :email, :notes, :test_cluster_only, :client_credentials_audience, scopes: [])
   end
 
   def developer_key_redirect_uris
     # When settings_url is set, the redirect_uris parameter is not required.
     # We can infer the redirect_uris from the tool configuration (target_link_uri).
     if tool_configuration_params[:settings_url].present?
-      params.dig(:developer_key, :redirect_uris)
+      params.dig(:developer_key, :redirect_uris).presence
     else
       params.require(:developer_key).require(:redirect_uris)
     end
+  end
+
+  def tool_configuration_redirect_uris
+    redirect_uris = params.dig(:developer_key, :redirect_uris)
+
+    if redirect_uris.is_a?(String)
+      return redirect_uris.split
+    end
+
+    redirect_uris
   end
 end

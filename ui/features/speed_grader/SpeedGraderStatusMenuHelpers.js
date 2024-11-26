@@ -19,17 +19,10 @@
 import axios from '@canvas/axios'
 import {underscoreProperties} from '@canvas/convert-case'
 
-// will be removed in EVAL-1911
-export function styleSubmissionStatusPills(pills) {
-  pills.forEach(pill => {
-    pill.style.display = 'flex'
-    pill.style.justifyContent = 'flex-end'
-    pill.style.flex = '1'
-  })
-}
-
 export function determineSubmissionSelection(submission) {
-  if (submission.excused) {
+  if (submission.custom_grade_status_id) {
+    return submission.custom_grade_status_id
+  } else if (submission.excused) {
     return 'excused'
   } else if (submission.missing) {
     return 'missing'

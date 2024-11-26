@@ -38,11 +38,124 @@ describe WikiPagesController do
       expect(response).to be_successful
       expect(assigns[:js_env][:DISPLAY_SHOW_ALL_LINK]).to be(true)
     end
+
+    it "sets up js_env for the block editor" do
+      @course.account.enable_feature!(:block_editor)
+      get "index", params: { course_id: @course.id }
+      expect(response).to be_successful
+      expect(assigns[:js_env][:FEATURES][:BLOCK_EDITOR]).to be(true)
+    end
   end
 
   context "with page" do
     before do
       @page = @course.wiki_pages.create!(title: "ponies5ever", body: "")
+    end
+
+    shared_examples_for("pages enforcing differentiation") do
+      before do
+        student_in_course(active_all: true)
+        @page.update!(editing_roles: "teachers,students")
+        user_session(@student)
+      end
+
+      context "with selective_release_backend enabled" do
+        before do
+          Account.site_admin.enable_feature! :selective_release_backend
+        end
+
+        context "regular pages" do
+          it "allows access by default" do
+            expect(response).to have_http_status :ok
+          end
+
+          it "does not allow access if page has only_visible_to_overrides=true" do
+            @page.update!(only_visible_to_overrides: true)
+            expect(response).to be_redirect
+            expect(response.location).to eq course_wiki_pages_url(@course)
+          end
+
+          it "allows access if only_visible_to_overrides=true but the user has an override" do
+            override = @page.assignment_overrides.create!
+            override.assignment_override_students.create!(user: @student)
+            expect(response).to have_http_status :ok
+          end
+
+          it "does not allow access if page has only_visible_to_overrides=false but user does not have module override" do
+            @page.update!(only_visible_to_overrides: false)
+            module1 = @course.context_modules.create!(name: "module1")
+            module1.add_item(id: @page.id, type: "wiki_page")
+            module1.assignment_overrides.create!(set_type: "ADHOC")
+
+            expect(response).to be_redirect
+            expect(response.location).to eq course_wiki_pages_url(@course)
+          end
+
+          it "allows access if page has only_visible_to_overrides=false and user does have module override" do
+            @page.update!(only_visible_to_overrides: false)
+            module1 = @course.context_modules.create!(name: "module1")
+            module1.add_item(id: @page.id, type: "wiki_page")
+
+            adhoc_override = module1.assignment_overrides.create!(set_type: "ADHOC")
+            adhoc_override.assignment_override_students.create!(user: @student)
+
+            expect(response).to have_http_status :ok
+          end
+        end
+
+        context "pages with an assignment" do
+          before do
+            assignment = @course.assignments.create!(
+              submission_types: "wiki_page",
+              only_visible_to_overrides: true
+            )
+            @page.assignment = assignment
+            @page.save!
+          end
+
+          it "does not allow access if assignment has only_visible_to_overrides=true" do
+            expect(response).to be_redirect
+            expect(response.location).to eq course_wiki_pages_url(@course)
+          end
+
+          it "allows access if assignment has only_visible_to_overrides=true but the user has an override" do
+            override = @page.assignment.assignment_overrides.create!
+            override.assignment_override_students.create!(user: @student)
+            expect(response).to have_http_status :ok
+          end
+
+          it "allows access if assignment has only_visible_to_overrides=false" do
+            @page.assignment.update!(only_visible_to_overrides: false)
+            expect(response).to have_http_status :ok
+          end
+        end
+      end
+
+      context "with selective_release_backend disabled" do
+        before do
+          Account.site_admin.disable_feature!(:selective_release_backend)
+          @assignment = @course.assignments.create!(submission_types: "wiki_page")
+          @page.assignment = @assignment
+          @page.save!
+        end
+
+        it "allows access by default" do
+          expect(response).to have_http_status :ok
+        end
+
+        it "does not allow access if assignment has only_visible_to_overrides=true and conditional release is enabled" do
+          allow(ConditionalRelease::Service).to receive(:service_configured?).and_return(true)
+          @course.update!(conditional_release: true)
+          @assignment.update!(only_visible_to_overrides: true)
+          expect(response).to be_redirect
+          expect(response.location).to eq course_wiki_pages_url(@course)
+        end
+
+        it "allows access if assignment has only_visible_to_overrides=true but conditional release is disabled" do
+          @assignment.update!(only_visible_to_overrides: true)
+          expect(response).to have_http_status :ok
+        end
+      end
     end
 
     describe "GET 'show_redirect'" do
@@ -58,6 +171,40 @@ describe WikiPagesController do
         get "show", params: { course_id: @course.id, id: @page.url }
         expect(response).to be_successful
       end
+
+      context "differentiation" do
+        let(:response) do
+          get "show", params: { course_id: @course.id, id: @page.url }
+        end
+
+        it_behaves_like "pages enforcing differentiation"
+      end
+
+      context "permanent_page_links enabled" do
+        before :once do
+          Account.site_admin.enable_feature!(:permanent_page_links)
+        end
+
+        before do
+          @page.wiki_page_lookups.create!(slug: "an-old-url")
+          allow(InstStatsd::Statsd).to receive(:increment)
+        end
+
+        it "redirects to current page url" do
+          get "show", params: { course_id: @course.id, id: "an-old-url" }
+          expect(response).to redirect_to(course_wiki_page_url(@course, "ponies5ever"))
+        end
+
+        it "emits wikipage.show.page_url_resolved to statsd when finding a page from a stale URL" do
+          get "show", params: { course_id: @course.id, id: "an-old-url" }
+          expect(InstStatsd::Statsd).to have_received(:increment).once.with("wikipage.show.page_url_resolved")
+        end
+
+        it "does not emit wikipage.show.page_url_resolved to statsd when using the current page URL" do
+          get "show", params: { course_id: @course.id, id: @page.url }
+          expect(InstStatsd::Statsd).not_to have_received(:increment).with("wikipage.show.page_url_resolved")
+        end
+      end
     end
 
     describe "GET 'edit'" do
@@ -65,12 +212,37 @@ describe WikiPagesController do
         get "edit", params: { course_id: @course.id, id: @page.url }
         expect(response).to be_successful
       end
+
+      context "differentiation" do
+        let(:response) do
+          get "edit", params: { course_id: @course.id, id: @page.url }
+        end
+
+        it_behaves_like "pages enforcing differentiation"
+      end
     end
 
     describe "GET 'revisions'" do
       it "renders" do
         get "revisions", params: { course_id: @course.id, wiki_page_id: @page.url }
         expect(response).to be_successful
+      end
+
+      context "differentiation" do
+        let(:response) do
+          get "revisions", params: { course_id: @course.id, wiki_page_id: @page.url }
+        end
+
+        it_behaves_like "pages enforcing differentiation"
+      end
+    end
+
+    describe "PUT 'create_block_editor'" do
+      it "calls the block editor creator with the proper blank page body" do
+        allow(BlockEditor).to receive(:create!).and_call_original
+        page = @course.wiki_pages.create! title: "A Page", root_account_id: @course.root_account_id
+        expect(BlockEditor).to receive(:create!).with(root_account_id: @course.root_account_id, context: page, editor_version: BlockEditor::LATEST_VERSION, blocks: BlockEditor.blank_page)
+        put :create_block_editor, params: { course_id: @course.id, wiki_page_id: page.url }
       end
     end
 
@@ -93,93 +265,6 @@ describe WikiPagesController do
         get "show", params: { course_id: @course.id, id: @page.url }
         expect(response).to be_successful
         expect(controller.js_env[:DISPLAY_SHOW_ALL_LINK]).to be_falsey
-      end
-    end
-
-    context "differentiated assignments" do
-      before do
-        assignment = @course.assignments.create!(
-          submission_types: "wiki_page",
-          only_visible_to_overrides: true
-        )
-        @page.assignment = assignment
-        @page.editing_roles = "teachers,students"
-        @page.save!
-
-        @student_with_override, @student_without_override = create_users(2, return_type: :record)
-        @section = @course.course_sections.create!(name: "test section")
-        create_section_override_for_assignment(assignment, course_section: @section)
-      end
-
-      context "for unassigned students" do
-        before do
-          @course.enroll_student(@student_without_override, enrollment_state: "active")
-          user_session(@student_without_override)
-        end
-
-        it "allows show" do
-          get "show", params: { course_id: @course.id, id: @page.url }
-          expect(response).to have_http_status :ok
-        end
-
-        it "allows edit" do
-          get "edit", params: { course_id: @course.id, id: @page.url }
-          expect(response).to have_http_status :ok
-        end
-
-        it "allows revisions" do
-          get "revisions", params: { course_id: @course.id, wiki_page_id: @page.url }
-          expect(response).to have_http_status :ok
-        end
-
-        context "feature enabled" do
-          before do
-            allow(ConditionalRelease::Service).to receive(:service_configured?).and_return(true)
-            @course.conditional_release = true
-            @course.save!
-          end
-
-          it "forbids show" do
-            get "show", params: { course_id: @course.id, id: @page.url }
-            expect(response).to be_redirect
-            expect(response.location).to eq course_wiki_pages_url(@course)
-          end
-
-          it "forbids edit" do
-            get "edit", params: { course_id: @course.id, id: @page.url }
-            expect(response).to be_redirect
-            expect(response.location).to eq course_wiki_pages_url(@course)
-          end
-
-          it "forbids revisions" do
-            get "revisions", params: { course_id: @course.id, wiki_page_id: @page.url }
-            expect(response).to be_redirect
-            expect(response.location).to eq course_wiki_pages_url(@course)
-          end
-        end
-      end
-
-      context "for assigned students" do
-        before do
-          student_in_section(@section, user: @student_with_override)
-          user_session(@student_with_override)
-        end
-
-        it "allows show" do
-          get "show", params: { course_id: @course.id, id: @page.url }
-          expect(response).to have_http_status :ok
-        end
-
-        it "allows edit" do
-          get "edit", params: { course_id: @course.id, id: @page.url }
-          expect(response).to have_http_status :ok
-          expect(controller.js_env[:CONDITIONAL_RELEASE_SERVICE_ENABLED]).to be false
-        end
-
-        it "allows revisions" do
-          get "revisions", params: { course_id: @course.id, wiki_page_id: @page.url }
-          expect(response).to have_http_status :ok
-        end
       end
     end
   end

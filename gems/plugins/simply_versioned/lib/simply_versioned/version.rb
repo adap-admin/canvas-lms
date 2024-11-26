@@ -49,7 +49,7 @@ module SimplyVersioned
         obj = versionable_type.constantize.new
         YAML.load(yaml).each do |var_name, var_value|
           # INSTRUCTURE:  added if... so that if a column is removed in a migration after this was versioned it doesen't die with NoMethodError: undefined method `some_column_name=' for ...
-          obj.write_attribute(var_name, var_value) if obj.class.columns_hash[var_name]
+          obj[var_name] = var_value if obj.class.columns_hash[var_name]
         end
         obj.instance_variable_set(:@new_record, false)
         obj.simply_versioned_options[:on_load].try(:call, obj, self)
@@ -79,7 +79,7 @@ module SimplyVersioned
 
     # If the model has new columns that it didn't have before just return nil
     def method_missing(method_name, *args, &)
-      if read_attribute(:versionable_type) && read_attribute(:versionable_type).constantize.column_names.member?(method_name.to_s)
+      if versionable_type && versionable_type.constantize.column_names.member?(method_name.to_s)
         nil
       else
         super
@@ -93,7 +93,7 @@ module SimplyVersioned
       GuardRail.activate(:secondary) do
         Shard.partition_by_shard(versionables) do |shard_objs|
           shard_objs.each_slice(100) do |sliced_objs|
-            values = sliced_objs.map { |o| "(#{o.id}, '#{o.class.base_class.name}')" }.join(",")
+            values = sliced_objs.map { |o| "(#{o.id}, '#{o.class.polymorphic_name}')" }.join(",")
             query = "SELECT (SELECT max (vo.number) FROM #{Version.quoted_table_name} vo WHERE vo.versionable_id = v.versionable_id AND vo.versionable_type = v.versionable_type)
               AS maximum_number, v.versionable_type, v.versionable_id FROM (VALUES #{values}) AS v (versionable_id, versionable_type)"
 

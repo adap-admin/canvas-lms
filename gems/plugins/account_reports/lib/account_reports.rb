@@ -106,13 +106,18 @@ module AccountReports
     REPORTS.select { |report, _details| enabled_reports.include?(report) }
   end
 
-  def self.generate_report(account_report)
+  def self.generate_report(account_report, attempt: 1)
+    account_report.capture_job_id
     account_report.update(workflow_state: "running", start_at: Time.zone.now)
     begin
       I18n.with_locale(account_report.parameters["locale"]) do
         REPORTS[account_report.report_type].proc.call(account_report)
       end
     rescue => e
+      if retry_exception?(e) && attempt < Setting.get("account_report_attempts", "3").to_i
+        account_report.run_report(attempt: attempt + 1) # this will queue a new job
+        return
+      end
       error_report_id = report_on_exception(e, { user: account_report.user })
       title = account_report.report_type.to_s.titleize
       error_message = "Generating the report, #{title}, failed."
@@ -124,6 +129,10 @@ module AccountReports
       finalize_report(account_report, error_message)
       @er = nil
     end
+  end
+
+  def self.retry_exception?(exception)
+    [PG::ConnectionBad, ActiveRecord::ConnectionFailed].any? { |e| exception.is_a?(e) }
   end
 
   def self.report_on_exception(exception, context, level: :error)
@@ -188,7 +197,7 @@ module AccountReports
       end
     end
     if filename
-      data = Rack::Test::UploadedFile.new(filepath, filetype, true)
+      data = Canvas::UploadedFile.new(filepath, filetype)
       # have to branch here because calling the uploaded_data= method on attachment
       # (done in the Attachments::Storage method) triggers an attachment_fu save
       # callback which is handled differently than creating the attachment using
@@ -233,6 +242,7 @@ module AccountReports
   end
 
   def self.finalize_report(account_report, message, csv = nil)
+    account_report.reload
     report_attachment(account_report, csv)
     account_report.message = message
     failed_report(account_report) unless csv

@@ -19,9 +19,9 @@
 
 import React from 'react'
 import ExternalToolDialog, {ExternalToolDialogProps} from '../ExternalToolDialog/ExternalToolDialog'
+import {waitFor} from '@testing-library/react'
 import ReactDOM, {Container} from 'react-dom'
-import {Transition} from '@instructure/ui-motion'
-import {ApplyTheme} from '@instructure/ui-themeable'
+import {InstUISettingsProvider} from '@instructure/emotion'
 import {createDeepMockProxy} from '../../../../../util/__tests__/deepMockProxy'
 import {RceToolWrapper} from '../../RceToolWrapper'
 import RCEWrapper from '../../../../RCEWrapper'
@@ -47,6 +47,8 @@ let container: HTMLDivElement | null = null
 let submit: jest.Mock
 let originalSubmit: () => void
 let originalScroll: typeof window.scroll
+
+window.CSS.supports = () => false
 
 async function waitForAssertion(cb: () => void) {
   try {
@@ -84,6 +86,7 @@ const rceMock = createDeepMockProxy<RCEWrapper>(
         contextType: 'course',
       },
     }, // satisfies Partial<RCEWrapperProps> as any,
+    getResourceIdentifiers: () => ({resourceType: 'assignment.body', resourceId: '132'}),
   }
 )
 
@@ -99,9 +102,9 @@ function getInstance(
       ...overrides,
     }
     ReactDOM.render(
-      <ApplyTheme theme={{[(Transition as any).theme]: {duration: '0ms'}}}>
+      <InstUISettingsProvider theme={{componentOverrides: {Transition: {duration: '0ms'}}}}>
         <ExternalToolDialog ref={it => resolve(it!)} {...props} />
-      </ApplyTheme>,
+      </InstUISettingsProvider>,
       _container ?? null
     )
   })
@@ -159,10 +162,6 @@ describe('ExternalToolDialog', () => {
   beforeEach(() => {
     editorMock.mockClear()
     rceMock.mockClear()
-
-    window.ENV = {}
-    window.INST = {}
-
     originalSubmit = HTMLFormElement.prototype.submit
     submit = jest.fn()
     HTMLFormElement.prototype.submit = submit
@@ -185,7 +184,7 @@ describe('ExternalToolDialog', () => {
       const instance = await getInstance(container)
       instance.open(toolHelper(1))
       expect(container?.querySelector('form')?.action).toBe('http://url/with/1')
-      expect(submit).toHaveBeenCalled()
+      await waitFor(() => expect(submit).toHaveBeenCalled())
     })
 
     it('submits current selection to tool', async () => {
@@ -197,7 +196,7 @@ describe('ExternalToolDialog', () => {
       expect((container?.querySelector('input[name="selection"]') as HTMLInputElement)?.value).toBe(
         selection
       )
-      expect(submit).toHaveBeenCalled()
+      await waitFor(() => expect(submit).toHaveBeenCalled())
     })
 
     it('submits current editor contents to tool', async () => {
@@ -208,7 +207,27 @@ describe('ExternalToolDialog', () => {
       expect(
         (container?.querySelector('input[name="editor_contents"]') as HTMLInputElement)?.value
       ).toBe(contents)
-      expect(submit).toHaveBeenCalled()
+      await waitFor(() => expect(submit).toHaveBeenCalled())
+    })
+
+    it('includes resource type and id in form', async () => {
+      const instance = await getInstance(container)
+      instance.open(toolHelper(1))
+      expect(
+        (
+          container?.querySelector(
+            'input[name="com_instructure_course_canvas_resource_type"]'
+          ) as HTMLInputElement
+        )?.value
+      ).toBe('assignment.body')
+      expect(
+        (
+          container?.querySelector(
+            'input[name="com_instructure_course_canvas_resource_id"]'
+          ) as HTMLInputElement
+        )?.value
+      ).toBe('132')
+      await waitFor(() => expect(submit).toHaveBeenCalled())
     })
 
     it('uses default resource selection url', async () => {
@@ -246,6 +265,21 @@ describe('ExternalToolDialog', () => {
       const instance = await getInstance(container)
       instance.open(toolHelper(2))
       expect(document.querySelector('iframe')?.getAttribute('data-lti-launch')).toBe('true')
+    })
+
+    it('sets height of iframe properly if dwh not supported', async () => {
+      const instance = await getInstance(container)
+      instance.open(toolHelper(2, {height: 500}))
+      const style = document.querySelector('iframe')?.style
+      expect(style?.height).toBe('500px')
+    })
+
+    it('sets height of iframe properly if dwh supported', async () => {
+      window.CSS.supports = () => true
+      const instance = await getInstance(container)
+      instance.open(toolHelper(2, {height: 500}))
+      const res = instance.calcIFrameHeight()
+      expect(res).toBe('min(500px, calc(95dvh - 5.5rem))')
     })
 
     describe('tray', () => {
@@ -339,7 +373,7 @@ describe('ExternalToolDialog', () => {
       const instance = await getInstance(container)
       instance.open(toolHelper(2))
       instance.handleClose()
-      expect(window.dispatchEvent).toHaveBeenCalledWith(new Event('resize'))
+      await waitFor(() => expect(window.dispatchEvent).toHaveBeenCalledWith(new Event('resize')))
     })
   })
 

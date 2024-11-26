@@ -124,6 +124,12 @@ describe('RCE > Plugins > Shared > Content Selection', () => {
         expect(getContentFromElement($element, editor).isPreviewable).toEqual(true)
       })
 
+      it('does not indicate the link is previewable if the "data-canvas-previewable" attribute is false', () => {
+        expect(getContentFromElement($element, editor).isPreviewable).toEqual(false)
+        $element.setAttribute('data-canvas-previewable', false)
+        expect(getContentFromElement($element, editor).isPreviewable).toEqual(false)
+      })
+
       it('indicates the link is previewable if it contains the "instructure_scribd_file" class name', () => {
         expect(getContentFromElement($element, editor).isPreviewable).toEqual(false)
         $element.classList.add('instructure_scribd_file')
@@ -341,6 +347,10 @@ describe('RCE > Plugins > Shared > Content Selection', () => {
       const result = findMediaPlayerIframe(shim)
       expect(result).toEqual(mediaIframe)
     })
+    it('does not error if given null', () => {
+      const result = findMediaPlayerIframe(null)
+      expect(result).toEqual(null)
+    })
   })
 
   describe('predicates', () => {
@@ -396,6 +406,45 @@ describe('RCE > Plugins > Shared > Content Selection', () => {
       expect(isImageEmbed($selectedNode)).toBeFalsy()
       expect(isVideoElement($selectedNode)).toBeFalsy()
       expect(isAudioElement($selectedNode)).toBeFalsy()
+    })
+
+    it('does not error on null', () => {
+      const $selectedNode = null
+      editor.setSelectedNode($selectedNode)
+      expect(isFileLink($selectedNode, editor)).toBeFalsy()
+      expect(isImageEmbed($selectedNode)).toBeFalsy()
+      expect(isVideoElement($selectedNode)).toBeFalsy()
+      expect(isAudioElement($selectedNode)).toBeFalsy()
+    })
+
+    it('detect a video element with only media_attachments_iframe src', () => {
+      const $selectedNode = document.createElement('span')
+      $selectedNode.setAttribute(
+        'data-mce-p-src',
+        'http://example.instructure.com/media_attachments_iframe/12345678'
+      )
+      $selectedNode.setAttribute('data-mce-p-data-media-type', 'video')
+      $selectedNode.innerHTML = '<iframe/>'
+      editor.setSelectedNode($selectedNode)
+      expect(isFileLink($selectedNode, editor)).toBeFalsy()
+      expect(isImageEmbed($selectedNode)).toBeFalsy()
+      expect(isVideoElement($selectedNode)).toBeTruthy()
+      expect(isAudioElement($selectedNode)).toBeFalsy()
+    })
+
+    it('detect an audio element with only media_attachments_iframe src', () => {
+      const $selectedNode = document.createElement('span')
+      $selectedNode.setAttribute(
+        'data-mce-p-src',
+        'http://example.instructure.com/media_attachments_iframe/12345678'
+      )
+      $selectedNode.setAttribute('data-mce-p-data-media-type', 'audio')
+      $selectedNode.innerHTML = '<iframe/>'
+      editor.setSelectedNode($selectedNode)
+      expect(isFileLink($selectedNode, editor)).toBeFalsy()
+      expect(isImageEmbed($selectedNode)).toBeFalsy()
+      expect(isVideoElement($selectedNode)).toBeFalsy()
+      expect(isAudioElement($selectedNode)).toBeTruthy()
     })
   })
 })

@@ -22,6 +22,10 @@ class FilePreviewsController < ApplicationController
 
   before_action :get_context
 
+  def services_jwt_auth_allowed
+    params[:action] == "show" && Account.site_admin.feature_enabled?(:rce_linked_file_urls)
+  end
+
   # renders (or redirects to) appropriate content for the file, such as
   # canvadocs, crocodoc, inline image, etc.
   def show
@@ -34,6 +38,7 @@ class FilePreviewsController < ApplicationController
                     status: :not_found,
                     formats: [:html]
     end
+
     if read_allowed(@file, @current_user, session, params)
       unless download_allowed(@file, @current_user, session, params)
         @lock_info = @file.locked_for?(@current_user)
@@ -76,12 +81,13 @@ class FilePreviewsController < ApplicationController
       verifier_checker = Attachments::Verification.new(attachment)
       return true if verifier_checker.valid_verifier_for_permission?(params[:verifier], :read, session)
     end
-    authorized_action(attachment, user, :read)
+    jwt_resource_match(attachment) || authorized_action(attachment, user, :read)
   end
 
   def download_allowed(attachment, user, session, params)
     verifier_checker = Attachments::Verification.new(attachment)
     (params[:verifier] && verifier_checker.valid_verifier_for_permission?(params[:verifier], :download, session)) ||
+      jwt_resource_match(attachment) ||
       attachment.grants_right?(user, session, :download)
   end
 end

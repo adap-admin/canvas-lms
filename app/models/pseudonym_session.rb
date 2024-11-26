@@ -29,7 +29,14 @@ class PseudonymSession < Authlogic::Session::Base
   allow_http_basic_auth false
   consecutive_failed_logins_limit 0
 
-  attr_accessor :remote_ip, :too_many_attempts
+  attr_accessor :remote_ip
+  attr_writer :non_explicit_session
+  attr_reader :login_error
+
+  def initialize(...)
+    super
+    @non_explicit_session = false
+  end
 
   # In authlogic 3.2.0, it tries to parse the last part of the cookie (delimited by '::')
   # as a timestamp to verify whether the cookie is stale.
@@ -93,25 +100,29 @@ class PseudonymSession < Authlogic::Session::Base
 
   # Validate the session using password auth (either local or LDAP, but not
   # SSO). If too many failed attempts have occured, the validation will fail.
-  # In this case, `too_many_attempts?` will be true, rather than
+  # In this case, `login_error` will be non-nil, rather than
   # `invalid_password?`.
-  #
-  # Note that for IP based max attempt tracking to occur, you'll need to set
-  # remote_ip on the PseudonymSession before calling save/valid?. Otherwise,
-  # only total # of failed attempts will be tracked.
   def validate_by_password
     super
-
     # have to call super first, as that's what loads attempted_record
-    if too_many_attempts? || attempted_record.try(:audit_login, remote_ip, !invalid_password?) == :too_many_attempts
-      self.too_many_attempts = true
-      errors.add(password_field, I18n.t("errors.max_attempts", "Too many failed login attempts. Please try again later or contact your system administrator."))
+    if (@login_error = attempted_record&.audit_login(!invalid_password?))
+      case @login_error
+      when :remaining_attempts_2, :remaining_attempts_1, :final_attempt
+        attempts = Canvas::Security::LoginRegistry::WARNING_ATTEMPTS[@login_error]
+        if @login_error == :final_attempt
+          errors.add(password_field, I18n.t("We've received several incorrect username or password entries. To protect your account, it has been locked. Please contact your system administrator."))
+        else
+          errors.add(password_field, I18n.t("Please verify your username or password and try again. After %{attempts} more attempt(s), your account will be locked.", attempts:))
+        end
+      when :too_many_attempts
+        errors.add(password_field, I18n.t("errors.max_attempts", "Too many failed login attempts. Please try again later or contact your system administrator."))
+      when :too_recent_login
+        errors.add(password_field, I18n.t("errors.rapid_attempts", "You have recently logged in multiple times too quickly. Please wait a few seconds and try again."))
+      else
+        errors.add(password_field, I18n.t("Login has been denied for security reasons. Please try again later or contact your system administrator."))
+      end
       nil
     end
-  end
-
-  def too_many_attempts?
-    too_many_attempts == true
   end
 
   # This block is pulled from Authlogic::Session::Base.find,
@@ -163,11 +174,17 @@ class PseudonymSession < Authlogic::Session::Base
         # a lot.  We want to use the SAME threshold we use for telling authlogic
         # to not bother incrementing the value to make sure we don't update
         # here if another process has already done so while we were waiting on the lock
-        time_clause = Pseudonym.arel_table[:last_request_at].lt(LAST_REQUEST_WINDOW.ago)
-        Pseudonym.where(id: r).where(time_clause).update_all(last_request_at: r.last_request_at)
+        Pseudonym.where(id: r, last_request_at: ...LAST_REQUEST_WINDOW.ago)
+                 .update_all(last_request_at: r.last_request_at)
       else
         r.save_without_transaction
       end
     end
+  end
+
+  def update_info
+    return if @non_explicit_session
+
+    super
   end
 end

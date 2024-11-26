@@ -398,8 +398,7 @@ describe GradeCalculator do
       end
 
       it "emits one live event per student" do
-        expect(Canvas::LiveEvents).to receive(:course_grade_change).exactly(1).times \
-          do |score, old_score_values, enrollment|
+        expect(Canvas::LiveEvents).to receive(:course_grade_change).once do |score, old_score_values, enrollment|
           expect(enrollment.user_id).to eq(@student.id)
           expect(enrollment.course_id).to eq(@course.id)
           expect(score.current_score).to eq(60)
@@ -823,26 +822,6 @@ describe GradeCalculator do
       @user.reload
       expect(@user.enrollments.first.computed_current_score).to equal(40.0)
       expect(@user.enrollments.first.computed_final_score).to equal(40.0)
-    end
-  end
-
-  describe "#number_or_null" do
-    it "returns a valid score" do
-      calc = GradeCalculator.new [@user.id], @course.id
-      score = 23.4
-      expect(calc.send(:number_or_null, score)).to equal(score)
-    end
-
-    it "converts NaN to NULL" do
-      calc = GradeCalculator.new [@user.id], @course.id
-      score = 0 / 0.0
-      expect(calc.send(:number_or_null, score)).to eql("NULL::float")
-    end
-
-    it "converts nil to NULL" do
-      calc = GradeCalculator.new [@user.id], @course.id
-      score = nil
-      expect(calc.send(:number_or_null, score)).to eql("NULL::float")
     end
   end
 
@@ -1912,6 +1891,72 @@ describe GradeCalculator do
 
         expect { calc.send(:save_course_and_grading_period_scores) }.to raise_error(Delayed::RetriableError)
       end
+    end
+  end
+
+  context "what if scores" do
+    let(:calc) { GradeCalculator.new([@student.id], @course, use_what_if_scores: true) }
+
+    before do
+      @assignment1 = @course.assignments.create! points_possible: 100
+      @assignment2 = @course.assignments.create! points_possible: 100
+    end
+
+    it "uses student_entered_score" do
+      @assignment1.grade_student @student, grade: 50, grader: @teacher
+      @assignment2.grade_student @student, grade: 90, grader: @teacher
+      submission = @assignment2.submissions.find_by(user: @student)
+      expect { submission.update_column(:student_entered_score, 10) }.to change { submission.reload.student_entered_score }.from(nil).to(10)
+
+      scores = calc.compute_scores
+
+      expect(scores.first[:current][:grade]).to eq 30
+    end
+
+    it "includes student_entered_scores even if the submission is unposted" do
+      @assignment2.ensure_post_policy(post_manually: true)
+      @assignment1.grade_student @student, grade: 50, grader: @teacher
+      @assignment2.grade_student @student, grade: 90, grader: @teacher
+      submission = @assignment2.submissions.find_by(user: @student)
+      submission.update_column(:student_entered_score, 10)
+
+      scores = calc.compute_scores
+
+      expect(scores.first[:current][:grade]).to eq 30
+    end
+
+    it "drops student_entered_score if necessary" do
+      @assignment1.assignment_group.rules_hash = { drop_lowest: 1 }.with_indifferent_access
+      @assignment1.assignment_group.save!
+      expect(@assignment1.assignment_group.id).to eq @assignment2.assignment_group.id
+      @assignment1.grade_student @student, grade: 50, grader: @teacher
+      @assignment2.grade_student @student, grade: 90, grader: @teacher
+      submission = @assignment2.submissions.find_by(user: @student)
+      expect { submission.update_column(:student_entered_score, 10) }.to change { submission.reload.student_entered_score }.from(nil).to(10)
+
+      scores = calc.compute_scores
+
+      expect(scores.first[:current][:grade]).to eq 50
+    end
+  end
+
+  context "include_discussion_checkpoints" do
+    before(:once) do
+      @course.root_account.enable_feature!(:discussion_checkpoints)
+      student_in_course(course: @course, active_all: true)
+      @reply_to_topic, @reply_to_entry = graded_discussion_topic_with_checkpoints(context: @course)
+    end
+
+    it "includes discussion checkpoints when true" do
+      calc = GradeCalculator.new([@student.id], @course, include_discussion_checkpoints: true)
+      expect(calc.submissions.pluck(:assignment_id)).to include(@reply_to_topic.id)
+      expect(calc.submissions.pluck(:assignment_id)).to include(@reply_to_entry.id)
+    end
+
+    it "does not include discussion checkpoints when false" do
+      calc = GradeCalculator.new([@student.id], @course, include_discussion_checkpoints: false)
+      expect(calc.submissions.pluck(:assignment_id)).to_not include(@reply_to_topic.id)
+      expect(calc.submissions.pluck(:assignment_id)).to_not include(@reply_to_entry.id)
     end
   end
 end

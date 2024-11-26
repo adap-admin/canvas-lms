@@ -119,7 +119,7 @@ describe UserLearningObjectScopes do
       @quiz.lock_at = nil
       @quiz.due_at = 2.days.from_now
       @quiz.save!
-      DueDateCacher.recompute(@quiz.assignment)
+      SubmissionLifecycleManager.recompute(@quiz.assignment)
 
       expect(@student.assignments_for_student("submitting", contexts: [@course]).count).to eq 1
     end
@@ -145,14 +145,14 @@ describe UserLearningObjectScopes do
         override.due_at = 1.week.from_now - 1.day
         override.due_at_overridden = true
         override.save!
-        DueDateCacher.recompute(@quiz.assignment)
+        SubmissionLifecycleManager.recompute(@quiz.assignment)
         expect(@student.assignments_for_student("submitting", contexts: [@course]))
           .to include @quiz.assignment
       end
 
       it "includes assignments with no locks" do
         @quiz.save!
-        DueDateCacher.recompute(@quiz.assignment)
+        SubmissionLifecycleManager.recompute(@quiz.assignment)
         list = @student.assignments_for_student("submitting", contexts: [@course])
         expect(list.size).to be 1
         expect(list.first.title).to eq "Test Assignment"
@@ -161,7 +161,7 @@ describe UserLearningObjectScopes do
       it "includes assignments with unlock_at in the past" do
         @quiz.unlock_at = 1.hour.ago
         @quiz.save!
-        DueDateCacher.recompute(@quiz.assignment)
+        SubmissionLifecycleManager.recompute(@quiz.assignment)
         list = @student.assignments_for_student("submitting", contexts: [@course])
         expect(list.size).to be 1
         expect(list.first.title).to eq "Test Assignment"
@@ -170,7 +170,7 @@ describe UserLearningObjectScopes do
       it "includes assignments with lock_at in the future" do
         @quiz.lock_at = 3.days.from_now
         @quiz.save!
-        DueDateCacher.recompute(@quiz.assignment)
+        SubmissionLifecycleManager.recompute(@quiz.assignment)
         list = @student.assignments_for_student("submitting", contexts: [@course])
         expect(list.size).to be 1
         expect(list.first.title).to eq "Test Assignment"
@@ -179,7 +179,7 @@ describe UserLearningObjectScopes do
       it "does not include assignments where unlock_at is in future" do
         @quiz.unlock_at = 1.hour.from_now
         @quiz.save!
-        DueDateCacher.recompute(@quiz.assignment)
+        SubmissionLifecycleManager.recompute(@quiz.assignment)
         expect(@student.assignments_for_student("submitting", contexts: [@course]).count).to eq 0
       end
 
@@ -187,7 +187,7 @@ describe UserLearningObjectScopes do
         @quiz.due_at = 2.hours.ago
         @quiz.lock_at = 1.hour.ago
         @quiz.save!
-        DueDateCacher.recompute(@quiz.assignment)
+        SubmissionLifecycleManager.recompute(@quiz.assignment)
         expect(@student.assignments_for_student("submitting", contexts: [@course]).count).to eq 0
       end
 
@@ -195,7 +195,7 @@ describe UserLearningObjectScopes do
         it "includes assignments where unlock_at is in future" do
           @quiz.unlock_at = 1.hour.from_now
           @quiz.save!
-          DueDateCacher.recompute(@quiz.assignment)
+          SubmissionLifecycleManager.recompute(@quiz.assignment)
           list = @student.assignments_for_student("submitting", include_locked: true, contexts: [@course])
           expect(list.count).to eq 1
         end
@@ -204,7 +204,7 @@ describe UserLearningObjectScopes do
           @quiz.due_at = 2.hours.ago
           @quiz.lock_at = 1.hour.ago
           @quiz.save!
-          DueDateCacher.recompute(@quiz.assignment)
+          SubmissionLifecycleManager.recompute(@quiz.assignment)
           list = @student.assignments_for_student("submitting", include_locked: true, contexts: [@course])
           expect(list.count).to eq 1
         end
@@ -214,7 +214,7 @@ describe UserLearningObjectScopes do
     context "ungraded assignments" do
       before :once do
         @assignment = @course.assignments.create! title: "blah!", due_at: 1.day.from_now, submission_types: "not_graded"
-        DueDateCacher.recompute(@assignment)
+        SubmissionLifecycleManager.recompute(@assignment)
       end
 
       it "excludes ungraded assignments by default" do
@@ -229,13 +229,13 @@ describe UserLearningObjectScopes do
     context "differentiated_assignments" do
       it "does not return the assignments without an override for the student" do
         assignment = create_assignment_with_override(due_at: 2.days.from_now)
-        DueDateCacher.recompute(assignment)
+        SubmissionLifecycleManager.recompute(assignment)
         expect(@student.assignments_for_student("submitting", contexts: Course.all)).not_to include(assignment)
       end
 
       it "returns the assignments with an override" do
         assignment = create_assignment_with_override(override: true, due_at: 2.days.from_now)
-        DueDateCacher.recompute(assignment)
+        SubmissionLifecycleManager.recompute(assignment)
         expect(@student.assignments_for_student("submitting", contexts: Course.all)).to include(assignment)
       end
 
@@ -247,7 +247,7 @@ describe UserLearningObjectScopes do
         ad_hoc.due_at = 2.weeks.from_now
         ad_hoc.due_at_overridden = true
         ad_hoc.save!
-        DueDateCacher.recompute(assignment)
+        SubmissionLifecycleManager.recompute(assignment)
         assigns1 = @student.assignments_for_student("submitting", due_after: 1.week.from_now, due_before: 3.weeks.from_now)
         assigns2 = @student.assignments_for_student("submitting", due_after: Time.zone.now, due_before: 1.week.from_now)
         expect(assigns1).to include(assignment)
@@ -262,7 +262,7 @@ describe UserLearningObjectScopes do
         ad_hoc.lock_at = 2.weeks.from_now
         ad_hoc.lock_at_overridden = true
         ad_hoc.save!
-        DueDateCacher.recompute(assignment)
+        SubmissionLifecycleManager.recompute(assignment)
         assigns1 = @student.assignments_for_student("submitting", due_after: 1.week.from_now, due_before: 3.weeks.from_now)
         assigns2 = @student.assignments_for_student("submitting", due_after: Time.zone.now, due_before: 1.week.from_now)
         expect(assigns1).not_to include(assignment)
@@ -277,7 +277,7 @@ describe UserLearningObjectScopes do
         ad_hoc.due_at = nil
         ad_hoc.due_at_overridden = true
         ad_hoc.save!
-        DueDateCacher.recompute(assignment)
+        SubmissionLifecycleManager.recompute(assignment)
         assignments = @student.assignments_for_student("submitting", due_after: 4.weeks.ago, due_before: 4.weeks.from_now)
         expect(assignments).not_to include(assignment)
       end
@@ -294,8 +294,8 @@ describe UserLearningObjectScopes do
         @c2 = @e2.course
         @q2 = assignment_quiz([], course: @c2, user: @user)
         @e2.conclude
-        DueDateCacher.recompute(@q1.assignment)
-        DueDateCacher.recompute(@q2.assignment)
+        SubmissionLifecycleManager.recompute(@q1.assignment)
+        SubmissionLifecycleManager.recompute(@q2.assignment)
       end
 
       it "does not include assignments from concluded enrollments by default" do
@@ -317,7 +317,7 @@ describe UserLearningObjectScopes do
         @quiz.lock_at = nil
         @quiz.due_at = 3.days.from_now
         @quiz.save!
-        DueDateCacher.recompute(@quiz.assignment)
+        SubmissionLifecycleManager.recompute(@quiz.assignment)
         Timecop.travel(2.days) do
           EnrollmentState.recalculate_expired_states # runs periodically in background
           expect(@student.assignments_for_student("submitting", contexts: [@course]).count).to eq 0
@@ -332,8 +332,8 @@ describe UserLearningObjectScopes do
         @course2 = course_with_student(active_all: true, user: @student).course
         @assignment1 = assignment_model(context: @course1, due_at: 1.day.from_now, submission_types: "online_upload")
         @assignment2 = assignment_model(context: @course2, due_at: 1.day.from_now, submission_types: "online_upload")
-        DueDateCacher.recompute(@assignment1)
-        DueDateCacher.recompute(@assignment2)
+        SubmissionLifecycleManager.recompute(@assignment1)
+        SubmissionLifecycleManager.recompute(@assignment2)
       end
 
       it "includes assignments from active courses by default" do
@@ -352,7 +352,7 @@ describe UserLearningObjectScopes do
       it "includes assignments from other shards" do
         student = @shard1.activate { user_factory }
         assignment = create_assignment_with_override(student:, override: true, due_at: 2.days.from_now)
-        DueDateCacher.recompute(assignment)
+        SubmissionLifecycleManager.recompute(assignment)
         expect(student.assignments_needing_submitting).to eq [assignment]
       end
     end
@@ -364,9 +364,23 @@ describe UserLearningObjectScopes do
       @quiz.lock_at = nil
       @quiz.due_at = 2.days.from_now
       @quiz.save!
-      DueDateCacher.recompute(@quiz.assignment)
+      SubmissionLifecycleManager.recompute(@quiz.assignment)
       assignments = @student.assignments_for_student("submitting", contexts: [@course])
       expect(assignments[0]).to have_attribute :only_visible_to_overrides
+    end
+
+    context "sub_assignments" do
+      before :once do
+        @course.root_account.enable_feature!(:discussion_checkpoints)
+        course_with_student(active_all: true)
+        @reply_to_topic, @reply_to_entry = graded_discussion_topic_with_checkpoints(context: @course)
+      end
+
+      it "returns sub_assignments when discussion checkpoints FF enabled" do
+        list = @student.assignments_for_student("submitting", is_sub_assignment: true, contexts: [@course])
+        expect(list.size).to be 2
+        expect(list.pluck(:id)).to match_array([@reply_to_topic.id, @reply_to_entry.id])
+      end
     end
   end
 
@@ -377,20 +391,20 @@ describe UserLearningObjectScopes do
 
     it "excludes assignments with due dates in the past" do
       past_assignment = @course.assignments.create! title: "blah!", due_at: 1.day.ago, submission_types: "not_graded"
-      DueDateCacher.recompute(past_assignment)
+      SubmissionLifecycleManager.recompute(past_assignment)
       expect(@student.assignments_needing_submitting).not_to include past_assignment
     end
 
     it "excludes assignments that aren't expecting a submission" do
       assignment = @course.assignments.create! title: "no submission", due_at: 1.day.from_now, submission_types: "none"
-      DueDateCacher.recompute(assignment)
+      SubmissionLifecycleManager.recompute(assignment)
       expect(@student.assignments_needing_submitting).not_to include assignment
     end
 
     it "excludes assignments that have an existing submission" do
       assignment = @course.assignments.create! title: "submitted", due_at: 1.day.from_now, submission_types: "online_url"
       submission_model(assignment:, user: @student, submission_type: "online_url", url: "www.hi.com")
-      DueDateCacher.recompute(assignment)
+      SubmissionLifecycleManager.recompute(assignment)
       expect(@student.assignments_needing_submitting).not_to include assignment
     end
   end
@@ -402,7 +416,7 @@ describe UserLearningObjectScopes do
 
     it "excludes assignments that don't have a submission" do
       assignment = @course.assignments.create! title: "submitted", due_at: 1.day.from_now, submission_types: "online_url"
-      DueDateCacher.recompute(assignment)
+      SubmissionLifecycleManager.recompute(assignment)
       expect(@student.submitted_assignments).not_to include assignment
     end
   end
@@ -574,6 +588,11 @@ describe UserLearningObjectScopes do
 
       expect(@reviewer.submissions_needing_peer_review.length).to eq 0
     end
+
+    it "does not include assessment requests when the user of the assessment is not an active enrollment" do
+      @assessment_request.user.enrollments.update_all(workflow_state: "inactive")
+      expect(@reviewer.submissions_needing_peer_review.length).to eq 0
+    end
   end
 
   context "assignments_needing_grading" do
@@ -621,20 +640,20 @@ describe UserLearningObjectScopes do
 
     it "counts assignments with ungraded submissions across multiple courses" do
       expect(@teacher.assignments_needing_grading.size).to be(2)
-      expect(@teacher.assignments_needing_grading).to be_include(@course1.assignments.first)
-      expect(@teacher.assignments_needing_grading).to be_include(@course2.assignments.first)
+      expect(@teacher.assignments_needing_grading).to include(@course1.assignments.first)
+      expect(@teacher.assignments_needing_grading).to include(@course2.assignments.first)
 
       # grade one submission for one assignment; these numbers don't change
       @course1.assignments.first.grade_student(@student_a, grade: "1", grader: @teacher)
       expect(@teacher.assignments_needing_grading.size).to be 2
-      expect(@teacher.assignments_needing_grading).to be_include(@course1.assignments.first)
-      expect(@teacher.assignments_needing_grading).to be_include(@course2.assignments.first)
+      expect(@teacher.assignments_needing_grading).to include(@course1.assignments.first)
+      expect(@teacher.assignments_needing_grading).to include(@course2.assignments.first)
 
       # grade the other submission; now course1's assignment no longer needs grading
       @course1.assignments.first.grade_student(@student_b, grade: "1", grader: @teacher)
       @teacher = User.find(@teacher.id)
       expect(@teacher.assignments_needing_grading.size).to be 1
-      expect(@teacher.assignments_needing_grading).to be_include(@course2.assignments.first)
+      expect(@teacher.assignments_needing_grading).to include(@course2.assignments.first)
     end
 
     it "includes re-submitted submissions in the list of submissions needing grading" do
@@ -648,8 +667,8 @@ describe UserLearningObjectScopes do
 
     it "only counts submissions in accessible course sections" do
       expect(@ta.assignments_needing_grading.size).to be 2
-      expect(@ta.assignments_needing_grading).to be_include(@course1.assignments.first)
-      expect(@ta.assignments_needing_grading).to be_include(@course2.assignments.first)
+      expect(@ta.assignments_needing_grading).to include(@course1.assignments.first)
+      expect(@ta.assignments_needing_grading).to include(@course2.assignments.first)
 
       # grade student A's submissions in both courses; now course1's assignment
       # should not show up because the TA doesn't have access to studentB's submission
@@ -658,7 +677,7 @@ describe UserLearningObjectScopes do
       @ta = User.find(@ta.id)
       expect(@ta.assignments_needing_grading.size).to be 1
       expect(@ta.assignments_needing_grading(scope_only: true).to_a.size).to be 1
-      expect(@ta.assignments_needing_grading).to be_include(@course2.assignments.first)
+      expect(@ta.assignments_needing_grading).to include(@course2.assignments.first)
 
       # but if we enroll the TA in both sections of course1, it should be accessible
       @course1.enroll_user(@ta,
@@ -670,8 +689,8 @@ describe UserLearningObjectScopes do
       @ta = User.find(@ta.id)
       expect(@ta.assignments_needing_grading.size).to be 2
       expect(@ta.assignments_needing_grading(scope_only: true).to_a.size).to be 2
-      expect(@ta.assignments_needing_grading).to be_include(@course1.assignments.first)
-      expect(@ta.assignments_needing_grading).to be_include(@course2.assignments.first)
+      expect(@ta.assignments_needing_grading).to include(@course1.assignments.first)
+      expect(@ta.assignments_needing_grading).to include(@course2.assignments.first)
     end
 
     it "does not count submissions for users with a deleted enrollment in the graders's section" do
@@ -722,6 +741,47 @@ describe UserLearningObjectScopes do
 
     it "always has the only_visible_to_overrides attribute" do
       expect(@teacher.assignments_needing_grading).to all(have_attribute(:only_visible_to_overrides))
+    end
+
+    context "is_sub_assignment" do
+      before do
+        @course1.root_account.enable_feature!(:discussion_checkpoints)
+        @reply_to_topic, @reply_to_entry = graded_discussion_topic_with_checkpoints(context: @course1)
+        @reply_to_topic.submit_homework @student_a, body: "checkpoint submission for #{@student_a.name}"
+      end
+
+      it "default false and does not return checkpointed sub-assignments" do
+        expect(@teacher.assignments_needing_grading).not_to include(@reply_to_topic)
+      end
+
+      it "returns only checkpointed sub-assignments when true" do
+        expect(@teacher.assignments_needing_grading(is_sub_assignment: true, discussion_checkpoints_enabled: true)).to eq([@reply_to_topic])
+      end
+
+      it "returns only checkpointed sub-assignments from the given course" do
+        @course2.root_account.enable_feature!(:discussion_checkpoints)
+        reply_to_topic2, _reply_to_entry2 = graded_discussion_topic_with_checkpoints(context: @course2)
+        reply_to_topic2.submit_homework @student_a, body: "checkpoint submission for #{@student_a.name}"
+
+        expect(@teacher.assignments_needing_grading(is_sub_assignment: true, discussion_checkpoints_enabled: true, course_ids: [@course1.id])).to eq([@reply_to_topic])
+      end
+
+      it "returns only active checkpointed sub-assignments" do
+        reply_to_topic2, _reply_to_entry2 = graded_discussion_topic_with_checkpoints(context: @course1)
+        reply_to_topic2.submit_homework @student_a, body: "checkpoint submission for #{@student_a.name}"
+
+        expect(@teacher.assignments_needing_grading(is_sub_assignment: true, discussion_checkpoints_enabled: true)).to eq([@reply_to_topic, reply_to_topic2])
+
+        reply_to_topic2.parent_assignment.workflow_state = "deleted"
+        reply_to_topic2.parent_assignment.save!
+
+        expect(@teacher.assignments_needing_grading(is_sub_assignment: true, discussion_checkpoints_enabled: true)).to eq([@reply_to_topic])
+      end
+
+      it "when false does not return parent assignments of sub-assignments" do
+        @reply_to_entry.submit_homework @student_a, body: "checkpoint submission for #{@student_a.name}"
+        expect(@teacher.assignments_needing_grading(discussion_checkpoints_enabled: true)).not_to include(@reply_to_topic.parent_assignment)
+      end
     end
 
     context "sharding" do
@@ -799,7 +859,7 @@ describe UserLearningObjectScopes do
     end
   end
 
-  context "#submissions_needing_grading_count" do
+  describe "#submissions_needing_grading_count" do
     before :once do
       course_with_teacher(active_all: true)
       @sectionb = @course.course_sections.create!(name: "section B")
@@ -840,7 +900,7 @@ describe UserLearningObjectScopes do
     end
   end
 
-  context "#assignments_needing_moderation" do
+  describe "#assignments_needing_moderation" do
     before :once do
       # create courses and sections
       @course1 = course_with_teacher(active_all: true).course
@@ -990,10 +1050,10 @@ describe UserLearningObjectScopes do
 
       context "locked discussion topics" do
         it "shows for ungraded discussion topics with unlock dates and todo dates within the opts date range" do
-          @topic.unlock_at = 1.day.from_now
+          @topic.delayed_post_at = 1.day.from_now
           @topic.todo_date = 1.day.from_now
           @topic.save!
-          @group_topic.unlock_at = 1.day.from_now
+          @group_topic.delayed_post_at = 1.day.from_now
           @group_topic.todo_date = 1.day.from_now
           @group_topic.save!
           expect(@student.discussion_topics_needing_viewing(**opts).sort_by(&:id)).to eq [@topic, @group_topic, @a]
@@ -1007,6 +1067,18 @@ describe UserLearningObjectScopes do
           @group_topic.todo_date = 1.day.from_now
           @group_topic.save!
           expect(@student.discussion_topics_needing_viewing(**opts).sort_by(&:id)).to eq [@topic, @group_topic, @a]
+        end
+
+        it "does not show for locked announcements" do
+          @a.lock_at = 1.day.ago
+          @a.save!
+          a2 = announcement_model(context: @course)
+          a2.lock_at = nil
+          a2.save!
+          a3 = announcement_model(context: @course)
+          a3.lock_at = 1.day.from_now
+          a3.save!
+          expect(@student.discussion_topics_needing_viewing(**opts)).to eq [a2, a3]
         end
       end
 
@@ -1210,6 +1282,16 @@ describe UserLearningObjectScopes do
       student2 = student_in_section(@course_section)
       wiki_page_assignment_model(wiki_page: @course_page)
       differentiated_assignment(assignment: @assignment, course_section: @course_section)
+      expect(@student.wiki_pages_needing_viewing(**opts)).to eq []
+      expect(student2.wiki_pages_needing_viewing(**opts)).to eq [@course_page]
+    end
+
+    it "does not show wiki pages that are not visible to the user" do
+      Account.site_admin.enable_feature! :selective_release_backend
+      @course_page.update!(todo_date: 1.day.from_now, only_visible_to_overrides: true)
+      section2 = add_section("Section 2")
+      student2 = student_in_section(section2)
+      @course_page.assignment_overrides.create!(set: section2)
       expect(@student.wiki_pages_needing_viewing(**opts)).to eq []
       expect(student2.wiki_pages_needing_viewing(**opts)).to eq [@course_page]
     end

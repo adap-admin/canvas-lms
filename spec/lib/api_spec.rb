@@ -239,8 +239,30 @@ describe Api do
       expect(@api.api_find(Account, "uuid:#{account.uuid}")).to eq account
     end
 
-    it "finds user by uuid" do
+    it "finds user by uuid (40 alpha-numeric character)" do
       expect(@api.api_find(User, "uuid:#{@user.uuid}")).to eq @user
+    end
+
+    context "when the user has a V4 UUID" do
+      let(:user) { @user }
+      let(:uuid) { SecureRandom.uuid }
+
+      before { @user.update!(uuid:) }
+
+      it "finds user by uuid" do
+        expect(@api.api_find(User, "uuid:#{uuid}")).to eq @user
+      end
+    end
+
+    context "when the user has a 50-character UUID" do
+      let(:user) { @user }
+      let(:uuid) { "806bd5b3988e0182c042bbe0c6554f191c781985-ua3871307" }
+
+      before { @user.update!(uuid:) }
+
+      it "finds user by uuid" do
+        expect(@api.api_find(User, "uuid:#{uuid}")).to eq @user
+      end
     end
 
     it "finds course by uuid" do
@@ -795,27 +817,27 @@ describe Api do
 
   context "ISO8601 regex" do
     it "does not allow invalid dates" do
-      expect("10/01/2014").to_not match Api::ISO8601_REGEX
+      expect(Api::ISO8601_REGEX).to_not match "10/01/2014"
     end
 
     it "does not allow non ISO8601 dates" do
-      expect("2014-10-01").to_not match Api::ISO8601_REGEX
+      expect(Api::ISO8601_REGEX).to_not match "2014-10-01"
     end
 
     it "does not allow garbage dates" do
-      expect("bad_data").to_not match Api::ISO8601_REGEX
+      expect(Api::ISO8601_REGEX).to_not match "bad_data"
     end
 
     it "allows valid dates" do
-      expect("2014-10-01T00:00:00-06:00").to match Api::ISO8601_REGEX
+      expect(Api::ISO8601_REGEX).to match "2014-10-01T00:00:00-06:00"
     end
 
     it "does not allow valid dates BC" do
-      expect("-2014-10-01T00:00:00-06:00").to_not match Api::ISO8601_REGEX
+      expect(Api::ISO8601_REGEX).to_not match "-2014-10-01T00:00:00-06:00"
     end
   end
 
-  context ".api_user_content" do
+  describe ".api_user_content" do
     let(:klass) do
       Class.new do
         include Api
@@ -860,8 +882,7 @@ describe Api do
       end
 
       it "does not prepend mobile css when coming from a web browser, even if it is a mobile browser" do
-        allow(@k).to receive(:in_app?).and_return(true)
-        allow(@k).to receive(:mobile_device?).and_return(true)
+        allow(@k).to receive_messages(in_app?: true, mobile_device?: true)
         res = @k.api_user_content(@html, @course, @student)
         expect(res).to eq "<p>a</p><p>b</p>"
       end
@@ -878,9 +899,11 @@ describe Api do
           proxy_instance.extend Rails.application.routes.url_helpers
           proxy_instance.extend ActionDispatch::Routing::UrlFor
 
-          allow(proxy_instance).to receive(:request).and_return(nil)
-          allow(proxy_instance).to receive(:get_host_and_protocol_from_request).and_return(["school.instructure.com", "https"])
-          allow(proxy_instance).to receive(:url_options).and_return({})
+          allow(proxy_instance).to receive_messages(
+            request: nil,
+            get_host_and_protocol_from_request: ["school.instructure.com", "https"],
+            url_options: {}
+          )
         end
 
         it "transposes ids in urls, leaving equation images alone" do
@@ -918,13 +941,13 @@ describe Api do
     end
   end
 
-  context ".process_incoming_html_content" do
+  describe ".process_incoming_html_content" do
     let(:klass) do
       Class.new do
         extend Api
 
         def self.request
-          OpenStruct.new({ host: "some-host.com", port: 80 })
+          @request ||= ActionDispatch::Request.new("HTTP_HOST" => "some-host.com")
         end
       end
     end
@@ -973,7 +996,7 @@ describe Api do
     end
   end
 
-  context ".paginate" do
+  describe ".paginate" do
     let(:request) { double("request", query_parameters: {}) }
     let(:response) { double("response", headers: {}) }
     let(:controller) { double("controller", request:, response:, params: {}) }
@@ -1018,9 +1041,9 @@ describe Api do
 
       context "with no max_per_page argument" do
         it "limits to the default max_per_page" do
-          controller = double("controller", request:, response:, params: { per_page: Api.max_per_page + 5 })
+          controller = double("controller", request:, response:, params: { per_page: Api::MAX_PER_PAGE + 5 })
           expect(Api.paginate(collection, controller, "example.com").size)
-            .to eq Api.max_per_page
+            .to eq Api::MAX_PER_PAGE
         end
       end
 
@@ -1028,7 +1051,7 @@ describe Api do
         it "limits to the default per_page" do
           controller = double("controller", request:, response:, params: {})
           expect(Api.paginate(collection, controller, "example.com").size)
-            .to eq Api.per_page
+            .to eq Api::PER_PAGE
         end
       end
 
@@ -1052,7 +1075,7 @@ describe Api do
     end
   end
 
-  context ".jsonapi_paginate" do
+  describe ".jsonapi_paginate" do
     let(:request) { double("request", query_parameters: {}) }
     let(:response) { double("response", headers: {}) }
     let(:controller) { double("controller", request:, response:, params: {}) }
@@ -1078,7 +1101,7 @@ describe Api do
     end
   end
 
-  context ".build_links" do
+  describe ".build_links" do
     it "does not build links if not pagination is provided" do
       expect(Api.build_links("www.example.com")).to be_empty
     end

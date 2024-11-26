@@ -6,29 +6,25 @@ x-environment: &BASE-ENV
   ENCRYPTION_KEY: facdd3a131ddd8988b14f6e4e01039c93cfa0160
   POSTGRES_PASSWORD: sekret
   RAILS_ENV: development
+  CANVAS_DEV_DOMAIN: canvas-web.$INST_DOMAIN
+  CANVAS_PROD_DOMAIN: canvas-web.$INST_DOMAIN
 
 x-base-service: &BASE-SERVICE
   build:
     context: .
   volumes:
       - .:/usr/src/app
-      - api_docs:/usr/src/app/public/doc/api
+      # needed to prevent local .bundle/plugin/index file from being copied into the container
+      - /usr/src/app/.bundle/plugin
       - brandable_css_brands:/usr/src/app/app/stylesheets/brandable_css_brands
       - bundler:/home/docker/.bundle/
       - canvas-docker-gems:/home/docker/.gem/
-      - canvas-planner_node_modules:/usr/src/app/packages/canvas-planner/node_modules
-      - canvas-planner_lib:/usr/src/app/packages/canvas-planner/lib
-      - jest-moxios-utils_node_modules:/usr/src/app/packages/jest-moxios-utils/node_modules
       - js-utils_es:/usr/src/app/packages/js-utils/es
       - js-utils_lib:/usr/src/app/packages/js-utils/lib
       - js-utils_node_modules:/usr/src/app/packages/js-utils/node_modules
-      - k5uploader_es:/usr/src/app/packages/k5uploader/es
-      - k5uploader_lib:/usr/src/app/packages/k5uploader/lib
-      - k5uploader_node_modules:/usr/src/app/packages/k5uploader/node_modules
       - locales:/usr/src/app/config/locales/generated
       - log:/usr/src/app/log
       - node_modules:/usr/src/app/node_modules
-      - old-copy-of-react-14-that-is-just-here-so-if-analytics-is-checked-out-it-doesnt-change-yarn.lock_node_modules:/usr/src/app/packages/old-copy-of-react-14-that-is-just-here-so-if-analytics-is-checked-out-it-doesnt-change-yarn.lock/node_modules
       - pacts:/usr/src/app/pacts
       - public_dist:/usr/src/app/public/dist
       - reports:/usr/src/app/reports
@@ -48,8 +44,6 @@ services:
     <<: *BASE-SERVICE
     environment:
       <<: *BASE-ENV
-      CANVAS_DEV_DOMAIN: canvas-web.$INST_DOMAIN
-      CANVAS_PROD_DOMAIN: canvas-web.$INST_DOMAIN
       HTTPS_METHOD: noredirect
       # TODO: remove and replace instances with CANVAS_DEV_DOMAIN
       VIRTUAL_HOST: .canvas-web.$INST_DOMAIN
@@ -59,11 +53,21 @@ services:
     depends_on:
       - postgres
       - redis
+    ports:
+    - "12345:12345"
     networks:
       default:
         aliases:
           - canvas-web
           - canvas-web.$INST_DOMAIN
+
+  web-dev-logs:
+    <<: *BASE-SERVICE
+    command: tail -f log/development.log
+    volumes:
+      - log:/usr/src/app/log:ro
+    labels:
+      - "traefik.enable=false"
 
   jobs:
     <<: *BASE-SERVICE
@@ -80,19 +84,6 @@ services:
       default:
         aliases:
           - canvas-webpack
-
-  storybook:
-    <<: *BASE-SERVICE
-    command: yarn run storybook
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.canvas-storybook-router.rule=Host(`canvas-storybook.$INST_DOMAIN`)
-      - traefik.http.routers.canvas-storybook-router.service=canvas-storybook
-      - traefik.http.services.canvas-storybook.loadbalancer.server.port=6006
-    networks:
-      default:
-        aliases:
-          - canvas-storybook
 
   postgres:
     build: ./docker-compose/postgres
@@ -138,14 +129,10 @@ networks:
     name: "inst_shared"
 
 volumes:
-  api_docs: {}
   brandable_css_brands: {}
   bundler: {}
   canvas-docker-gems: {}
-  canvas-planner_node_modules: {}
-  canvas-planner_lib: {}
   i18nliner_node_modules: {}
-  jest-moxios-utils_node_modules: {}
   js-utils_es: {}
   js-utils_lib: {}
   js-utils_node_modules: {}
@@ -155,7 +142,6 @@ volumes:
   locales: {}
   log: {}
   node_modules: {}
-  old-copy-of-react-14-that-is-just-here-so-if-analytics-is-checked-out-it-doesnt-change-yarn.lock_node_modules: {}
   pg_data: {}
   pacts: {}
   public_dist: {}

@@ -1,4 +1,3 @@
-/* eslint-disable import/no-extraneous-dependencies */
 /*
  * Copyright (C) 2022 - present Instructure, Inc.
  *
@@ -20,18 +19,12 @@
 const path = require('path')
 const glob = require('glob')
 const {DefinePlugin, EnvironmentPlugin, ProvidePlugin} = require('webpack')
-const partitioning = require('./partitioning')
 const PluginSpecsRunner = require('./PluginSpecsRunner')
 const {canvasDir} = require('../params')
 
-const {
-  CONTEXT_COFFEESCRIPT_SPEC,
-  CONTEXT_EMBER_GRADEBOOK_SPEC,
-  CONTEXT_JSX_SPEC,
-  RESOURCE_COFFEESCRIPT_SPEC,
-  RESOURCE_EMBER_GRADEBOOK_SPEC,
-  RESOURCE_JSX_SPEC,
-} = partitioning
+const UI_FEATURES_SPEC = 'ui/features'
+const UI_SHARED_SPEC = 'ui/shared'
+const QUNIT_SPEC = /Spec$/
 
 const WEBPACK_PLUGIN_SPECS = path.join(canvasDir, 'tmp/webpack-plugin-specs.js')
 
@@ -41,37 +34,21 @@ module.exports = {
     noParse: [require.resolve('jquery'), require.resolve('tinymce')],
     rules: [
       {
-        test: /\.m?js$/,
+        test: /\.(mjs|js|jsx|ts|tsx)$/,
         type: 'javascript/auto',
-        include: [
-          path.resolve(canvasDir, 'node_modules/graphql'),
-          path.resolve(canvasDir, 'packages/datetime-moment-parser/index.js'),
-          path.resolve(canvasDir, 'packages/datetime/index.js'),
-        ],
+        include: [path.resolve(canvasDir, 'node_modules/graphql')],
         resolve: {
           fullySpecified: false,
         },
       },
       {
-        test: /\.js$/,
+        test: /\.(js|jsx|ts|tsx)$/,
         type: 'javascript/auto',
         include: [path.resolve(canvasDir, 'node_modules/@instructure')],
       },
       {
-        test: /\.(js|ts|tsx)$/,
-        include: [
-          path.join(canvasDir, 'ui'),
-          path.join(canvasDir, 'packages/jquery-kyle-menu'),
-          path.join(canvasDir, 'packages/jquery-popover'),
-          path.join(canvasDir, 'packages/jquery-selectmenu'),
-          path.join(canvasDir, 'packages/defer-promise'),
-          path.resolve(canvasDir, 'packages/convert-case'),
-          path.resolve(canvasDir, 'packages/html-escape'),
-          path.join(canvasDir, 'packages/slickgrid'),
-          path.join(canvasDir, 'spec/javascripts/jsx'),
-          path.join(canvasDir, 'spec/coffeescripts'),
-          /gems\/plugins\/.*\/app\/(jsx|coffeescripts)\//,
-        ],
+        test: /\.(js|jsx|ts|tsx)$/,
+        include: [path.join(canvasDir, 'ui'), /gems\/plugins\/.*\/app\/(jsx|coffeescripts)\//],
         exclude: [/node_modules/],
         parser: {
           requireInclude: 'allow',
@@ -81,7 +58,11 @@ module.exports = {
           options: {
             cacheDirectory: false,
             configFile: false,
-            presets: [['@babel/preset-react', {useBuiltIns: true}], ['@babel/preset-typescript']],
+            presets: [
+              ['@babel/preset-env'],
+              ['@babel/preset-react', {useBuiltIns: true}],
+              ['@babel/preset-typescript'],
+            ],
             plugins: [
               // we need to have babel transpile ESM to CJS and can't just let
               // Webpack do it because Sinon is evidently no longer compatible
@@ -108,11 +89,6 @@ module.exports = {
         ],
       },
       {
-        test: /\.hbs$/,
-        include: [path.join(canvasDir, 'ui/features/screenreader_gradebook/jst')],
-        use: [require.resolve('#webpack-ember-handlebars-loader')],
-      },
-      {
         test: /\.css$/,
         use: ['style-loader', 'css-loader'],
       },
@@ -131,11 +107,8 @@ module.exports = {
       // globals. We should get rid of this and just change our actual source to
       // s/test/qunit.test/ and s/module/qunit.module/
       {
-        test: /\.js$/,
-        include: [
-          path.join(canvasDir, 'spec/coffeescripts'),
-          path.join(canvasDir, 'spec/javascripts/jsx'),
-        ].concat(
+        test: /\.(js|jsx|ts|tsx)$/,
+        include: [path.join(canvasDir, 'ui')].concat(
           glob.sync('gems/plugins/*/spec_canvas/coffeescripts/', {
             cwd: canvasDir,
             absolute: true,
@@ -148,16 +121,13 @@ module.exports = {
   },
   resolve: {
     alias: {
-      d3: 'd3/d3',
       'node_modules-version-of-backbone$': require.resolve('backbone'),
       'node_modules-version-of-react-modal$': require.resolve('react-modal'),
-      'spec/jsx': path.join(canvasDir, 'spec/javascripts/jsx'),
       'ui/boot/initializers': path.join(canvasDir, 'ui/boot/initializers'),
       'ui/ext': path.join(canvasDir, 'ui/ext'),
       'ui/features': path.join(canvasDir, 'ui/features'),
-      [CONTEXT_COFFEESCRIPT_SPEC]: path.join(canvasDir, CONTEXT_COFFEESCRIPT_SPEC),
-      [CONTEXT_EMBER_GRADEBOOK_SPEC]: path.join(canvasDir, CONTEXT_EMBER_GRADEBOOK_SPEC),
-      [CONTEXT_JSX_SPEC]: path.join(canvasDir, CONTEXT_JSX_SPEC),
+      [UI_FEATURES_SPEC]: path.join(canvasDir, UI_FEATURES_SPEC),
+      [UI_SHARED_SPEC]: path.join(canvasDir, UI_SHARED_SPEC),
 
       // need to explicitly point this out for whatwg-url otherwise you get an
       // error like:
@@ -170,13 +140,12 @@ module.exports = {
     },
     fallback: {
       path: false, // for minimatch
+      stream: require.resolve('stream-browserify'),
     },
-    extensions: ['.mjs', '.js', '.ts', '.tsx'],
+    extensions: ['.mjs', '.js', '.jsx', '.ts', '.tsx'],
     modules: [
-      path.join(canvasDir, 'ui/shims'),
       path.join(canvasDir, 'public/javascripts'),
       path.join(canvasDir, 'gems/plugins'),
-      path.join(canvasDir, 'spec/coffeescripts'),
       'node_modules',
     ],
   },
@@ -187,19 +156,17 @@ module.exports = {
 
   plugins: [
     new DefinePlugin({
-      CONTEXT_COFFEESCRIPT_SPEC: JSON.stringify(CONTEXT_COFFEESCRIPT_SPEC),
-      CONTEXT_EMBER_GRADEBOOK_SPEC: JSON.stringify(CONTEXT_EMBER_GRADEBOOK_SPEC),
-      CONTEXT_JSX_SPEC: JSON.stringify(CONTEXT_JSX_SPEC),
-      RESOURCE_COFFEESCRIPT_SPEC,
-      RESOURCE_EMBER_GRADEBOOK_SPEC,
-      RESOURCE_JSX_SPEC,
+      UI_FEATURES_SPEC: JSON.stringify(UI_FEATURES_SPEC),
+      UI_SHARED_SPEC: JSON.stringify(UI_SHARED_SPEC),
+      CI_NODE_TOTAL: JSON.stringify(process.env.CI_NODE_TOTAL),
+      CI_NODE_INDEX: JSON.stringify(process.env.CI_NODE_INDEX),
+      QUNIT_SPEC,
       WEBPACK_PLUGIN_SPECS: JSON.stringify(WEBPACK_PLUGIN_SPECS),
-      process: {env: {}},
+      process: {browser: true, env: {}},
     }),
 
     new EnvironmentPlugin({
       JSPEC_PATH: null,
-      JSPEC_GROUP: null,
       JSPEC_RECURSE: '1',
       JSPEC_VERBOSE: '0',
       A11Y_REPORT: false,
@@ -215,16 +182,9 @@ module.exports = {
     // whatwg-url, its dependency)
     new ProvidePlugin({
       Buffer: ['buffer', 'Buffer'],
+      $: 'jquery',
+      jQuery: 'jquery',
+      'window.jQuery': 'jquery',
     }),
-  ].concat(
-    process.env.JSPEC_GROUP
-      ? [
-          partitioning.createPlugin({
-            group: process.env.JSPEC_GROUP,
-            nodeIndex: +process.env.CI_NODE_INDEX,
-            nodeTotal: +process.env.CI_NODE_TOTAL,
-          }),
-        ]
-      : []
-  ),
+  ],
 }

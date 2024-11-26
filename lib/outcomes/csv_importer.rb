@@ -140,7 +140,7 @@ module Outcomes
       headers = row.slice(0, main_columns_end).map(&:to_sym)
 
       after_ratings = row[(main_columns_end + 1)..] || []
-      after_ratings = after_ratings.select(&:present?).map(&:to_s)
+      after_ratings = after_ratings.compact_blank.map(&:to_s)
       raise ParseError, I18n.t("Invalid fields after ratings: %{fields}", fields: after_ratings.inspect) unless after_ratings.empty?
 
       missing = (REQUIRED_FIELDS - headers).map(&:to_s)
@@ -162,6 +162,10 @@ module Outcomes
       if object[:mastery_points].present?
         object[:mastery_points] = strict_parse_float(object[:mastery_points], I18n.t("mastery points"))
       end
+      if object[:friendly_description].present? && object[:friendly_description].length > 255
+        raise InvalidDataError, I18n.t("Friendly description is too long (maximum is 255 characters)")
+      end
+
       import_object(object)
     end
 

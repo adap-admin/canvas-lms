@@ -28,6 +28,9 @@ export default function processEditorContentItems(
     data?: {
       content_items?: Lti13ContentItemJson[] | null
       ltiEndpoint?: string | null
+      replaceEditorContents?: boolean | null
+      msg?: string | null
+      errorMsg?: string | null
     }
   },
   env: ExternalToolsEnv,
@@ -52,29 +55,35 @@ export default function processEditorContentItems(
       })
 
       if (parsedItem != null) {
-        env.insertCode(parsedItem.toHtmlString())
-      } else {
-        // eslint-disable-next-line no-console
-        console.warn('Unsupported LTI 1.3 Content Item: ', inputItem)
-
-        if (!unsupportedItemWarningShown) {
-          showFlashAlert({
-            message: formatMessage(
-              'Could not insert content: "{itemType}" items are not currently supported in Canvas.',
-              {itemType: inputItem.type ?? 'unknown'}
-            ),
-            type: 'warning',
-            err: null,
-          })
-
-          unsupportedItemWarningShown = true
+        if (event.data?.replaceEditorContents) {
+          env.replaceCode(parsedItem.toHtmlString())
+        } else {
+          env.insertCode(parsedItem.toHtmlString())
         }
+      } else if (!unsupportedItemWarningShown) {
+        showFlashAlert({
+          message: formatMessage(
+            'Could not insert content: "{itemType}" items are not currently supported in Canvas.',
+            {itemType: inputItem.type ?? 'unknown'}
+          ),
+          type: 'warning',
+          err: null,
+        })
+
+        unsupportedItemWarningShown = true
       }
     }
 
     // Remove "unsaved changes" warnings and close modal
     if (event.data?.content_items) {
       dialog?.close()
+    }
+
+    if (event.data?.msg !== undefined) {
+      showFlashAlert({message: event.data.msg.toString()})
+    }
+    if (event.data?.errormsg !== undefined) {
+      showFlashAlert({message: event.data.errormsg.toString(), type: 'error'})
     }
   } catch (e) {
     showFlashAlert({

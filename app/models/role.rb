@@ -43,7 +43,7 @@ class Role < ActiveRecord::Base
 
       self.role = shard.activate do
         # Use `default_canvas_role` even though `default_role` sounds better since default_role is a rails method in rails >= 6.1
-        Role.get_role_by_id(read_attribute(:role_id)) || (respond_to?(:default_canvas_role) ? default_canvas_role : nil)
+        Role.get_role_by_id(role_id) || (respond_to?(:default_canvas_role) ? default_canvas_role : nil)
       end
     end
 
@@ -147,7 +147,7 @@ class Role < ActiveRecord::Base
     return nil unless id
     return nil if id.is_a?(String) && id !~ Api::ID_REGEX
 
-    Role.where(id:).take # giving up on built-in role caching because it's silly now and we should just preload more
+    Role.find_by(id:) # giving up on built-in role caching because it's silly now and we should just preload more
   end
 
   def self.get_built_in_role(name, root_account_id:)

@@ -25,8 +25,7 @@ describe Lti::ContentItemResponse do
   let_once(:assign2) { context.assignments.create!(name: "A2") }
   let(:controller) do
     controller_mock = double("controller")
-    allow(controller_mock).to receive(:api_v1_course_content_exports_url).and_return("api_export_url")
-    allow(controller_mock).to receive(:file_download_url).and_return("file_download_url")
+    allow(controller_mock).to receive_messages(api_v1_course_content_exports_url: "api_export_url", file_download_url: "file_download_url")
     controller_mock
   end
 
@@ -181,6 +180,70 @@ describe Lti::ContentItemResponse do
       quiz = context.quizzes.create!(title: "a quiz")
       content_item_response = subject({ modules: [context_module.id], quizzes: [quiz.id] })
       expect(content_item_response.title).to eq "Unnamed Course"
+    end
+  end
+
+  describe "#media_type_for_content_type" do
+    let(:new_quizzes) { new_quizzes_assignment(course: context) }
+    let(:conext_module) { context.context_modules.create!(name: "a module for NQ") }
+    let(:tag) { conext_module.add_item(id: new_quizzes.id, type: "assignment") }
+    let(:nq_media_type) { "quizzesnext" }
+    let(:assignment_media_type) { "assignment" }
+
+    before do
+      allow(Account.site_admin)
+        .to receive(:feature_enabled?)
+        .and_call_original
+    end
+
+    context "when new_quizzes_media_type feature flag is enabled" do
+      before do
+        allow(Account.site_admin)
+          .to receive(:feature_enabled?)
+          .with(:new_quizzes_media_type)
+          .and_return(true)
+      end
+
+      it "returns 'quizzesnext' for a new quiz" do
+        media_type = subject({ assignments: [new_quizzes.id] }).media_type_for_content_type
+        expect(media_type).to eq nq_media_type
+      end
+
+      it "returns 'quizzesnext' for a new quiz with module context" do
+        media_type = subject({ module_items: [tag.id] }).media_type_for_content_type
+        expect(media_type).to eq nq_media_type
+      end
+
+      it "returns 'assignment' for a not new quizzes assignment" do
+        assignment = context.assignments.create!(name: "an assignment")
+        media_type = subject({ assignments: [assignment.id] }).media_type_for_content_type
+        expect(media_type).to eq assignment_media_type
+      end
+
+      it "does not modify other resources media type like old quizzes" do
+        quiz = context.quizzes.create!(title: "a quiz")
+        media_type = subject({ quizzes: [quiz.id] }).media_type_for_content_type
+        expect(media_type).to eq "quiz"
+      end
+    end
+
+    context "when new_quizzes_media_type feature flag is disabled" do
+      before do
+        allow(Account.site_admin)
+          .to receive(:feature_enabled?)
+          .with(:new_quizzes_media_type)
+          .and_return(false)
+      end
+
+      it "returns 'assignment' for a new quiz" do
+        media_type = subject({ assignments: [new_quizzes.id] }).media_type_for_content_type
+        expect(media_type).to eq assignment_media_type
+      end
+
+      it "returns 'assignment' for a new quiz with module context" do
+        media_type = subject({ module_items: [tag.id] }).media_type_for_content_type
+        expect(media_type).to eq assignment_media_type
+      end
     end
   end
 

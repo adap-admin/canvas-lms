@@ -79,6 +79,8 @@ describe "submission_graded" do
       # truthy setting
       course_root_account.settings[:restrict_quantitative_data] = { value: true, locked: true }
       course_root_account.save!
+      @assignment.course.restrict_quantitative_data = true
+      @assignment.course.save!
 
       summary = generate_message(:submission_graded, :summary, asset, user: @student)
       expect(summary.body).to include("grade: A")
@@ -89,6 +91,19 @@ describe "submission_graded" do
       expect(twitter.body).to include("grade: A")
       sms = generate_message(:submission_graded, :sms, asset, user: @student)
       expect(sms.body).to include("grade: A")
+    end
+
+    it "show which sub assignment was graded" do
+      @course.root_account.enable_feature!(:discussion_checkpoints)
+      @reply_to_topic, @reply_to_entry = graded_discussion_topic_with_checkpoints(context: @course)
+      @reply_to_topic.submit_homework @student, body: "Test reply to topic for student"
+      submission = @reply_to_topic.grade_student(@student, grade: 5, grader: @teacher).first
+
+      email = generate_message(:submission_graded, :email, submission, user: @student)
+      expect(email.body).to include("Reply To Topic")
+      expect(email.html_body).to include("Reply To Topic")
+      sms = generate_message(:submission_graded, :sms, submission, user: @student)
+      expect(sms.body).to include("Reply To Topic")
     end
   end
 end

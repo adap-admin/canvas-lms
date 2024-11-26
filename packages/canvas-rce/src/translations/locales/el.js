@@ -21,6 +21,7 @@ import '../tinymce/el'
 
 const locale = {
   "add_8523c19b": { "message": "Πρόσθεση" },
+  "add_one_9e34a6f8": { "message": "Προσθήκη!" },
   "all_4321c3a1": { "message": "Όλα" },
   "alpha_15d59033": { "message": "Alpha" },
   "announcement_fb4cb645": { "message": "Ανακοίνωση" },
@@ -54,6 +55,7 @@ const locale = {
   "collaborations_5c56c15f": { "message": "Συνεργασίες" },
   "content_1440204b": { "message": "Περιεχόμενο" },
   "content_type_2cf90d95": { "message": "Τύπος Περιεχομένου" },
+  "copy_9748f9f": { "message": "Αντιγραφή" },
   "copyright_holder_66ee111": { "message": "Κάτοχος Πνευματικών Δικαιωμάτων:" },
   "count_plural_one_item_loaded_other_items_loaded_857023b7": {
     "message": "{ count, plural,\n    one {}\n  other {}\n}"
@@ -82,6 +84,7 @@ const locale = {
   "external_tools_6e77821": { "message": "Εξωτερικά Εργαλεία" },
   "files_c300e900": { "message": "Αρχεία" },
   "files_index_af7c662b": { "message": "Ευρετήριο Αρχείων" },
+  "find_8d605019": { "message": "Εύρεση" },
   "format_4247a9c5": { "message": "Τύπος" },
   "generating_preview_45b53be0": { "message": "Δημιουργία προεπισκόπησης..." },
   "grades_a61eba0a": { "message": "Βαθμοί" },
@@ -134,10 +137,14 @@ const locale = {
   "new_quiz_34aacba6": { "message": "Νέο Κουίζ" },
   "next_40e12421": { "message": "Επόμενο" },
   "no_e16d9132": { "message": "μη δημοσιευμένο" },
+  "no_pages_created_yet_c379fa6e": {
+    "message": "Δεν έχουν δημιουργηθεί σελίδες ακόμη."
+  },
   "no_preview_is_available_for_this_file_f940114a": {
     "message": "Δεν υπάρχει διαθέσιμη προεπισκόπηση για αυτό το αρχείο."
   },
   "no_results_940393cf": { "message": "Δεν υπάρχουν Αποτελέσματα" },
+  "no_results_found_58717065": { "message": "Δεν βρέθηκαν αποτελέσματα" },
   "none_3b5e34d2": { "message": "Κανένα" },
   "operators_a2ef9a93": { "message": "Χειριστές" },
   "orange_81386a62": { "message": "Πορτοκαλί" },
@@ -148,6 +155,7 @@ const locale = {
   "pink_68ad45cb": { "message": "Ροζ" },
   "prev_f82cbc48": { "message": "Προηγούμενο" },
   "preview_53003fd2": { "message": "Προεπισκόπηση" },
+  "previous_bd2ac015": { "message": "Προηγούμενο" },
   "published_c944a23d": { "message": "δημοσιευμένο/α" },
   "purple_7678a9fc": { "message": "Μοβ" },
   "quiz_e0dcce8f": { "message": "Κουίζ" },
@@ -158,6 +166,7 @@ const locale = {
   "relationships_6602af70": { "message": "Σχέσεις" },
   "replace_e61834a7": { "message": "Αντικατάσταση" },
   "reset_95a81614": { "message": "Επαναφορά" },
+  "retry_ebd5f8ba": { "message": "Δοκιμάστε ξανά" },
   "rich_content_editor_2708ef21": {
     "message": "Επεξεργαστής Πλούσιου Περιεχομένου-rich content"
   },
@@ -168,6 +177,7 @@ const locale = {
   "star_8d156e09": { "message": " " },
   "start_over_f7552aa9": { "message": "Ξεκινήστε Ξανά" },
   "submit_a3cc6859": { "message": "Υποβολή" },
+  "submitting_b90fac62": { "message": "Υποβολή σε εξέλιξη..." },
   "syllabus_f191f65b": { "message": "Αναλυτικό Πρόγραμμα" },
   "teal_f729a294": { "message": "Γαλαζοπράσινο" },
   "the_document_preview_is_currently_being_processed__7d9ea135": {

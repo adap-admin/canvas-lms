@@ -28,6 +28,9 @@ import {
 } from '../../../__tests__/fixtures'
 import ConnectedHeader, {Header} from '../header'
 import {CoursePace} from 'features/course_paces/react/types'
+import {enableFetchMocks} from 'jest-fetch-mock'
+
+enableFetchMocks()
 
 const defaultProps = {
   context_type: 'Course',
@@ -123,10 +126,7 @@ describe('Course paces header', () => {
 
     it('renders the data pulled from the context api', async () => {
       window.ENV.COURSE_ID = 30
-      fetchMock.mock(
-        '/api/v1/courses/30/pace_contexts?type=course',
-        JSON.stringify(HEADING_STATS_API_RESPONSE)
-      )
+      fetchMock.mock('/api/v1/courses/30/pace_contexts?type=course', HEADING_STATS_API_RESPONSE)
       const {getByRole, getByTestId} = renderConnected(
         <ConnectedHeader {...defaultProps} coursePace={PRIMARY_PACE} />
       )

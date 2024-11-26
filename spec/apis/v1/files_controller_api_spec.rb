@@ -81,8 +81,7 @@ describe "Files API", type: :request do
 
     it "includes include capture param in inst_fs token" do
       secret = "secret"
-      allow(InstFS).to receive(:enabled?).and_return true
-      allow(InstFS).to receive(:jwt_secrets).and_return([secret])
+      allow(InstFS).to receive_messages(enabled?: true, jwt_secrets: [secret])
       json = call_course_create_file
       query = Rack::Utils.parse_nested_query(URI(json["upload_url"]).query)
       payload = Canvas::Security.decode_jwt(query["token"], [secret])
@@ -240,7 +239,7 @@ describe "Files API", type: :request do
                            "hidden" => false,
                            "lock_at" => nil,
                            "locked_for_user" => false,
-                           "preview_url" => context_url(@attachment.context, :context_file_file_preview_url, @attachment, annotate: 0, verifier: @attachment.uuid),
+                           "preview_url" => context_url(@attachment.context, :context_file_file_preview_url, @attachment, annotate: 0),
                            "hidden_for_user" => false,
                            "created_at" => @attachment.created_at.as_json,
                            "updated_at" => @attachment.updated_at.as_json,
@@ -281,7 +280,7 @@ describe "Files API", type: :request do
                            "hidden" => false,
                            "lock_at" => nil,
                            "locked_for_user" => false,
-                           "preview_url" => context_url(@attachment.context, :context_file_file_preview_url, @attachment, annotate: 0, verifier: @attachment.uuid),
+                           "preview_url" => context_url(@attachment.context, :context_file_file_preview_url, @attachment, annotate: 0),
                            "hidden_for_user" => false,
                            "created_at" => @attachment.created_at.as_json,
                            "updated_at" => @attachment.updated_at.as_json,
@@ -418,8 +417,7 @@ describe "Files API", type: :request do
     end
 
     before do
-      allow(InstFS).to receive(:enabled?).and_return true
-      allow(InstFS).to receive(:jwt_secrets).and_return([secret])
+      allow(InstFS).to receive_messages(enabled?: true, jwt_secrets: [secret])
     end
 
     it "is not available without the InstFS feature" do
@@ -435,7 +433,7 @@ describe "Files API", type: :request do
       raw_api_call(:post,
                    "/api/v1/files/capture?#{params.to_query}",
                    params.merge(controller: "files", action: "api_capture", format: "json"))
-      assert_status(403)
+      assert_forbidden
     end
 
     it "checks quota unless exempt" do
@@ -493,9 +491,66 @@ describe "Files API", type: :request do
                base_params.merge(controller: "files", action: "api_capture", format: "json"))
       existing.reload
       attachment = Attachment.where(instfs_uuid:).first
+      expect(attachment).not_to eq(existing)
       expect(attachment.display_name).to eq params[:name]
       expect(existing).to be_deleted
       expect(existing.replacement_attachment).to eq attachment
+    end
+
+    it "is permitted if attachment context is an account" do
+      account = Account.default
+      folder = Folder.root_folders(account).first
+      params = base_params.merge(context_type: "Account", context_id: account.global_id, folder: folder.id, size: 864.kilobytes)
+      raw_api_call(:post,
+                   "/api/v1/files/capture?#{params.to_query}",
+                   params.merge(controller: "files", action: "api_capture", format: "json"))
+      assert_status(201)
+    end
+
+    describe "re-uploading a file" do
+      before :once do
+        @existing = Attachment.create!(
+          context: @course,
+          folder:,
+          uploaded_data: StringIO.new("a file"),
+          filename: base_params[:name],
+          display_name: base_params[:name],
+          instfs_uuid: "old-instfs-uuid"
+        )
+        @capture_params = base_params.merge(controller: "files",
+                                            action: "api_capture",
+                                            format: "json",
+                                            size: @existing.size,
+                                            sha512: @existing.md5,
+                                            instfs_uuid: "new-instfs-uuid",
+                                            on_duplicate: "overwrite")
+      end
+
+      it "reuses the Attachment if a file is re-uploaded to the same folder" do
+        expect(InstFS).to receive(:delete_file).with("old-instfs-uuid")
+        json = api_call(:post, "/api/v1/files/capture?#{@capture_params.to_query}", @capture_params)
+        expect(json["id"]).to eq @existing.id
+        expect(@existing.reload.instfs_uuid).to eq "new-instfs-uuid"
+      end
+
+      it "does not delete the old instfs file if it is in use by other Attachments" do
+        other_course = course_factory
+        other_file = @existing.clone_for(other_course)
+        other_file.save!
+        expect(InstFS).not_to receive(:delete_file)
+        json = api_call(:post, "/api/v1/files/capture?#{@capture_params.to_query}", @capture_params)
+        expect(json["id"]).to eq @existing.id
+        expect(@existing.reload.instfs_uuid).to eq "new-instfs-uuid"
+        expect(@existing.cloned_item_id).to be_nil
+        expect(other_file.reload.instfs_uuid).to eq "old-instfs-uuid"
+      end
+
+      it "does not reuse a deleted Attachment" do
+        @existing.destroy
+        expect(InstFS).not_to receive(:delete_file)
+        json = api_call(:post, "/api/v1/files/capture?#{@capture_params.to_query}", @capture_params)
+        expect(json["id"]).not_to eq @existing.id
+      end
     end
 
     it "redirect has preview_url include if requested" do
@@ -646,7 +701,7 @@ describe "Files API", type: :request do
       @f1.save!
       course_with_student_logged_in(course: @course)
       raw_api_call(:get, @files_path, @files_path_options, {}, {})
-      assert_status(401)
+      assert_forbidden
     end
 
     it "404s for no folder found" do
@@ -1042,35 +1097,39 @@ describe "Files API", type: :request do
       @file_path_options = { controller: "files", action: "api_show", format: "json", id: @att.id.to_param }
     end
 
+    def attachment_json
+      {
+        "id" => @att.id,
+        "uuid" => @att.uuid,
+        "folder_id" => @att.folder_id,
+        "url" => file_download_url(@att, verifier: @att.uuid, download: "1", download_frd: "1"),
+        "content-type" => "image/png",
+        "display_name" => "test-frd.png",
+        "filename" => @att.filename,
+        "size" => @att.size,
+        "unlock_at" => nil,
+        "locked" => false,
+        "hidden" => false,
+        "lock_at" => nil,
+        "locked_for_user" => false,
+        "hidden_for_user" => false,
+        "created_at" => @att.created_at.as_json,
+        "updated_at" => @att.updated_at.as_json,
+        "upload_status" => "success",
+        "thumbnail_url" => thumbnail_image_url(@att, @att.uuid, host: "www.example.com"),
+        "modified_at" => @att.modified_at.as_json,
+        "mime_class" => @att.mime_class,
+        "media_entry_id" => @att.media_entry_id,
+        "canvadoc_session_url" => nil,
+        "crocodoc_session_url" => nil,
+        "category" => "uncategorized",
+        "visibility_level" => @att.visibility_level
+      }
+    end
+
     it "returns expected json" do
       json = api_call(:get, @file_path, @file_path_options, {})
-      expect(json).to eq({
-                           "id" => @att.id,
-                           "uuid" => @att.uuid,
-                           "folder_id" => @att.folder_id,
-                           "url" => file_download_url(@att, verifier: @att.uuid, download: "1", download_frd: "1"),
-                           "content-type" => "image/png",
-                           "display_name" => "test-frd.png",
-                           "filename" => @att.filename,
-                           "size" => @att.size,
-                           "unlock_at" => nil,
-                           "locked" => false,
-                           "hidden" => false,
-                           "lock_at" => nil,
-                           "locked_for_user" => false,
-                           "hidden_for_user" => false,
-                           "created_at" => @att.created_at.as_json,
-                           "updated_at" => @att.updated_at.as_json,
-                           "upload_status" => "success",
-                           "thumbnail_url" => thumbnail_image_url(@att, @att.uuid, host: "www.example.com"),
-                           "modified_at" => @att.modified_at.as_json,
-                           "mime_class" => @att.mime_class,
-                           "media_entry_id" => @att.media_entry_id,
-                           "canvadoc_session_url" => nil,
-                           "crocodoc_session_url" => nil,
-                           "category" => "uncategorized",
-                           "visibility_level" => @att.visibility_level
-                         })
+      expect(json).to eq(attachment_json)
     end
 
     it "works with a context path" do
@@ -1096,13 +1155,13 @@ describe "Files API", type: :request do
       api_call(:get, "/api/v1/users/#{@teacher.id}/files/#{@att.id}", opts, {}, {}, expected_status: 200)
     end
 
-    it "401s with invalid verifier" do
+    it "403s with invalid verifier" do
       @att.context = @teacher
       @att.save!
       course_with_student(course: @course)
       user_session(@student)
       opts = @file_path_options.merge(user_id: @teacher.id.to_param, verifier: "nope")
-      api_call(:get, "/api/v1/users/#{@teacher.id}/files/#{@att.id}", opts, {}, {}, expected_status: 401)
+      api_call(:get, "/api/v1/users/#{@teacher.id}/files/#{@att.id}", opts, {}, {}, expected_status: 403)
     end
 
     it "omits verifiers when using session auth" do
@@ -1121,6 +1180,55 @@ describe "Files API", type: :request do
       expect(json["url"]).to eq file_download_url(@att, download: "1", download_frd: "1", verifier: @att.uuid)
     end
 
+    it "omits verifiers in the enhanced preview when using session auth" do
+      user_session(@user)
+      get @file_path + "?include[]=enhanced_preview_url"
+      expect(response).to be_successful
+      json = json_parse
+      expect(json["preview_url"]).to eq context_url(@att.context, :context_file_file_preview_url, @att, annotate: 0)
+    end
+
+    it "passes along given verifiers when creating the enhanced_preview_url" do
+      user_session(@user)
+      get @file_path + "?include[]=enhanced_preview_url&verifier=#{@att.uuid}"
+      expect(response).to be_successful
+      json = json_parse
+      expect(json["preview_url"]).to eq context_url(@att.context, :context_file_file_preview_url, @att, annotate: 0, verifier: @att.uuid)
+    end
+
+    describe "with JWT access token" do
+      include_context "InstAccess setup"
+
+      before do
+        @att.update!(instfs_uuid: "stuff", content_type: "application/pdf")
+        user_with_pseudonym
+        jwt_payload = {
+          resource: "/courses/#{@course.id}/files/#{@att.id}?instfs_id=stuff",
+          aud: [@course.root_account.uuid],
+          sub: @user.uuid,
+          tenant_auth: { location: "location" },
+          iss: "instructure:inst_access",
+          exp: 1.hour.from_now.to_i,
+          iat: Time.now.to_i
+        }
+        @token_string = InstAccess::Token.send(:new, jwt_payload).to_unencrypted_token_string
+        allow(Canvadocs).to receive(:enabled?).and_return(true)
+        allow(InstFS).to receive_messages(enabled?: true, app_host: "http://instfs.test")
+        stub_request(:get, "http://instfs.test/files/stuff/metadata").to_return(status: 200, body: { url: "http://instfs.test/stuff" }.to_json)
+      end
+
+      it "allows access" do
+        json = api_call(:get, "/api/v1/files/#{@att.id}", { controller: "files", action: "api_show", format: "json", id: @att.id.to_param, include: "enhanced_preview_url", instfs_id: "stuff", access_token: @token_string }, {})
+        expect(response).to be_successful
+
+        expect(json["preview_url"]).to include "/courses/#{@course.id}/files/#{@att.id}/file_preview?access_token=#{@token_string}&annotate=0&instfs_id=stuff"
+        expect(json["canvadoc_session_url"]).to include "access_token=#{@token_string}"
+        query_params = Addressable::URI.parse(json["preview_url"]).query_values
+        expect(query_params["access_token"]).to eq @token_string
+        expect(query_params["instfs_id"]).to eq "stuff"
+      end
+    end
+
     it "returns lock information" do
       one_month_ago, one_month_from_now = 1.month.ago, 1.month.from_now
       att2 = Attachment.create!(filename: "test.txt", display_name: "test.txt", uploaded_data: StringIO.new("file"), folder: @root, context: @course, locked: true)
@@ -1137,6 +1245,30 @@ describe "Files API", type: :request do
       expect(json["lock_at"]).to eq one_month_from_now.as_json
     end
 
+    it "returns blueprint course restriction information when requested" do
+      copy_from = course_factory(active_all: true)
+      template = MasterCourses::MasterTemplate.set_as_master_course(copy_from)
+      original_file = copy_from.attachments.create!(
+        display_name: "cat_hugs.mp4", filename: "cat_hugs.mp4", content_type: "video/mp4", media_entry_id: "m-123456"
+      )
+      tag = template.create_content_tag_for!(original_file)
+      tag.update(restrictions: { content: true })
+
+      course_with_teacher(active_all: true)
+      copy_to = @course
+      template.add_child_course!(copy_to)
+
+      # just create a copy directly instead of doing a real migration
+      file_copy = copy_to.attachments.new(
+        display_name: "cat_hugs.mp4", filename: "cat_hugs.mp4", content_type: "video/mp4", media_entry_id: "m-123456"
+      )
+      file_copy.migration_id = tag.migration_id
+      file_copy.save!
+
+      json = api_call(:get, "/api/v1/files/#{file_copy.id}", { controller: "files", action: "api_show", format: "json", id: file_copy.id.to_param }, { include: ["blueprint_course_status"] })
+      expect(json["restricted_by_master_course"]).to be true
+    end
+
     it "is not locked/hidden for a teacher" do
       att2 = Attachment.create!(filename: "test.txt", display_name: "test.txt", uploaded_data: StringIO.new("file"), folder: @root, context: @course, locked: true)
       att2.hidden = true
@@ -1146,7 +1278,7 @@ describe "Files API", type: :request do
       expect(json["hidden"]).to be_truthy
       expect(json["hidden_for_user"]).to be_falsey
       expect(json["locked_for_user"]).to be_falsey
-      expect(json["preview_url"].include?("verifier")).to be_truthy
+      expect(json["preview_url"].include?("verifier")).to be_falsey
     end
 
     def should_be_locked(json)
@@ -1165,7 +1297,7 @@ describe "Files API", type: :request do
       expect(json.keys & prohibited_fields).to be_empty
     end
 
-    context "when the attachment is locked and replacement params are inlucded" do
+    context "when the attachment is locked and replacement params are included" do
       subject do
         api_call(
           :get,
@@ -1275,6 +1407,24 @@ describe "Files API", type: :request do
           expect(subject["preview_url"]).not_to be_nil
         end
       end
+
+      context "enrolled in limited access account" do
+        before do
+          @course.account.root_account.enable_feature!(:allow_limited_access_for_students)
+          @course.account.settings[:enable_limited_access_for_students] = true
+          @course.account.save!
+        end
+
+        it "renders forbidden if called via API" do
+          api_call(:get, @file_path, @file_path_options, {})
+          expect(response).to have_http_status :forbidden
+        end
+
+        it "returns expected json if called from UI" do
+          json = api_call(:get, @file_path, @file_path_options, {}, { "HTTP_REFERER" => "https://rspec.instructure.com" })
+          expect(json).to eq(attachment_json)
+        end
+      end
     end
 
     it "returns not found error" do
@@ -1288,7 +1438,7 @@ describe "Files API", type: :request do
 
     it "returns no permissions error for no context enrollment" do
       course_with_teacher(active_all: true, user: user_with_pseudonym)
-      api_call(:get, @file_path, @file_path_options, {}, {}, expected_status: 401)
+      api_call(:get, @file_path, @file_path_options, {}, {}, expected_status: 403)
     end
 
     it "returns a hidden file" do
@@ -1354,7 +1504,7 @@ describe "Files API", type: :request do
                  migration_id: @mig_id },
                {},
                {},
-               { expected_status: 401 })
+               { expected_status: 403 })
     end
 
     it "404s if given a bad migration id" do
@@ -1422,7 +1572,7 @@ describe "Files API", type: :request do
     it "is not authorized to delete/replace a file" do
       course_with_teacher(active_all: true, user: user_with_pseudonym)
       @file_path_options[:replace] = true
-      api_call(:delete, @file_path, @file_path_options, {}, {}, expected_status: 401)
+      api_call(:delete, @file_path, @file_path_options, {}, {}, expected_status: 403)
     end
 
     it "returns 404" do
@@ -1486,7 +1636,7 @@ describe "Files API", type: :request do
       it "gives unauthorized errors if the user is not authorized to view the file" do
         @icon.update(locked: true)
         course_with_student_logged_in(course: @course)
-        api_call(:get, @file_path, @file_path_options, {}, {}, expected_status: 401)
+        api_call(:get, @file_path, @file_path_options, {}, {}, expected_status: 403)
       end
 
       it "gives bad request errors if the file is not an icon" do
@@ -1517,13 +1667,7 @@ describe "Files API", type: :request do
             end
           end
 
-          @original_net_http = Net.send(:remove_const, :HTTP)
-          Net.send(:const_set, :HTTP, mocked_http)
-        end
-
-        after do
-          Net.send(:remove_const, :HTTP)
-          Net.send(:const_set, :HTTP, @original_net_http)
+          stub_const("Net::HTTP", mocked_http)
         end
 
         it "only downloads data until the end of the metadata tag" do
@@ -1580,7 +1724,7 @@ describe "Files API", type: :request do
 
     it "does not let non-admin users reset verifiers" do
       course_with_teacher(course: @course, active_all: true, user: user_with_pseudonym)
-      api_call(:post, @file_path, @file_path_options, {}, {}, expected_status: 401)
+      api_call(:post, @file_path, @file_path_options, {}, {}, expected_status: 403)
     end
 
     context "as an admin without manage_files_edit or manage_files_delete permission" do
@@ -1593,9 +1737,193 @@ describe "Files API", type: :request do
 
       it "disallows letting admin users reset verifiers" do
         old_uuid = @att.uuid
-        api_call(:post, @file_path, @file_path_options, {}, {}, expected_status: 401)
+        api_call(:post, @file_path, @file_path_options, {}, {}, expected_status: 403)
         expect(@att.reload.uuid).to eq old_uuid
       end
+    end
+  end
+
+  describe "#rce_linked_file_instfs_ids" do
+    before :once do
+      course_with_teacher(active_all: true)
+    end
+
+    before do
+      account_admin_user(account: @course.root_account)
+      user_session(@user)
+      allow(Canvadocs).to receive(:enabled?).and_return(true)
+      allow(InstFS).to receive_messages(enabled?: true, app_host: "http://instfs.test")
+    end
+
+    it "returns 404 if feature not enabled" do
+      Account.site_admin.disable_feature!(:rce_linked_file_urls)
+      api_call(:post, "/api/v1/rce_linked_file_instfs_ids", { controller: "files", action: "rce_linked_file_instfs_ids", format: "json" }, {}, {}, expected_status: 404)
+    end
+
+    it "allows access to course files the user has access to manage" do
+      course = @course
+      doc = attachment_model(context: course, display_name: "test.docx", uploaded_data: fixture_file_upload("test.docx"), instfs_uuid: "doc")
+      image = attachment_model(context: course, display_name: "cn_image.jpg", uploaded_data: fixture_file_upload("cn_image.jpg"), instfs_uuid: "image")
+      media = attachment_model(context: course, display_name: "292.mp3", uploaded_data: fixture_file_upload("292.mp3"), instfs_uuid: "media")
+      diff_course = attachment_model(context: course_factory, display_name: "292.mp3", uploaded_data: fixture_file_upload("292.mp3"), instfs_uuid: "media2")
+
+      file_urls = [
+        "/courses/#{course.id}/files/#{doc.id}?wrap=1",
+        "/courses/#{course.id}/files/#{image.id}/preview",
+        "/media_attachments_iframe/#{media.id}?type=video&amp;embedded=true",
+        "/media_attachments_iframe/#{diff_course.id}?type=video&amp;embedded=true"
+      ]
+      body = { user_uuid: @teacher.uuid, file_urls: }
+
+      api_call(:post, "/api/v1/rce_linked_file_instfs_ids", { controller: "files", action: "rce_linked_file_instfs_ids", format: "json" }, body, {}, expected_status: 200)
+      json = JSON.parse(response.body)
+      expect(json).to eq({
+                           "instfs_ids" => { "/courses/#{course.id}/files/#{image.id}/preview" => "image" },
+                           "canvas_instfs_ids" => {
+                             "/courses/#{course.id}/files/#{doc.id}?wrap=1" => "doc",
+                             "/media_attachments_iframe/#{media.id}?type=video&amp;embedded=true" => "media"
+                           }
+                         })
+    end
+
+    it "allows access to user files the user has access to manage" do
+      doc = attachment_model(context: @teacher, display_name: "test.docx", uploaded_data: fixture_file_upload("test.docx"), instfs_uuid: "doc")
+      image = attachment_model(context: @teacher, display_name: "cn_image.jpg", uploaded_data: fixture_file_upload("cn_image.jpg"), instfs_uuid: "image")
+      media = attachment_model(context: @teacher, display_name: "292.mp3", uploaded_data: fixture_file_upload("292.mp3"), instfs_uuid: "media")
+      not_yours = attachment_model(context: @user, display_name: "292.mp3", uploaded_data: fixture_file_upload("292.mp3"), instfs_uuid: "media2")
+
+      file_urls = [
+        "/users/#{@teacher.id}/files/#{doc.id}?wrap=1",
+        "/users/#{@teacher.id}/files/#{image.id}/preview",
+        "/media_attachments_iframe/#{media.id}?type=video&amp;embedded=true",
+        "/media_attachments_iframe/#{not_yours.id}?type=video&amp;embedded=true"
+      ]
+      body = { user_uuid: @teacher.uuid, file_urls: }
+
+      api_call(:post, "/api/v1/rce_linked_file_instfs_ids", { controller: "files", action: "rce_linked_file_instfs_ids", format: "json" }, body, {}, expected_status: 200)
+      json = JSON.parse(response.body)
+      expect(json).to eq({
+                           "instfs_ids" => { "/users/#{@teacher.id}/files/#{image.id}/preview" => "image" },
+                           "canvas_instfs_ids" => {
+                             "/users/#{@teacher.id}/files/#{doc.id}?wrap=1" => "doc",
+                             "/media_attachments_iframe/#{media.id}?type=video&amp;embedded=true" => "media"
+                           }
+                         })
+    end
+
+    it "allows access to contextless files the user has access to manage" do
+      doc = attachment_model(context: @course, display_name: "test.docx", uploaded_data: fixture_file_upload("test.docx"), instfs_uuid: "doc")
+
+      file_urls = ["/files/#{doc.id}/download?download_frd=1", "/files/#{doc.id}", "http://example.canvas.edu/files/#{doc.id}/download"]
+      body = { user_uuid: @teacher.uuid, file_urls: }
+
+      api_call(:post, "/api/v1/rce_linked_file_instfs_ids", { controller: "files", action: "rce_linked_file_instfs_ids", format: "json" }, body, {}, expected_status: 200)
+      json = JSON.parse(response.body)
+      expect(json).to eq({
+                           "canvas_instfs_ids" => {
+                             "/files/#{doc.id}/download?download_frd=1" => "doc",
+                             "/files/#{doc.id}" => "doc",
+                             "http://example.canvas.edu/files/#{doc.id}/download" => "doc"
+                           }
+                         })
+    end
+
+    it "doesn't allow deleted file access" do
+      doc = attachment_model(context: @course, display_name: "test.docx", uploaded_data: fixture_file_upload("test.docx"), instfs_uuid: "doc")
+      image = attachment_model(context: @teacher, display_name: "cn_image.jpg", uploaded_data: fixture_file_upload("cn_image.jpg"), instfs_uuid: "image")
+      media = attachment_model(context: @course, display_name: "292.mp3", uploaded_data: fixture_file_upload("292.mp3"), instfs_uuid: "media")
+      Attachment.where(id: [doc, image, media]).destroy_all
+
+      file_urls = [
+        "/courses/#{@course.id}/files/#{doc.id}?wrap=1",
+        "/courses/#{@course.id}/files/#{image.id}/preview",
+        "/media_attachments_iframe/#{media.id}?type=video&amp;embedded=true",
+      ]
+      body = { user_uuid: @teacher.uuid, file_urls: }
+
+      api_call(:post, "/api/v1/rce_linked_file_instfs_ids", { controller: "files", action: "rce_linked_file_instfs_ids", format: "json" }, body, {}, expected_status: 422)
+      json = JSON.parse(response.body)
+      expect(json).to eq({ "errors" => [{ "message" => "No valid file URLs given" }] })
+    end
+
+    it "shows hidden files" do
+      doc = attachment_model(context: @course, display_name: "test.docx", uploaded_data: fixture_file_upload("test.docx"), instfs_uuid: "doc", file_state: "hidden")
+      image = attachment_model(context: @course, display_name: "cn_image.jpg", uploaded_data: fixture_file_upload("cn_image.jpg"), instfs_uuid: "image", file_state: "hidden")
+      media = attachment_model(context: @course, display_name: "292.mp3", uploaded_data: fixture_file_upload("292.mp3"), instfs_uuid: "media", file_state: "hidden")
+
+      file_urls = [
+        "/courses/#{@course.id}/files/#{doc.id}?wrap=1",
+        "/courses/#{@course.id}/files/#{image.id}/preview",
+        "/media_attachments_iframe/#{media.id}?type=video&amp;embedded=true",
+      ]
+      body = { user_uuid: @teacher.uuid, file_urls:, }
+
+      api_call(:post, "/api/v1/rce_linked_file_instfs_ids", { controller: "files", action: "rce_linked_file_instfs_ids", format: "json" }, body, {}, expected_status: 200)
+      json = JSON.parse(response.body)
+      expect(json).to eq({
+                           "instfs_ids" => { "/courses/#{@course.id}/files/#{image.id}/preview" => "image" },
+                           "canvas_instfs_ids" => {
+                             "/courses/#{@course.id}/files/#{doc.id}?wrap=1" => "doc",
+                             "/media_attachments_iframe/#{media.id}?type=video&amp;embedded=true" => "media"
+                           }
+                         })
+    end
+
+    it "follows replaced files" do
+      doc2 = attachment_model(context: @course, display_name: "test.docx", uploaded_data: fixture_file_upload("test.docx"), instfs_uuid: "doc2")
+      image2 = attachment_model(context: @course, display_name: "cn_image.jpg", uploaded_data: fixture_file_upload("cn_image.jpg"), instfs_uuid: "image2")
+      media2 = attachment_model(context: @course, display_name: "292.mp3", uploaded_data: fixture_file_upload("292.mp3"), instfs_uuid: "media2")
+
+      doc = attachment_model(context: @course, display_name: "test.docx", uploaded_data: fixture_file_upload("test.docx"), instfs_uuid: "doc", replacement_attachment_id: doc2)
+      image = attachment_model(context: @course, display_name: "cn_image.jpg", uploaded_data: fixture_file_upload("cn_image.jpg"), instfs_uuid: "image", replacement_attachment_id: image2)
+      media = attachment_model(context: @course, display_name: "292.mp3", uploaded_data: fixture_file_upload("292.mp3"), instfs_uuid: "media", replacement_attachment_id: media2)
+      Attachment.where(id: [doc, image, media]).destroy_all
+
+      file_urls = [
+        "/courses/#{@course.id}/files/#{doc.id}?wrap=1",
+        "/courses/#{@course.id}/files/#{image.id}/preview",
+        "/media_attachments_iframe/#{media.id}?type=video&amp;embedded=true",
+      ]
+      body = { user_uuid: @teacher.uuid, file_urls: }
+
+      api_call(:post, "/api/v1/rce_linked_file_instfs_ids", { controller: "files", action: "rce_linked_file_instfs_ids", format: "json" }, body, {}, expected_status: 200)
+      json = JSON.parse(response.body)
+      expect(json).to eq({
+                           "instfs_ids" => { "/courses/#{@course.id}/files/#{image.id}/preview" => "image2" },
+                           "canvas_instfs_ids" => {
+                             "/courses/#{@course.id}/files/#{doc.id}?wrap=1" => "doc2",
+                             "/media_attachments_iframe/#{media.id}?type=video&amp;embedded=true" => "media2"
+                           }
+                         })
+    end
+
+    it "doesn't crash with bad urls" do
+      media = attachment_model(context: @course, display_name: "292.mp3", uploaded_data: fixture_file_upload("292.mp3"), instfs_uuid: "media", replacement_attachment_id: media)
+
+      file_urls = [
+        "/courseles?wrap=1",
+        "https://really-bad-url@",
+        "/media_attachments_iframe/#{media.id}?type=video&amp;embedded=true",
+      ]
+      body = { user_uuid: @teacher.uuid, file_urls: }
+
+      api_call(:post, "/api/v1/rce_linked_file_instfs_ids", { controller: "files", action: "rce_linked_file_instfs_ids", format: "json" }, body, {}, expected_status: 200)
+      json = JSON.parse(response.body)
+      expect(json).to eq({
+                           "canvas_instfs_ids" => {
+                             "/media_attachments_iframe/#{media.id}?type=video&amp;embedded=true" => "media"
+                           }
+                         })
+    end
+
+    it "limits the number of file links returned" do
+      file_urls = []
+      101.times { |i| file_urls << "/courses/#{@course.id}/files/#{i}?wrap=1" }
+      body = { user_uuid: @teacher.uuid, file_urls:, location: "quiz/123" }
+      api_call(:post, "/api/v1/rce_linked_file_instfs_ids", { controller: "files", action: "rce_linked_file_instfs_ids", format: "json" }, body, {}, expected_status: 422)
+
+      json = JSON.parse(response.body)
+      expect(json).to eq({ "errors" => [{ "message" => "Too many file links requested.  A maximum of 100 file links can be processed per request." }] })
     end
   end
 
@@ -1709,7 +2037,7 @@ describe "Files API", type: :request do
                          { controller: "files", action: "api_update", format: "json", id: @file.to_param },
                          { parent_folder_id: @sub_folder.to_param },
                          {},
-                         { expected_status: 401 })
+                         { expected_status: 403 })
       end
 
       it "does not move a file out of a submissions folder" do
@@ -1719,13 +2047,13 @@ describe "Files API", type: :request do
                          { controller: "files", action: "api_update", format: "json", id: @sub_file.to_param },
                          { parent_folder_id: @root_folder.to_param },
                          {},
-                         { expected_status: 401 })
+                         { expected_status: 403 })
       end
     end
 
-    it "returns unauthorized error" do
+    it "returns forbidden error" do
       course_with_student(course: @course)
-      api_call(:put, @file_path, @file_path_options, { name: "new name" }, {}, expected_status: 401)
+      api_call(:put, @file_path, @file_path_options, { name: "new name" }, {}, expected_status: 403)
     end
 
     it "404s with invalid parent id" do
@@ -1788,7 +2116,7 @@ describe "Files API", type: :request do
         unlock = 1.day.from_now
         lock = 3.days.from_now
         new_params = { name: "newname.txt", locked: "true", hidden: true, unlock_at: unlock.iso8601, lock_at: lock.iso8601 }
-        api_call(:put, @file_path, @file_path_options, new_params, {}, expected_status: 401)
+        api_call(:put, @file_path, @file_path_options, new_params, {}, expected_status: 403)
       end
     end
   end
@@ -1829,7 +2157,7 @@ describe "Files API", type: :request do
                        { controller: "files", action: "api_quota", format: "json", course_id: t_course.to_param },
                        {},
                        {},
-                       { expected_status: 401 })
+                       { expected_status: 403 })
     end
 
     it "operates on groups" do
@@ -1845,7 +2173,7 @@ describe "Files API", type: :request do
       expect(json).to eql({ "quota" => group.quota, "quota_used" => 13.megabytes })
     end
 
-    it "operates on users" do
+    it "operates on users if user == self" do
       course_with_student active_all: true
       json = api_call(:get,
                       "/api/v1/users/self/files/quota",
@@ -1854,6 +2182,31 @@ describe "Files API", type: :request do
                       format: "json",
                       user_id: "self")
       expect(json).to eql({ "quota" => @student.quota, "quota_used" => 0 })
+    end
+
+    it "operates on users for account admins" do
+      course_with_student active_all: true
+      account_admin_user
+      json = api_call_as_user(@admin,
+                              :get,
+                              "/api/v1/users/#{@student.id}/files/quota",
+                              controller: "files",
+                              action: "api_quota",
+                              format: "json",
+                              user_id: @student.id)
+      expect(json).to eql({ "quota" => @student.quota, "quota_used" => 0 })
+    end
+
+    it "does not operate on users for non admin roles" do
+      course_with_student active_all: true
+      api_call_as_user(@teacher,
+                       :get,
+                       "/api/v1/users/#{@student.id}/files/quota",
+                       controller: "files",
+                       action: "api_quota",
+                       format: "json",
+                       user_id: @student.id)
+      expect(response).to have_http_status(:forbidden)
     end
   end
 end

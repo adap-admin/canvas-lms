@@ -18,7 +18,12 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
+require_relative "../../../spec_helper"
+require_relative "../../../lti_spec_helper"
+
 describe Lti::Concerns::ParentFrame do
+  include LtiSpecHelper
+
   subject { controller.send(:parent_frame_origin) }
 
   let(:controller_class) do
@@ -40,11 +45,15 @@ describe Lti::Concerns::ParentFrame do
     @pseudonym
   end
 
+  let(:request) do
+    double("request", query_parameters: "hello=world")
+  end
+
   before do
     controller.instance_variable_set(:@current_user, current_pseudonym.user)
     controller.instance_variable_set(:@current_pseudonym, current_pseudonym)
-    allow(controller).to receive(:parent_frame_context).and_return tool.id.to_s
-    allow(controller).to receive(:session).and_return nil
+    allow(controller).to receive_messages(parent_frame_context: tool.id.to_s, session: nil, request:)
+    allow(ContextExternalTool).to receive(:find_by).and_return(nil)
     allow(ContextExternalTool).to receive(:find_by).with(id: tool.id.to_s).and_return(tool)
   end
 
@@ -60,6 +69,27 @@ describe Lti::Concerns::ParentFrame do
         end
 
         it { is_expected.to eq(expected_tool_origin) }
+
+        it "handles beta url overrides" do
+          allow_beta_overrides(tool)
+          tool.settings["environments"] = { "beta_launch_url" => "http://beta.example.com/launch" }
+          tool.save!
+          expect(subject).to eq("http://beta.example.com")
+        end
+
+        it "handles beta domain overrides" do
+          allow_beta_overrides(tool)
+          tool.settings["environments"] = { "beta_domain" => "beta.example.com" }
+          tool.save!
+          expect(subject).to eq("http://beta.example.com")
+        end
+
+        it "handles beta domain overrides with https prefix" do
+          allow_beta_overrides(tool)
+          tool.settings["environments"] = { "beta_domain" => "http://beta.example.com" }
+          tool.save!
+          expect(subject).to eq("http://beta.example.com")
+        end
       end
 
       context "when the user does not have the read or launch_external_tool permission" do
@@ -71,6 +101,41 @@ describe Lti::Concerns::ParentFrame do
 
         it { is_expected.to be_nil }
       end
+
+      context "when parent_frame_context is malformed" do
+        before do
+          allow(controller).to receive(:parent_frame_context).and_return("10000000000001uhoh")
+        end
+
+        it "captures an error" do
+          subject
+          error_report = ErrorReport.last
+          expect(error_report.message).to include("Invalid CSP header for nested LTI launch")
+          expect(error_report.data).to include("query_params" => "hello=world")
+        end
+      end
+    end
+  end
+
+  describe "allow_trusted_tools_to_embed_this_page!" do
+    let(:tool_context) { Account.default }
+
+    before do
+      controller.instance_variable_set(:@domain_root_account, tool_context)
+      allow(controller).to receive(:request).and_return(double(host: "instructure.com"))
+      allow(tool_context).to receive(:cached_tool_domains).with(internal_service_only: true).and_return(["mytool.example.com"])
+    end
+
+    it "adds trusted tool origins to the Content-Security-Policy" do
+      controller.send(:allow_trusted_tools_to_embed_this_page!)
+      expect(controller.send(:csp_frame_ancestors)).to include("https://mytool.example.com")
+    end
+
+    it "adds allows the trusted too to use http in development" do
+      expect(Rails.env).to receive(:development?).and_return(true)
+      controller.send(:allow_trusted_tools_to_embed_this_page!)
+      expect(controller.send(:csp_frame_ancestors)).to include("https://mytool.example.com")
+      expect(controller.send(:csp_frame_ancestors)).to include("http://mytool.example.com")
     end
   end
 end

@@ -131,7 +131,8 @@ class Quizzes::QuizzesController < ApplicationController
         PERMISSIONS: {
           create: can_do(@context.quizzes.temp_record, @current_user, :create),
           manage: can_manage,
-          read_question_banks: can_manage || can_do(@context, @current_user, :read_question_banks)
+          read_question_banks: can_manage || can_do(@context, @current_user, :read_question_banks),
+          manage_assign_to: can_do(@context.quizzes.temp_record, @current_user, :manage_assign_to),
         },
         FLAGS: {
           question_banks: feature_enabled?(:question_banks),
@@ -153,7 +154,10 @@ class Quizzes::QuizzesController < ApplicationController
         SIS_INTEGRATION_SETTINGS_ENABLED: sis_integration_settings_enabled,
         NEW_QUIZZES_SELECTED: quiz_engine_selection,
         SHOW_SPEED_GRADER_LINK: @current_user.present? && context.allows_speed_grader? && context.grants_any_right?(@current_user, :manage_grades, :view_all_grades),
+        VALID_DATE_RANGE: CourseDateRange.new(@context),
+        HAS_GRADING_PERIODS: @context.grading_periods?,
       }
+      set_section_list_js_env
       if @context.is_a?(Course) && @context.grants_right?(@current_user, session, :read)
         hash[:COURSE_ID] = @context.id.to_s
       end
@@ -249,7 +253,7 @@ class Quizzes::QuizzesController < ApplicationController
 
       setup_attachments
       submission_counts if @quiz.grants_right?(@current_user, session, :grade) || @quiz.grants_right?(@current_user, session, :read_statistics)
-      @stored_params = (@submission.temporary_data rescue nil) if params[:take] && @submission && (@submission.untaken? || @submission.preview?)
+      @stored_params = @submission.temporary_data if params[:take] && @submission && (@submission.untaken? || @submission.preview?)
       @stored_params ||= {}
       hash = {
         ATTACHMENTS: @attachments.to_h { |_, a| [a.id, attachment_hash(a)] },
@@ -259,9 +263,12 @@ class Quizzes::QuizzesController < ApplicationController
         QUIZ: quiz_json(@quiz, @context, @current_user, session),
         QUIZ_DETAILS_URL: course_quiz_managed_quiz_data_url(@context.id, @quiz.id),
         QUIZZES_URL: course_quizzes_url(@context),
-        MAX_GROUP_CONVERSATION_SIZE: Conversation.max_group_conversation_size
+        MAX_GROUP_CONVERSATION_SIZE: Conversation.max_group_conversation_size,
+        VALID_DATE_RANGE: CourseDateRange.new(@context),
+        HAS_GRADING_PERIODS: @context.grading_periods?,
+        DUE_DATE_REQUIRED_FOR_ACCOUNT: AssignmentUtil.due_date_required_for_account?(@context),
       }
-
+      set_section_list_js_env
       append_sis_data(hash)
       js_env(hash)
       conditional_release_js_env(@quiz.assignment, includes: [:rule])
@@ -329,13 +336,12 @@ class Quizzes::QuizzesController < ApplicationController
       @banks_hash = get_banks(@quiz)
 
       if (@has_student_submissions = @quiz.has_student_submissions?)
-        flash[:notice] = t("notices.has_submissions_already", "Keep in mind, some students have already taken or started taking this quiz")
+        flash.now[:notice] = t("notices.has_submissions_already", "Keep in mind, some students have already taken or started taking this quiz")
       end
 
       regrade_options = @quiz.current_quiz_question_regrades.to_h do |qqr|
         [qqr.quiz_question_id, qqr.regrade_option]
       end
-      sections = @context.course_sections.active
 
       max_name_length_required_for_account = AssignmentUtil.name_length_required_for_account?(@context)
       max_name_length = AssignmentUtil.assignment_max_name_length(@context)
@@ -344,18 +350,10 @@ class Quizzes::QuizzesController < ApplicationController
         ASSIGNMENT_ID: @assignment.present? ? @assignment.id : nil,
         ASSIGNMENT_OVERRIDES: assignment_overrides_json(@quiz.overrides_for(@current_user,
                                                                             ensure_set_not_empty: true),
-                                                        @current_user),
+                                                        @current_user,
+                                                        include_names: true),
         DUE_DATE_REQUIRED_FOR_ACCOUNT: AssignmentUtil.due_date_required_for_account?(@context),
         QUIZ: quiz_json(@quiz, @context, @current_user, session),
-        SECTION_LIST: sections.map do |section|
-          {
-            id: section.id,
-            name: section.name,
-            start_at: section.start_at,
-            end_at: section.end_at,
-            override_course_and_term_dates: section.restrict_enrollments_to_section_dates
-          }
-        end,
         QUIZZES_URL: course_quizzes_url(@context),
         QUIZ_IP_FILTERS_URL: api_v1_course_quiz_ip_filters_url(@context, @quiz),
         CONTEXT_ACTION_SOURCE: :quizzes,
@@ -368,6 +366,8 @@ class Quizzes::QuizzesController < ApplicationController
         MAX_NAME_LENGTH: max_name_length,
         IS_MODULE_ITEM: @quiz.is_module_item?
       }
+
+      set_section_list_js_env
 
       if @context.grading_periods?
         hash[:active_grading_periods] = GradingPeriod.json_for(@context, @current_user)
@@ -508,7 +508,7 @@ class Quizzes::QuizzesController < ApplicationController
               old_assignment.id = @quiz.assignment.id
 
               @quiz.assignment.post_to_sis = params[:post_to_sis] == "1"
-              @quiz.assignment.validate_overrides_for_sis(overrides) unless overrides.nil?
+              @quiz.assignment.validate_overrides_for_sis(prepared_batch) if overrides
 
               @quiz.assignment.important_dates = value_to_boolean(params[:important_dates])
             end
@@ -555,11 +555,13 @@ class Quizzes::QuizzesController < ApplicationController
 
         if @quiz.assignment && (@overrides_affected.to_i > 0 || cached_due_dates_changed || created_quiz)
           @quiz.assignment.clear_cache_key(:availability)
-          DueDateCacher.recompute(@quiz.assignment, update_grades: true, executing_user: @current_user)
+          SubmissionLifecycleManager.recompute(@quiz.assignment, update_grades: true, executing_user: @current_user)
         end
 
-        flash[:notice] = t("Quiz successfully updated")
-        format.html { redirect_to named_context_url(@context, :context_quiz_url, @quiz) }
+        format.html do
+          flash[:notice] = t("Quiz successfully updated")
+          redirect_to named_context_url(@context, :context_quiz_url, @quiz)
+        end
         format.json { render json: @quiz.as_json(include: { assignment: { include: :assignment_group } }) }
       end
     end
@@ -730,7 +732,7 @@ class Quizzes::QuizzesController < ApplicationController
       js_env GRADE_BY_QUESTION: @current_user&.preferences&.dig(:enable_speedgrader_grade_by_question)
       if authorized_action(@submission, @current_user, :read)
         if @current_user && !@quiz.visible_to_user?(@current_user)
-          flash[:notice] = t "notices.submission_doesnt_count", "This quiz will no longer count towards your grade."
+          flash.now[:notice] = t "notices.submission_doesnt_count", "This quiz will no longer count towards your grade."
         end
         dont_show_user_name = @submission.quiz.anonymous_submissions || (!@submission.user || @submission.user == @current_user)
         add_crumb((dont_show_user_name ? t(:default_history_crumb, "History") : @submission.user.name))
@@ -776,7 +778,11 @@ class Quizzes::QuizzesController < ApplicationController
       @students = @students.name_like(params[:search_term]) if params[:search_term].present?
       @students = @students.distinct.order_by_sortable_name
       @students = @students.order(:uuid) if @quiz.survey? && @quiz.anonymous_submissions
-      last_updated_at = Time.parse(params[:last_updated_at]) rescue nil
+      begin
+        last_updated_at = Time.parse(params[:last_updated_at]) if params[:last_updated_at]
+      rescue ArgumentError
+        # ignore
+      end
       respond_to do |format|
         format.html do
           @students = @students.paginate(page: params[:page], per_page: 50)
@@ -961,7 +967,7 @@ class Quizzes::QuizzesController < ApplicationController
     return unless quiz_submission_active?
 
     @show_embedded_chat = false
-    flash[:notice] = t("notices.less_than_allotted_time", "You started this quiz near when it was due, so you won't have the full amount of time to take the quiz.") if @submission.less_than_allotted_time?
+    flash.now[:notice] = t("notices.less_than_allotted_time", "You started this quiz near when it was due, so you won't have the full amount of time to take the quiz.") if @submission.less_than_allotted_time?
     if params[:question_id] && !valid_question?(@submission, params[:question_id])
       redirect_to course_quiz_url(@context, @quiz) and return
     end
@@ -1111,8 +1117,8 @@ class Quizzes::QuizzesController < ApplicationController
                quiz_version: quiz.version_number,
                assignment_id: quiz.assignment_id,
                assignment_version: quiz.assignment&.version_number }
-    prepared_batch[:overrides_to_create].each { |override| override.assign_attributes(params) }
-    prepared_batch[:overrides_to_update].each { |override| override.assign_attributes(params) }
+    prepared_batch[:overrides_to_create].each { |override| override.assign_attributes(params) unless override.context_module_id }
+    prepared_batch[:overrides_to_update].each { |override| override.assign_attributes(params) unless override.context_module_id }
   end
 
   def hide_quiz?
@@ -1165,5 +1171,17 @@ class Quizzes::QuizzesController < ApplicationController
       selection
     end
     selection
+  end
+
+  def set_section_list_js_env
+    js_env SECTION_LIST: @context.course_sections.active.map { |section|
+      {
+        id: section.id,
+        name: section.name,
+        start_at: section.start_at,
+        end_at: section.end_at,
+        override_course_and_term_dates: section.restrict_enrollments_to_section_dates
+      }
+    }
   end
 end

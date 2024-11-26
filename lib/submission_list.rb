@@ -18,9 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require "hashery/dictionary"
-
-# Contains a dictionary of arrays with hashes in them. This is so that
+# Contains a hash of arrays with hashes in them. This is so that
 # we can get all the submissions for a course grouped by date and
 # ordered by date, person, then assignment.  Since working with this is
 # a loop in a loop in a loop, it gets a little awkward for controllers
@@ -141,25 +139,15 @@ class SubmissionList
     list.each(&)
   end
 
+  DateAndGraders = Struct.new(:date, :graders)
   # An array of days with an array of grader open structs for that day and course.
-  # TODO - This needes to be refactored, it is way slow and I cant figure out why.
   def days
-    # start = Time.now
-    # current = Time.now
-    # puts "----------------------------------------------"
-    # puts "starting"
-    # puts "---------------------------------------------------------------------------------"
     list.map do |day, _value|
-      # puts "-----------------------------------------------item #{Time.now - current}----------------------------"
-      # current = Time.now
-      OpenObject.new(date: day, graders: graders_for_day(day))
+      DateAndGraders.new(day, graders_for_day(day))
     end
-    # puts "----------------------------------------------"
-    # puts Time.now - start
-    # puts "---------------------------------------------------------------------------------"
-    # foo
   end
 
+  SubmissionEntry = Struct.new(*VALID_KEYS, keyword_init: true)
   # A filtered list of hashes of all submission versions that change the
   # grade with all the meta data finally included. This list can be sorted
   # and displayed.
@@ -168,12 +156,8 @@ class SubmissionList
 
     @submission_entries = filtered_submissions.map do |s|
       entry = current_grade_map[s[:id]]
-      s[:current_grade] = entry.grade
-      s[:current_graded_at] = entry.graded_at
-      s[:current_grader] = entry.grader
-      s
+      SubmissionEntry.new(**s.slice(*VALID_KEYS), current_grade: entry.grade, current_graded_at: entry.graded_at, current_grader: entry.grader)
     end
-    trim_keys(@submission_entries)
   end
 
   # A cleaner look at a SubmissionList
@@ -183,34 +167,36 @@ class SubmissionList
 
   protected
 
+  AssignmentsForGrader = Struct.new(:assignments, :name, :grader_id)
   # Returns an array of graders with an array of assignment open structs
   def graders_for_day(day)
     hsh = list[day].each_with_object({}) do |submission, h|
       grader = submission[:grader]
-      h[grader] ||= OpenObject.new(
-        assignments: assignments_for_grader_and_day(grader, day),
-        name: grader,
-        grader_id: submission[:grader_id]
+      h[grader] ||= AssignmentsForGrader.new(
+        assignments_for_grader_and_day(grader, day),
+        grader,
+        submission[:grader_id]
       )
     end
     hsh.values
   end
 
+  AssignmentsForGraderAndDay = Struct.new(:name, :assignment_id, :submissions, :submission_count)
   # Returns an array of assignments with an array of submission open structs.
   def assignments_for_grader_and_day(grader, day)
     hsh = submission_entries.find_all { |e| e[:grader] == grader and e[:graded_on] == day }.each_with_object({}) do |submission, h|
       assignment = submission[:assignment_name]
-      h[assignment] ||= OpenObject.new(
-        name: assignment,
-        assignment_id: submission[:assignment_id],
-        submissions: []
+      h[assignment] ||= AssignmentsForGraderAndDay.new(
+        assignment,
+        submission[:assignment_id],
+        []
       )
 
-      h[assignment].submissions << OpenObject.new(submission)
+      h[assignment].submissions << submission
     end
 
     hsh.each_value do |v|
-      v["submissions"] = Canvas::ICU.collate_by(v.submissions, &:student_name)
+      v.submissions = Canvas::ICU.collate_by(v.submissions, &:student_name)
       v.submission_count = v.submissions.size
     end
 
@@ -221,12 +207,13 @@ class SubmissionList
   # all the meta data we need and no banned keys included.
   def process
     @list = submission_entries.sort_by { |a| [a[:graded_at] ? -a[:graded_at].to_f : CanvasSort::Last, a[:safe_grader_id], a[:assignment_id]] }
-                              .each_with_object(Hashery::Dictionary.new) do |se, d|
+                              .each_with_object({}) do |se, d|
       d[se[:graded_on]] ||= []
       d[se[:graded_on]] << se
     end
   end
 
+  CurrentGrade = Struct.new(:grade, :graded_at, :grader)
   # A hash of the current grades of each submission, keyed by submission.id
   def current_grade_map
     @current_grade_map ||= course.submissions.not_placeholder.each_with_object({}) do |submission, hash|
@@ -235,17 +222,9 @@ class SubmissionList
                end
       grader ||= I18n.t("gradebooks.history.graded_on_submission", "Graded on submission")
 
-      hash[submission.id] = OpenObject.new(grade: translate_grade(submission),
-                                           graded_at: submission.graded_at,
-                                           grader:)
-    end
-  end
-
-  # Ensures that the final product only has approved keys in it.  This
-  # makes our final product much more yummy.
-  def trim_keys(list)
-    list.each do |hsh|
-      hsh.slice!(*VALID_KEYS)
+      hash[submission.id] = CurrentGrade.new(translate_grade(submission),
+                                             submission.graded_at,
+                                             grader)
     end
   end
 
@@ -320,9 +299,9 @@ class SubmissionList
 
   # A list of all versions in YAML format
   def yaml_list
-    @yaml_list ||= course.submissions.not_placeholder.preload(:versions).map do |s|
+    @yaml_list ||= course.submissions.not_placeholder.preload(:versions).flat_map do |s|
       s.versions.map(&:yaml)
-    end.flatten
+    end
   end
 
   # A list of hashes.  All the versions of all the submissions for a

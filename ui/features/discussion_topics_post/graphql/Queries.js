@@ -20,10 +20,8 @@ import {AnonymousUser} from './AnonymousUser'
 import {Discussion} from './Discussion'
 import {Course} from './Course'
 import {DiscussionEntry} from './DiscussionEntry'
-import {DiscussionEntryDraft} from './DiscussionEntryDraft'
 import gql from 'graphql-tag'
 import {PageInfo} from './PageInfo'
-import {User} from './User'
 import {GroupSet} from './GroupSet'
 import {Group} from './Group'
 
@@ -37,24 +35,15 @@ export const DISCUSSION_QUERY = gql`
     $userSearchId: String
     $filter: DiscussionFilterType
     $sort: DiscussionSortOrderType
-    $courseID: String
-    $rolePillTypes: [String!] = ["TaEnrollment", "TeacherEnrollment", "DesignerEnrollment"]
     $unreadBefore: String
   ) {
     legacyNode(_id: $discussionID, type: Discussion) {
       ... on Discussion {
         ...Discussion
-        editor(courseId: $courseID, roleTypes: $rolePillTypes) {
-          ...User
-          courseRoles(courseId: $courseID, roleTypes: $rolePillTypes)
-        }
-        author(courseId: $courseID, roleTypes: $rolePillTypes) {
-          ...User
-          courseRoles(courseId: $courseID, roleTypes: $rolePillTypes)
-        }
         anonymousAuthor {
           ...AnonymousUser
         }
+        sortOrder(sort: $sort)
         discussionEntriesConnection(
           after: $page
           first: $perPage
@@ -67,25 +56,9 @@ export const DISCUSSION_QUERY = gql`
         ) {
           nodes {
             ...DiscussionEntry
-            editor(courseId: $courseID, roleTypes: $rolePillTypes) {
-              ...User
-              courseRoles(courseId: $courseID, roleTypes: $rolePillTypes)
-            }
-            author(courseId: $courseID, roleTypes: $rolePillTypes) {
-              ...User
-              courseRoles(courseId: $courseID, roleTypes: $rolePillTypes)
-            }
             anonymousAuthor {
               ...AnonymousUser
             }
-          }
-          pageInfo {
-            ...PageInfo
-          }
-        }
-        discussionEntryDraftsConnection {
-          nodes {
-            ...DiscussionEntryDraft
           }
           pageInfo {
             ...PageInfo
@@ -101,32 +74,57 @@ export const DISCUSSION_QUERY = gql`
         searchEntryCount(filter: $filter, searchTerm: $searchTerm)
         groupSet {
           ...GroupSet
-          groupsConnection {
-            nodes {
-              ...Group
-            }
+          groups {
+            ...Group
           }
         }
       }
     }
   }
-  ${User.fragment}
   ${AnonymousUser.fragment}
   ${Discussion.fragment}
   ${DiscussionEntry.fragment}
-  ${DiscussionEntryDraft.fragment}
   ${PageInfo.fragment}
   ${GroupSet.fragment}
   ${Group.fragment}
 `
+export const STUDENT_DISCUSSION_QUERY = gql`
+  query GetDiscussionQuery(
+    $discussionID: ID!
+    $perPage: Int!
+    $userSearchId: String
+    $sort: DiscussionSortOrderType
+  ) {
+    legacyNode(_id: $discussionID, type: Discussion) {
+      ... on Discussion {
+        ...Discussion
+        anonymousAuthor {
+          ...AnonymousUser
+        }
+        sortOrder(sort: $sort)
+        discussionEntriesConnection(sortOrder: $sort, userSearchId: $userSearchId) {
+          nodes {
+            _id
+            rootEntryId
+            anonymousAuthor {
+              ...AnonymousUser
+            }
+            rootEntryPageNumber(perPage: $perPage)
+          }
+          pageInfo {
+            ...PageInfo
+          }
+        }
+      }
+    }
+  }
+  ${AnonymousUser.fragment}
+  ${Discussion.fragment}
+  ${PageInfo.fragment}
+`
 
 export const DISCUSSION_ENTRIES_BY_STUDENT_QUERY = gql`
-  query GetDiscussionEntriesByStudentQuery(
-    $discussionID: ID!
-    $userSearchId: String!
-    $courseID: String
-    $rolePillTypes: [String!] = ["TaEnrollment", "TeacherEnrollment", "DesignerEnrollment"]
-  ) {
+  query GetDiscussionEntriesByStudentQuery($discussionID: ID!, $userSearchId: String!) {
     legacyNode(_id: $discussionID, type: Discussion) {
       ... on Discussion {
         id
@@ -134,14 +132,6 @@ export const DISCUSSION_ENTRIES_BY_STUDENT_QUERY = gql`
         discussionEntriesConnection(userSearchId: $userSearchId) {
           nodes {
             ...DiscussionEntry
-            editor(courseId: $courseID, roleTypes: $rolePillTypes) {
-              ...User
-              courseRoles(courseId: $courseID, roleTypes: $rolePillTypes)
-            }
-            author(courseId: $courseID, roleTypes: $rolePillTypes) {
-              ...User
-              courseRoles(courseId: $courseID, roleTypes: $rolePillTypes)
-            }
             anonymousAuthor {
               ...AnonymousUser
             }
@@ -151,7 +141,6 @@ export const DISCUSSION_ENTRIES_BY_STUDENT_QUERY = gql`
     }
   }
   ${AnonymousUser.fragment}
-  ${User.fragment}
   ${DiscussionEntry.fragment}
 `
 
@@ -163,8 +152,6 @@ export const DISCUSSION_SUBENTRIES_QUERY = gql`
     $first: Int
     $last: Int
     $sort: DiscussionSortOrderType
-    $courseID: String
-    $rolePillTypes: [String!] = ["TaEnrollment", "TeacherEnrollment", "DesignerEnrollment"]
     $relativeEntryId: ID
     $includeRelativeEntry: Boolean
     $beforeRelativeEntry: Boolean
@@ -172,14 +159,6 @@ export const DISCUSSION_SUBENTRIES_QUERY = gql`
     legacyNode(_id: $discussionEntryID, type: DiscussionEntry) {
       ... on DiscussionEntry {
         ...DiscussionEntry
-        editor(courseId: $courseID, roleTypes: $rolePillTypes) {
-          ...User
-          courseRoles(courseId: $courseID, roleTypes: $rolePillTypes)
-        }
-        author(courseId: $courseID, roleTypes: $rolePillTypes) {
-          ...User
-          courseRoles(courseId: $courseID, roleTypes: $rolePillTypes)
-        }
         anonymousAuthor {
           ...AnonymousUser
         }
@@ -195,14 +174,6 @@ export const DISCUSSION_SUBENTRIES_QUERY = gql`
         ) {
           nodes {
             ...DiscussionEntry
-            editor(courseId: $courseID, roleTypes: $rolePillTypes) {
-              ...User
-              courseRoles(courseId: $courseID, roleTypes: $rolePillTypes)
-            }
-            author(courseId: $courseID, roleTypes: $rolePillTypes) {
-              ...User
-              courseRoles(courseId: $courseID, roleTypes: $rolePillTypes)
-            }
             anonymousAuthor {
               ...AnonymousUser
             }
@@ -214,10 +185,28 @@ export const DISCUSSION_SUBENTRIES_QUERY = gql`
       }
     }
   }
-  ${User.fragment}
   ${AnonymousUser.fragment}
   ${DiscussionEntry.fragment}
   ${PageInfo.fragment}
+`
+
+export const DISCUSSION_ENTRY_ALL_ROOT_ENTRIES_QUERY = gql`
+  query GetDiscussionEntryAllRootEntriesQuery($discussionEntryID: ID!) {
+    legacyNode(_id: $discussionEntryID, type: DiscussionEntry) {
+      ... on DiscussionEntry {
+        id
+        _id
+        allRootEntries {
+          ...DiscussionEntry
+          anonymousAuthor {
+            ...AnonymousUser
+          }
+        }
+      }
+    }
+  }
+  ${AnonymousUser.fragment}
+  ${DiscussionEntry.fragment}
 `
 
 export const COURSE_USER_QUERY = gql`

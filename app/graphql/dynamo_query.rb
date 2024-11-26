@@ -50,7 +50,7 @@ class DynamoQuery
     @partition_value = value
     @sort_key = sort_key
     @scan_index_forward = scan_index_forward
-    @key_condition_expression = +"#{partition_key} = :id"
+    @key_condition_expression = "#{partition_key} = :id"
     @key_condition_expression << " AND #{key_condition_expression}" if key_condition_expression
     @expression_attribute_values = expression_attribute_values.merge(":id" => value)
   end
@@ -76,10 +76,8 @@ class DynamoQuery
     query.items.each(&)
   end
 
-  def map
-    res = []
-    each { |item| res << yield(item) }
-    res
+  def map(&)
+    each.map(&)
   end
 
   def first

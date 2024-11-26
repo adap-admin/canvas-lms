@@ -1,6 +1,6 @@
 # Using Docker for Canvas Development
 
-_*This document and its associated scripts are deprecated in favor of the `inst` CLI. Go [here](./../../inst-cli/doc/docker/developing_with_docker.md) for more info.*_
+_*Instructure employees should use the `inst` CLI. Go [here](./../../inst-cli/doc/docker/developing_with_docker.md) for more info.*_
 
 You can use Docker in your development environment for a more seamless
 way to get started developing Canvas.
@@ -114,73 +114,50 @@ all be done with one command:
 Changes you're making are not showing up? See the Caveats section below.
 
 
-### With an IDE
-Canvas supports [ruby-debug-ide](https://github.com/ruby-debug/ruby-debug-ide) to establish
-communication between the debugger engine and IDE (RubyMine or VS Code)
+### With VS Code
 
-For full instructions on setting up RubyMine or VS Code to visually debug Canvas
-Please see [this page](https://instructure.atlassian.net/wiki/spaces/CE/pages/4287561732/Debugging+Dockerized+Canvas+with+RubyMine+or+Visual+Studio+Code).
-
-#### Example VS Code Configuration
-1. Add `docker-compose/rdebug-ide.override.yml` to the `COMPOSE_FILE` variable in the `.env` file. Example:
+First you'll need to enable the specific debug configuration for VSCode by
+adding `docker-compose/rdbg.override.yml` to the `COMPOSE_FILE` variable in the
+`.env` file. Example:
 ```
-COMPOSE_FILE=docker-compose.yml:docker-compose.override.yml:docker-compose/rdebug-ide.override.yml
-```
-2. Install the Ruby extension from [the Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=rebornix.Ruby)
-3. Create a .vscode/launch.json file at the repo root, with the following contents:
-```json
-{
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "name": "Listen for rdebug-ide",
-      "type": "Ruby",
-      "request": "attach",
-      "remoteHost": "127.0.0.1",
-      "remotePort": "1234",
-      "remoteWorkspaceRoot": "/usr/src/app",
-      "cwd": "${workspaceRoot}"
-    }
-  ]
-}
-```
-4. Press F5, set breakpoints, and start debugging!
-
-### Byebug
-
-A byebug server is running in development mode on the web and job containers
-to allow you to remotely control any sessions where `byebug` has yielded
-execution. To use it, you will need to enable `REMOTE_DEBUGGING_ENABLED` in your
-`docker-compose.<user>.override.yml` file in your app's root directory. If you don't have
-this file, you will need to create it and add the following:
-
-```
-version: '2.3'
-services:
-  web:
-    environment:
-      REMOTE_DEBUGGING_ENABLED: 'true'
+COMPOSE_FILE=docker-compose.yml:docker-compose.override.yml:docker-compose/rdbg.override.yml
 ```
 
-Make sure you add this new file to your `COMPOSE_FILE` var in `.env`.
+Once you have built your container, open the folder in VSCode.
+If you don't already have the Dev Containers extension installed, it will prompt you that it is a recommended extension.
+Once that is installed, it should prompt you to reopen the folder in the container.
+Go ahead and do so.
+Debug configurations will already be set up.
+You can attach to the currently running web server, or run specs for the currently active spec file.
 
-You can attach to the byebug server once the container is started:
+### Debugging
+
+A Ruby debug server is running in development mode on the web and job containers
+to allow you to remotely control any sessions where the debugger has yielded
+execution. To use it, you will need to enable `REMOTE_DEBUGGING_ENABLED`.
+You can easily add it by adding `docker-compose/rdbg.override.yml` to the
+`COMPOSE_FILE` variable in the `.env` file. Example:
+```
+COMPOSE_FILE=docker-compose.yml:docker-compose.override.yml:docker-compose/rdbg.override.yml
+```
+
+You can attach to the server once the container is started:
 
 Debugging web:
 
 ```
-docker-compose exec web bin/byebug-remote
+docker-compose exec web bin/rdbg --attach
 ```
 
 Debugging jobs:
 
 ```
-docker-compose exec jobs bin/byebug-remote
+docker-compose exec jobs bin/rdbg --attach
 ```
 
 ### Prefer pry?
 
-Unfortunately, you can't start a pry session in a remote byebug session. What
+Unfortunately, you can't start a pry session in a remote debug session. What
 you can do instead is use `pry-remote`.
 
 1. Add `pry-remote` to your Gemfile
@@ -265,13 +242,6 @@ docker-compose run --rm js-tests yarn test:jest:watch ui/features/speed_grader/r
 
 To enable Selenium: Add `docker-compose/selenium.override.yml` to your `COMPOSE_FILE` var in `.env`.
 
-For M1 Mac users using Chrome, the official selenium images are not ARM compatible so a standalone chromium image must be used.
-In the selenium.override.yml file, replace the image with the following below.
-
-```sh
-image: seleniarm/standalone-chromium:latest
-```
-
 The container used to run the selenium browser is only started when spinning up
 all docker-compose containers, or when specified explicitly. The selenium
 container needs to be started before running any specs that require selenium.
@@ -284,11 +254,7 @@ docker-compose up -d selenium-hub
 
 With the container running, you should be able to open a VNC session:
 
-```sh
-open vnc://secret:secret@seleniumff.docker          (firefox)
-open vnc://secret:secret@seleniumch.docker:5901     (chrome)
-open vnc://secret:secret@seleniumedge.docker:5902   (edge)
-```
+<http://127.0.0.1:7900/?autoconnect=1&resize=scale&password=secret>
 
 Now just run your choice of selenium specs:
 
@@ -328,27 +294,12 @@ colorized rails log and a browser screenshot taken at the time of the failure.
 
 ## Extra Services
 
-### Cassandra
-
-If you're using the analytics package, you'll also need Cassandra. The
-Cassandra configuration isn't enabled by default. Add `docker-compose/cassandra.override.yml` to your `COMPOSE_FILE` var in `.env`
-
-Then:
-- Uncomment configuration in config/cassandra.yml
-- See config/cassandra.yml.example for further setup instructions
-- to invoke cqlsh as directed in cassandra.yml.example use:
-```sh
-docker-compose exec cassandra cqlsh
-```
-
 ### Mail Catcher
+Mail Catcher is used to both send and view email in a development environment.
 
-To enable Mail Catcher: Add `docker-compose/mailcatcher.override.yml` to your `COMPOSE_FILE` var in `.env`.
+To enable Mail Catcher: Add `docker-compose/mailcatcher.override.yml` to your `COMPOSE_FILE` var in `.env`. Then you can `docker compose up mailcatcher`.
 
-Email is often sent through background jobs if you spin up the `jobs` container.
-If you would like to test or preview any notifications, simply trigger the email
-through its normal actions, and it should immediately show up in the emulated
-webmail inbox available here: http://mail.canvas.docker/
+Email is often sent through background jobs in the jobs container. If you would like to test or preview any notifications, simply trigger the email through its normal actions, and it should immediately show up in the emulated webmail inbox available here: <http://mail.canvas.docker>
 
 ### Canvas RCE API
 

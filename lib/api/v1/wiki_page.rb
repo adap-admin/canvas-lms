@@ -40,6 +40,7 @@ module Api::V1::WikiPage
     hash["html_url"] = polymorphic_url([wiki_page.context, wiki_page])
     hash["todo_date"] = wiki_page.todo_date
     hash["publish_at"] = wiki_page.publish_at
+    hash["editor"] = wiki_page.block_editor ? "block_editor" : "rce" if @context.account.feature_enabled?(:block_editor)
 
     hash["updated_at"] = wiki_page.revised_at
     if opts[:include_assignment] && wiki_page.for_assignment?
@@ -51,7 +52,16 @@ module Api::V1::WikiPage
     end
     locked_json(hash, wiki_page, current_user, "page", deep_check_if_needed: opts[:deep_check_if_needed])
     if include_body && !hash["locked_for_user"] && !hash["lock_info"]
-      hash["body"] = api_user_content(wiki_page.body, wiki_page.context)
+      if @context.account.feature_enabled?(:block_editor) && wiki_page.block_editor
+        hash["block_editor_attributes"] = {
+          id: wiki_page.block_editor.id,
+          version: wiki_page.block_editor.editor_version,
+          blocks: wiki_page.block_editor.blocks
+        }
+        hash["body"] = wiki_page.block_editor.viewer_iframe_html
+      else
+        hash["body"] = api_user_content(wiki_page.body, wiki_page.context)
+      end
       wiki_page.context_module_action(current_user, wiki_page.context, :read)
     end
     if opts[:master_course_status]
@@ -60,8 +70,10 @@ module Api::V1::WikiPage
     hash
   end
 
-  def wiki_pages_json(wiki_pages, current_user, session, opts = {})
-    wiki_pages.map { |page| wiki_page_json(page, current_user, session, false, opts) }
+  def wiki_pages_json(wiki_pages, current_user, session, include_body = false, opts = {})
+    ActiveRecord::Associations.preload(wiki_pages, :assignment)
+    DatesOverridable.preload_override_data_for_objects(wiki_pages.filter_map(&:assignment))
+    wiki_pages.map { |page| wiki_page_json(page, current_user, session, include_body, opts) }
   end
 
   def wiki_page_revision_json(version, _current_user, _session, include_content = true, latest_version = nil)

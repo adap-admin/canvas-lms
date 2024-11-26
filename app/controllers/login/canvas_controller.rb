@@ -34,9 +34,15 @@ class Login::CanvasController < ApplicationController
     @headers = false
     flash.now[:error] = params[:message] if params[:message]
     flash.now[:notice] = t("Your password has been changed.") if params[:password_changed] == "1"
-    @include_recaptcha = recaptcha_enabled?
+    @include_recaptcha = recaptcha_enabled?(failsafe: false)
 
-    maybe_render_mobile_login
+    # TODO: remove feature flag check and fallback when `login_registration_ui_identity` is no longer needed
+    if @domain_root_account.feature_enabled? :login_registration_ui_identity
+      render_new_login
+    else
+      # fallback to maintain original behavior
+      maybe_render_mobile_login
+    end
   end
 
   def create
@@ -99,22 +105,31 @@ class Login::CanvasController < ApplicationController
     end
 
     if !found && params[:pseudonym_session]
-      pseudonym = Pseudonym.authenticate(params[:pseudonym_session],
-                                         @domain_root_account.trusted_account_ids,
-                                         request.remote_ip)
-      if pseudonym && ![:too_many_attempts, :impossible_credentials].include?(pseudonym)
+      pseudonym = Pseudonym.authenticate(params[:pseudonym_session], @domain_root_account.trusted_account_ids)
+      if pseudonym.is_a?(Pseudonym)
         @pseudonym_session = PseudonymSession.new(pseudonym, params[:pseudonym_session][:remember_me] == "1")
         found = @pseudonym_session.save
       end
     end
 
-    if pseudonym == :impossible_credentials
-      unsuccessful_login t("Invalid username or password")
+    login_error = @pseudonym_session&.login_error || pseudonym
+    case login_error
+    when :remaining_attempts_2, :remaining_attempts_1, :final_attempt
+      attempts = Canvas::Security::LoginRegistry::WARNING_ATTEMPTS[login_error]
+      if login_error == :final_attempt
+        unsuccessful_login t("We've received several incorrect username or password entries. To protect your account, it has been locked. Please contact your system administrator.")
+      else
+        unsuccessful_login t("Please verify your username or password and try again. After %{attempts} more attempt(s), your account will be locked.", attempts:)
+      end
       return
-    end
-
-    if pseudonym == :too_many_attempts || @pseudonym_session.too_many_attempts?
+    when :impossible_credentials
+      unsuccessful_login t("Please verify your username or password and try again.")
+      return
+    when :too_many_attempts
       unsuccessful_login t("Too many failed login attempts. Please try again later or contact your system administrator.")
+      return
+    when :too_recent_login
+      unsuccessful_login t("You have recently logged in multiple times too quickly. Please wait a few seconds and try again.")
       return
     end
 
@@ -137,20 +152,21 @@ class Login::CanvasController < ApplicationController
       link_url = Setting.get("invalid_login_faq_url", nil)
       if link_url
         unsuccessful_login t(
-          "Invalid username or password. Trouble logging in? *Check out our Login FAQs*.",
+          "Please verify your username or password and try again. Trouble logging in? *Check out our Login FAQs*.",
           wrapper: view_context.link_to('\1', link_url)
         )
       else
-        unsuccessful_login t("Invalid username or password")
+        unsuccessful_login t("Please verify your username or password and try again.")
       end
     end
   end
 
   protected
 
-  def validate_auth_type
+  def aac
     @domain_root_account.authentication_providers.where(auth_type: params[:controller].sub(%r{^login/}, "")).active.take!
   end
+  alias_method :validate_auth_type, :aac
 
   def unsuccessful_login(message)
     if request.format.json?
@@ -164,17 +180,41 @@ class Login::CanvasController < ApplicationController
                     end
     @errored = true
     @headers = false
-    maybe_render_mobile_login :bad_request
+
+    if @domain_root_account.feature_enabled?(:login_registration_ui_identity)
+      render_new_login(:bad_request)
+    else
+      maybe_render_mobile_login(:bad_request)
+    end
   end
 
   def maybe_render_mobile_login(status = nil)
     if mobile_device?
-      @login_handle_name = @domain_root_account.login_handle_name_with_inference
-      @login_handle_is_email = @login_handle_name == AuthenticationProvider.default_login_handle_name
-      render :mobile_login, layout: "mobile_auth", status:
+      render_mobile_login
     else
-      @aacs_with_buttons = @domain_root_account.authentication_providers.active.select { |aac| aac.class.login_button? }
+      @aacs_with_buttons = auth_providers_with_buttons
       render :new, status:
     end
+  end
+
+  def render_new_login(status = nil)
+    @auth_providers = auth_providers_with_buttons.map do |provider|
+      {
+        id: provider.id,
+        auth_type: provider.auth_type,
+        display_name: provider.class.display_name
+      }
+    end
+    render "login/canvas/new_login", layout: "bare", status: status || :ok
+  end
+
+  def auth_providers_with_buttons
+    @domain_root_account.authentication_providers.active.select { |aac| aac.class.login_button? }
+  end
+
+  def render_mobile_login
+    @login_handle_name = @domain_root_account.login_handle_name_with_inference
+    @login_handle_is_email = @login_handle_name == AuthenticationProvider.default_login_handle_name
+    render :mobile_login, layout: "mobile_auth", status:
   end
 end

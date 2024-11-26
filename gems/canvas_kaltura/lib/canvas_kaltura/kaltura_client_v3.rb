@@ -23,7 +23,7 @@ require "csv"
 require "net/http"
 require "uri"
 require "nokogiri"
-require "multipart"
+require "legacy_multipart"
 
 # Test Console and API Documentation at:
 # http://www.kaltura.com/api_v3/testmeDoc/index.php
@@ -38,7 +38,7 @@ module CanvasKaltura
 
     def initialize
       config = CanvasKaltura::ClientV3.config
-      @host = config["domain"]
+      @host, @port = config["domain"].split(":") if config["domain"] && !config["domain"].empty? # rubocop:disable Rails/Present
       @resource_domain = config["resource_domain"]
       @endpoint = config["endpoint"]
       @partnerId = config["partner_id"]
@@ -276,6 +276,8 @@ module CanvasKaltura
                            ks: @ks,
                            conversionProfileId: -1,
                            csvFileData: KalturaStringIO.new(csv, "bulk_data.csv"))
+      raise "Failed to get bulkUpload result from Kaltura" if result.nil?
+
       unless result.css("logFileUrl").any?
         code = result.css("error > code").first.try(:content)
         message = result.css("error > message").first.try(:content)
@@ -332,7 +334,7 @@ module CanvasKaltura
                           :getDownloadUrl,
                           ks: @ks,
                           id: assetId)
-      return result.content if result
+      result&.content
     end
 
     # This is not a true Kaltura API call, but generates the url for a "playlist"
@@ -361,7 +363,7 @@ module CanvasKaltura
 
     def postRequest(service, action, params)
       requestParams = "service=#{service}&action=#{action}"
-      multipart_body, headers = Multipart::Post.new.prepare_query(params)
+      multipart_body, headers = LegacyMultipart::Post.prepare_query(params)
       response = sendRequest(
         Net::HTTP::Post.new("#{@endpoint}/?#{requestParams}", headers),
         multipart_body
@@ -388,7 +390,8 @@ module CanvasKaltura
     def sendRequest(request, body = nil)
       response = nil
       CanvasKaltura.with_timeout_protector(fallback_timeout_length: 30) do
-        http = Net::HTTP.new(@host, @use_ssl ? Net::HTTP.https_default_port : Net::HTTP.http_default_port)
+        @port ||= @use_ssl ? Net::HTTP.https_default_port : Net::HTTP.http_default_port
+        http = Net::HTTP.new(@host, @port)
         http.use_ssl = @use_ssl
         http.verify_mode = OpenSSL::SSL::VERIFY_NONE if ENV["RAILS_ENV"] == "development"
 

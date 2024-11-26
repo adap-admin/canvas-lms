@@ -29,12 +29,25 @@ class Rubric < ActiveRecord::Base
     end
   end
 
+  class RubricAssessedAlignments < ActiveModel::Validator
+    def validate(record)
+      return if record.criteria.nil?
+
+      ids = record.criteria.pluck(:learning_outcome_id).compact
+      ids_from_results = record.learning_outcome_ids_from_results
+
+      record.errors.add :base, I18n.t("This rubric removes criterions that have learning outcome results") unless (ids_from_results - ids).empty?
+    end
+  end
+
   include Workflow
   include HtmlTextHelper
+  include Trackable
 
   POINTS_POSSIBLE_PRECISION = 4
 
   attr_writer :skip_updating_points_possible
+  attr_accessor :is_duplicate, :is_manually_update
 
   belongs_to :user
   belongs_to :rubric # based on another rubric
@@ -43,14 +56,20 @@ class Rubric < ActiveRecord::Base
   has_many :rubric_associations_with_deleted, class_name: "RubricAssociation", inverse_of: :rubric
   has_many :rubric_assessments, through: :rubric_associations, dependent: :destroy
   has_many :learning_outcome_alignments, -> { where("content_tags.tag_type='learning_outcome' AND content_tags.workflow_state<>'deleted'").preload(:learning_outcome) }, as: :content, inverse_of: :content, class_name: "ContentTag"
+  has_many :learning_outcome_results, -> { active }, through: :rubric_assessments
+  has_many :rubric_criteria, class_name: "RubricCriterion", inverse_of: :rubric, dependent: :destroy
 
   validates :context_id, :context_type, :workflow_state, presence: true
   validates :description, length: { maximum: maximum_text_length, allow_blank: true }
   validates :title, length: { maximum: maximum_string_length, allow_blank: false }
+  validates :button_display, inclusion: { in: %w[numeric emoji letter] }
+  validates :rating_order, inclusion: { in: %w[ascending descending] }
 
   validates_with RubricUniqueAlignments
+  validates_with RubricAssessedAlignments
 
   before_validation :default_values
+  before_save :set_default_hide_points
   before_create :set_root_account_id
   after_save :update_alignments
   after_save :touch_associations
@@ -61,7 +80,7 @@ class Rubric < ActiveRecord::Base
   scope :publicly_reusable, -> { where(reusable: true).order(best_unicode_collation_key("title")) }
   scope :matching, ->(search) { where(wildcard("rubrics.title", search)).order("rubrics.association_count DESC") }
   scope :before, ->(date) { where("rubrics.created_at<?", date) }
-  scope :active, -> { where.not(workflow_state: "deleted") }
+  scope :active, -> { where.not(workflow_state: %w[archived deleted draft]) }
 
   set_policy do
     given { |user, session| context.grants_right?(user, session, :manage_rubrics) }
@@ -77,10 +96,10 @@ class Rubric < ActiveRecord::Base
     can :read
 
     # read_only means "associated with > 1 object for grading purposes"
-    given { |user, session| !read_only && rubric_associations.for_grading.length < 2 && context.grants_any_right?(user, session, :manage_assignments, :manage_assignments_edit) }
+    given { |user, session| !read_only && rubric_associations.for_grading.count < 2 && context.grants_any_right?(user, session, :manage_assignments, :manage_assignments_edit) }
     can :update and can :delete
 
-    given { |user, session| !read_only && rubric_associations.for_grading.length < 2 && context.grants_right?(user, session, :manage_rubrics) }
+    given { |user, session| !read_only && rubric_associations.for_grading.count < 2 && context.grants_right?(user, session, :manage_rubrics) }
     can :update and can :delete
 
     given { |user, session| context.grants_any_right?(user, session, :manage_assignments, :manage_assignments_edit) }
@@ -91,11 +110,40 @@ class Rubric < ActiveRecord::Base
 
     given { |user, session| context.grants_right?(user, session, :read) }
     can :read
+
+    given { |user, session| context.grants_right?(user, session, :manage_rubrics) }
+    can :archive
+
+    given { |user, session| context.grants_right?(user, session, :manage_rubrics) }
+    can :unarchive
   end
 
   workflow do
-    state :active
+    state :active do
+      event :archive, transitions_to: :archived
+    end
+    state :archived do
+      event :unarchive, transitions_to: :active
+    end
+    state :draft
     state :deleted
+  end
+
+  def archive
+    # overrides 'archive' event in workflow to make sure the feature flag is enabled
+    # remove this and 'unarchive' method when feature flag is removed
+    return unless enhanced_rubrics_enabled?
+
+    InstStatsd::Statsd.increment("#{context.class.to_s.downcase}.rubrics.archived")
+    super
+  end
+
+  def unarchive
+    super if enhanced_rubrics_enabled?
+  end
+
+  def draft
+    super if enhanced_rubrics_enabled?
   end
 
   def self.aligned_to_outcomes
@@ -174,6 +222,7 @@ class Rubric < ActiveRecord::Base
     self.workflow_state = "deleted"
     if save
       rubric_associations.in_batches.destroy_all
+      rubric_criteria.in_batches.destroy_all
       true
     end
   end
@@ -242,8 +291,16 @@ class Rubric < ActiveRecord::Base
     OutcomeFriendlyDescription.where(learning_outcome_id: data_outcome_ids)
   end
 
+  def outcome_data
+    return [] unless data_outcome_ids.present?
+
+    LearningOutcome.where(id: data_outcome_ids).map do |outcome|
+      { id: outcome.id, display_name: outcome.display_name }
+    end
+  end
+
   def criteria_object
-    OpenObject.process(data)
+    reconstitute_criteria(data)
   end
 
   def criteria
@@ -275,6 +332,7 @@ class Rubric < ActiveRecord::Base
   def update_with_association(current_user, rubric_params, context, association_params)
     self.free_form_criterion_comments = rubric_params[:free_form_criterion_comments] == "1" if rubric_params[:free_form_criterion_comments]
     self.user ||= current_user
+    self.is_manually_update = association_params[:update_if_existing]
     rubric_params[:hide_score_total] ||= association_params[:hide_score_total]
     @skip_updating_points_possible = association_params[:skip_updating_points_possible]
     update_criteria(rubric_params)
@@ -294,12 +352,20 @@ class Rubric < ActiveRecord::Base
   end
 
   def update_criteria(params)
-    without_versioning(&:save) if new_record?
+    if new_record?
+      self.is_duplicate = ActiveModel::Type::Boolean.new.cast(params[:is_duplicate]) if params[:is_duplicate]
+      without_versioning(&:save)
+    end
     data = generate_criteria(params)
     self.hide_score_total = params[:hide_score_total] if hide_score_total.nil? || (association_count || 0) < 2
     self.data = data.criteria
+    self.button_display = params[:button_display] if params.key?(:button_display)
     self.title = data.title
     self.points_possible = data.points_possible
+    self.hide_points = params[:hide_points]
+    self.rating_order = params[:rating_order] if params.key?(:rating_order)
+    self.workflow_state = params[:workflow_state] if params[:workflow_state]
+    self.is_duplicate = params[:is_duplicate] if params[:is_duplicate]
     save
     self
   end
@@ -393,8 +459,11 @@ class Rubric < ActiveRecord::Base
   end
 
   CriteriaData = Struct.new(:criteria, :points_possible, :title)
+  Criterion = Struct.new(:description, :long_description, :points, :id, :criterion_use_range, :learning_outcome_id, :mastery_points, :ignore_for_scoring, :ratings, :title, :migration_id, :percentage, :order, keyword_init: true)
+  Rating = Struct.new(:description, :long_description, :points, :id, :criterion_id, :migration_id, :percentage, keyword_init: true)
   def generate_criteria(params)
     @used_ids = {}
+    valid_bools = [true, "true", "1"]
     title = params[:title] || t("context_name_rubric", "%{course_name} Rubric", course_name: context.name)
     criteria = []
     (params[:criteria] || {}).each do |idx, criterion_data|
@@ -416,7 +485,7 @@ class Rubric < ActiveRecord::Base
         if outcome
           criterion[:learning_outcome_id] = outcome.id
           criterion[:mastery_points] = ((criterion_data[:mastery_points] || outcome.data[:rubric_criterion][:mastery_points]).to_f rescue nil)
-          criterion[:ignore_for_scoring] = criterion_data[:ignore_for_scoring] == "1"
+          criterion[:ignore_for_scoring] = valid_bools.include?(criterion_data[:ignore_for_scoring])
         end
       end
 
@@ -437,8 +506,49 @@ class Rubric < ActiveRecord::Base
     CriteriaData.new(criteria, points_possible, title)
   end
 
+  def reconstitute_criteria(criteria)
+    criteria.map do |criterion|
+      ratings = criterion[:ratings].map { |rating| Rating.new(**rating.slice(*Rating.members)) }
+      Criterion.new(**criterion.slice(*Criterion.members), ratings:)
+    end
+  end
+
   def total_points_from_criteria(criteria)
     criteria.reject { |c| c[:ignore_for_scoring] }.sum { |c| c[:points] }
+  end
+
+  def reconcile_criteria_models(current_user)
+    return unless enhanced_rubrics_enabled?
+
+    return unless criteria.present? && criteria.is_a?(Array)
+
+    criteria.each.with_index(1) do |old_school_criterion, index|
+      criterion = rubric_criteria.find_by(order: index)
+      if criterion
+        update_params = { description: old_school_criterion[:description],
+                          long_description: old_school_criterion[:long_description],
+                          points: old_school_criterion[:points],
+                          learning_outcome_id: old_school_criterion[:learning_outcome_id],
+                          mastery_points: old_school_criterion[:mastery_points],
+                          ignore_for_scoring: !!old_school_criterion[:ignore_for_scoring],
+                          criterion_use_range: !!old_school_criterion[:criterion_use_range] }
+
+        update_params[:created_by] = current_user if criterion.will_change_with_update(update_params)
+        criterion.update!(update_params)
+      else
+        rubric_criteria.create!(description: old_school_criterion[:description],
+                                long_description: old_school_criterion[:long_description],
+                                points: old_school_criterion[:points],
+                                order: index,
+                                learning_outcome_id: old_school_criterion[:learning_outcome_id],
+                                mastery_points: old_school_criterion[:mastery_points],
+                                ignore_for_scoring: !!old_school_criterion[:ignore_for_scoring],
+                                criterion_use_range: !!old_school_criterion[:criterion_use_range],
+                                root_account_id:,
+                                created_by: current_user)
+      end
+    end
+    rubric_criteria.where("rubric_criteria.order > ?", criteria.length).delete_all
   end
 
   # undo innocuous changes introduced by migrations which break `will_change_with_update?`
@@ -465,5 +575,39 @@ class Rubric < ActiveRecord::Base
       else
         context&.root_account_id
       end
+  end
+
+  def set_default_hide_points
+    self.hide_points = false if hide_points.nil?
+  end
+
+  def enhanced_rubrics_enabled?
+    context.feature_enabled?(:enhanced_rubrics)
+  end
+
+  def learning_outcome_ids_from_results
+    learning_outcome_results.select(:learning_outcome_id).distinct.pluck(:learning_outcome_id)
+  end
+
+  def rubric_assignment_associations?
+    rubric_associations.where(association_type: "Assignment", workflow_state: "active").any?
+  end
+
+  def used_locations
+    associations = rubric_associations.active.where(association_type: "Assignment")
+
+    Assignment.where(id: associations.pluck(:association_id))
+  end
+
+  def self.enhanced_rubrics_assignments_enabled?(context_to_check)
+    Account.site_admin.feature_enabled?(:enhanced_rubrics_assignments) && context_to_check.feature_enabled?(:enhanced_rubrics)
+  end
+
+  def self.rubric_assessment_import_export_enabled?(context_to_check)
+    Account.site_admin.feature_enabled?(:rubric_assessment_imports_exports) && context_to_check.feature_enabled?(:enhanced_rubrics)
+  end
+
+  def self.rubric_self_assessment_enabled?(context_to_check)
+    context_to_check.feature_enabled?(:enhanced_rubrics) && context_to_check.feature_enabled?(:platform_service_speedgrader)
   end
 end

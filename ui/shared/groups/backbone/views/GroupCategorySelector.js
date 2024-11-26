@@ -21,7 +21,7 @@
 import {extend} from '@canvas/backbone/utils'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import Backbone from '@canvas/backbone'
-import _ from 'underscore'
+import {isEmpty, find, chain, includes} from 'lodash'
 import template from '../../jst/GroupCategorySelector.handlebars'
 import '@canvas/assignments/jquery/toggleAccessibly'
 import awaitElement from '@canvas/await-element'
@@ -38,6 +38,7 @@ function GroupCategorySelector() {
   this.filterFormData = this.filterFormData.bind(this)
   this.toJSON = this.toJSON.bind(this)
   this.toggleGroupCategoryOptions = this.toggleGroupCategoryOptions.bind(this)
+  this.clickGroupCategoryOptions = this.clickGroupCategoryOptions.bind(this)
   this.canManageGroups = this.canManageGroups.bind(this)
   this.enableGroupDiscussionCheckbox = this.enableGroupDiscussionCheckbox.bind(this)
   this.disableGroupDiscussionCheckbox = this.disableGroupDiscussionCheckbox.bind(this)
@@ -70,6 +71,7 @@ GroupCategorySelector.prototype.events = (function () {
   events['change ' + GROUP_CATEGORY_ID] = 'groupCategorySelected'
   events['click ' + CREATE_GROUP_CATEGORY_ID] = 'showGroupCategoryCreateDialog'
   events['change ' + HAS_GROUP_CATEGORY] = 'toggleGroupCategoryOptions'
+  events['click ' + HAS_GROUP_CATEGORY] = 'clickGroupCategoryOptions'
   return events
 })()
 
@@ -96,11 +98,11 @@ GroupCategorySelector.optionProperty('inClosedGradingPeriod')
 
 GroupCategorySelector.prototype.render = function () {
   const selectedID = this.parentModel.groupCategoryId()
-  if (_.isEmpty(this.groupCategories)) {
+  if (isEmpty(this.groupCategories)) {
     StudentGroupStore.setSelectedGroupSet(null)
   } else if (
     selectedID == null ||
-    _.findWhere(this.groupCategories, {
+    find(this.groupCategories, {
       id: selectedID.toString(),
     }) == null
   ) {
@@ -109,12 +111,29 @@ GroupCategorySelector.prototype.render = function () {
     StudentGroupStore.setSelectedGroupSet(selectedID)
   }
   GroupCategorySelector.__super__.render.apply(this, arguments)
-  return this.$groupCategory.toggleAccessibly(!_.isEmpty(this.groupCategories))
+  return this.$groupCategory.toggleAccessibly(!isEmpty(this.groupCategories))
 }
 
 GroupCategorySelector.prototype.groupCategorySelected = function () {
+  if (ENV.FEATURES?.selective_release_edit_page) {
+    const selected_group_category_id = StudentGroupStore.getSelectedGroupSetId()
+    const has_group_overrides = this.hasGroupOverrides(selected_group_category_id)
+    const error_message = document.getElementById('assignment_group_category_id_blocked_error')
+    if (has_group_overrides !== undefined) {
+      this.$groupCategoryID.val(selected_group_category_id)
+      error_message.innerText = I18n.t(
+        'You must remove any groups belonging to %{group} from the Assign Access section before you can change to another Group Set.',
+        {group: this.$groupCategoryID[0].options[this.$groupCategoryID[0].selectedIndex].text}
+      )
+      error_message.style.display = 'block'
+      return
+    }
+    error_message.style.display = 'none'
+  }
+
   const newSelectedId = this.$groupCategoryID.val()
-  return StudentGroupStore.setSelectedGroupSet(newSelectedId)
+  StudentGroupStore.setSelectedGroupSet(newSelectedId)
+  return document.dispatchEvent(new Event('group_category_changed'))
 }
 
 GroupCategorySelector.prototype.showGroupCategoryCreateDialog = function () {
@@ -132,7 +151,14 @@ GroupCategorySelector.prototype.showGroupCategoryCreateDialog = function () {
             _this.$groupCategoryID.append($newCategory)
             _this.$groupCategoryID.val(result.id)
             _this.groupCategories.push(result)
-            return (_this.$groupCategory.toggleAccessibly = true)
+
+            if (ENV.FEATURES?.selective_release_edit_page) {
+              // Runs the validations and shows an error if there is
+              // an group override that belongs to the previous group set
+              _this.groupCategorySelected()
+            }
+
+            return _this.$groupCategory.toggleAccessibly(true)
           }
         }
       })(this)
@@ -165,12 +191,27 @@ GroupCategorySelector.prototype.toggleGroupCategoryOptions = function () {
   this.$groupCategoryOptions.toggleAccessibly(isGrouped)
   const selectedGroupSetId = isGrouped ? this.$groupCategoryID.val() : null
   StudentGroupStore.setSelectedGroupSet(selectedGroupSetId)
-  if (isGrouped && _.isEmpty(this.groupCategories) && this.canManageGroups()) {
+  document.dispatchEvent(new Event('group_category_changed'))
+  if (isGrouped && isEmpty(this.groupCategories) && this.canManageGroups()) {
     this.showGroupCategoryCreateDialog()
   }
   if (this.renderSectionsAutocomplete != null) {
     return this.renderSectionsAutocomplete()
   }
+}
+
+GroupCategorySelector.prototype.clickGroupCategoryOptions = function (e) {
+  if (!ENV.FEATURES?.selective_release_edit_page) return
+  const selected_group_category_id = StudentGroupStore.getSelectedGroupSetId()
+  const has_group_overrides = this.hasGroupOverrides(selected_group_category_id)
+  const error_message = document.getElementById('has_group_category_blocked_error')
+  if (has_group_overrides !== undefined) {
+    e.preventDefault()
+    e.stopPropagation()
+    error_message.style.display = 'block'
+    return
+  }
+  error_message.style.display = 'none'
 }
 
 GroupCategorySelector.prototype.toJSON = function () {
@@ -179,7 +220,7 @@ GroupCategorySelector.prototype.toJSON = function () {
     (typeof (base = this.parentModel).frozenAttributes === 'function'
       ? base.frozenAttributes()
       : void 0) || []
-  const groupCategoryFrozen = _.includes(frozenAttributes, 'group_category_id')
+  const groupCategoryFrozen = includes(frozenAttributes, 'group_category_id')
   const groupCategoryLocked = !this.parentModel.canGroup()
   return {
     isGroupAssignment:
@@ -189,11 +230,11 @@ GroupCategorySelector.prototype.toJSON = function () {
     groupCategoryUnselected:
       !this.parentModel.groupCategoryId() ||
       this.parentModel.groupCategoryId() === 'blank' ||
-      (!_.chain(this.groupCategories)
-        .pluck('id')
-        .contains(this.parentModel.groupCategoryId())
+      (!chain(this.groupCategories)
+        .map('id')
+        .includes(this.parentModel.groupCategoryId())
         .value() &&
-        !_.isEmpty(this.groupCategories)),
+        !isEmpty(this.groupCategories)),
     hideGradeIndividually: this.hideGradeIndividually,
     gradeGroupStudentsIndividually:
       !this.hideGradeIndividually && this.parentModel.gradeGroupStudentsIndividually(),
@@ -236,7 +277,7 @@ GroupCategorySelector.prototype.validateBeforeSave = function (data, errors) {
 GroupCategorySelector.prototype._validateGroupCategoryID = function (data, errors) {
   const gcid = this.nested ? data.assignment.groupCategoryId() : data.group_category_id
   if (gcid === 'blank') {
-    if (_.isEmpty(this.groupCategories)) {
+    if (isEmpty(this.groupCategories)) {
       if (this.canManageGroups()) {
         errors.newGroupCategory = [
           {
@@ -259,6 +300,13 @@ GroupCategorySelector.prototype._validateGroupCategoryID = function (data, error
     }
   }
   return errors
+}
+
+GroupCategorySelector.prototype.hasGroupOverrides = function (selected_group_category_id) {
+  if (!selected_group_category_id) return undefined
+  return this.parentModel?.attributes?.assignment_overrides?.models?.find(
+    override => override.attributes.group_category_id === selected_group_category_id
+  )
 }
 
 export default GroupCategorySelector

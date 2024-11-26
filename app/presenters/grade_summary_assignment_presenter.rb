@@ -19,6 +19,7 @@
 
 class GradeSummaryAssignmentPresenter
   include TextHelper
+  include GradeDisplay
   attr_reader :assignment, :submission, :originality_reports
 
   def initialize(summary, current_user, assignment, submission)
@@ -88,7 +89,7 @@ class GradeSummaryAssignmentPresenter
   end
 
   def has_no_group_weight?
-    !(assignment.group_weight rescue false)
+    !assignment.try(:group_weight)
   end
 
   def has_no_score_display?
@@ -99,12 +100,22 @@ class GradeSummaryAssignmentPresenter
     submission&.submission_type == "online_quiz" && submission&.workflow_state == "pending_review"
   end
 
+  def custom_grade_status?
+    return false unless Account.site_admin.feature_enabled?(:custom_gradebook_statuses)
+
+    submission&.custom_grade_status_id?
+  end
+
+  def custom_grade_status_id
+    submission&.custom_grade_status_id
+  end
+
   def original_points
     has_no_score_display? ? "" : submission.published_score
   end
 
   def unchangeable?
-    (!@summary.editable? || assignment.special_class)
+    !@summary.editable? || assignment.special_class
   end
 
   def has_comments?
@@ -153,7 +164,7 @@ class GradeSummaryAssignmentPresenter
     classes << special_class
     classes << "excused" if excused?
     classes << "extended" if extended?
-    classes << "feedback_visibility_ff" if Account.site_admin.feature_enabled?(:visibility_feedback_student_grades_page)
+    classes << "has_sub_assignments" if has_sub_assignments?
     classes.join(" ")
   end
 
@@ -171,6 +182,12 @@ class GradeSummaryAssignmentPresenter
 
   def extended?
     submission.try(:extended?)
+  end
+
+  delegate :has_sub_assignments?, to: :assignment
+
+  def checkpoints_parent?
+    assignment.has_sub_assignments? && assignment.root_account.feature_enabled?(:discussion_checkpoints)
   end
 
   def deduction_present?
@@ -195,7 +212,7 @@ class GradeSummaryAssignmentPresenter
 
   def published_grade
     if is_letter_graded_or_gpa_scaled? && !submission.published_grade.nil?
-      "(#{submission.published_grade})"
+      "(#{replace_dash_with_minus(submission.published_grade)})"
     else
       ""
     end
@@ -204,6 +221,8 @@ class GradeSummaryAssignmentPresenter
   def display_score
     if has_no_score_display?
       ""
+    elsif assignment.grading_standard_or_default.points_based
+      "#{I18n.n(round_if_whole(submission.published_score), precision: 2)} #{published_grade}"
     else
       "#{I18n.n round_if_whole(submission.published_score)} #{published_grade}"
     end

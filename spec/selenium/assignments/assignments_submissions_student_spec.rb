@@ -44,7 +44,7 @@ describe "submissions" do
       user_session(@student)
     end
 
-    it "does not show score if RDQ" do
+    it "does not show score if RQD" do
       # truthy feature flag
       Account.default.enable_feature! :restrict_quantitative_data
 
@@ -63,12 +63,46 @@ describe "submissions" do
 
       first_period_assignment.grade_student(@student, grade: 8, grader: @teacher)
 
-      get "/courses/#{@course.id}/assignments/#{first_period_assignment.id}/submissions/#{@student.id}"
+      get "/courses/#{@course.id}/assignments/#{first_period_assignment.id}"
+      expect(f(".module")).to include_text "Grade: B−"
 
-      expect(f(".entered_grade")).to include_text "B-"
+      get "/courses/#{@course.id}/assignments/#{first_period_assignment.id}/submissions/#{@student.id}"
+      expect(f(".entered_grade")).to include_text "B−"
     end
 
-    it "show score if not RDQ" do
+    it "show canvas menu when is not embedded within mobile apps" do
+      @teacher = User.create!
+      @course.enroll_teacher(@teacher)
+
+      first_period_assignment = @course.assignments.create!(
+        due_at: @due_date,
+        points_possible: 10,
+        submission_types: "online_text_entry"
+      )
+
+      get "/courses/#{@course.id}/assignments/#{first_period_assignment.id}/submissions/#{@student.id}"
+
+      expect(f("body")).to contain_jqcss("header#mobile-header")
+      expect(f("body")).to contain_jqcss("header#header")
+    end
+
+    it "remove canvas menu when embedded within mobile apps" do
+      @teacher = User.create!
+      @course.enroll_teacher(@teacher)
+
+      first_period_assignment = @course.assignments.create!(
+        due_at: @due_date,
+        points_possible: 10,
+        submission_types: "online_text_entry"
+      )
+
+      get "/courses/#{@course.id}/assignments/#{first_period_assignment.id}/submissions/#{@student.id}?embed=true"
+
+      expect(f("body")).not_to contain_jqcss("header#mobile-header")
+      expect(f("body")).not_to contain_jqcss("header#header")
+    end
+
+    it "show score if not RQD" do
       # truthy feature flag
       Account.default.enable_feature! :restrict_quantitative_data
 
@@ -86,6 +120,9 @@ describe "submissions" do
       )
 
       first_period_assignment.grade_student(@student, grade: 8, grader: @teacher)
+
+      get "/courses/#{@course.id}/assignments/#{first_period_assignment.id}"
+      expect(f(".module")).to include_text "Grade: 8 (10 pts possible)"
 
       get "/courses/#{@course.id}/assignments/#{first_period_assignment.id}/submissions/#{@student.id}"
 
@@ -456,10 +493,6 @@ describe "submissions" do
     end
 
     describe "uploaded files for submission" do
-      def fixture_file_path(file)
-        RSpec.configuration.fixture_path.join(file).to_s
-      end
-
       def make_folder_actions_visible
         driver.execute_script("$('.folder_item').addClass('folder_item_hover')")
       end
@@ -470,7 +503,6 @@ describe "submissions" do
         add_file(fixture_file_upload("html-editing-test.html", "text/html"),
                  @student,
                  "html-editing-test.html")
-        File.read(fixture_file_path("files/html-editing-test.html"))
         assignment = @course.assignments.create!(title: "assignment 1",
                                                  name: "assignment 1",
                                                  submission_types: "online_upload",
@@ -493,14 +525,12 @@ describe "submissions" do
       it "does not allow a user to submit a file-submission assignment from previously uploaded files with an illegal file extension", priority: "1" do
         skip_if_safari(:alert)
         filename = "hello-world.sh"
-        fixture_fn = "files/#{filename}"
 
         local_storage!
 
         add_file(fixture_file_upload(filename, "application/x-sh"),
                  @student,
                  filename)
-        File.read(fixture_file_path(fixture_fn))
         assignment = @course.assignments.create!(title: "assignment 1",
                                                  name: "assignment 1",
                                                  submission_types: "online_upload",
@@ -645,6 +675,41 @@ describe "submissions" do
       get "/courses/#{@course.id}/assignments/#{@assignment.id}"
       expect(f("#content")).not_to contain_css("a.submit_assignment_link")
       expect(f("#assignment_show .assignment-title")).to include_text "assignment 1"
+    end
+  end
+
+  context "discussion_checkpoints" do
+    it "does not have keyboard-only next and previous buttons" do
+      Account.default.enable_feature! :react_discussions_post
+      Account.default.enable_feature! :discussion_checkpoints
+      teacher_in_course(active_all: true)
+      @checkpointed_discussion = DiscussionTopic.create_graded_topic!(course: @course, title: "Checkpointed Discussion")
+      Checkpoints::DiscussionCheckpointCreatorService.call(
+        discussion_topic: @checkpointed_discussion,
+        checkpoint_label: CheckpointLabels::REPLY_TO_TOPIC,
+        dates: [{ type: "everyone", due_at: 2.days.from_now }],
+        points_possible: 6
+      )
+      Checkpoints::DiscussionCheckpointCreatorService.call(
+        discussion_topic: @checkpointed_discussion,
+        checkpoint_label: CheckpointLabels::REPLY_TO_ENTRY,
+        dates: [{ type: "everyone", due_at: 3.days.from_now }],
+        points_possible: 7,
+        replies_required: 1
+      )
+
+      rr = @checkpointed_discussion.discussion_entries.create!(user: @student, message: "root reply")
+      @checkpointed_discussion.discussion_entries.create!(user: @student, message: "reply to root", parent_entry: rr)
+      student_in_course(active_all: true)
+      user_session(@student)
+      get "/courses/#{@course.id}/assignments/#{@checkpointed_discussion.assignment.id}/submissions/#{@student.id}"
+
+      in_frame("preview_frame") do
+        in_frame("discussion_preview_iframe") do
+          wait_for_ajaximations
+          expect(f("body")).not_to contain_jqcss("[data-testid='jump-to-speedgrader-navigation']")
+        end
+      end
     end
   end
 end

@@ -484,6 +484,7 @@ export const outcomeGroup = {
 const createSearchGroupOutcomesOutcomeMocks = (
   canUnlink,
   canEdit,
+  canArchive,
   contextId,
   contextType,
   title,
@@ -512,6 +513,7 @@ const createSearchGroupOutcomesOutcomeMocks = (
           masteryPoints,
           ratings,
           canEdit,
+          canArchive,
           contextId,
           contextType,
           friendlyDescription: null,
@@ -537,6 +539,7 @@ const createSearchGroupOutcomesOutcomeMocks = (
           masteryPoints,
           ratings,
           canEdit,
+          canArchive,
           contextId,
           contextType,
           friendlyDescription: null,
@@ -565,6 +568,7 @@ const createSearchGroupOutcomesOutcomeMocks = (
           masteryPoints,
           ratings,
           canEdit,
+          canArchive,
           contextId,
           contextType,
           friendlyDescription: null,
@@ -586,6 +590,7 @@ export const groupDetailMocks = ({
   title = `Group ${groupId}`,
   canEdit = true,
   canUnlink = true,
+  canArchive = true,
   contextType = 'Account',
   contextId = '1',
   outcomeIsImported = false,
@@ -603,6 +608,8 @@ export const groupDetailMocks = ({
   const calculationInt = 65
   const masteryPoints = defaultMasteryPoints
   const ratings = ratingsWithTypename(testRatings)
+
+  let wasFetchedOnce = false
 
   return [
     {
@@ -644,6 +651,7 @@ export const groupDetailMocks = ({
                     calculationInt,
                     masteryPoints,
                     ratings,
+                    canArchive,
                     isImported: outcomeIsImported,
                     __typename: 'LearningOutcome',
                     friendlyDescription: {
@@ -664,6 +672,7 @@ export const groupDetailMocks = ({
                     calculationInt,
                     masteryPoints,
                     ratings,
+                    canArchive,
                     isImported: outcomeIsImported,
                     __typename: 'LearningOutcome',
                     friendlyDescription: {
@@ -720,6 +729,7 @@ export const groupDetailMocks = ({
                     calculationInt,
                     masteryPoints,
                     ratings,
+                    canArchive,
                     isImported: outcomeIsImported,
                     __typename: 'LearningOutcome',
                     friendlyDescription: {
@@ -740,6 +750,7 @@ export const groupDetailMocks = ({
                     calculationInt,
                     masteryPoints,
                     ratings,
+                    canArchive,
                     isImported: outcomeIsImported,
                     __typename: 'LearningOutcome',
                     friendlyDescription: {
@@ -799,6 +810,7 @@ export const groupDetailMocks = ({
                     calculationInt,
                     masteryPoints,
                     ratings,
+                    canArchive,
                     __typename: 'LearningOutcome',
                     friendlyDescription: {
                       description: 'Outcome 5 - friendly description',
@@ -819,6 +831,7 @@ export const groupDetailMocks = ({
                     calculationInt,
                     masteryPoints,
                     ratings,
+                    canArchive,
                     __typename: 'LearningOutcome',
                     friendlyDescription: {
                       description: 'Outcome 6 - friendly description',
@@ -847,36 +860,41 @@ export const groupDetailMocks = ({
           targetGroupId,
         },
       },
-      result: {
-        data: {
-          group: {
-            _id: groupId,
-            description: `${groupDescription} 4`,
-            title,
-            outcomesCount: numOfOutcomes,
-            notImportedOutcomesCount,
-            outcomes: {
-              pageInfo: {
-                hasNextPage: withMorePage,
-                endCursor: 'Mx',
-                __typename: 'PageInfo',
-              },
-              edges: createSearchGroupOutcomesOutcomeMocks(
-                canUnlink,
-                canEdit,
-                contextId,
-                contextType,
-                title,
-                numOfOutcomes
-              ),
-              __typename: 'ContentTagConnection',
-            },
-            __typename: 'LearningOutcomeGroup',
-          },
-        },
-      },
-      // for testing graphqls refetch in index.js
       newData: jest.fn(() => {
+        if (!wasFetchedOnce) {
+          wasFetchedOnce = true
+
+          return {
+            data: {
+              group: {
+                _id: groupId,
+                description: `${groupDescription} 4`,
+                title,
+                outcomesCount: numOfOutcomes,
+                notImportedOutcomesCount,
+                outcomes: {
+                  pageInfo: {
+                    hasNextPage: withMorePage,
+                    endCursor: 'Mx',
+                    __typename: 'PageInfo',
+                  },
+                  edges: createSearchGroupOutcomesOutcomeMocks(
+                    canUnlink,
+                    canEdit,
+                    canArchive,
+                    contextId,
+                    contextType,
+                    title,
+                    numOfOutcomes
+                  ),
+                  __typename: 'ContentTagConnection',
+                },
+                __typename: 'LearningOutcomeGroup',
+              },
+            },
+          }
+        }
+
         const outcome1 = {
           canUnlink,
           _id: '1',
@@ -889,6 +907,7 @@ export const groupDetailMocks = ({
             calculationInt,
             masteryPoints,
             ratings,
+            canArchive,
             canEdit,
             contextId,
             contextType,
@@ -919,6 +938,7 @@ export const groupDetailMocks = ({
             masteryPoints,
             ratings,
             canEdit,
+            canArchive,
             contextId,
             contextType,
             friendlyDescription: null,
@@ -944,6 +964,7 @@ export const groupDetailMocks = ({
             masteryPoints,
             ratings,
             canEdit,
+            canArchive,
             contextId,
             contextType,
             friendlyDescription: null,
@@ -1021,6 +1042,7 @@ export const groupDetailMocks = ({
                     masteryPoints,
                     ratings,
                     canEdit,
+                    canArchive,
                     contextId,
                     contextType,
                     friendlyDescription: null,
@@ -1046,6 +1068,7 @@ export const groupDetailMocks = ({
                     masteryPoints,
                     ratings,
                     canEdit,
+                    canArchive,
                     contextId,
                     contextType,
                     friendlyDescription: null,
@@ -1106,6 +1129,7 @@ export const groupDetailMocks = ({
                     masteryPoints,
                     ratings,
                     canEdit,
+                    canArchive,
                     contextId,
                     contextType,
                     friendlyDescription: null,
@@ -1134,6 +1158,7 @@ export const groupDetailMocksFetchMore = ({
   title = `Group ${groupId}`,
   canEdit = true,
   canUnlink = true,
+  canArchive = true,
   contextType = 'Account',
   contextId = '1',
   withMorePage = true,
@@ -1187,6 +1212,7 @@ export const groupDetailMocksFetchMore = ({
                     masteryPoints,
                     ratings,
                     canEdit,
+                    canArchive,
                     contextId,
                     contextType,
                     friendlyDescription: null,
@@ -1212,6 +1238,7 @@ export const groupDetailMocksFetchMore = ({
                     masteryPoints,
                     ratings,
                     canEdit,
+                    canArchive,
                     contextId,
                     contextType,
                     friendlyDescription: null,
@@ -1272,6 +1299,7 @@ export const groupDetailMocksFetchMore = ({
                     masteryPoints,
                     ratings,
                     canEdit,
+                    canArchive,
                     contextId,
                     contextType,
                     friendlyDescription: null,
@@ -1297,6 +1325,7 @@ export const groupDetailMocksFetchMore = ({
                     masteryPoints,
                     ratings,
                     canEdit,
+                    canArchive,
                     contextId,
                     contextType,
                     friendlyDescription: null,
@@ -1623,6 +1652,7 @@ export const updateLearningOutcomeMocks = ({
     pointsPossible,
     ratings: outputRatings,
   }
+  if (description === null) delete input.description
 
   return [
     {
@@ -2499,15 +2529,22 @@ export const courseAlignmentStatsMocks = ({
     },
   })
 
+  let wasFetchedOnce = false
+
   return [
     {
       request: {
         query: COURSE_ALIGNMENT_STATS,
         variables: {id},
       },
-      result: returnResult(),
-      // for testing data refetch
-      newData: () => returnResult(refetchIncrement),
+      newData: () => {
+        if (wasFetchedOnce) {
+          return returnResult(refetchIncrement)
+        } else {
+          wasFetchedOnce = true
+          return returnResult()
+        }
+      },
     },
   ]
 }
@@ -2604,15 +2641,22 @@ export const courseAlignmentMocks = ({
     },
   })
 
+  let wasFetchedOnce = false
+
   return [
     {
       request: {
         query: SEARCH_OUTCOME_ALIGNMENTS,
         variables,
       },
-      result: returnResult(),
-      // for testing data refetch
-      newData: () => returnResult(true),
+      newData: () => {
+        if (wasFetchedOnce) {
+          return returnResult(true)
+        } else {
+          wasFetchedOnce = true
+          return returnResult()
+        }
+      },
     },
     {
       request: {

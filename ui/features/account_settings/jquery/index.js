@@ -19,20 +19,20 @@
 import 'jqueryui/dialog'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import htmlEscape from 'html-escape'
+import htmlEscape from '@instructure/html-escape'
 import RichContentEditor from '@canvas/rce/RichContentEditor'
 import axios from '@canvas/axios'
-import {setupCache} from 'axios-cache-adapter/src/index'
 import 'jqueryui/tabs'
 import globalAnnouncements from './global_announcements'
 import '@canvas/jquery/jquery.ajaxJSON'
-import '@canvas/datetime' // date_field, time_field, datetime_field, /\$\.datetime/
-import '@canvas/forms/jquery/jquery.instructure_forms' // formSubmit, getFormData, validateForm
+import '@canvas/jquery/jquery.instructure_forms' // formSubmit, getFormData, validateForm
 import '@canvas/jquery/jquery.instructure_misc_helpers' // replaceTags
 import '@canvas/jquery/jquery.instructure_misc_plugins' // confirmDelete, showIf, /\.log/
 import '@canvas/loading-image'
-import 'date-js' // Date.parse
+import '@instructure/date-js' // Date.parse
 import 'jquery-scroll-to-visible/jquery.scrollTo'
+import {renderDatetimeField} from '@canvas/datetime/jquery/DatetimeField'
+import doFetchApi from '@canvas/do-fetch-api-effect'
 
 const I18n = useI18nScope('account_settings')
 
@@ -49,6 +49,8 @@ export function openReportDescriptionLink(event) {
   $desc.clone().dialog({
     title,
     width: responsiveWidth,
+    modal: true,
+    zIndex: 1000,
   })
 }
 
@@ -146,7 +148,23 @@ $(document).ready(function () {
       return false
     }
   })
-  $('.datetime_field').datetime_field({
+
+  $('#account_settings_suppress_notifications').click(event => {
+    if (event.target.checked) {
+      // eslint-disable-next-line no-alert
+      const result = window.confirm(
+        I18n.t(
+          'suppress_notifications_warning',
+          "You have 'Suppress notifications from being created and sent out' checked, are you sure you want to continue?"
+        )
+      )
+      if (!result) {
+        $('#account_settings_suppress_notifications').prop('checked', false)
+      }
+    }
+  })
+
+  renderDatetimeField($('.datetime_field'), {
     addHiddenInput: true,
   })
 
@@ -154,11 +172,12 @@ $(document).ready(function () {
 
   $('#account_settings_tabs').on('tabsactivate', (event, ui) => {
     try {
-      const hash = new URL(ui.newTab.context.href).hash
+      const $tabLink = ui.newTab.children('a:first-child')
+      const hash = new URL($tabLink.prop('href')).hash
       if (window.location.hash !== hash) {
         window.history.pushState(null, null, hash)
       }
-      ui.newTab.focus(0)
+      $tabLink.focus()
     } catch (_ignore) {
       // get here if `new URL` throws, but it shouldn't, and
       // there's really nothing we need to do about it
@@ -170,7 +189,7 @@ $(document).ready(function () {
       const tabId =
         event.type === 'tabscreate'
           ? window.location.hash.replace('#', '') + '-link'
-          : ui.newTab.context.id
+          : $(ui.newTab.get(0)).children('a').get(0).id
 
       if (tabId === 'tab-reports-link' && !reportsTabHasLoaded) {
         reportsTabHasLoaded = true
@@ -182,7 +201,7 @@ $(document).ready(function () {
           .then(req => req.text())
           .then(html => {
             $('#tab-reports').html(html)
-            $('#tab-reports .datetime_field').datetime_field()
+            renderDatetimeField($('#tab-reports .datetime_field'))
 
             $('.open_report_description_link').click(openReportDescriptionLink)
 
@@ -218,6 +237,69 @@ $(document).ready(function () {
             })
 
             $('.configure_report_link').click(function (_event) {
+              const provisioning_container = document.getElementById('provisioning_csv_form')
+              const sis_export_container = document.getElementById('sis_export_csv_form')
+              const provisioning_checkboxes = provisioning_container.querySelectorAll(
+                'input[type="checkbox"]:not(#parameters_created_by_sis):not(#parameters_include_deleted)'
+              )
+              const sis_export_checkboxes = sis_export_container.querySelectorAll(
+                'input[type="checkbox"]:not(#parameters_created_by_sis):not(#parameters_include_deleted)'
+              )
+
+              provisioning_container.onclick = function () {
+                let reportIsChecked = false
+
+                provisioning_checkboxes.forEach(checkbox => {
+                  if (checkbox.checked) {
+                    reportIsChecked = true
+                  }
+                })
+
+                const createdBySisChecbox = provisioning_container.querySelector(
+                  '#parameters_created_by_sis'
+                )
+                const includeDeletedCheckbox = provisioning_container.querySelector(
+                  '#parameters_include_deleted'
+                )
+
+                if (reportIsChecked) {
+                  createdBySisChecbox.disabled = false
+                  includeDeletedCheckbox.disabled = false
+                } else {
+                  createdBySisChecbox.checked = false
+                  createdBySisChecbox.disabled = true
+                  includeDeletedCheckbox.checked = false
+                  includeDeletedCheckbox.disabled = true
+                }
+              }
+
+              sis_export_container.onclick = function () {
+                let reportIsChecked = false
+
+                sis_export_checkboxes.forEach(checkbox => {
+                  if (checkbox.checked) {
+                    reportIsChecked = true
+                  }
+                })
+
+                const createdBySisChecbox = sis_export_container.querySelector(
+                  '#parameters_created_by_sis'
+                )
+                const includeDeletedCheckbox = sis_export_container.querySelector(
+                  '#parameters_include_deleted'
+                )
+
+                if (reportIsChecked) {
+                  createdBySisChecbox.disabled = false
+                  includeDeletedCheckbox.disabled = false
+                } else {
+                  createdBySisChecbox.checked = false
+                  createdBySisChecbox.disabled = true
+                  includeDeletedCheckbox.checked = false
+                  includeDeletedCheckbox.disabled = true
+                }
+              }
+
               event.preventDefault()
               const data = $(this).data()
               let $dialog = data.$report_dialog
@@ -230,6 +312,8 @@ $(document).ready(function () {
                     autoOpen: false,
                     width: responsiveWidth,
                     title: I18n.t('titles.configure_report', 'Configure Report'),
+                    modal: true,
+                    zIndex: 1000,
                   })
               }
               $dialog.dialog('open')
@@ -239,17 +323,7 @@ $(document).ready(function () {
             $('#tab-reports').text(I18n.t('There are no reports for you to view.'))
           })
       } else if (tabId === 'tab-security-link') {
-        // Set up axios and send a prefetch request to get the data we need,
-        // this should make things appear to be much quicker once the bundle
-        // loads in.
-        const cache = setupCache({
-          maxAge: 0.5 * 60 * 1000, // Hold onto the data for 30 seconds
-          debug: true,
-        })
-
-        const api = axios.create({
-          adapter: cache.adapter,
-        })
+        const api = axios.create({})
 
         const splitContext = window.ENV.context_asset_string.split('_')
 
@@ -288,6 +362,15 @@ $(document).ready(function () {
     .tabs({active: initialTab >= 0 ? initialTab : null})
     .show()
 
+  $('#account_settings_restrict_quantitative_data_value').click(event => {
+    const lockbox = $('#account_settings_restrict_quantitative_data_locked')
+    if (event.target.checked) {
+      lockbox.prop('disabled', false)
+    } else {
+      lockbox.prop('checked', false)
+      lockbox.prop('disabled', true)
+    }
+  })
   $('.add_ip_filter_link').click(event => {
     event.preventDefault()
     const $filter = $('.ip_filter.blank:first').clone(true).removeClass('blank')
@@ -305,6 +388,8 @@ $(document).ready(function () {
     $('#ip_filters_dialog').dialog({
       title: I18n.t('titles.what_are_quiz_ip_filters', 'What are Quiz IP Filters?'),
       width: 400,
+      modal: true,
+      zIndex: 1000,
     })
   })
   $('.rqd_help_btn').click(event => {
@@ -312,6 +397,8 @@ $(document).ready(function () {
     $('#rqd_dialog').dialog({
       title: I18n.t('titles.rqd_help', 'Restrict Quantitative Data'),
       width: 400,
+      modal: true,
+      zIndex: 1000,
     })
   })
 
@@ -323,6 +410,8 @@ $(document).ready(function () {
         'An External Identity Provider is Enabled'
       ),
       width: 400,
+      modal: true,
+      zIndex: 1000,
     })
   })
 
@@ -392,7 +481,7 @@ $(document).ready(function () {
     .change(function () {
       const attr_id = $(this).attr('id')
       const $myFieldset = $('#' + attr_id + '_settings')
-      const iAmChecked = $(this).attr('checked')
+      const iAmChecked = $(this).prop('checked')
       $myFieldset.showIf(iAmChecked)
     })
     .change()
@@ -460,6 +549,8 @@ $(document).ready(function () {
     $dialog.dialog({
       autoOpen: false,
       width: 560,
+      modal: true,
+      zIndex: 1000,
     })
 
     $(`<button class="Button Button--icon-action" type="button">
@@ -483,11 +574,10 @@ $(document).ready(function () {
   $('.notification_from_name_option').on('change', () => {
     const $useCustom = $('#account_settings_outgoing_email_default_name_option_custom')
     const $customName = $('#account_settings_outgoing_email_default_name')
-    if ($useCustom.attr('checked')) {
+    if ($useCustom.prop('checked')) {
       $customName.removeAttr('disabled')
-      $customName.focus()
     } else {
-      $customName.attr('disabled', 'disabled')
+      $customName.prop('disabled', true)
     }
   })
   $('#account_settings_outgoing_email_default_name').on('keyup', () => {
@@ -527,14 +617,27 @@ $(document).ready(function () {
         $('#terms_of_service_modal').show()
         $rce_container.show()
 
-        const url = '/api/v1/terms_of_service_custom_content'
-        const defaultContent = await (await fetch(url)).text()
+        try {
+          const {json, response} = await doFetchApi({
+            path: '/api/v1/acceptable_use_policy',
+          })
 
-        RichContentEditor.loadNewEditor($textarea, {
-          focus: true,
-          manageParent: true,
-          defaultContent,
-        })
+          if (response.ok) {
+            RichContentEditor.loadNewEditor($textarea, {
+              focus: true,
+              manageParent: true,
+              defaultContent: json?.content || '',
+            })
+          } else {
+            // eslint-disable-next-line no-console
+            console.error(
+              `Failed to load Acceptable Use Policy content: Received ${response.status} ${response.statusText}`
+            )
+          }
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.error('Failed to load Acceptable Use Policy content:', error)
+        }
       } else {
         $rce_container.hide()
         $('#terms_of_service_modal').hide()
@@ -542,6 +645,26 @@ $(document).ready(function () {
     }
     onTermsTypeChange()
   }
+
+  $('#account_settings_enable_inbox_signature_block').click(event => {
+    const lockbox = $('#account_settings_disable_inbox_signature_block_for_students')
+    if (event.target.checked) {
+      lockbox.prop('disabled', false)
+    } else {
+      lockbox.prop('checked', false)
+      lockbox.prop('disabled', true)
+    }
+  })
+
+  $('#account_settings_enable_inbox_auto_response').click(event => {
+    const lockbox = $('#account_settings_disable_inbox_auto_response_for_students')
+    if (event.target.checked) {
+      lockbox.prop('disabled', false)
+    } else {
+      lockbox.prop('checked', false)
+      lockbox.prop('disabled', true)
+    }
+  })
 
   window.addEventListener('popstate', () => {
     const openTab = window.location.hash

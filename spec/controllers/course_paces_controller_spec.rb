@@ -222,7 +222,104 @@ describe CoursePacesController do
       assert_unauthorized
     end
 
+    context "paces publishing" do
+      before :once do
+        @course1 = course_factory
+        @teacher1 = User.create!
+        course_with_teacher(course: @course1, user: @teacher1, active_all: true)
+        @course1.update(start_at: "2021-09-30", restrict_enrollments_to_course_dates: true)
+        @course1.root_account.enable_feature!(:course_paces)
+        @course1.enable_course_paces = true
+        @course1.save!
+        @course_pace1 = course_pace_model(course: @course1)
+
+        @course2 = course_factory
+        @teacher2 = User.create!
+        course_with_teacher(course: @course2, user: @teacher2, active_all: true)
+        @course2.update(start_at: "2021-09-30", restrict_enrollments_to_course_dates: true)
+        @course2.root_account.enable_feature!(:course_paces)
+        @course2.enable_course_paces = true
+        @course2.save!
+        @course_pace2 = course_pace_model(course: @course2)
+      end
+
+      it "only gets paces publishing for the current course" do
+        @course_pace1.create_publish_progress
+        @course_pace2.create_publish_progress
+
+        user_session(@teacher1)
+
+        get :index, params: { course_id: @course1.id }
+        expect(response).to be_successful
+
+        js_env = controller.js_env
+        expect(js_env[:PACES_PUBLISHING].length).to eq(1)
+      end
+
+      it "does not return duplicate paces publishing for the same pace context" do
+        @course_pace1.create_publish_progress
+        @course_pace1.create_publish_progress
+        section_pace = course_pace_model(course: @course1, course_section: @course1.default_section)
+        section_pace.create_publish_progress
+
+        user_session(@teacher1)
+
+        get :index, params: { course_id: @course1.id }
+        expect(response).to be_successful
+
+        js_env = controller.js_env
+        expect(js_env[:PACES_PUBLISHING].length).to eq(2)
+      end
+
+      it "removes the progress if the enrollment is no longer active" do
+        student_enrollment = @course1.enroll_student(@student, enrollment_state: "active", allow_multiple_enrollments: true)
+        # Stop other publishing progresses
+        Progress.where(tag: "course_pace_publish").destroy_all
+        student_enrollment_pace_model(student_enrollment:).create_publish_progress
+        expect(Progress.where(tag: "course_pace_publish").count).to eq(1)
+        student_pace_progress = Progress.find_by(tag: "course_pace_publish")
+        student_enrollment.destroy
+        # The enrollment destroy queues up the course pace
+        expect(Progress.where(tag: "course_pace_publish").count).to eq(2)
+        expect(Progress.all).to include(student_pace_progress)
+        user_session(@teacher1)
+
+        get :index, params: { course_id: @course1.id }
+        expect(response).to be_successful
+
+        js_env = controller.js_env
+        expect(js_env[:PACES_PUBLISHING].length).to eq(1)
+        expect(Progress.where(tag: "course_pace_publish").count).to eq(1)
+        expect(Progress.all).not_to include(student_pace_progress)
+      end
+    end
+
     context "progress" do
+      it "queues up a new job using the same progress if the delayed_job_id is missing" do
+        progress = @course_pace.create_publish_progress
+        delayed_job = progress.delayed_job
+        progress.update!(delayed_job_id: nil)
+        delayed_job.destroy
+        get :index, params: { course_id: @course.id }
+        expect(response).to be_successful
+        expect(Progress.last.id).to eq(progress.id)
+        progress.reload
+        expect(progress.delayed_job_id).not_to be_nil
+        expect(progress.delayed_job).not_to be_nil
+      end
+
+      it "creates a new progress and job if the delayed_job is missing" do
+        progress = @course_pace.create_publish_progress
+        progress.delayed_job.destroy
+        get :index, params: { course_id: @course.id }
+        expect(response).to be_successful
+        expect(progress.reload.failed?).to be_truthy
+        new_progress = Progress.last
+        expect(new_progress.tag).to eq("course_pace_publish")
+        expect(new_progress.delayed_job_id).not_to be_nil
+        expect(new_progress.delayed_job).not_to be_nil
+      end
+
       it "starts the progress' delayed job if queued" do
         progress = @course_pace.create_publish_progress
         delayed_job = progress.delayed_job
@@ -270,13 +367,13 @@ describe CoursePacesController do
 
         get :api_show, params: { course_id: @course.id, id: @course_pace.id }
         pace = response.parsed_body["course_pace"]
-        expect(pace["modules"][0]["items"].select { |item| item["assignment_title"] == "Del this assn" }.present?).to be_truthy
+        expect(pace["modules"][0]["items"].any? { |item| item["assignment_title"] == "Del this assn" }).to be_truthy
 
         a.destroy!
 
         get :api_show, params: { course_id: @course.id, id: @course_pace.id }
         pace = response.parsed_body["course_pace"]
-        expect(pace["modules"][0]["items"].select { |item| item["assignment_title"] == "Del this assn" }.present?).to be_falsey
+        expect(pace["modules"][0]["items"].any? { |item| item["assignment_title"] == "Del this assn" }).to be_falsey
       end
 
       it "handles quizzes" do
@@ -287,13 +384,13 @@ describe CoursePacesController do
 
         get :api_show, params: { course_id: @course.id, id: @course_pace.id }
         pace = response.parsed_body["course_pace"]
-        expect(pace["modules"][0]["items"].select { |item| item["assignment_title"] == "Del this quiz" }.present?).to be_truthy
+        expect(pace["modules"][0]["items"].any? { |item| item["assignment_title"] == "Del this quiz" }).to be_truthy
 
         q.destroy!
 
         get :api_show, params: { course_id: @course.id, id: @course_pace.id }
         pace = response.parsed_body["course_pace"]
-        expect(pace["modules"][0]["items"].select { |item| item["assignment_title"] == "Del this quiz" }.present?).to be_falsey
+        expect(pace["modules"][0]["items"].any? { |item| item["assignment_title"] == "Del this quiz" }).to be_falsey
       end
 
       it "handles graded discussions" do
@@ -304,13 +401,13 @@ describe CoursePacesController do
 
         get :api_show, params: { course_id: @course.id, id: @course_pace.id }
         pace = response.parsed_body["course_pace"]
-        expect(pace["modules"][0]["items"].select { |item| item["assignment_title"] == "Del this disc" }.present?).to be_truthy
+        expect(pace["modules"][0]["items"].any? { |item| item["assignment_title"] == "Del this disc" }).to be_truthy
 
         d.destroy!
 
         get :api_show, params: { course_id: @course.id, id: @course_pace.id }
         pace = response.parsed_body["course_pace"]
-        expect(pace["modules"][0]["items"].select { |item| item["assignment_title"] == "Del this disc" }.present?).to be_falsey
+        expect(pace["modules"][0]["items"].any? { |item| item["assignment_title"] == "Del this disc" }).to be_falsey
       end
     end
   end
@@ -337,9 +434,98 @@ describe CoursePacesController do
       expect(progress.workflow_state).to eq("queued")
       expect(response_body["progress"]["id"]).to eq(progress.id)
     end
+
+    it "overrides to active workflow_state and publishes, when passing unpublished workflow_state to an already published pace" do
+      @course.root_account.enable_feature!(:course_pace_draft_state)
+
+      put :update, params: { course_id: @course.id, id: @course_pace.id, course_pace: valid_update_params.merge(workflow_state: "unpublished") }
+      expect(response).to be_successful
+      response_body = response.parsed_body
+      expect(response_body["course_pace"]["workflow_state"]).to eq("active")
+
+      # Course pace's publish should be queued
+      progress = Progress.last
+      expect(progress.context).to eq(@course_pace)
+      expect(progress.workflow_state).to eq("queued")
+      expect(response_body["progress"]["id"]).to eq(progress.id)
+    end
+
+    describe "updating an unpublished pace" do
+      before :once do
+        @new_section = @course.course_sections.create!
+        @course_pace_draft = course_pace_model(course: @course, course_section: @new_section, workflow_state: "unpublished", published_at: nil)
+        @course.root_account.enable_feature!(:course_pace_draft_state)
+      end
+
+      it "updates the pace without queuing a publish job" do
+        put :update, params: {
+          course_id: @course.id,
+          id: @course_pace_draft.id,
+          course_pace: valid_update_params.merge(workflow_state: "unpublished", course_section_id: @new_section.id)
+        }
+        expect(response).to be_successful
+
+        response_body = response.parsed_body
+        expect(response_body["course_pace"]["id"]).to eq(@course_pace_draft.id)
+        expect(response_body["course_pace"]["workflow_state"]).to eq("unpublished")
+        expect(response_body["progress"]).to be_nil
+
+        # Course pace's publish should NOT be queued
+        progress = Progress.last
+        expect(progress.context).not_to eq(@course_pace_draft)
+      end
+
+      it "updates the pace a second time without queuing a publish job" do
+        put :update, params: {
+          course_id: @course.id,
+          id: @course_pace_draft.id,
+          course_pace: valid_update_params.merge(
+            workflow_state: "unpublished",
+            hard_end_dates: false,
+            course_section_id: @new_section.id
+          )
+        }
+        expect(response).to be_successful
+
+        response_body = response.parsed_body
+        expect(response_body["course_pace"]["id"]).to eq(@course_pace_draft.id)
+        expect(response_body["course_pace"]["workflow_state"]).to eq("unpublished")
+        expect(response_body["progress"]).to be_nil
+
+        # Course pace's publish should NOT be queued
+        progress = Progress.last
+        expect(progress.context).not_to eq(@course_pace_draft)
+      end
+
+      it "updates the pace a final time and queues a publish job" do
+        put :update, params: {
+          course_id: @course.id,
+          id: @course_pace_draft.id,
+          course_pace: valid_update_params.merge(
+            course_section_id: @new_section.id,
+            workflow_state: "active"
+          )
+        }
+        expect(response).to be_successful
+
+        response_body = response.parsed_body
+        expect(response_body["course_pace"]["id"]).to eq(@course_pace_draft.id)
+        expect(response_body["course_pace"]["workflow_state"]).to eq("active")
+
+        # Course pace's publish should be queued
+        progress = Progress.last
+        expect(progress.context).to eq(@course_pace_draft)
+        expect(progress.workflow_state).to eq("queued")
+        expect(response_body["progress"]["id"]).to eq(progress.id)
+      end
+    end
   end
 
   describe "POST #create" do
+    before :once do
+      @course.root_account.disable_feature!(:course_pace_draft_state)
+    end
+
     let(:create_params) { valid_update_params.merge(course_id: @course.id, user_id: @student.id) }
 
     it "creates the CoursePace and all the CoursePaceModuleItems" do
@@ -372,9 +558,48 @@ describe CoursePacesController do
       expect(progress.workflow_state).to eq("queued")
       expect(response_body["progress"]["id"]).to eq(progress.id)
     end
+
+    it "creates and publishes the CoursePace when course_pace_draft_state feature flag is disabled and workflow_state=unpublished" do
+      post :create, params: { course_id: @course.id, course_pace: create_params.merge(workflow_state: "unpublished") }
+      expect(response).to be_successful
+
+      course_pace = CoursePace.last
+      response_body = response.parsed_body
+
+      # Course pace's publish should be queued anyway and ignore passed workflow_state
+      progress = Progress.last
+      expect(progress.context).to eq(course_pace)
+      expect(progress.workflow_state).to eq("queued")
+      expect(response_body["progress"]["id"]).to eq(progress.id)
+    end
+
+    describe "create pace in draft state" do
+      before :once do
+        @course.root_account.enable_feature!(:course_pace_draft_state)
+      end
+
+      it "creates the pace without queueing a publishing job" do
+        post :create, params: { course_id: @course.id, course_pace: create_params.merge(workflow_state: "unpublished") }
+        expect(response).to be_successful
+
+        response_body = response.parsed_body
+        expect(response_body["course_pace"]["workflow_state"]).to eq("unpublished")
+        expect(response_body["progress"]).to be_nil
+
+        created_pace = CoursePace.last
+
+        # Course pace's publish should be NOT be queued
+        progress = Progress.last
+        expect(progress.context).not_to eq(created_pace)
+      end
+    end
   end
 
   describe "GET #new" do
+    before :once do
+      @course.root_account.disable_feature!(:course_pace_draft_state)
+    end
+
     context "course" do
       it "returns a created course pace if one already exists" do
         get :new, params: { course_id: @course.id }
@@ -586,6 +811,20 @@ describe CoursePacesController do
       json_response = response.parsed_body
       expect(json_response["context_type"]).to eq("CoursePace")
       expect(json_response["workflow_state"]).to eq("queued")
+    end
+
+    it "emits course_pacing.publishing.count_exceeding_limit to statsd when pace publishing processes exceeded limit" do
+      allow(InstStatsd::Statsd).to receive(:count).and_call_original
+      stub_const("CoursePacesController::COURSE_PACES_PUBLISHING_LIMIT", 5)
+
+      Progress.destroy_all
+      6.times do
+        pace = course_pace_model(course: @course, course_section: @course.course_sections.create!)
+        pace.create_publish_progress(run_at: Time.now)
+      end
+
+      post :publish, params: { course_id: @course.id, id: @course_pace.id }
+      expect(InstStatsd::Statsd).to have_received(:count).with("course_pacing.publishing.count_exceeding_limit", 6)
     end
   end
 

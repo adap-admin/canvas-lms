@@ -18,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require "atom"
-
 # @API Groups
 #
 # Groups serve as the data for a few different ideas in Canvas.  The first is
@@ -90,6 +88,11 @@ require "atom"
 #           "example": "Course",
 #           "type": "string"
 #         },
+#         "context_name": {
+#           "description": "The course or account name that the group belongs to.",
+#           "example": "Course 101",
+#           "type": "string"
+#         },
 #         "course_id": {
 #           "example": 3,
 #           "type": "integer"
@@ -143,6 +146,7 @@ require "atom"
 class GroupsController < ApplicationController
   before_action :get_context
   before_action :require_user, only: %w[index accept_invitation activity_stream activity_stream_summary]
+  before_action :check_limited_access_for_students, only: %i[create_file]
 
   include Api::V1::Attachment
   include Api::V1::Group
@@ -175,7 +179,7 @@ class GroupsController < ApplicationController
     category = @context.group_categories.where(id: params[:category_id]).first
     return render json: {}, status: :not_found unless category
 
-    page = (params[:page] || 1).to_i rescue 1
+    page = (params[:page] || 1).to_i
     per_page = Api.per_page_for(self, default: 15, max: 100)
     groups = if category && !category.student_organized?
                category.groups.active
@@ -219,8 +223,11 @@ class GroupsController < ApplicationController
   def index
     return context_index if @context
 
+    page_has_instui_topnav
     includes = { include: params[:include] }
     groups_scope = @current_user.current_groups
+    page_has_instui_topnav
+
     respond_to do |format|
       format.html do
         groups_scope = groups_scope.where(context_type: params[:context_type]) if params[:context_type]
@@ -266,9 +273,13 @@ class GroupsController < ApplicationController
   def context_index
     return unless authorized_action(@context, @current_user, :read_roster)
 
+    page_has_instui_topnav
     @groups = all_groups = @context.groups.active
-                                   .order(GroupCategory::Bookmarker.order_by, Group::Bookmarker.order_by)
-                                   .eager_load(:group_category).preload(:root_account)
+    unless params[:filter].nil?
+      @groups = all_groups = @groups.left_outer_joins(:users).where("groups.name ILIKE :query OR users.name ILIKE :query", query: "%#{ActiveRecord::Base.sanitize_sql_like(params[:filter])}%")
+    end
+    @groups = all_groups = @groups.order(GroupCategory::Bookmarker.order_by, Group::Bookmarker.order_by)
+                                  .eager_load(:group_category).preload(:root_account)
 
     # run this only for students
     if params[:section_restricted] && @context.is_a?(Course) && @context.user_is_student?(@current_user)
@@ -313,7 +324,7 @@ class GroupsController < ApplicationController
         @categories  = @context.group_categories.order(Arel.sql("role <> 'student_organized'"), GroupCategory.best_unicode_collation_key("name")).preload(:root_account)
         @user_groups = @current_user.group_memberships_for(@context) if @current_user
 
-        if @context.grants_any_right?(@current_user, session, :manage_groups, *RoleOverride::GRANULAR_MANAGE_GROUPS_PERMISSIONS)
+        if @context.grants_any_right?(@current_user, session, *RoleOverride::GRANULAR_MANAGE_GROUPS_PERMISSIONS)
           categories_json = @categories.map { |cat| group_category_json(cat, @current_user, session, include: %w[progress_url unassigned_users_count groups_count]) }
           uncategorized = @context.groups.active.uncategorized.to_a
           if uncategorized.present?
@@ -323,9 +334,9 @@ class GroupsController < ApplicationController
           end
 
           js_permissions = {
-            can_add_groups: @context.grants_any_right?(@current_user, session, :manage_groups, :manage_groups_add),
-            can_manage_groups: @context.grants_any_right?(@current_user, session, :manage_groups, :manage_groups_manage),
-            can_delete_groups: @context.grants_any_right?(@current_user, session, :manage_groups, :manage_groups_delete)
+            can_add_groups: @context.grants_right?(@current_user, session, :manage_groups_add),
+            can_manage_groups: @context.grants_right?(@current_user, session, :manage_groups_manage),
+            can_delete_groups: @context.grants_right?(@current_user, session, :manage_groups_delete)
           }
 
           js_env group_categories: categories_json,
@@ -337,6 +348,7 @@ class GroupsController < ApplicationController
           if @context.is_a?(Course)
             # get number of sections with students in them so we can enforce a min group size for random assignment on sections
             js_env(student_section_count: @context.enrollments.active_or_pending.where(type: "StudentEnrollment").distinct.count(:course_section_id))
+            js_env(self_signup_deadline_enabled: @context.account.feature_enabled?(:self_signup_deadline))
           end
           # since there are generally lots of users in an account, always do large roster view
           @js_env[:IS_LARGE_ROSTER] ||= @context.is_a?(Account)
@@ -353,12 +365,11 @@ class GroupsController < ApplicationController
       end
 
       format.atom { render xml: @groups.map(&:to_atom).to_xml }
-
       format.json do
-        path = send("api_v1_#{@context.class.to_s.downcase}_user_groups_url")
+        path = send(:"api_v1_#{@context.class.to_s.downcase}_user_groups_url")
 
         if value_to_boolean(params[:only_own_groups]) || !tab_enabled?(Course::TAB_PEOPLE, no_render: true)
-          all_groups = all_groups.merge(@current_user.current_groups)
+          all_groups = all_groups.merge(@current_user.current_groups.shard(@current_user))
         end
         @paginated_groups = Api.paginate(all_groups, self, path)
         render json: @paginated_groups.map { |g|
@@ -400,6 +411,7 @@ class GroupsController < ApplicationController
           add_crumb @group.short_name, named_context_url(@group, :context_url)
         end
         @context = @group
+        page_has_instui_topnav
         assign_localizer
         if @group.deleted? && @group.context
           flash[:notice] = t("notices.already_deleted", "That group has been deleted")
@@ -410,8 +422,8 @@ class GroupsController < ApplicationController
           redirect_to dashboard_url
           return
         end
-        @current_conferences = @group.web_conferences.active.select { |c| c.active? && c.users.include?(@current_user) } rescue []
-        @scheduled_conferences = @context.web_conferences.active.select { |c| c.scheduled? && c.users.include?(@current_user) } rescue []
+        @current_conferences = @group.web_conferences.active.select { |c| c.active? && c.users.include?(@current_user) }
+        @scheduled_conferences = @context.web_conferences.active.select { |c| c.scheduled? && c.users.include?(@current_user) }
         @stream_items = @current_user.try(:cached_recent_stream_items, { contexts: @context }) || []
         if params[:join] && @group.grants_right?(@current_user, :join)
           if @group.full?
@@ -457,7 +469,7 @@ class GroupsController < ApplicationController
   end
 
   def new
-    if authorized_action(@context, @current_user, [:manage_groups, :manage_groups_add])
+    if authorized_action(@context, @current_user, :manage_groups_add)
       @group = @context.groups.build
     end
   end
@@ -505,14 +517,14 @@ class GroupsController < ApplicationController
 
         @context = group_category.context
         attrs[:group_category] = group_category
-        return unless authorized_action(group_category.context, @current_user, [:manage_groups, :manage_groups_add])
+        return unless authorized_action(group_category.context, @current_user, :manage_groups_add)
       else
         @context = @domain_root_account
         attrs[:group_category] = GroupCategory.communities_for(@context)
       end
     elsif params[:group]
       group_category_id = params[:group].delete :group_category_id
-      if group_category_id && @context.grants_any_right?(@current_user, session, :manage_groups, :manage_groups_add)
+      if group_category_id && @context.grants_right?(@current_user, session, :manage_groups_add)
         group_category = @context.group_categories.where(id: group_category_id).first
         return render json: {}, status: :bad_request unless group_category
 
@@ -536,7 +548,7 @@ class GroupsController < ApplicationController
       end
       respond_to do |format|
         if @group.save
-          DueDateCacher.with_executing_user(@current_user) do
+          SubmissionLifecycleManager.with_executing_user(@current_user) do
             @group.add_user(@current_user, "accepted", true) if @group.should_add_creator?(@current_user)
           end
 
@@ -751,7 +763,7 @@ class GroupsController < ApplicationController
   def add_user
     @group = @context
     if authorized_action(@group, @current_user, :manage)
-      DueDateCacher.with_executing_user(@current_user) do
+      SubmissionLifecycleManager.with_executing_user(@current_user) do
         @membership = @group.add_user(User.find(params[:user_id]))
         if @membership.valid?
           @group.touch
@@ -833,12 +845,9 @@ class GroupsController < ApplicationController
   def public_feed
     return unless get_feed_context(only: [:group])
 
-    feed = Atom::Feed.new do |f|
-      f.title = t(:feed_title, "%{course_or_account_name} Feed", course_or_account_name: @context.full_name)
-      f.links << Atom::Link.new(href: group_url(@context), rel: "self")
-      f.updated = Time.now
-      f.id = group_url(@context)
-    end
+    title = t(:feed_title, "%{course_or_account_name} Feed", course_or_account_name: @context.full_name)
+    link = group_url(@context)
+
     @entries = []
     @entries.concat @context.calendar_events.active
     @entries.concat(DiscussionTopic::ScopedToUser.new(@context, @current_user, @context.discussion_topics.published).scope.reject do |dt|
@@ -846,11 +855,9 @@ class GroupsController < ApplicationController
     end)
     @entries.concat WikiPages::ScopedToUser.new(@context, @current_user, @context.wiki_pages.published).scope
     @entries = @entries.sort_by(&:updated_at)
-    @entries.each do |entry|
-      feed.entries << entry.to_atom(context: @context)
-    end
+
     respond_to do |format|
-      format.atom { render plain: feed.to_xml }
+      format.atom { render plain: AtomFeedHelper.render_xml(title:, link:, entries: @entries, context: @context) }
     end
   end
 
@@ -871,6 +878,7 @@ class GroupsController < ApplicationController
       submit_assignment = value_to_boolean(params[:submit_assignment])
       opts = { check_quota: true, submit_assignment: }
       if submit_assignment && @context.respond_to?(:submissions_folder)
+        opts[:check_quota] = false
         opts[:folder] = @context.submissions_folder
       end
       api_attachment_preflight(@context, request, opts)

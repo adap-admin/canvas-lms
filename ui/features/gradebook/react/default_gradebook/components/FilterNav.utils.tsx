@@ -23,13 +23,20 @@ import type {AssignmentGroup, Module, Section, StudentGroupCategoryMap} from '..
 import type {CamelizedGradingPeriod} from '@canvas/grading/grading.d'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import natcompare from '@canvas/util/natcompare'
-import {doFiltersMatch, isFilterNotEmpty} from '../Gradebook.utils'
+import {
+  doFiltersMatch,
+  formatGradingPeriodTitleForDisplay,
+  getCustomStatusIdStrings,
+  isFilterNotEmpty,
+  mapCustomStatusToIdString,
+} from '../Gradebook.utils'
 import type {
   Filter,
   FilterDrilldownData,
   FilterDrilldownMenuItem,
   FilterPreset,
 } from '../gradebook.d'
+import type {GradeStatus} from '@canvas/grading/accountGradingStatus'
 
 const I18n = useI18nScope('gradebook')
 
@@ -43,6 +50,8 @@ function useFilterDropdownData({
   studentGroupCategories,
   onToggleFilterPreset,
   onToggleDateModal,
+  customStatuses,
+  multiselectGradebookFiltersEnabled,
 }: {
   appliedFilters: Filter[]
   assignmentGroups: AssignmentGroup[]
@@ -53,6 +62,8 @@ function useFilterDropdownData({
   studentGroupCategories: StudentGroupCategoryMap
   onToggleFilterPreset: (filterPreset: FilterPreset) => void
   onToggleDateModal: () => void
+  customStatuses: GradeStatus[]
+  multiselectGradebookFiltersEnabled?: boolean
 }) {
   const assignments = assignmentGroups.flatMap(ag => ag.assignments)
   const modulesWithGradeableAssignments = useMemo(() => {
@@ -60,7 +71,10 @@ function useFilterDropdownData({
       assignments.some(a => a.grading_type !== 'not_graded' && (a.module_ids || []).includes(m.id))
     )
   }, [modules, assignments])
-  const toggleFilter = useStore(state => state.toggleFilter)
+  const {toggleFilter, toggleFilterMultiSelect} = useStore.getState()
+  const toggleFilterHelper = multiselectGradebookFiltersEnabled
+    ? toggleFilterMultiSelect
+    : toggleFilter
 
   const {dataMap_, filterItems_} = useMemo(() => {
     const dataMap: FilterDrilldownData = {
@@ -92,20 +106,22 @@ function useFilterDropdownData({
         name: I18n.t('Sections'),
         parentId: 'savedFilterPresets',
         isSelected: appliedFilters.some(c => c.type === 'section'),
-        items: sections.map(s => ({
-          id: s.id,
-          name: s.name,
-          isSelected: appliedFilters.some(c => c.type === 'section' && c.value === s.id),
-          onToggle: () => {
-            const filter: Filter = {
-              id: uuid.v4(),
-              type: 'section',
-              value: s.id,
-              created_at: new Date().toISOString(),
-            }
-            toggleFilter(filter)
-          },
-        })),
+        items: sections
+          .sort((s1, s2) => natcompare.strings(s1.name, s2.name))
+          .map(s => ({
+            id: s.id,
+            name: s.name,
+            isSelected: appliedFilters.some(c => c.type === 'section' && c.value === s.id),
+            onToggle: () => {
+              const filter: Filter = {
+                id: uuid.v4(),
+                type: 'section',
+                value: s.id,
+                created_at: new Date().toISOString(),
+              }
+              toggleFilterHelper(filter)
+            },
+          })),
       }
       dataMap.sections = filterItems.sections
     }
@@ -127,7 +143,7 @@ function useFilterDropdownData({
               value: m.id,
               created_at: new Date().toISOString(),
             }
-            toggleFilter(filter)
+            toggleFilterHelper(filter)
           },
         })),
       }
@@ -137,7 +153,7 @@ function useFilterDropdownData({
     if (gradingPeriods.length > 0) {
       const gradingPeriodItems: FilterDrilldownMenuItem[] = gradingPeriods.map(a => ({
         id: a.id,
-        name: a.title,
+        name: formatGradingPeriodTitleForDisplay(a) as string,
         isSelected: appliedFilters.some(c => c.type === 'grading-period' && c.value === a.id),
         onToggle: () => {
           const filter: Filter = {
@@ -192,7 +208,7 @@ function useFilterDropdownData({
               value: a.id,
               created_at: new Date().toISOString(),
             }
-            toggleFilter(filter)
+            toggleFilterHelper(filter)
           },
         })),
         itemGroups: [],
@@ -226,14 +242,14 @@ function useFilterDropdownData({
                     value: group.id,
                     created_at: new Date().toISOString(),
                   }
-                  toggleFilter(filter)
+                  toggleFilterHelper(filter)
                 },
               })),
           })),
       }
       dataMap['student-groups'] = filterItems['student-groups']
     }
-
+    const customStatusIdStrings = getCustomStatusIdStrings(customStatuses)
     filterItems.status = {
       id: 'status',
       name: I18n.t('Status'),
@@ -241,9 +257,15 @@ function useFilterDropdownData({
       isSelected: appliedFilters.some(
         c =>
           c.type === 'submissions' &&
-          ['late', 'missing', 'resubmitted', 'dropped', 'excused', 'extended'].includes(
-            c.value || ''
-          )
+          [
+            'late',
+            'missing',
+            'resubmitted',
+            'dropped',
+            'excused',
+            'extended',
+            ...customStatusIdStrings,
+          ].includes(c.value || '')
       ),
       items: [
         {
@@ -257,7 +279,7 @@ function useFilterDropdownData({
               value: 'late',
               created_at: new Date().toISOString(),
             }
-            toggleFilter(filter)
+            toggleFilterHelper(filter)
           },
         },
         {
@@ -271,7 +293,7 @@ function useFilterDropdownData({
               value: 'missing',
               created_at: new Date().toISOString(),
             }
-            toggleFilter(filter)
+            toggleFilterHelper(filter)
           },
         },
         {
@@ -287,7 +309,7 @@ function useFilterDropdownData({
               value: 'resubmitted',
               created_at: new Date().toISOString(),
             }
-            toggleFilter(filter)
+            toggleFilterHelper(filter)
           },
         },
         {
@@ -301,7 +323,7 @@ function useFilterDropdownData({
               value: 'dropped',
               created_at: new Date().toISOString(),
             }
-            toggleFilter(filter)
+            toggleFilterHelper(filter)
           },
         },
         {
@@ -315,7 +337,7 @@ function useFilterDropdownData({
               value: 'excused',
               created_at: new Date().toISOString(),
             }
-            toggleFilter(filter)
+            toggleFilterHelper(filter)
           },
         },
       ],
@@ -332,30 +354,50 @@ function useFilterDropdownData({
             value: 'extended',
             created_at: new Date().toISOString(),
           }
-          toggleFilter(filter)
+          toggleFilterHelper(filter)
         },
       })
     }
+    customStatuses.forEach(status => {
+      filterItems.status.items!.push({
+        id: mapCustomStatusToIdString(status),
+        name: status.name,
+        isSelected: appliedFilters.some(
+          c => c.type === 'submissions' && c.value === mapCustomStatusToIdString(status)
+        ),
+        onToggle: () => {
+          const filter: Filter = {
+            id: uuid.v4(),
+            type: 'submissions',
+            value: mapCustomStatusToIdString(status),
+            created_at: new Date().toISOString(),
+          }
+          toggleFilterHelper(filter)
+        },
+      })
+    })
     dataMap.status = filterItems.status
 
     filterItems.submissions = {
       id: 'submissions',
       name: I18n.t('Submissions'),
       parentId: 'savedFilterPresets',
-      isSelected: appliedFilters.some(c => c.type === 'submissions'),
+      isSelected: appliedFilters.some(
+        c =>
+          c.type === 'submissions' &&
+          [
+            'has-ungraded-submissions',
+            'has-submissions',
+            'has-no-submissions',
+            'has-unposted-grades',
+          ].includes(c.value || '')
+      ),
       items: [
         {
-          id: 'savedFilterPresets',
+          id: '1',
           name: I18n.t('Has Ungraded Submissions'),
           isSelected: appliedFilters.some(
-            c =>
-              c.type === 'submissions' &&
-              [
-                'has-ungraded-submissions',
-                'has-submissions',
-                'has-no-submissions',
-                'has-unposted-grades',
-              ].includes(c.value || '')
+            c => c.type === 'submissions' && c.value === 'has-ungraded-submissions'
           ),
           onToggle: () => {
             const filter: Filter = {
@@ -364,7 +406,7 @@ function useFilterDropdownData({
               value: 'has-ungraded-submissions',
               created_at: new Date().toISOString(),
             }
-            toggleFilter(filter)
+            toggleFilterHelper(filter)
           },
         },
         {
@@ -380,7 +422,7 @@ function useFilterDropdownData({
               value: 'has-submissions',
               created_at: new Date().toISOString(),
             }
-            toggleFilter(filter)
+            toggleFilterHelper(filter)
           },
         },
         {
@@ -396,7 +438,7 @@ function useFilterDropdownData({
               value: 'has-no-submissions',
               created_at: new Date().toISOString(),
             }
-            toggleFilter(filter)
+            toggleFilterHelper(filter)
           },
         },
         {
@@ -412,7 +454,7 @@ function useFilterDropdownData({
               value: 'has-unposted-grades',
               created_at: new Date().toISOString(),
             }
-            toggleFilter(filter)
+            toggleFilterHelper(filter)
           },
         },
       ],
@@ -433,6 +475,7 @@ function useFilterDropdownData({
   }, [
     appliedFilters,
     assignmentGroups,
+    customStatuses,
     filterPresets,
     gradingPeriods,
     modulesWithGradeableAssignments,
@@ -441,6 +484,7 @@ function useFilterDropdownData({
     sections,
     studentGroupCategories,
     toggleFilter,
+    toggleFilterHelper,
   ])
 
   return {dataMap: dataMap_, filterItems: filterItems_}

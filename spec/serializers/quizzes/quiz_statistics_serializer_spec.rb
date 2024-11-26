@@ -70,8 +70,7 @@ describe Quizzes::QuizStatisticsSerializer do
     }
 
     ActiveModel::FakeController.new(options).tap do |controller|
-      allow(controller).to receive(:session).and_return session
-      allow(controller).to receive(:context).and_return context
+      allow(controller).to receive_messages(session:, context:)
     end
   end
 
@@ -132,7 +131,7 @@ describe Quizzes::QuizStatisticsSerializer do
     )
   end
 
-  it "does not serialize speed_grader url if user cannot view speed grader" do
+  it "does not serialize speed_grader url if user cannot view SpeedGrader" do
     allow(quiz.assignment).to receive(:can_view_speed_grader?).and_return false
     expect(subject.as_json[:quiz_statistics][:speed_grader_url]).to be_nil
   end

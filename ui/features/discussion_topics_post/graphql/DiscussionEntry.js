@@ -17,7 +17,7 @@
  */
 
 import {AnonymousUser} from './AnonymousUser'
-import {bool, number, shape, string} from 'prop-types'
+import {arrayOf, bool, number, shape, string} from 'prop-types'
 import {DiscussionEntryPermissions} from './DiscussionEntryPermissions'
 import {DiscussionEntryVersion} from './DiscussionEntryVersion'
 import gql from 'graphql-tag'
@@ -32,11 +32,18 @@ export const DiscussionEntry = {
       _id
       createdAt
       updatedAt
+      editedAt
       deleted
       message
       ratingCount
       ratingSum
       subentriesCount
+      editor {
+        ...User
+      }
+      author {
+        ...User
+      }
       attachment {
         ...Attachment
       }
@@ -57,12 +64,11 @@ export const DiscussionEntry = {
         ...DiscussionEntryPermissions
       }
       rootEntryId
-      isolatedEntryId
       parentId
       quotedEntry {
         _id
         createdAt
-        previewMessage
+        message
         author {
           shortName
           id
@@ -77,10 +83,8 @@ export const DiscussionEntry = {
         }
         deleted
       }
-      discussionEntryVersionsConnection {
-        nodes {
-          ...DiscussionEntryVersion
-        }
+      discussionEntryVersions {
+        ...DiscussionEntryVersion
       }
       reportTypeCounts {
         inappropriateCount
@@ -90,6 +94,7 @@ export const DiscussionEntry = {
       }
       depth
     }
+    ${User.fragment}
     ${Attachment.fragment}
     ${DiscussionEntryPermissions.fragment}
     ${DiscussionEntryVersion.fragment}
@@ -100,6 +105,7 @@ export const DiscussionEntry = {
     _id: string,
     createdAt: string,
     updatedAt: string,
+    editedAt: string,
     deleted: bool,
     message: string,
     ratingCount: number,
@@ -124,11 +130,10 @@ export const DiscussionEntry = {
     }),
     permissions: DiscussionEntryPermissions.shape,
     rootEntryId: string,
-    isolatedEntryId: string,
     parentId: string,
     quotedEntry: shape({
       createdAt: string,
-      previewMessage: string,
+      message: string,
       author: shape({
         shortName: string,
         id: string,
@@ -142,7 +147,7 @@ export const DiscussionEntry = {
       }),
       deleted: bool,
     }),
-    discussionEntryVersionsConnection: DiscussionEntryVersion.shape,
+    discussionEntryVersions: arrayOf(DiscussionEntryVersion.shape),
     reportTypeCounts: shape({
       inappropriateCount: number,
       offensiveCount: number,
@@ -157,6 +162,7 @@ export const DiscussionEntry = {
     _id = 'DiscussionEntry-default-mock',
     createdAt = '2021-02-08T13:35:56-07:00',
     updatedAt = '2021-04-13T10:00:20-06:00',
+    editedAt = '2021-04-13T10:00:20-06:00',
     deleted = false,
     message = '<p>This is the parent reply</p>',
     ratingCount = null,
@@ -189,17 +195,13 @@ export const DiscussionEntry = {
       __typename: 'DiscussionSubentriesConnection',
     },
     rootEntryId = null,
-    isolatedEntryId = null,
     parentId = null,
     quotedEntry = null,
-    discussionEntryVersionsConnection = {
-      nodes: [
-        DiscussionEntryVersion.mock({
-          message: '<p>This is the parent reply</p>',
-        }),
-      ],
-      __typename: 'DiscussionEntryVersionConnection',
-    },
+    discussionEntryVersions = [
+      DiscussionEntryVersion.mock({
+        message: '<p>This is the parent reply</p>',
+      }),
+    ],
     reportTypeCounts = {
       inappropriateCount: 0,
       offensiveCount: 0,
@@ -213,6 +215,7 @@ export const DiscussionEntry = {
     _id,
     createdAt,
     updatedAt,
+    editedAt,
     deleted,
     message,
     ratingCount,
@@ -228,10 +231,9 @@ export const DiscussionEntry = {
     permissions,
     discussionSubentriesConnection,
     rootEntryId,
-    isolatedEntryId,
     parentId,
     quotedEntry,
-    discussionEntryVersionsConnection,
+    discussionEntryVersions,
     reportTypeCounts,
     depth,
     __typename: 'DiscussionEntry',

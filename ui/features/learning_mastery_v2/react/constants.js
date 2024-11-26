@@ -21,4 +21,4 @@ export const COLUMN_WIDTH = 160
 export const STUDENT_COLUMN_WIDTH = 220
 export const STUDENT_COLUMN_RIGHT_PADDING = 15
 export const COLUMN_PADDING = 2
-export const CELL_HEIGHT = 50
+export const CELL_HEIGHT = 45

@@ -44,44 +44,38 @@ describe BrokenLinkHelper, type: :controller do
   end
 
   it "returns false if the location is not found in the referrer body" do
-    allow(request).to receive(:referer).and_return "/courses/#{@course.id}/assignments/#{@assignment.id}"
-    allow(request).to receive(:path).and_return "/bad_link"
+    allow(request).to receive_messages(referer: "/courses/#{@course.id}/assignments/#{@assignment.id}", path: "/bad_link")
     @assignment.update(description: "stuff")
     expect(send_broken_content!).to be false
   end
 
   it "returns true for bad links in assignments with local 404 errors" do
-    allow(request).to receive(:referer).and_return "/courses/#{@course.id}/assignments/#{@assignment.id}"
-    allow(request).to receive(:path).and_return "/test_error"
+    allow(request).to receive_messages(referer: "/courses/#{@course.id}/assignments/#{@assignment.id}", path: "/test_error")
     expect(send_broken_content!).to be true
   end
 
   it "returns true for bad links in quizzes" do
     quiz_model(course: @course, description: "<a href='/test_error'>bad link</a>")
-    allow(request).to receive(:referer).and_return "/courses/#{@course.id}/quizzes/#{@quiz.id}"
-    allow(request).to receive(:path).and_return "/test_error"
+    allow(request).to receive_messages(referer: "/courses/#{@course.id}/quizzes/#{@quiz.id}", path: "/test_error")
     expect(send_broken_content!).to be true
   end
 
   it "returns true for bad links in discussion topics" do
     discussion_topic_model(context: @course, message: "<a href='/test_error'>bad link</a>")
-    allow(request).to receive(:referer).and_return "/courses/#{@course.id}/discussion_topics/#{@topic.id}"
-    allow(request).to receive(:path).and_return "/test_error"
+    allow(request).to receive_messages(referer: "/courses/#{@course.id}/discussion_topics/#{@topic.id}", path: "/test_error")
     expect(send_broken_content!).to be true
   end
 
   it "returns false for bad links in discussion topic entries" do
     discussion_topic_model(context: @course, message: "<a href='/good_page'>bad link</a>")
     @topic.reply_from(user: @student, html: "<a href='/test_error'>bad link</a>")
-    allow(request).to receive(:referer).and_return "/courses/#{@course.id}/discussion_topics/#{@topic.id}"
-    allow(request).to receive(:path).and_return "/test_error"
+    allow(request).to receive_messages(referer: "/courses/#{@course.id}/discussion_topics/#{@topic.id}", path: "/test_error")
     expect(send_broken_content!).to be false
   end
 
   it "returns true for bad links in wiki pages" do
     wiki_page_model(context: @course, body: "<a href='/test_error'>bad link</a>")
-    allow(request).to receive(:referer).and_return "/courses/#{@course.id}/pages/#{@page.url}"
-    allow(request).to receive(:path).and_return "/test_error"
+    allow(request).to receive_messages(referer: "/courses/#{@course.id}/pages/#{@page.url}", path: "/test_error")
     expect(send_broken_content!).to be true
   end
 
@@ -89,8 +83,7 @@ describe BrokenLinkHelper, type: :controller do
     wiki_page_model(context: @course, body: "<a href='/test_error'>bad link</a>")
     @page.set_as_front_page!
     @course.update_attribute(:default_view, "wiki")
-    allow(request).to receive(:referer).and_return "/courses/#{@course.id}"
-    allow(request).to receive(:path).and_return "/test_error"
+    allow(request).to receive_messages(referer: "/courses/#{@course.id}", path: "/test_error")
     expect(send_broken_content!).to be true
   end
 
@@ -98,12 +91,11 @@ describe BrokenLinkHelper, type: :controller do
     linked_assignment = @assignment
     assignment_model(course: @course).update(workflow_state: "unpublished")
     linked_assignment.update(description: "<a href='/courses/#{@course.id}/assignments/#{@assignment.id}'>Unpublished Assignment</a>")
-    allow(request).to receive(:referer).and_return "/courses/#{@course.id}/assignments/#{linked_assignment.id}"
-    allow(request).to receive(:path).and_return "/courses/#{@course.id}/assignments/#{@assignment.id}"
+    allow(request).to receive_messages(referer: "/courses/#{@course.id}/assignments/#{linked_assignment.id}", path: "/courses/#{@course.id}/assignments/#{@assignment.id}")
     expect(send_broken_content!).to be true
   end
 
-  context "#error_type" do
+  describe "#error_type" do
     it "returns :missing_item if the link doesn't point to course content" do
       expect(error_type(@course, "/test_error")).to eq :missing_item
     end
@@ -160,6 +152,27 @@ describe BrokenLinkHelper, type: :controller do
 
     it "returns :missing_item when the user got to a route that doesn't exist in Canvas" do
       expect(error_type(@course, "/yo")).to eq :missing_item
+    end
+  end
+
+  describe AssignmentsController, type: :controller do
+    render_views
+
+    context "in a rendered page" do
+      it "sends a notification for bad links" do
+        @teacher = User.create!
+        @course.enroll_teacher(@teacher)
+        @course.update(workflow_state: "active")
+        linked_assignment = @assignment
+        assignment_model(course: @course).update(workflow_state: "unpublished")
+        linked_assignment.update(description: "<a href='/courses/#{@course.id}/assignments/#{@assignment.id}'>Unpublished Assignment</a>")
+
+        user_session(@student)
+        @request.env["HTTP_REFERER"] = "/courses/#{@course.id}/assignments/#{linked_assignment.id}"
+        get :show, params: { course_id: @course.id, id: @assignment.id }
+        expect(response.status).to eq(401)
+        expect(response.body).to include("We&#39;ve let your instructor know to review this link as soon as possible.")
+      end
     end
   end
 end

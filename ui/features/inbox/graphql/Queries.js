@@ -19,7 +19,6 @@ import gql from 'graphql-tag'
 
 import {Conversation} from './Conversation'
 import {ConversationMessage} from './ConversationMessage'
-import {ConversationParticipant} from './ConversationParticipant'
 import {Enrollment} from './Enrollment'
 import {Course} from './Course'
 import {Group} from './Group'
@@ -54,6 +53,8 @@ export const ADDRESS_BOOK_RECIPIENTS = gql`
               _id
               id
               name
+              shortName
+              pronouns
               observerEnrollmentsConnection(contextCode: $courseContextCode) {
                 nodes {
                   associatedUser {
@@ -74,6 +75,7 @@ export const ADDRESS_BOOK_RECIPIENTS = gql`
   ${PageInfo.fragment}
 `
 
+// This query is used for the compose modal
 export const ADDRESS_BOOK_RECIPIENTS_WITH_COMMON_COURSES = gql`
   query GetAddressBookRecipients(
     $userID: ID!
@@ -92,6 +94,7 @@ export const ADDRESS_BOOK_RECIPIENTS_WITH_COMMON_COURSES = gql`
             nodes {
               id
               name
+              userCount
             }
             pageInfo {
               ...PageInfo
@@ -102,6 +105,8 @@ export const ADDRESS_BOOK_RECIPIENTS_WITH_COMMON_COURSES = gql`
               _id
               id
               name
+              shortName
+              pronouns
               commonCoursesConnection {
                 nodes {
                   _id
@@ -146,6 +151,17 @@ export const TOTAL_RECIPIENTS = gql`
   }
 `
 
+export const USER_INBOX_LABELS_QUERY = gql`
+  query GetUserInboxLabels($userID: ID!) {
+    legacyNode(_id: $userID, type: User) {
+      ... on User {
+        id
+        inboxLabels
+      }
+    }
+  }
+`
+
 export const CONVERSATIONS_QUERY = gql`
   query GetConversationsQuery(
     $userID: ID!
@@ -164,12 +180,35 @@ export const CONVERSATIONS_QUERY = gql`
           after: $afterConversation
         ) {
           nodes {
-            ...ConversationParticipant
+            _id
+            id
+            label
+            workflowState
             conversation {
-              ...Conversation
+              _id
+              id
+              subject
+              isPrivate
+              canReply
+              conversationMessagesCount
+              conversationParticipantsConnection(first: 10) {
+                nodes {
+                  user {
+                    shortName
+                  }
+                }
+              }
               conversationMessagesConnection(first: 1) {
                 nodes {
-                  ...ConversationMessage
+                  id
+                  body
+                  createdAt
+                  author {
+                    id
+                    _id
+                    name
+                    shortName
+                  }
                 }
               }
             }
@@ -181,9 +220,6 @@ export const CONVERSATIONS_QUERY = gql`
       }
     }
   }
-  ${ConversationParticipant.fragment}
-  ${Conversation.fragment}
-  ${ConversationMessage.fragment}
   ${PageInfo.fragment}
 `
 
@@ -249,6 +285,8 @@ export const REPLY_CONVERSATION_QUERY = gql`
         id
         _id
         contextName
+        contextAssetString
+        contextType
         subject
         conversationMessagesConnection(
           participants: $participants
@@ -344,6 +382,21 @@ export const RECIPIENTS_OBSERVERS_QUERY = gql`
           }
         }
       }
+    }
+  }
+`
+
+export const INBOX_SETTINGS_QUERY = gql`
+  query GetMyInboxSettings {
+    myInboxSettings {
+      _id
+      useSignature
+      signature
+      useOutOfOffice
+      outOfOfficeFirstDate
+      outOfOfficeLastDate
+      outOfOfficeSubject
+      outOfOfficeMessage
     }
   }
 `

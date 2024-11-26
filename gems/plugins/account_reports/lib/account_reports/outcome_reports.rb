@@ -35,35 +35,37 @@ module AccountReports
     end
 
     def self.student_assignment_outcome_headers
-      {
-        "student name" => I18n.t("student name"),
-        "student id" => I18n.t("student id"),
-        "student sis id" => I18n.t("student sis id"),
-        "assignment title" => I18n.t("assignment title"),
-        "assignment id" => I18n.t("assignment id"),
-        "submission date" => I18n.t("submission date"),
-        "submission score" => I18n.t("submission score"),
-        "learning outcome name" => I18n.t("learning outcome name"),
-        "learning outcome id" => I18n.t("learning outcome id"),
-        "attempt" => I18n.t("attempt"),
-        "outcome score" => I18n.t("outcome score"),
-        "course name" => I18n.t("course name"),
-        "course id" => I18n.t("course id"),
-        "course sis id" => I18n.t("course sis id"),
-        "section name" => I18n.t("section name"),
-        "section id" => I18n.t("section id"),
-        "section sis id" => I18n.t("section sis id"),
-        "assignment url" => I18n.t("assignment url"),
-        "learning outcome friendly name" => I18n.t("learning outcome friendly name"),
-        "learning outcome points possible" => I18n.t("learning outcome points possible"),
-        "learning outcome mastery score" => I18n.t("learning outcome mastery score"),
-        "learning outcome mastered" => I18n.t("learning outcome mastered"),
-        "learning outcome rating" => I18n.t("learning outcome rating"),
-        "learning outcome rating points" => I18n.t("learning outcome rating points"),
-        "account id" => I18n.t("account id"),
-        "account name" => I18n.t("account name"),
-        "enrollment state" => I18n.t("enrollment state")
-      }
+      [
+        "student name",
+        "student id",
+        "student sis id",
+        "assignment title",
+        "assignment id",
+        "submission date",
+        "submission score",
+        "learning outcome name",
+        "learning outcome id",
+        "attempt",
+        "outcome score",
+        "course name",
+        "course id",
+        "course sis id",
+        "section name",
+        "section id",
+        "section sis id",
+        "assignment url",
+        "learning outcome friendly name",
+        "learning outcome points possible",
+        "learning outcome mastery score",
+        "learning outcome mastered",
+        "learning outcome rating",
+        "learning outcome rating points",
+        "learning outcome group title",
+        "learning outcome group id",
+        "account id",
+        "account name",
+        "enrollment state"
+      ]
     end
 
     # returns rows for each assignment that is linked to an outcome,
@@ -73,38 +75,40 @@ module AccountReports
     end
 
     def self.outcome_result_headers
-      {
-        "student name" => I18n.t("student name"),
-        "student id" => I18n.t("student id"),
-        "student sis id" => I18n.t("student sis id"),
-        "assessment title" => I18n.t("assessment title"),
-        "assessment id" => I18n.t("assessment id"),
-        "assessment type" => I18n.t("assessment type"),
-        "submission date" => I18n.t("submission date"),
-        "submission score" => I18n.t("submission score"),
-        "learning outcome name" => I18n.t("learning outcome name"),
-        "learning outcome id" => I18n.t("learning outcome id"),
-        "attempt" => I18n.t("attempt"),
-        "outcome score" => I18n.t("outcome score"),
-        "assessment question" => I18n.t("assessment question"),
-        "assessment question id" => I18n.t("assessment question id"),
-        "course name" => I18n.t("course name"),
-        "course id" => I18n.t("course id"),
-        "course sis id" => I18n.t("course sis id"),
-        "section name" => I18n.t("section name"),
-        "section id" => I18n.t("section id"),
-        "section sis id" => I18n.t("section sis id"),
-        "assignment url" => I18n.t("assignment url"),
-        "learning outcome friendly name" => I18n.t("learning outcome friendly name"),
-        "learning outcome points possible" => I18n.t("learning outcome points possible"),
-        "learning outcome mastery score" => I18n.t("learning outcome mastery score"),
-        "learning outcome mastered" => I18n.t("learning outcome mastered"),
-        "learning outcome rating" => I18n.t("learning outcome rating"),
-        "learning outcome rating points" => I18n.t("learning outcome rating points"),
-        "account id" => I18n.t("account id"),
-        "account name" => I18n.t("account name"),
-        "enrollment state" => I18n.t("enrollment state")
-      }
+      [
+        "student name",
+        "student id",
+        "student sis id",
+        "assessment title",
+        "assessment id",
+        "assessment type",
+        "submission date",
+        "submission score",
+        "learning outcome name",
+        "learning outcome id",
+        "attempt",
+        "outcome score",
+        "assessment question",
+        "assessment question id",
+        "course name",
+        "course id",
+        "course sis id",
+        "section name",
+        "section id",
+        "section sis id",
+        "assignment url",
+        "learning outcome friendly name",
+        "learning outcome points possible",
+        "learning outcome mastery score",
+        "learning outcome mastered",
+        "learning outcome rating",
+        "learning outcome rating points",
+        "learning outcome group title",
+        "learning outcome group id",
+        "account id",
+        "account name",
+        "enrollment state"
+      ]
     end
 
     # returns rows for each assessed outcome result (or question result)
@@ -136,6 +140,8 @@ module AccountReports
                                lo.id                  AS "learning outcome id",
                                lo.display_name        AS "learning outcome friendly name",
                                lo.data                AS "learning outcome data",
+                               g.title                AS "learning outcome group title",
+                               g.id                   AS "learning outcome group id",
                                r.attempt              AS "attempt",
                                r.hide_points          AS "learning outcome points hidden",
                                r.score                AS "outcome score",
@@ -168,7 +174,8 @@ module AccountReports
                                INNER JOIN #{Account.quoted_table_name} acct ON acct.id = c.account_id
                                INNER JOIN #{CourseSection.quoted_table_name} s ON s.id = e.course_section_id
                                INNER JOIN #{Assignment.quoted_table_name} a ON (a.context_id = c.id
-                                                            AND a.context_type = 'Course')
+                                                            AND a.context_type = 'Course'
+                                                            AND a.type = 'Assignment')
                                INNER JOIN #{ContentTag.quoted_table_name} ct ON (ct.content_id = a.id
                                                               AND ct.content_type = 'Assignment')
                                INNER JOIN #{LearningOutcome.quoted_table_name} lo ON lo.id = ct.learning_outcome_id
@@ -177,6 +184,8 @@ module AccountReports
                                  AND lol.context_type = 'Account'
                                  AND lol.tag_type = 'learning_outcome_association'
                                  AND lol.workflow_state != 'deleted'
+                               INNER JOIN #{LearningOutcomeGroup.quoted_table_name} g ON g.id = lol.associated_asset_id
+                                 AND lol.associated_asset_type = 'LearningOutcomeGroup'
                                  LEFT JOIN #{LearningOutcomeResult.quoted_table_name} r ON (r.user_id=pseudonyms.user_id
                                    AND r.content_tag_id = ct.id)
                                  LEFT JOIN #{Submission.quoted_table_name} sub ON sub.assignment_id = a.id
@@ -206,6 +215,8 @@ module AccountReports
                                 learning_outcomes.id                        AS "learning outcome id",
                                 learning_outcomes.display_name              AS "learning outcome friendly name",
                                 learning_outcomes.data                      AS "learning outcome data",
+                                g.title                                     AS "learning outcome group title",
+                                g.id                                        AS "learning outcome group id",
                                 c.name                                      AS "course name",
                                 c.id                                        AS "course id",
                                 c.sis_source_id                             AS "course sis id",
@@ -218,6 +229,8 @@ module AccountReports
                               .joins(<<~SQL.squish)
                                 INNER JOIN #{LearningOutcome.quoted_table_name} ON learning_outcomes.id = content_tags.content_id
                                   AND content_tags.content_type = 'LearningOutcome'
+                                INNER JOIN #{LearningOutcomeGroup.quoted_table_name} g ON g.id = content_tags.associated_asset_id
+                                  AND content_tags.associated_asset_type = 'LearningOutcomeGroup'
                                 INNER JOIN #{ContentTag.quoted_table_name} cct ON cct.content_id = content_tags.content_id AND cct.context_type = 'Course'
                                 INNER JOIN #{Course.quoted_table_name} c ON cct.context_id = c.id
                                 INNER JOIN #{Account.quoted_table_name} acct ON acct.id = c.account_id
@@ -337,6 +350,8 @@ module AccountReports
         student["learning outcome id"] = outcome["learning outcome id"]
         student["learning outcome friendly name"] = outcome["learning outcome friendly name"]
         student["learning outcome data"] = outcome["learning outcome data"]
+        student["learning outcome group title"] = outcome["learning outcome group title"]
+        student["learning outcome group id"] = outcome["learning outcome group id"]
         student["course name"] = course.name
         student["course id"] = course.id
         student["course sis id"] = course.sis_source_id
@@ -445,6 +460,8 @@ module AccountReports
                           COALESCE(qr.possible, r.possible)           AS "learning outcome points possible",
                           COALESCE(qr.mastery, r.mastery)             AS "learning outcome mastered",
                           learning_outcomes.data                      AS "learning outcome data",
+                          g.title                                     AS "learning outcome group title",
+                          g.id                                        AS "learning outcome group id",
                           COALESCE(qr.attempt, r.attempt)             AS "attempt",
                           r.hide_points                               AS "learning outcome points hidden",
                           COALESCE(qr.score, r.score)                 AS "outcome score",
@@ -463,6 +480,8 @@ module AccountReports
                           acct.name                                   AS "account name"
                         SQL
                         .joins(<<~SQL.squish)
+                          INNER JOIN #{LearningOutcomeGroup.quoted_table_name} g ON g.id = content_tags.associated_asset_id
+                            AND content_tags.associated_asset_type = 'LearningOutcomeGroup'
                           INNER JOIN #{LearningOutcome.quoted_table_name} ON content_tags.content_id = learning_outcomes.id
                             AND content_tags.content_type = 'LearningOutcome'
                           INNER JOIN #{LearningOutcomeResult.quoted_table_name} r ON r.learning_outcome_id = learning_outcomes.id
@@ -478,8 +497,8 @@ module AccountReports
                           LEFT OUTER JOIN #{LearningOutcomeQuestionResult.quoted_table_name} qr on qr.learning_outcome_result_id = r.id
                           LEFT OUTER JOIN #{Quizzes::Quiz.quoted_table_name} q ON q.id = r.association_id
                            AND r.association_type IN ('Quiz', 'Quizzes::Quiz')
-                          LEFT OUTER JOIN #{Assignment.quoted_table_name} a ON (a.id = ct.content_id
-                           AND ct.content_type = 'Assignment') OR a.id = q.assignment_id
+                          LEFT OUTER JOIN #{Assignment.quoted_table_name} a ON a.type = 'Assignment' AND ((a.id = ct.content_id
+                           AND ct.content_type = 'Assignment') OR a.id = q.assignment_id)
                           LEFT OUTER JOIN #{Submission.quoted_table_name} subs ON subs.assignment_id = a.id
                            AND subs.user_id = u.id AND subs.workflow_state <> 'deleted' AND subs.workflow_state <> 'unsubmitted'
                           LEFT OUTER JOIN #{Quizzes::QuizSubmission.quoted_table_name} qs ON r.artifact_id = qs.id
@@ -541,13 +560,11 @@ module AccountReports
       end
     end
 
-    def canvas_next?(canvas_scope, canvas_index, os_scope, os_index)
-      return false if canvas_index >= canvas_scope.length
+    def canvas_next?(canvas, os_scope, os_index)
       return true if os_index >= os_scope.length
 
       order = map_order_to_columns(outcome_order)
 
-      canvas = canvas_scope[canvas_index]
       os = os_scope[os_index]
       order.each do |column|
         if canvas[column] != os[column]
@@ -562,35 +579,39 @@ module AccountReports
     def write_outcomes_report(headers, canvas_scope, config_options = {})
       config_options[:empty_scope_message] ||= "No outcomes found"
       config_options[:new_quizzes_scope] ||= []
-      header_keys = headers.keys
-      header_names = headers.values
       host = root_account.domain
       enable_i18n_features = true
+      @account_level_mastery_scales_enabled = @account_report.account.root_account.feature_enabled?(:account_level_mastery_scales)
 
       os_scope = config_options[:new_quizzes_scope]
 
-      write_report header_names, enable_i18n_features do |csv|
-        total = canvas_scope.length + os_scope.length
-        GuardRail.activate(:primary) { AccountReport.where(id: @account_report.id).update_all(total_lines: total) }
-
-        canvas_index = 0
-        os_index = 0
-        while canvas_index < canvas_scope.length || os_index < os_scope.length
-          if canvas_next?(canvas_scope, canvas_index, os_scope, os_index)
-            row = canvas_scope[canvas_index].attributes.dup
-            canvas_index += 1
-          else
-            row = os_scope[os_index]
-            os_index += 1
-          end
-
+      write_report headers, enable_i18n_features do |csv|
+        write_row = lambda do |row|
           row["assignment url"] = "https://#{host}" \
                                   "/courses/#{row["course id"]}" \
                                   "/assignments/#{row["assignment id"]}"
           row["submission date"] = default_timezone_format(row["submission date"])
           add_outcomes_data(row)
-          csv << header_keys.map { |h| row[h] }
+          csv << headers.map { |h| row[h] }
         end
+
+        total = os_scope.length + canvas_scope.except(:select).count
+        GuardRail.activate(:primary) { AccountReport.where(id: @account_report.id).update_all(total_lines: total) }
+
+        os_index = 0
+        canvas_scope.find_each do |canvas_row|
+          until canvas_next?(canvas_row, os_scope, os_index)
+            write_row.call(os_scope[os_index])
+            os_index += 1
+          end
+          write_row.call(canvas_row.attributes)
+        end
+
+        while os_index < os_scope.length
+          write_row.call(os_scope[os_index])
+          os_index += 1
+        end
+
         csv << [config_options[:empty_scope_message]] if total == 0
       end
     end
@@ -649,13 +670,22 @@ module AccountReports
       row["learning outcome mastery score"] = nil
     end
 
+    COURSE_CACHE_SIZE = 32
+    def find_cached_course(id)
+      @course_cache ||= {}
+      @course_cache[id] ||= begin
+        @course_cache.delete(@course_cache.keys.first) if @course_cache.size >= COURSE_CACHE_SIZE
+        Course.find(id)
+      end
+    end
+
     def add_outcomes_data(row)
       row["learning outcome mastered"] = unless row["learning outcome mastered"].nil?
                                            row["learning outcome mastered"] ? 1 : 0
                                          end
 
-      course = Course.find(row["course id"])
-      outcome_data = if @account_report.account.root_account.feature_enabled?(:account_level_mastery_scales) && course.resolved_outcome_proficiency.present?
+      outcome_data = if @account_level_mastery_scales_enabled &&
+                        (course = find_cached_course(row["course id"])).resolved_outcome_proficiency.present?
                        proficiency(course)
                      elsif row["learning outcome data"].present?
                        YAML.safe_load(row["learning outcome data"])[:rubric_criterion]
@@ -665,7 +695,7 @@ module AccountReports
       row["learning outcome mastery score"] = outcome_data[:mastery_points]
       score = set_score(row, outcome_data)
       rating = set_rating(row, score, outcome_data) if score.present?
-      if row["assessment type"] != "quiz" && @account_report.account.root_account.feature_enabled?(:account_level_mastery_scales)
+      if row["assessment type"] != "quiz" && @account_level_mastery_scales_enabled
         row["learning outcome points possible"] = outcome_data[:points_possible]
       end
       if row["learning outcome points hidden"]

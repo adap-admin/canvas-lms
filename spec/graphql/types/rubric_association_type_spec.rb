@@ -52,6 +52,12 @@ describe Types::RubricAssociationType do
   end
 
   describe "works for the field" do
+    it "hide_outcome_results" do
+      expect(
+        submission_type.resolve("rubricAssessmentsConnection { nodes { rubricAssociation { hideOutcomeResults } } }")
+      ).to eq [rubric_association.hide_outcome_results]
+    end
+
     it "hide_points" do
       expect(
         submission_type.resolve("rubricAssessmentsConnection { nodes { rubricAssociation { hidePoints } } }")
@@ -68,6 +74,19 @@ describe Types::RubricAssociationType do
       expect(
         submission_type.resolve("rubricAssessmentsConnection { nodes { rubricAssociation { useForGrading } } }")
       ).to eq [false]
+    end
+
+    it "saved_comments (empty)" do
+      expect(
+        submission_type.resolve("rubricAssessmentsConnection { nodes { rubricAssociation { savedComments } } }")
+      ).to eq [nil]
+    end
+
+    it "saved_comments (with data)" do
+      rubric_association.update!(summary_data: { saved_comments: { "1" => ["comment"] } })
+      expect(
+        submission_type.resolve("rubricAssessmentsConnection { nodes { rubricAssociation { savedComments } } }")
+      ).to eq ["{\"1\":[\"comment\"]}"]
     end
   end
 end

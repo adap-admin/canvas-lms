@@ -20,13 +20,21 @@ import React, {useEffect} from 'react'
 import {useMatch} from 'react-router-dom'
 import {GradingSchemesManagement} from '@canvas/grading-scheme'
 
-export const AccountGradingSchemes = () => {
+export function Component() {
   const pathMatch = useMatch('/accounts/:accountId/*')
   if (!pathMatch || !pathMatch.params || !pathMatch.params.accountId) {
     throw new Error('account id is not present on path')
   }
+
   useEffect(() => {
     document.title = 'Account Grading Schemes'
   }, [])
-  return <GradingSchemesManagement contextType="Account" contextId={pathMatch.params.accountId} />
+  return (
+    <GradingSchemesManagement
+      contextType="Account"
+      contextId={pathMatch.params.accountId}
+      archivedGradingSchemesEnabled={!!ENV.ARCHIVED_GRADING_SCHEMES_ENABLED}
+      defaultAccountGradingSchemeEnabled={!!ENV.DEFAULT_ACCOUNT_GRADING_SCHEME_ENABLED}
+    />
+  )
 }

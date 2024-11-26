@@ -89,9 +89,10 @@
 #
 class SectionsController < ApplicationController
   before_action :require_context
-  before_action :require_section, except: [:index, :create]
+  before_action :require_section, except: %i[index create user_count]
 
   include Api::V1::Section
+  include AvatarHelper
 
   # @API List course sections
   # A paginated list of the list of sections for this course.
@@ -108,6 +109,10 @@ class SectionsController < ApplicationController
   #   - "permissions": Include whether section grants :manage_calendar permission
   #     to the caller
   #
+  # @argument search_term [Optional, String]
+  #   When included, searches course sections for the term. Returns only matching
+  #   results. Term must be at least 2 characters.
+  #
   # @returns [Section]
   def index
     if authorized_action(@context, @current_user, %i[read read_roster view_all_grades manage_grades])
@@ -116,8 +121,10 @@ class SectionsController < ApplicationController
       end
 
       includes = Array(params[:include])
+      search_term = params[:search_term]
 
       sections = @context.active_course_sections.order(CourseSection.best_unicode_collation_key("name"), :id)
+      sections = CourseSection.search_by_attribute(sections, :name, search_term) if search_term.present?
 
       unless params[:all].present?
         sections = Api.paginate(sections, self, api_v1_course_sections_url)
@@ -183,6 +190,38 @@ class SectionsController < ApplicationController
     end
   end
 
+  def user_count
+    GuardRail.activate(:secondary) do
+      # Limit 100 to avoid killing the servers, ppl should use search anyway with this amount of sections
+      sections = @context.course_sections.active.order(CourseSection.best_unicode_collation_key("name")).limit(100)
+      sections = sections.where("name ILIKE ?", "%#{params[:search]}%") if params[:search].present?
+
+      if params[:exclude].present?
+        exclude_ids = params[:exclude].map { |id| id.gsub("section_", "") }
+        sections = sections.where.not(id: exclude_ids)
+      end
+
+      # This prevents N+1 queries without lots of added complexity, as we cant preload association scopes
+      section_counts_by_section_id = Enrollment
+                                     .select("course_section_id, count(*) as count")
+                                     .not_fake.where.not(workflow_state: "rejected")
+                                     .where(course_section_id: sections.select(:id))
+                                     .active
+                                     .group(:course_section_id)
+
+      response = sections.map do |section|
+        {
+          id: section.id,
+          name: section.name,
+          user_count: section_counts_by_section_id.find { |count| count.course_section_id == section.id }&.count || 0,
+          avatar_url: avatar_url_for_group,
+          type: "context",
+        }
+      end
+      render json: { sections: response }
+    end
+  end
+
   def require_section
     case @context
     when Course
@@ -201,7 +240,7 @@ class SectionsController < ApplicationController
     # cross-listing should only be allowed within the same root account
     @new_course = @section.root_account.all_courses.not_deleted.where(id: course_id).first if Api::ID_REGEX.match?(course_id)
     @new_course ||= @section.root_account.all_courses.not_deleted.where(sis_source_id: course_id).first if course_id.present?
-    allowed = @new_course && @section.grants_right?(@current_user, session, :update) && @new_course.grants_right?(@current_user, session, :manage)
+    allowed = @new_course && MasterCourses::MasterTemplate.where(course_id: params[:new_course_id]).where.not(workflow_state: "deleted").none? && @section.grants_right?(@current_user, session, :update) && @new_course.grants_right?(@current_user, session, :manage)
     res = { allowed: !!allowed }
     if allowed
       @account = @new_course.account
@@ -227,6 +266,8 @@ class SectionsController < ApplicationController
     if params[:override_sis_stickiness] && !value_to_boolean(params[:override_sis_stickiness])
       return render json: (api_request? ? section_json(@section, @current_user, session, []) : @section)
     end
+
+    return render json: { error: "cannot crosslist into blueprint courses" }, status: :forbidden if MasterCourses::MasterTemplate.where(course_id: params[:new_course_id]).where.not(workflow_state: "deleted").any?
 
     if authorized_action(@section, @current_user, :update) && authorized_action(@new_course, @current_user, :manage)
       @section.crosslist_to_course(@new_course, updating_user: @current_user)
@@ -294,7 +335,7 @@ class SectionsController < ApplicationController
       integration_id = params[:course_section].delete(:integration_id)
       if sis_id || integration_id
         if @section.root_account.grants_right?(@current_user, :manage_sis)
-          @section.sis_source_id = (sis_id == "") ?  nil : sis_id if sis_id
+          @section.sis_source_id = (sis_id == "") ? nil : sis_id if sis_id
           @section.integration_id = (integration_id == "") ? nil : integration_id if integration_id
         elsif api_request?
           return render json: { message: "You must have manage_sis permission to update sis attributes" }, status: :unauthorized

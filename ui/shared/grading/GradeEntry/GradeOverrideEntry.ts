@@ -21,16 +21,23 @@ import I18n from '@canvas/i18n'
 
 import round from '@canvas/round'
 import GradeFormatHelper from '../GradeFormatHelper'
-import {gradeToScoreLowerBound, scoreToGrade} from '../GradingSchemeHelper'
+import {gradePointsToPercentage, gradeToScoreLowerBound} from '../GradingSchemeHelper'
+import {scoreToGrade} from '@instructure/grading-utils'
 import GradeOverride from '../GradeOverride'
 import {parseEntryValue} from '../GradeInputHelper'
 import GradeOverrideInfo from './GradeOverrideInfo'
 import GradeEntry, {EnterGradesAs} from './index'
-import type {GradeType, GradingScheme, GradeEntryMode} from '../grading.d'
+import type {GradeType, DeprecatedGradingScheme, GradeEntryMode} from '../grading.d'
 
-function schemeKeyForPercentage(percentage, gradingScheme) {
+function schemeKeyForPercentage(percentage, gradingScheme: DeprecatedGradingScheme) {
   if (gradingScheme) {
-    return scoreToGrade(percentage, gradingScheme.data)
+    const grade = scoreToGrade(
+      percentage,
+      gradingScheme.data,
+      gradingScheme.pointsBased,
+      gradingScheme.scalingFactor
+    )
+    return GradeFormatHelper.replaceDashWithMinus(grade)
   }
   return null
 }
@@ -82,13 +89,13 @@ export default class GradeOverrideEntry extends GradeEntry {
     })
   }
 
-  gradeInfoFromGrade(grade) {
+  gradeInfoFromGrade(grade, inputByUser: boolean) {
     if (!grade) {
       return this.parseValue(null)
     }
 
     const parseValue = grade.percentage == null ? grade.schemeKey : grade.percentage
-    return this.parseValue(parseValue)
+    return this.parseValue(parseValue, inputByUser)
   }
 
   hasGradeChanged(
@@ -106,6 +113,10 @@ export default class GradeOverrideEntry extends GradeEntry {
       return true
     }
 
+    if (currentGradeInfo.valid !== effectiveGradeInfo.valid) {
+      return true
+    }
+
     if (currentGradeInfo.enteredAs === EnterGradesAs.GRADING_SCHEME) {
       return currentGradeInfo.grade.schemeKey !== effectiveGradeInfo.grade.schemeKey
     }
@@ -113,8 +124,8 @@ export default class GradeOverrideEntry extends GradeEntry {
     return currentGradeInfo.grade.percentage !== effectiveGradeInfo.grade.percentage
   }
 
-  parseValue(value): GradeOverrideInfo {
-    const gradingScheme: string | {data: GradingScheme[]} = this.options.gradingScheme
+  parseValue(value, inputByUser: boolean = true): GradeOverrideInfo {
+    const gradingScheme: string | {data: DeprecatedGradingScheme[]} = this.options.gradingScheme
     const parseResult = parseEntryValue(value, gradingScheme)
 
     let enteredAs: null | GradeType = null
@@ -131,6 +142,26 @@ export default class GradeOverrideEntry extends GradeEntry {
         schemeKey: String(parseResult.value),
       }
       valid = true
+      // points based grading scheme
+    } else if (gradingScheme?.pointsBased) {
+      // entered percentage or is from backend which should be treated as percentage
+      if (parseResult.isPercentage || !inputByUser) {
+        enteredAs = EnterGradesAs.PERCENTAGE
+        grade = {
+          percentage: parseResult.value,
+          schemeKey: schemeKeyForPercentage(parseResult.value, gradingScheme),
+        }
+        valid = true
+        // entered points
+      } else if (parseResult.isPoints) {
+        enteredAs = EnterGradesAs.POINTS
+        grade = {
+          percentage: gradePointsToPercentage(parseResult.value, gradingScheme),
+          schemeKey: null,
+        }
+        valid = true
+      }
+      // percentage based grading scheme
     } else if (parseResult.isPercentage || parseResult.isPoints) {
       enteredAs = EnterGradesAs.PERCENTAGE
       grade = {
@@ -138,6 +169,18 @@ export default class GradeOverrideEntry extends GradeEntry {
         schemeKey: schemeKeyForPercentage(parseResult.value, gradingScheme),
       }
       valid = true
+      if (gradingScheme && gradingScheme.pointsBased) {
+        // points based scheme
+        if (inputByUser) {
+          // don't allow user to input percents or points for points based scheme
+          valid = false
+        } else {
+          // the initial (ie, saved to server value) in percent format is valid
+          valid = true
+        }
+      } else {
+        valid = true
+      }
     }
 
     if (grade != null) {

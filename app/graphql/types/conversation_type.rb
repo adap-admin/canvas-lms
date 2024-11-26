@@ -26,11 +26,11 @@ module Types
 
     global_id_field :id
     field :_id, ID, "legacy canvas id", method: :id, null: false
-    field :context_type, String, null: true
+    field :can_reply, Boolean, null: true
     field :context_id, ID, null: true
+    field :context_type, String, null: true
     field :subject, String, null: true
     field :updated_at, Types::DateTimeType, null: true
-    field :can_reply, Boolean, null: true
     def can_reply
       other_users = object.participants.reject { |u| u.id == current_user.id }
       audience = other_users.map(&:id)
@@ -42,8 +42,8 @@ module Types
     end
 
     field :conversation_messages_connection, Types::ConversationMessageType.connection_type, null: true do
-      argument :participants, [ID], required: false, prepare: GraphQLHelpers.relay_or_legacy_ids_prepare_func("User")
       argument :created_before, DateTimeType, required: false
+      argument :participants, [ID], required: false, prepare: GraphQLHelpers.relay_or_legacy_ids_prepare_func("User")
     end
     def conversation_messages_connection(participants: nil, created_before: nil)
       load_association(:conversation_messages).then do |messages|
@@ -62,6 +62,17 @@ module Types
       end
     end
 
+    field :conversation_messages_count, Int, null: false
+    def conversation_messages_count
+      scope = ConversationMessage
+              .where(conversation_id: object.id)
+              .joins(:conversation_message_participants)
+
+      scope.where(conversation_message_participants: { user_id: current_user.id, workflow_state: "active" })
+           .or(scope.where(conversation_message_participants: { user_id: current_user.id, workflow_state: nil }))
+           .select("distinct(conversation_messages.id)").count
+    end
+
     field :conversation_participants_connection, Types::ConversationParticipantType.connection_type, null: true
     def conversation_participants_connection
       load_association(:conversation_participants)
@@ -72,6 +83,13 @@ module Types
       # load_association(:context).then(&:name)
       load_association(:context).then do |context|
         context&.name
+      end
+    end
+
+    field :context_asset_string, String, null: true
+    def context_asset_string
+      load_association(:context).then do |context|
+        context&.asset_string
       end
     end
 

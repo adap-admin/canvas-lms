@@ -64,11 +64,9 @@ describe Lti::LtiOutboundAdapter do
   let(:lti_assignment) { LtiOutbound::LTIAssignment.new }
   let(:controller) do
     request_mock = double("request")
-    allow(request_mock).to receive(:host).and_return("/my/url")
-    allow(request_mock).to receive(:scheme).and_return("https")
+    allow(request_mock).to receive_messages(host: "/my/url", scheme: "https")
     m = double("controller")
-    allow(m).to receive(:request).and_return(request_mock)
-    allow(m).to receive(:logged_in_user).and_return(@user || user)
+    allow(m).to receive_messages(request: request_mock, logged_in_user: @user || user)
     m
   end
   let(:variable_expander) do
@@ -232,9 +230,7 @@ describe Lti::LtiOutboundAdapter do
       let(:url) { "http://www.example.com/basic_lti" }
 
       before do
-        allow(ApplicationController).to receive(:test_cluster?).and_return(true)
-        allow(ApplicationController).to receive(:test_cluster_name).and_return("beta")
-        Account.site_admin.enable_feature! :dynamic_lti_environment_overrides
+        allow(ApplicationController).to receive_messages(test_cluster?: true, test_cluster_name: "beta")
 
         tool.settings[:environments] = {
           launch_url: override_url
@@ -291,7 +287,6 @@ describe Lti::LtiOutboundAdapter do
 
     it "does not copy query params to the post body if :disable_post_only is set on root_Account" do
       allow(account).to receive(:all_account_users_for).with(user).and_return([])
-      allow(account).to receive(:feature_enabled?).with(:variable_substitution_numeric_to_string).and_return(false)
       allow(account).to receive(:feature_enabled?).with(:disable_lti_post_only).and_return(true)
       adapter.prepare_tool_launch(return_url, variable_expander)
       payload = adapter.generate_post_payload
@@ -376,6 +371,26 @@ describe Lti::LtiOutboundAdapter do
       expect do
         adapter.generate_post_payload_for_homework_submission(assignment)
       end.to raise_error(RuntimeError, "Called generate_post_payload_for_homework_submission before calling prepare_tool_launch")
+    end
+  end
+
+  describe "#generate_post_payload_for_student_context_card" do
+    let(:student_id) { user.global_id }
+    let(:student) { user }
+
+    it "raises a not prepared error if the tool launch has not been prepared" do
+      expect do
+        adapter.generate_post_payload_for_student_context_card(student: @student)
+      end.to raise_error(RuntimeError, "Called generate_post_payload_for_student_context_card before calling prepare_tool_launch")
+    end
+
+    it "add student id to the overrides" do
+      tool_launch = double("tool launch", generate: {}, url: "http://example.com/launch")
+      allow(LtiOutbound::ToolLaunch).to receive(:new).and_return(tool_launch)
+
+      adapter.prepare_tool_launch(return_url, variable_expander)
+      adapter.generate_post_payload_for_student_context_card(student:)
+      expect(tool_launch).to have_received(:generate).with(hash_including(lti_student_id: student_id))
     end
   end
 

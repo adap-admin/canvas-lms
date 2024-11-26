@@ -35,21 +35,21 @@ describe AuthenticationProvider::SAML::MetadataRefresher do
 
       expect(subject).to receive(:refresh_if_necessary).with(saml1.global_id, "1").and_raise("die")
       expect(subject).to receive(:refresh_if_necessary).with(saml2.global_id, "2").and_return(false)
-      expect(Canvas::Errors).to receive(:capture_exception).once
+      expect(Canvas::Errors).to receive(:capture).once
 
       subject.refresh_providers
     end
 
     it "doesn't populate if nothing changed" do
       expect(subject).to receive(:refresh_if_necessary).with(saml1.global_id, "1").and_return(false)
-      expect(saml1).not_to receive(:populate_from_metadata_xml)
+      expect(saml1).not_to receive(:metadata=)
 
       subject.refresh_providers
     end
 
     it "does populate, but doesn't save, if the XML changed, but nothing changes on the model" do
       expect(subject).to receive(:refresh_if_necessary).with(saml1.global_id, "1").and_return("xml")
-      expect_any_instantiation_of(saml1).to receive(:populate_from_metadata_xml).with("xml")
+      expect_any_instantiation_of(saml1).to receive(:metadata=).with("xml")
       expect_any_instantiation_of(saml1).not_to receive(:save!)
 
       subject.refresh_providers
@@ -57,7 +57,7 @@ describe AuthenticationProvider::SAML::MetadataRefresher do
 
     it "populates and saves" do
       expect(subject).to receive(:refresh_if_necessary).with(saml1.global_id, "1").and_return("xml")
-      expect_any_instantiation_of(saml1).to receive(:populate_from_metadata_xml).with("xml")
+      expect_any_instantiation_of(saml1).to receive(:metadata=).with("xml")
       expect_any_instantiation_of(saml1).to receive(:changed?).and_return(true)
       expect_any_instantiation_of(saml1).to receive(:save!).once
 
@@ -77,8 +77,7 @@ describe AuthenticationProvider::SAML::MetadataRefresher do
     let(:redis) { double("redis") }
 
     before do
-      allow(Canvas).to receive(:redis_enabled?).and_return(true)
-      allow(Canvas).to receive(:redis).and_return(redis)
+      allow(Canvas).to receive_messages(redis_enabled?: true, redis:)
     end
 
     it "passes ETag if we know it" do
@@ -111,7 +110,7 @@ describe AuthenticationProvider::SAML::MetadataRefresher do
       expect(response).to receive(:is_a?).with(Net::HTTPNotModified).and_return(false)
       expect(response).to receive(:value)
       allow(response).to receive(:[]).with("ETag").and_return("NewETag")
-      expect(redis).to receive(:set).with("saml_1_etag", "NewETag")
+      expect(redis).to receive(:set).with("auth_provider_refresh_572d4e421e5e6b9bc11d815e8a027112_etag", "NewETag")
       expect(response).to receive(:body).and_return("xml")
 
       expect(CanvasHttp).to receive(:get).with("url", {}).and_yield(response)

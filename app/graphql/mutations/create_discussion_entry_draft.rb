@@ -21,24 +21,23 @@
 class Mutations::CreateDiscussionEntryDraft < Mutations::BaseMutation
   graphql_name "CreateDiscussionEntryDraft"
 
-  argument :discussion_topic_id,
-           ID,
-           required: true,
-           prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func("DiscussionTopic")
   argument :discussion_entry_id,
            ID,
            required: false,
            prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func("DiscussionEntry")
-  argument :parent_id,
+  argument :discussion_topic_id,
            ID,
-           required: false,
-           prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func("DiscussionEntry")
+           required: true,
+           prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func("DiscussionTopic")
   argument :file_id,
            ID,
            required: false,
            prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func("Attachment")
   argument :message, String, required: true
-  argument :include_reply_preview, Boolean, required: false
+  argument :parent_id,
+           ID,
+           required: false,
+           prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func("DiscussionEntry")
 
   field :discussion_entry_draft, Types::DiscussionEntryDraftType, null: true
 
@@ -51,8 +50,6 @@ class Mutations::CreateDiscussionEntryDraft < Mutations::BaseMutation
     if input[:parent_id]
       parent_entry = topic.discussion_entries.active.find(input[:parent_id])
     end
-
-    include_reply_preview = input[:include_reply_preview].present? && parent_entry&.root_entry_id.present?
 
     if input[:discussion_entry_id]
       entry = topic.discussion_entries.active.find(input[:discussion_entry_id])
@@ -72,8 +69,7 @@ class Mutations::CreateDiscussionEntryDraft < Mutations::BaseMutation
                                            topic:,
                                            entry:,
                                            parent: parent_entry,
-                                           attachment:,
-                                           reply_preview: include_reply_preview).first
+                                           attachment:).first
     draft = DiscussionEntryDraft.new(
       id:,
       message:,

@@ -27,8 +27,8 @@ describe "assignment group that can't manage assignments" do
   it "does not display the manage cog menu" do
     @domain_root_account = Account.default
     course_factory
-    account_admin_user_with_role_changes(role_changes: { manage_course: true,
-                                                         manage_assignments: false })
+    account_admin_user_with_role_changes(role_changes: { manage_courses_admin: true,
+                                                         manage_assignments_edit: false })
     user_session(@user)
     @course.require_assignment_group
     @assignment_group = @course.assignment_groups.first
@@ -57,11 +57,27 @@ describe "assignment groups" do
     @course.assignments.create(name: "test", assignment_group: @assignment_group)
   end
 
+  # EVAL-3711 Remove this test when instui_nav feature flag is removed
   it "creates a new assignment group", priority: "1" do
     get "/courses/#{@course.id}/assignments"
     wait_for_ajaximations
 
     f("#addGroup").click
+    wait_for_ajaximations
+
+    replace_content(f("#ag_new_name"), "Second AG")
+    fj(".create_group:visible").click
+    wait_for_ajaximations
+
+    expect(ff(".assignment_group .ig-header h2").map(&:text)).to include("Second AG")
+  end
+
+  it "creates a new assignment group with the instui nav feature flag on", priority: "1" do
+    @course.root_account.enable_feature!(:instui_nav)
+    get "/courses/#{@course.id}/assignments"
+    wait_for_ajaximations
+
+    f("[data-testid='new_group_button']").click
     wait_for_ajaximations
 
     replace_content(f("#ag_new_name"), "Second AG")
@@ -81,7 +97,7 @@ describe "assignment groups" do
     f("#assignment_group_#{ag.id} .add_assignment").click
 
     wait_for_ajaximations
-    fj(".more_options:visible").click
+    f("[data-testid='more-options-button']").click
     wait_for_ajaximations
 
     expect(get_value("#assignment_group_id")).to eq ag.id.to_s
@@ -95,12 +111,9 @@ describe "assignment groups" do
     get "/courses/#{@course.id}/assignments"
     wait_for_ajaximations
 
-    f("#assignment_group_#{ag2.id} .add_assignment").click
-    wait_for_ajaximations
+    build_assignment_with_type("Assignment", assignment_group_id: ag2.id, name: "Do this", points: "13")
 
-    replace_content(f("#ag_#{ag2.id}_assignment_name"), "Do this")
-    replace_content(f("#ag_#{ag2.id}_assignment_points"), "13")
-    expect_new_page_load { fj(".more_options:visible").click }
+    expect_new_page_load { f("[data-testid='more-options-button']").click }
 
     expect(get_value("#assignment_name")).to eq "Do this"
     expect(get_value("#assignment_points_possible")).to eq "13"
@@ -183,12 +196,8 @@ describe "assignment groups" do
     wait_for_ajaximations
     ag = @course.assignment_groups.first
 
-    f("#assignment_group_#{ag.id} .add_assignment").click
-    wait_for_animations
+    build_assignment_with_type("Assignment", assignment_group_id: ag.id, name: "Disappear", submit: true)
 
-    replace_content(f("#ag_#{ag.id}_assignment_name"), "Disappear")
-    fj(".create_assignment:visible").click
-    wait_for_ajaximations
     refresh_page
     expect(fj("#assignment_group_#{ag.id} .assignment:eq(1) .ig-title").text).to match "Disappear"
 
@@ -236,7 +245,7 @@ describe "assignment groups" do
 
     get "/courses/#{@course.id}/assignments"
     wait_for_ajaximations
-    drag_with_js("#assignment_group_#{ags[1].id} .sortable-handle", 0, 100)
+    drag_with_js("#assignment_group_#{ags[1].id} .sortable-handle", 0, 200)
     wait_for_ajaximations
 
     ags.each(&:reload)
@@ -258,16 +267,16 @@ describe "assignment groups" do
         get "/courses/#{@course.id}/assignments"
         wait_for_ajaximations
 
-        # Finds and click the Add Assignment button on an assignment group.
-        f("#assignment_group_#{assignment_group.id} .add_assignment").click
-        wait_for_ajaximations
-
-        # Enter in values for Name, Due, and Points, then clicks save.
-        replace_content(f("#ag_#{assignment_group.id}_assignment_name"), assignment_name)
-        replace_content(f("#ag_#{assignment_group.id}_assignment_due_at"), current_time)
-        replace_content(f("#ag_#{assignment_group.id}_assignment_points"), assignment_points)
-        fj(".create_assignment:visible").click
-        wait_for_ajaximations
+        # Create Assignment
+        build_assignment_with_type(
+          "Assignment",
+          assignment_group_id: assignment_group.id,
+          name: "Do this",
+          due_at: current_time,
+          due_time: "4:15 AM",
+          points: "13",
+          submit: true
+        )
       end
     end
 
@@ -303,16 +312,10 @@ describe "assignment groups" do
     get "/courses/#{@course.id}/assignments"
     wait_for_ajaximations
 
-    f("#assignment_group_#{ag.id} .add_assignment").click
-    wait_for_ajaximations
-
-    replace_content(f("#ag_#{ag.id}_assignment_name"), "Do this")
-    replace_content(f("#ag_#{ag.id}_assignment_points"), "13")
-    fj(".create_assignment:visible").click
-    wait_for_ajaximations
+    build_assignment_with_type("Assignment", assignment_group_id: ag.id, name: "Do this", points: "13", submit: true)
 
     f("#assignment_group_#{ag.id} .add_assignment").click
-    expect(f("#ag_#{ag.id}_assignment_name")).to be_displayed
+    expect(f("[data-testid='assignment-name-input']")).to be_displayed
   end
 
   it "adds group weights correctly", priority: "2" do
@@ -368,11 +371,10 @@ describe "assignment groups" do
     it "is not locked for admin", priority: "2" do
       @course.assignment_groups.create!(name: "other")
       course_with_admin_logged_in(course: @course, name: "admin user")
-      orig_title = @frozen_assign.title
 
       run_assignment_edit(@frozen_assign) do
         # title isn't locked, should allow editing
-        f("#assignment_name").send_keys("edit")
+        f("#assignment_name").send_keys("edited")
 
         expect(f("#assignment_group_id")).not_to be_disabled
         expect(f("#assignment_peer_reviews")).not_to be_disabled
@@ -380,7 +382,7 @@ describe "assignment groups" do
         click_option("#assignment_group_id", "other")
       end
 
-      expect(f("h1.title")).to include_text("edit" + orig_title)
+      expect(f("h1.title")).to include_text("edited")
       expect(@frozen_assign.reload.assignment_group.name).to eq "other"
     end
   end

@@ -19,6 +19,7 @@
 #
 
 require "mail"
+require "canvas_errors"
 
 module IncomingMailProcessor
   class IncomingMessageProcessor
@@ -76,7 +77,11 @@ module IncomingMailProcessor
         encoding = "UTF-8" if encoding == "UTF8"
 
         # change encoding; if it throws an exception (i.e. unrecognized encoding), just strip invalid UTF-8
-        new_string = string.encode("UTF-8", encoding) rescue nil
+        begin
+          new_string = string.encode("UTF-8", encoding)
+        rescue EncodingError
+          # ignore
+        end
         new_string&.valid_encoding? ? new_string : Utf8Cleaner.strip_invalid_utf8(string)
       end
 
@@ -114,10 +119,10 @@ module IncomingMailProcessor
 
         config.symbolize_keys.each do |key, value|
           if IncomingMailProcessor::Settings.members.map(&:to_sym).include?(key)
-            settings.send("#{key}=", value)
+            settings.send(:"#{key}=", value)
           elsif IncomingMailProcessor::DeprecatedSettings.members.map(&:to_sym).include?(key)
             logger&.warn("deprecated setting sent to IncomingMessageProcessor: #{key}")
-            deprecated_settings.send("#{key}=", value)
+            deprecated_settings.send(:"#{key}=", value)
           else
             raise "unrecognized setting sent to IncomingMessageProcessor: #{key}"
           end
@@ -315,7 +320,7 @@ module IncomingMailProcessor
     rescue => e
       # any exception that makes it here probably means the connection is broken
       # skip this account, but the rest of the accounts should still be tried
-      @error_reporter.log_exception(self.class.error_report_category, e, {})
+      CanvasErrors.capture_exception(self.class.error_report_category, e, {})
     end
 
     def parse_message(raw_contents)
@@ -327,7 +332,7 @@ module IncomingMailProcessor
 
       [message, errors]
     rescue => e
-      @error_reporter.log_exception(self.class.error_report_category, e, {})
+      CanvasErrors.capture_exception(self.class.error_report_category, e, {})
       nil
     end
 
@@ -346,10 +351,10 @@ module IncomingMailProcessor
 
       process_single(message, tag, account)
     rescue => e
-      @error_reporter.log_exception(self.class.error_report_category,
-                                    e,
-                                    from: message.from.try(:first),
-                                    to: message.to.to_s)
+      CanvasErrors.capture_exception(self.class.error_report_category,
+                                     e,
+                                     from: message.from.try(:first),
+                                     to: message.to.to_s)
     end
   end
 end

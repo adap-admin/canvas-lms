@@ -47,7 +47,7 @@ class MethodView < HashView
 
   def nickname
     summary.downcase
-           .gsub(/ the /, " ")
+           .gsub(" the ", " ")
            .gsub(/ an? /, " ")
            .gsub(/[^a-z]+/, "_")
            .gsub(/^_+|_+$/, "")
@@ -146,9 +146,8 @@ class MethodView < HashView
 
   def create_nickname_suffix
     {}.tap do |nickname_suffix|
-      url_list = []
-      routes.each do |r|
-        url_list << r.swagger_path.split("/")
+      url_list = routes.map do |r|
+        r.swagger_path.split("/")
       end
       calculate_unique_nicknames url_list, 0, [], nickname_suffix
     end

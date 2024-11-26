@@ -36,15 +36,22 @@ module Services
     end
     let(:submit_assignment) { true }
     let(:failure_email) do
-      OpenStruct.new(
-        from_name: "notifications@instructure.com",
-        subject: "Submission upload failed: #{assignment.name}",
-        to: user.email,
-        body: "Your file, #{attachment.display_name}, failed to upload to your " \
-              "Canvas assignment, #{assignment.name}. Please re-submit to " \
-              "the assignment or contact your instructor if you are no " \
-              "longer able to do so."
-      )
+      instance_double("Message",
+                      from_name: "notifications@instructure.com",
+                      subject: "Submission upload failed: #{assignment.name}",
+                      to: user.email,
+                      path_type: "email",
+                      context: nil,
+                      context_type: nil,
+                      id: nil,
+                      global_id: nil,
+                      created_at: nil,
+                      reply_to_name: nil,
+                      html_body: nil,
+                      body: "Your file, #{attachment.display_name}, failed to upload to your " \
+                            "Canvas assignment, #{assignment.name}. Please re-submit to " \
+                            "the assignment or contact your instructor if you are no " \
+                            "longer able to do so.")
     end
     let(:eula_agreement_timestamp) { "1522419910" }
     let(:comment) { "what a comment" }
@@ -81,8 +88,7 @@ module Services
       end
 
       before do
-        allow(worker).to receive(:homework_service).and_return(service)
-        allow(worker).to receive(:attachment).and_return(attachment)
+        allow(worker).to receive_messages(homework_service: service, attachment:)
       end
 
       it "clones and submit the url when submit_assignment is true" do
@@ -95,8 +101,7 @@ module Services
 
       it "clones and not submit the url when submit_assignment is false" do
         worker = described_class.submit_job(attachment, progress, eula_agreement_timestamp, comment, executor, false)
-        allow(worker).to receive(:homework_service).and_return(service)
-        allow(worker).to receive(:attachment).and_return(attachment)
+        allow(worker).to receive_messages(homework_service: service, attachment:)
         expect(attachment).to receive(:clone_url).with(url, dup_handling, check_quota, opts)
         expect(service).not_to receive(:submit)
         worker.perform

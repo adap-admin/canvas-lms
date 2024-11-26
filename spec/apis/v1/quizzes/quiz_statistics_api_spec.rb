@@ -63,7 +63,7 @@ describe Quizzes::QuizStatisticsController, type: :request do
     it "denies unauthorized access" do
       student_in_course
       api_index raw: true
-      assert_status(401)
+      assert_forbidden
     end
 
     it "respects the all_versions parameter" do
@@ -88,7 +88,7 @@ describe Quizzes::QuizStatisticsController, type: :request do
     it "returns :no_content for large quizzes" do
       allow(Quizzes::QuizStatistics).to receive(:large_quiz?).and_return true
 
-      expect(api_index(raw: true)).to be_equal(204)
+      expect(api_index(raw: true)).to equal(204)
     end
 
     context "JSON-API compliance" do

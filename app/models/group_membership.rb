@@ -52,6 +52,15 @@ class GroupMembership < ActiveRecord::Base
     joins(:group).active.where(user_id: users, groups: { context_id: context, workflow_state: "available" })
   }
 
+  scope :for_assignments, lambda { |ids|
+    active.joins(group: { group_category: :assignments })
+          .merge(Group.active)
+          .merge(GroupCategory.active)
+          .merge(Assignment.active).where(assignments: { id: ids })
+  }
+
+  scope :for_students, ->(ids) { where(user_id: ids) }
+
   resolves_root_account through: :group
 
   alias_method :context, :group
@@ -184,7 +193,7 @@ class GroupMembership < ActiveRecord::Base
     assignments += DiscussionTopic.where(context_type: group.context_type, context_id: group.context_id)
                                   .where.not(assignment_id: nil).where(group_category_id: group.group_category_id).pluck(:assignment_id)
 
-    DueDateCacher.recompute_users_for_course(user.id, group.context_id, assignments) if assignments.any?
+    SubmissionLifecycleManager.recompute_users_for_course(user.id, group.context_id, assignments) if assignments.any?
   end
 
   def touch_groups
@@ -228,28 +237,10 @@ class GroupMembership < ActiveRecord::Base
   end
 
   set_policy do
-    #################### Begin legacy permission block #########################
-
-    given do |user, session|
-      !group.context.root_account.feature_enabled?(:granular_permissions_manage_groups) &&
-        user && self.user && group && !group.group_category.try(:communities?) &&
-        (
-          (user == self.user && group.grants_right?(user, session, :join)) ||
-            (
-              group.can_join?(self.user) && group.context &&
-                group.context.grants_right?(user, session, :manage_groups)
-            )
-        )
-    end
-    can :create
-
-    ##################### End legacy permission block ##########################
-
     # for non-communities, people can be placed into groups by users who can
     # manage groups at the context level, but not moderators (hence :manage_groups_manage)
     given do |user, session|
-      group.context.root_account.feature_enabled?(:granular_permissions_manage_groups) &&
-        user && self.user && group && !group.group_category.try(:communities?) &&
+      user && self.user && group && !group.group_category.try(:communities?) &&
         (
           (user == self.user && group.grants_right?(user, session, :join)) ||
             (

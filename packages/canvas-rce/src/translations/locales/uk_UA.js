@@ -22,6 +22,7 @@ import '../tinymce/uk_UA'
 const locale = {
   "accessibility_checker_b3af1f6c": { "message": "Перевірка доступності" },
   "add_8523c19b": { "message": "Додати" },
+  "add_one_9e34a6f8": { "message": "Додати одного!" },
   "align_11050992": { "message": "Вирівняти" },
   "all_4321c3a1": { "message": "Всі" },
   "alpha_15d59033": { "message": "Альфа" },
@@ -76,6 +77,7 @@ const locale = {
     "message": "Вміст все ще завантажується, якщо ви продовжите, він не буде вбудований належним чином."
   },
   "content_type_2cf90d95": { "message": "Тип вмісту" },
+  "copy_9748f9f": { "message": "Копіювати" },
   "copyright_holder_66ee111": { "message": "Правовласник:" },
   "count_plural_one_item_loaded_other_items_loaded_857023b7": {
     "message": "{ count, plural,\n    one {}\n    few {}\n   many {}\n  other {}\n}"
@@ -111,6 +113,7 @@ const locale = {
   "external_tools_6e77821": { "message": "Зовнішні інструменти" },
   "files_c300e900": { "message": "Файли" },
   "files_index_af7c662b": { "message": "Індекс файлів" },
+  "find_8d605019": { "message": "Знайти" },
   "format_4247a9c5": { "message": "Формат" },
   "generating_preview_45b53be0": {
     "message": "Генерується попередній перегляд..."
@@ -166,10 +169,12 @@ const locale = {
   "new_quiz_34aacba6": { "message": "Нова контрольна робота" },
   "next_40e12421": { "message": "Далі" },
   "no_e16d9132": { "message": "Ні" },
+  "no_pages_created_yet_c379fa6e": { "message": "Немає створених сторінок." },
   "no_preview_is_available_for_this_file_f940114a": {
     "message": "Попередній перегляд  для цього файлу недоступний."
   },
   "no_results_940393cf": { "message": "Результати відсутні." },
+  "no_results_found_58717065": { "message": "Результатів не знайдено" },
   "none_3b5e34d2": { "message": "Ніхто" },
   "open_this_keyboard_shortcuts_dialog_9658b83a": {
     "message": "Вікрити діалогове вікно гарячих клавіш"
@@ -183,6 +188,7 @@ const locale = {
   "pink_68ad45cb": { "message": "Рожевий" },
   "prev_f82cbc48": { "message": "Попередній" },
   "preview_53003fd2": { "message": "Попередній перегляд" },
+  "previous_bd2ac015": { "message": "Попередній" },
   "published_c944a23d": { "message": "опубліковано" },
   "purple_7678a9fc": { "message": "Фіолетовий" },
   "quiz_e0dcce8f": { "message": "Контрольна робота" },
@@ -194,15 +200,18 @@ const locale = {
   "relationships_6602af70": { "message": "Зв''язки" },
   "replace_e61834a7": { "message": "Замінити" },
   "reset_95a81614": { "message": "Скинути" },
+  "retry_ebd5f8ba": { "message": "Спробувати ще раз" },
   "rich_content_editor_2708ef21": {
     "message": "Редактор збагаченого контенту"
   },
   "save_11a80ec3": { "message": "Зберегти" },
   "search_280d00bd": { "message": "Пошук" },
+  "selected_274ce24f": { "message": "Обраний" },
   "size_b30e1077": { "message": "Розмір" },
   "star_8d156e09": { "message": "Помітити зіркою" },
   "start_over_f7552aa9": { "message": "Почати з початку" },
   "submit_a3cc6859": { "message": "Підтвердити" },
+  "submitting_b90fac62": { "message": "Надсилання..." },
   "syllabus_f191f65b": { "message": "Навчальний план" },
   "teal_f729a294": { "message": "Бірюзовий" },
   "the_document_preview_is_currently_being_processed__7d9ea135": {

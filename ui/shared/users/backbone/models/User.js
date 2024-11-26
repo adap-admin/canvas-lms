@@ -18,13 +18,20 @@
 
 import {extend} from '@canvas/backbone/utils'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import _ from 'underscore'
+import {filter, isEmpty, find} from 'lodash'
 import Backbone from '@canvas/backbone'
+
+function where(collection, properties, first) {
+  if (first && isEmpty(properties)) {
+    return undefined
+  } else {
+    return first ? find(collection, properties) : filter(collection, properties)
+  }
+}
 
 const I18n = useI18nScope('user')
 
 export default (function (superClass) {
-
   function User() {
     return User.__super__.constructor.apply(this, arguments)
   }
@@ -59,7 +66,7 @@ export default (function (superClass) {
 
   // first: optional boolean to return only the first match
   User.prototype.enrollments = function (attrs, first) {
-    return _.where(this.get('enrollments'), attrs, first)
+    return where(this.get('enrollments'), attrs, first)
   }
 
   User.prototype.hasEnrollmentType = function (type) {
@@ -102,7 +109,7 @@ export default (function (superClass) {
   }
 
   User.prototype.pending = function (role) {
-    return _.some(this.get('enrollments'), function (e) {
+    return (this.get('enrollments') || []).some(function (e) {
       let ref
       return (
         e.role === role && ((ref = e.enrollment_state) === 'creation_pending' || ref === 'invited')
@@ -111,13 +118,13 @@ export default (function (superClass) {
   }
 
   User.prototype.inactive = function () {
-    return _.every(this.get('enrollments'), function (e) {
+    return (this.get('enrollments') || []).every(function (e) {
       return e.enrollment_state === 'inactive'
     })
   }
 
   User.prototype.sectionEditableEnrollments = function () {
-    return _.select(this.get('enrollments'), function (e) {
+    return filter(this.get('enrollments'), function (e) {
       return e.type !== 'ObserverEnrollment'
     })
   }

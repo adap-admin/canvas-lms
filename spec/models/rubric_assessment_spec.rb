@@ -143,16 +143,67 @@ describe RubricAssessment do
     it "returns true if the rubric association exists and is active" do
       expect(@assessment).to be_active_rubric_association
     end
+
+    context "triggering a rubric_assessed live event" do
+      it "does not trigger if there is not rubric association" do
+        expect(Canvas::LiveEvents).not_to receive(:rubric_assessed)
+        @assessment.update!(rubric_association: nil)
+      end
+
+      it "does not trigger if the rubric association is soft-deleted" do
+        expect(Canvas::LiveEvents).not_to receive(:rubric_assessed)
+        @association.destroy
+      end
+
+      context "if the rubric association exists and is active" do
+        before do
+          @assignment = assignment_model
+          @association = @rubric.associate_with(@assignment, @course, purpose: "grading", use_for_grading: true)
+          @course.enroll_student(@student, enrollment_state: :active)
+          @artifact = @assignment.find_or_create_submission(@student)
+        end
+
+        def assess_assignment(criterion_points)
+          @association.assess({
+                                user: @student,
+                                assessor: @teacher,
+                                artifact: @artifact,
+                                assessment: {
+                                  assessment_type: "grading",
+                                  criterion_crit1: {
+                                    points: criterion_points,
+                                    comments: "comments",
+                                  }
+                                }
+                              })
+        end
+
+        it "does trigger an event when saving the initial assessment" do
+          expect(Canvas::LiveEvents).to receive(:rubric_assessed)
+          @assessment = assess_assignment("3")
+        end
+
+        it "does trigger an event when reassessing an assessment" do
+          expect(Canvas::LiveEvents).to receive(:rubric_assessed).twice
+          first_assessment = assess_assignment("3")
+          expect(first_assessment.versions.count).to eq 1
+
+          second_assessment = assess_assignment("5")
+          expect(second_assessment.versions.count).to eq 2
+        end
+      end
+    end
   end
 
   it { is_expected.to have_many(:learning_outcome_results).dependent(:destroy) }
 
   it "htmlifies the rating comments" do
     comment = "Hi, please see www.example.com.\n\nThanks."
+    submission = @assignment.find_or_create_submission(@student)
     assessment = @association.assess({
                                        user: @student,
                                        assessor: @teacher,
-                                       artifact: @assignment.find_or_create_submission(@student),
+                                       artifact: submission,
                                        assessment: {
                                          assessment_type: "grading",
                                          criterion_crit1: {
@@ -166,7 +217,9 @@ describe RubricAssessment do
     t.extend HtmlTextHelper
     expected = t.format_message(comment).first
     expect(assessment.data.first[:comments_html]).to eq expected
-    expect(@student.reload.unread_rubric_assessments?(@assignment.submission_for_student(@student))).to be true
+    participations = [submission].map(&:content_participations).flatten
+    unread_items = ContentParticipation.items_by_submission(participations, "unread")
+    expect(unread_items.length).to eq 1
   end
 
   context "grading" do
@@ -357,6 +410,48 @@ describe RubricAssessment do
       end
     end
 
+    context "aligned_outcome_ids" do
+      it "returns ids if rubric is aligned with outcomes" do
+        assignment_model
+        outcome_with_rubric
+        @association = @rubric.associate_with(@assignment, @course, purpose: "grading", use_for_grading: true)
+        @course.enroll_student(@student, enrollment_state: :active)
+        criterion_id = :"criterion_#{@rubric.data[0][:id]}"
+        assessment = @association.assess({
+                                           user: @student,
+                                           assessor: @teacher,
+                                           artifact: @assignment.find_or_create_submission(@student),
+                                           assessment: {
+                                             :assessment_type => "grading",
+                                             criterion_id => {
+                                               points: "3"
+                                             }
+                                           }
+                                         })
+        expect(assessment.aligned_outcome_ids).to eq [@rubric.data[0][:learning_outcome_id]]
+      end
+
+      it "returns emptry array if rubric is aligned with outcomes" do
+        assignment_model
+        rubric_model
+        @association = @rubric.associate_with(@assignment, @course, purpose: "grading", use_for_grading: true)
+        @course.enroll_student(@student, enrollment_state: :active)
+        criterion_id = :"criterion_#{@rubric.data[0][:id]}"
+        assessment = @association.assess({
+                                           user: @student,
+                                           assessor: @teacher,
+                                           artifact: @assignment.find_or_create_submission(@student),
+                                           assessment: {
+                                             :assessment_type => "grading",
+                                             criterion_id => {
+                                               points: "3"
+                                             }
+                                           }
+                                         })
+        expect(assessment.aligned_outcome_ids).to eq []
+      end
+    end
+
     context "outcome criterion" do
       before :once do
         assignment_model
@@ -368,7 +463,7 @@ describe RubricAssessment do
       it "assessing a rubric with outcome criterion should increment datadog counter" do
         allow(InstStatsd::Statsd).to receive(:increment)
         @outcome.update!(data: nil)
-        criterion_id = "criterion_#{@rubric.data[0][:id]}".to_sym
+        criterion_id = :"criterion_#{@rubric.data[0][:id]}"
         @association.assess({
                               user: @student,
                               assessor: @teacher,
@@ -386,7 +481,7 @@ describe RubricAssessment do
 
       it "uses default ratings for scoring" do
         @outcome.update!(data: nil)
-        criterion_id = "criterion_#{@rubric.data[0][:id]}".to_sym
+        criterion_id = :"criterion_#{@rubric.data[0][:id]}"
         assessment = @association.assess({
                                            user: @student,
                                            assessor: @teacher,
@@ -403,7 +498,7 @@ describe RubricAssessment do
       end
 
       it "does not allow points to exceed max points possible" do
-        criterion_id = "criterion_#{@rubric.data[0][:id]}".to_sym
+        criterion_id = :"criterion_#{@rubric.data[0][:id]}"
         assessment = @association.assess({
                                            user: @student,
                                            assessor: @teacher,
@@ -421,7 +516,7 @@ describe RubricAssessment do
 
       it "allows points to exceed max points possible if Allow Outcome Extra Credit feature is enabled" do
         @course.enable_feature!(:outcome_extra_credit)
-        criterion_id = "criterion_#{@rubric.data[0][:id]}".to_sym
+        criterion_id = :"criterion_#{@rubric.data[0][:id]}"
         assessment = @association.assess({
                                            user: @student,
                                            assessor: @teacher,
@@ -439,7 +534,7 @@ describe RubricAssessment do
 
       it "propagates hide_points value" do
         @association.update!(hide_points: true)
-        criterion_id = "criterion_#{@rubric.data[0][:id]}".to_sym
+        criterion_id = :"criterion_#{@rubric.data[0][:id]}"
         assessment = @association.assess({
                                            user: @student,
                                            assessor: @teacher,
@@ -457,7 +552,7 @@ describe RubricAssessment do
 
       it "truncates the learning outcome result title to 250 characters" do
         @association.update!(title: "a" * 255)
-        criterion_id = "criterion_#{@rubric.data[0][:id]}".to_sym
+        criterion_id = :"criterion_#{@rubric.data[0][:id]}"
         @association.assess({
                               user: @student,
                               assessor: @teacher,
@@ -474,7 +569,7 @@ describe RubricAssessment do
 
       it "propagates hide_outcome_results value" do
         @association.update!(hide_outcome_results: true)
-        criterion_id = "criterion_#{@rubric.data[0][:id]}".to_sym
+        criterion_id = :"criterion_#{@rubric.data[0][:id]}"
         @association.assess({
                               user: @student,
                               assessor: @teacher,
@@ -490,7 +585,7 @@ describe RubricAssessment do
       end
 
       it "restores a deleted result" do
-        criterion_id = "criterion_#{@rubric.data[0][:id]}".to_sym
+        criterion_id = :"criterion_#{@rubric.data[0][:id]}"
         @association.assess({
                               user: @student,
                               assessor: @teacher,
@@ -520,7 +615,7 @@ describe RubricAssessment do
       end
 
       it "does not update outcomes on a peer assessment" do
-        criterion_id = "criterion_#{@rubric.data[0][:id]}".to_sym
+        criterion_id = :"criterion_#{@rubric.data[0][:id]}"
         expect do
           @association.assess({
                                 user: @student,
@@ -537,7 +632,7 @@ describe RubricAssessment do
       end
 
       it "does not update outcomes on a provisional grade" do
-        criterion_id = "criterion_#{@rubric.data[0][:id]}".to_sym
+        criterion_id = :"criterion_#{@rubric.data[0][:id]}"
         expect do
           submission = @assignment.find_or_create_submission(@student)
           provisional_grade = submission.find_or_create_provisional_grade!(@teacher, grade: 3)
@@ -606,7 +701,7 @@ describe RubricAssessment do
 
     describe "when saving comments is requested" do
       it "saves comments normally" do
-        criterion_id = "criterion_#{@rubric.data[0][:id]}".to_sym
+        criterion_id = :"criterion_#{@rubric.data[0][:id]}"
         @association.assess({
                               user: @student,
                               assessor: @student,
@@ -623,8 +718,30 @@ describe RubricAssessment do
         expect(@association.summary_data[:saved_comments]["crit1"]).to eq(["Some comment"])
       end
 
+      it "does NOT update possible points based on rubric on comment save" do
+        criterion_id = :"criterion_#{@rubric.data[0][:id]}"
+        old_points_possible = @rubric.points_possible
+        @rubric.points_possible = 1_984
+        expect(@association.association_object.points_possible).not_to eq(@association.rubric.points_possible)
+        @association.assess({
+                              user: @student,
+                              assessor: @student,
+                              artifact: @assignment.find_or_create_submission(@student),
+                              assessment: {
+                                :assessment_type => "grading",
+                                criterion_id => {
+                                  points: "3",
+                                  comments: "Some comment",
+                                  save_comment: "1"
+                                }
+                              }
+                            })
+        expect(@association.association_object.points_possible).not_to eq(@association.rubric.points_possible)
+        @rubric.points_possible = old_points_possible
+      end
+
       it "does not save comments for peer assessments" do
-        criterion_id = "criterion_#{@rubric.data[0][:id]}".to_sym
+        criterion_id = :"criterion_#{@rubric.data[0][:id]}"
         @association.assess({
                               user: @student,
                               assessor: @student,
@@ -830,6 +947,51 @@ describe RubricAssessment do
           expect(assignment.submission_for_student(other_student_in_group)).to be_posted
         end
       end
+
+      context "discussion_checkpoints" do
+        before do
+          Account.site_admin.enable_feature!(:discussion_checkpoints)
+        end
+
+        it "does not grade students for checkpointed discussions" do
+          topic = DiscussionTopic.create_graded_topic!(course: @course, title: "checkpointed discussion")
+          Checkpoints::DiscussionCheckpointCreatorService.call(
+            discussion_topic: topic,
+            checkpoint_label: CheckpointLabels::REPLY_TO_TOPIC,
+            dates: [{ type: "everyone", due_at: 1.week.from_now }],
+            points_possible: 5
+          )
+
+          Checkpoints::DiscussionCheckpointCreatorService.call(
+            discussion_topic: topic,
+            checkpoint_label: CheckpointLabels::REPLY_TO_ENTRY,
+            dates: [{ type: "everyone", due_at: 2.weeks.from_now }],
+            points_possible: 10,
+            replies_required: 2
+          )
+
+          cd_assignment = topic.assignment
+          cd_submission = cd_assignment.submissions.find_by!(user: @student)
+          cd_submission.score = 1
+
+          rubric = rubric_model
+          ra = RubricAssessment.new(
+            score: 2.0,
+            assessment_type: :grading,
+            rubric:,
+            artifact: cd_submission,
+            assessor: @teacher
+          )
+
+          ra.build_rubric_association(
+            use_for_grading: true,
+            association_object: cd_assignment
+          )
+
+          expect(cd_assignment).not_to receive(:grade_student)
+          ra.save!
+        end
+      end
     end
   end
 
@@ -858,35 +1020,14 @@ describe RubricAssessment do
       expect(@assessment.grants_right?(@teacher, :read)).to be true
     end
 
-    it "does not grant :read to an account user without :manage_courses or :view_all_grades" do
+    it "does not grant :read to an account user without :view_all_grades" do
       user_factory
       role = custom_account_role("custom", account: @account)
       @account.account_users.create!(user: @user, role:)
       expect(@assessment.grants_right?(@user, :read)).to be false
     end
 
-    it "grants :read to an account user with :view_all_grades but not :manage_courses" do
-      @account.disable_feature!(:granular_permissions_manage_courses)
-      user_factory
-      role = custom_account_role("custom", account: @account)
-      RoleOverride.create!(
-        context: @account,
-        permission: "view_all_grades",
-        role:,
-        enabled: true
-      )
-      RoleOverride.create!(
-        context: @account,
-        permission: "manage_courses",
-        role:,
-        enabled: false
-      )
-      @account.account_users.create!(user: @user, role:)
-      expect(@assessment.grants_right?(@user, :read)).to be true
-    end
-
-    it "grants :read to an account user with :view_all_grades but not :manage_courses_admin (granular permissions)" do
-      @account.enable_feature!(:granular_permissions_manage_courses)
+    it "grants :read to an account user with :view_all_grades but not :manage_courses_admin" do
       user_factory
       role = custom_account_role("custom", account: @account)
       RoleOverride.create!(
@@ -908,6 +1049,9 @@ describe RubricAssessment do
 
   describe "create" do
     it "sets the root_account_id using rubric" do
+      allow(InstStatsd::Statsd).to receive(:increment).and_call_original
+      expect(InstStatsd::Statsd).to receive(:increment).with("grading.rubric.teacher_assessed_old").at_least(:once)
+      expect(InstStatsd::Statsd).to receive(:increment).with("grading.rubric.teacher_leaves_feedback_old").at_least(:once)
       assessment = @association.assess({
                                          user: @student,
                                          assessor: @teacher,
@@ -927,42 +1071,39 @@ describe RubricAssessment do
   end
 
   describe "mark_unread_assessments" do
-    context "when feedback visibility ff on" do
-      before do
-        Account.site_admin.enable_feature!(:visibility_feedback_student_grades_page)
-        @submission = @assignment.find_or_create_submission(@student)
-      end
+    before do
+      @submission = @assignment.find_or_create_submission(@student)
+    end
 
-      it "is unread after assessing with comments or points" do
+    it "is unread after assessing with comments or points" do
+      @assessment = @association.assess({
+                                          user: @student,
+                                          assessor: @teacher,
+                                          artifact: @submission,
+                                          assessment: {
+                                            assessment_type: "grading",
+                                            criterion_crit1: {
+                                              points: 5,
+                                              comments: "comments",
+                                            }
+                                          }
+                                        })
+
+      expect(@submission.unread_item?(@student, "rubric")).to be_truthy
+    end
+
+    it "does not save participation if assessment is missing comments and points" do
+      expect do
         @assessment = @association.assess({
                                             user: @student,
                                             assessor: @teacher,
                                             artifact: @submission,
                                             assessment: {
                                               assessment_type: "grading",
-                                              criterion_crit1: {
-                                                points: 5,
-                                                comments: "comments",
-                                              }
+                                              criterion_crit1: {}
                                             }
                                           })
-
-        expect(@submission.unread_item?(@student, "rubric")).to be_truthy
-      end
-
-      it "does not save participation if assessment is missing comments and points" do
-        expect do
-          @assessment = @association.assess({
-                                              user: @student,
-                                              assessor: @teacher,
-                                              artifact: @submission,
-                                              assessment: {
-                                                assessment_type: "grading",
-                                                criterion_crit1: {}
-                                              }
-                                            })
-        end.not_to change(ContentParticipation, :count)
-      end
+      end.not_to change(ContentParticipation, :count)
     end
   end
 end

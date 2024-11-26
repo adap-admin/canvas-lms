@@ -19,6 +19,14 @@
 #
 
 module Types
+  class DashboardObserveeFilterInputType < BaseInputObject
+    graphql_name "DashboardObserveeFilter"
+    argument :observed_user_id,
+             ID,
+             "Only view filtered user",
+             required: false
+  end
+
   class UserType < ApplicationObjectType
     #
     # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -40,13 +48,13 @@ module Types
     global_id_field :id
 
     field :name, String, null: true
-    field :sortable_name,
-          String,
-          "The name of the user that is should be used for sorting groups of users, such as in the gradebook.",
-          null: true
     field :short_name,
           String,
           "A short name the user has selected, for use in conversations or other less formal places through the site.",
+          null: true
+    field :sortable_name,
+          String,
+          "The name of the user that is should be used for sorting groups of users, such as in the gradebook.",
           null: true
 
     field :pronouns, String, null: true
@@ -59,19 +67,24 @@ module Types
     field :avatar_url, UrlType, null: true
 
     def avatar_url
-      if object.account.service_enabled?(:avatars)
-        AvatarHelper.avatar_url_for_user(object, context[:request], use_fallback: false)
-      else
-        nil
+      Loaders::AssociationLoader.for(User, :pseudonym).load(object).then do
+        if object.account.service_enabled?(:avatars)
+          AvatarHelper.avatar_url_for_user(object, context[:request], use_fallback: false)
+        else
+          nil
+        end
       end
     end
 
     field :html_url, UrlType, null: true do
-      argument :course_id, ID, required: true, prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func("Course")
+      argument :course_id, ID, required: false, prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func("Course")
     end
-    def html_url(course_id:)
+    def html_url(course_id: nil)
+      resolved_course_id = course_id.nil? ? context[:course_id] : course_id
+      return if resolved_course_id.nil?
+
       GraphQLHelpers::UrlHelpers.course_user_url(
-        course_id:,
+        course_id: resolved_course_id,
         id: object.id,
         host: context[:request].host_with_port
       )
@@ -89,10 +102,13 @@ module Types
                                 .then { object.email }
     end
 
+    field :uuid, String, null: true
+
     field :sis_id, String, null: true
     def sis_id
       domain_root_account = context[:domain_root_account]
       if domain_root_account.grants_any_right?(context[:current_user], :read_sis, :manage_sis) ||
+         context[:course]&.grants_any_right?(context[:current_user], :read_sis, :manage_sis) ||
          object.grants_any_right?(context[:current_user], :read_sis, :manage_sis)
         Loaders::AssociationLoader.for(User, :pseudonyms)
                                   .load(object)
@@ -112,6 +128,7 @@ module Types
     def integration_id
       domain_root_account = context[:domain_root_account]
       if domain_root_account.grants_any_right?(context[:current_user], :read_sis, :manage_sis) ||
+         context[:course]&.grants_any_right?(context[:current_user], :read_sis, :manage_sis) ||
          object.grants_any_right?(context[:current_user], :read_sis, :manage_sis)
         Loaders::AssociationLoader.for(User, :pseudonyms)
                                   .load(object)
@@ -137,13 +154,13 @@ module Types
                Boolean,
                "Whether or not to restrict results to `active` enrollments in `available` courses",
                required: false
-      argument :order_by,
-               [String],
-               "The fields to order the results by",
-               required: false
       argument :exclude_concluded,
                Boolean,
                "Whether or not to exclude `completed` enrollments",
+               required: false
+      argument :order_by,
+               [String],
+               "The fields to order the results by",
                required: false
     end
 
@@ -182,8 +199,8 @@ module Types
 
     field :notification_preferences_enabled, Boolean, null: false do
       argument :account_id, ID, required: false, prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func("Account")
-      argument :course_id, ID, required: false, prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func("Course")
       argument :context_type, NotificationPreferencesContextType, required: true
+      argument :course_id, ID, required: false, prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func("Course")
     end
     def notification_preferences_enabled(account_id: nil, course_id: nil, context_type: nil)
       enabled_for = lambda do |context|
@@ -213,8 +230,8 @@ module Types
     end
 
     field :conversations_connection, Types::ConversationParticipantType.connection_type, null: true do
-      argument :scope, String, required: false
       argument :filter, [String], required: false
+      argument :scope, String, required: false
     end
     def conversations_connection(scope: nil, filter: nil)
       if object == context[:current_user]
@@ -256,57 +273,60 @@ module Types
     end
 
     field :recipients, RecipientsType, null: true do
-      argument :search, String, required: false
       argument :context, String, required: false
+      argument :search, String, required: false
     end
     def recipients(search: nil, context: nil)
       return nil unless object == self.context[:current_user]
 
-      @current_user = object
-      search_context = AddressBook.load_context(context)
+      GuardRail.activate(:secondary) do
+        @current_user = object
+        search_context = AddressBook.load_context(context)
 
-      load_all_contexts(
-        context: search_context,
-        permissions: [:send_messages, :send_messages_all],
-        base_url: self.context[:request].base_url
-      )
+        load_all_contexts(
+          context: search_context,
+          permissions: [:send_messages, :send_messages_all],
+          base_url: self.context[:request].base_url
+        )
 
-      collections = search_contexts_and_users(
-        search:,
-        context:,
-        synthetic_contexts: true,
-        messageable_only: true,
-        base_url: self.context[:request].base_url
-      )
+        collections = search_contexts_and_users(
+          search:,
+          context:,
+          synthetic_contexts: true,
+          messageable_only: true,
+          base_url: self.context[:request].base_url,
+          include_concluded: false
+        )
 
-      contexts_collection = collections.select { |c| c[0] == "contexts" }
-      users_collection = collections.select { |c| c[0] == "participants" }
+        contexts_collection = collections.select { |c| c[0] == "contexts" }
+        users_collection = collections.select { |c| c[0] == "participants" }
 
-      contexts_collection = contexts_collection[0][1] if contexts_collection.count > 0
-      users_collection = users_collection[0][1] if users_collection.count > 0
+        contexts_collection = contexts_collection[0][1] if contexts_collection.count > 0
+        users_collection = users_collection[0][1] if users_collection.count > 0
 
-      can_send_all = if search_context.nil?
-                       false
-                     elsif search_context.is_a?(Course)
-                       search_context.grants_any_right?(object, :send_messages_all)
-                     elsif !search_context.course.nil?
-                       search_context.course.grants_any_right?(object, :send_messages_all)
-                     end
+        can_send_all = if search_context.nil?
+                         false
+                       elsif search_context.is_a?(Course)
+                         search_context.grants_any_right?(object, :send_messages_all)
+                       elsif !search_context.course.nil?
+                         search_context.course.grants_any_right?(object, :send_messages_all)
+                       end
 
-      # The contexts_connection and users_connection return types of custom Collections
-      # These special data structures are handled in the collection_connection.rb files
-      {
-        sendMessagesAll: !!can_send_all,
-        contexts_connection: contexts_collection,
-        users_connection: users_collection
-      }
+        # The contexts_connection and users_connection return types of custom Collections
+        # These special data structures are handled in the collection_connection.rb files
+        {
+          sendMessagesAll: !!can_send_all,
+          contexts_connection: contexts_collection,
+          users_connection: users_collection
+        }
+      end
     rescue ActiveRecord::RecordNotFound
       nil
     end
 
     field :recipients_observers, MessageableUserType.connection_type, null: true do
-      argument :recipient_ids, [String], required: true
       argument :context_code, String, required: true
+      argument :recipient_ids, [String], required: true
     end
     def recipients_observers(recipient_ids: nil, context_code: nil)
       return nil unless object == context[:current_user]
@@ -360,8 +380,10 @@ module Types
       ).load(object)
     end
 
-    field :favorite_courses_connection, Types::CourseType.connection_type, null: true
-    def favorite_courses_connection
+    field :favorite_courses_connection, Types::CourseType.connection_type, null: true do
+      argument :dashboard_filter, Types::DashboardObserveeFilterInputType, required: false
+    end
+    def favorite_courses_connection(dashboard_filter: nil)
       return unless object == current_user
 
       load_association(:enrollments).then do |enrollments|
@@ -369,7 +391,20 @@ module Types
                       Loaders::AssociationLoader.for(Enrollment, :course).load_many(enrollments),
                       load_association(:favorites)
                     ]).then do
-          object.menu_courses
+          opts = {}
+          if dashboard_filter&.dig(:observed_user_id).present?
+            observed_user_id = dashboard_filter[:observed_user_id].to_i
+            opts[:observee_user] = User.find_by(id: observed_user_id) || current_user
+          end
+
+          menu_courses = object.menu_courses(nil, opts)
+          published, unpublished = menu_courses.partition(&:published?)
+
+          Rails.cache.write(["last_known_dashboard_cards_published_count", current_user.global_id].cache_key, published.count)
+          Rails.cache.write(["last_known_dashboard_cards_unpublished_count", current_user.global_id].cache_key, unpublished.count)
+          Rails.cache.write(["last_known_k5_cards_count", current_user.global_id].cache_key, menu_courses.count { |course| !course.homeroom_course? })
+
+          menu_courses
         end
       end
     end
@@ -431,7 +466,8 @@ module Types
         submissions += Submission.where(id: submission_ids)
       end
       InstStatsd::Statsd.increment("inbox.visit.scope.submission_comments.pages_loaded.react")
-      submissions.sort_by { |t| t.last_comment_at || t.created_at }.reverse
+      # on FE we use newest submission comment to render date so use that first.
+      submissions.sort_by { |t| t.submission_comments.last.created_at || t.last_comment_at }.reverse
     rescue
       []
     end
@@ -460,18 +496,53 @@ module Types
     end
 
     field :course_roles, [String], null: true do
+      argument :built_in_only, Boolean, "Only return default/built_in roles", required: false
       argument :course_id, String, required: false
       argument :role_types, [String], "Return only requested base role types", required: false
-      argument :built_in_only, Boolean, "Only return default/built_in roles", required: false
     end
     def course_roles(course_id: nil, role_types: nil, built_in_only: true)
-      # The discussion only role "Author" will be handled with a front-end check because graphql
-      # currently does not support type inheritance. If graphql starts supporting type inheritance
-      # this field can be replaced by a discussionAuthor type that inherits from User type and
-      # contains a discussionRoles field
-      return if course_id.nil?
+      # This graphql execution context can be used to set course_id if you are calling course_role from a nested query
+      resolved_course_id = course_id.nil? ? context[:course_id] : course_id
+      return if resolved_course_id.nil?
 
-      Loaders::CourseRoleLoader.for(course_id:, role_types:, built_in_only:).load(object)
+      Loaders::CourseRoleLoader.for(course_id: resolved_course_id, role_types:, built_in_only:).load(object)
+    end
+
+    field :course_progression, CourseProgressionType, <<~MD, null: true # rubocop:disable GraphQL/ExtractType
+      Returns null if either of these conditions are met:
+      * the course is not module based
+      * no module in it has completion requirements
+      * the queried user is not a student in the course
+      * insufficient permissions for the request
+    MD
+    def course_progression
+      target_user = object
+      course = context[:course]
+      return if course.nil?
+      return unless course.grants_right?(current_user, session, :view_all_grades) || target_user.grants_right?(current_user, session, :read)
+
+      progress = CourseProgress.new(context[:course], object, read_only: true)
+      return unless progress.can_evaluate_progression?
+
+      progress
+    end
+
+    field :inbox_labels, [String], null: true
+    def inbox_labels
+      return unless object == current_user
+
+      object.inbox_labels
+    end
+
+    field :activity_stream, ActivityStreamType, null: true do
+      argument :only_active_courses, Boolean, required: false
+    end
+    def activity_stream(only_active_courses: false)
+      return unless object == current_user
+
+      context.scoped_set!(:only_active_courses, only_active_courses)
+      context.scoped_set!(:context_type, "User")
+      object
     end
   end
 end
@@ -492,7 +563,7 @@ module Loaders
 
       scope = scope.where.not(enrollments: { workflow_state: "completed" }) if exclude_concluded
 
-      scope = scope.active_by_date_or_completed if exclude_pending_enrollments
+      scope = scope.excluding_pending if exclude_pending_enrollments
 
       order_by.each { |o| scope = scope.order(o) }
 

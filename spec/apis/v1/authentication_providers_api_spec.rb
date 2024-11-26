@@ -67,9 +67,9 @@ describe "AuthenticationProviders API", type: :request do
       expect(res.pluck("idp_entity_id").join).to eq "rad"
     end
 
-    it "returns unauthorized error" do
+    it "returns forbidden error" do
       course_with_student(course: @course)
-      call_index(401)
+      call_index(403)
     end
   end
 
@@ -171,6 +171,13 @@ describe "AuthenticationProviders API", type: :request do
       expect(aac.position).to eq 1
     end
 
+    it "allows setting jit_provisioning attribute" do
+      call_create(@cas_hash.merge!(jit_provisioning: true))
+
+      aac = @account.authentication_providers.take
+      expect(aac.jit_provisioning).to be_truthy
+    end
+
     it "does not error when mixing auth_types (for now)" do
       call_create(@ldap_hash)
       call_create(@saml_hash, 200)
@@ -213,9 +220,9 @@ describe "AuthenticationProviders API", type: :request do
       )
     end
 
-    it "returns unauthorized error" do
+    it "returns forbidden error" do
       course_with_student(course: @course)
-      call_create({}, 401)
+      call_create({}, 403)
     end
 
     it "disables open registration when setting delegated auth" do
@@ -328,6 +335,16 @@ describe "AuthenticationProviders API", type: :request do
       expect(aac.auth_base).to eq "192.168.0.1"
     end
 
+    it "allows updating jit_provisioning attribute" do
+      aac = @account.authentication_providers.create!(@cas_hash)
+      expect(aac.jit_provisioning).to be_falsey
+
+      @cas_hash["jit_provisioning"] = true
+      call_update(aac.id, @cas_hash)
+
+      expect(aac.reload.jit_provisioning).to be_truthy
+    end
+
     it "errors when mixing auth_types" do
       aac = @account.authentication_providers.create!(@saml_hash)
       json = call_update(aac.id, @cas_hash, 400)
@@ -348,9 +365,9 @@ describe "AuthenticationProviders API", type: :request do
       call_update(0, {}, 404)
     end
 
-    it "returns unauthorized error" do
+    it "returns forbidden error" do
       course_with_student(course: @course)
-      call_update(0, {}, 401)
+      call_update(0, {}, 403)
     end
 
     it "can disable MFA" do
@@ -394,6 +411,7 @@ describe "AuthenticationProviders API", type: :request do
       @saml_hash["strip_domain_from_login_attribute"] = false
       @saml_hash["mfa_required"] = false
       @saml_hash["skip_internal_mfa"] = false
+      @saml_hash["otp_via_sms"] = true
       expect(json).to eq @saml_hash
     end
 
@@ -412,6 +430,7 @@ describe "AuthenticationProviders API", type: :request do
       @ldap_hash["skip_internal_mfa"] = false
       @ldap_hash["internal_ca"] = nil
       @ldap_hash["verify_tls_cert_opt_in"] = false
+      @ldap_hash["otp_via_sms"] = true
       expect(json).to eq @ldap_hash
     end
 
@@ -426,6 +445,7 @@ describe "AuthenticationProviders API", type: :request do
       @cas_hash["federated_attributes"] = {}
       @cas_hash["mfa_required"] = false
       @cas_hash["skip_internal_mfa"] = false
+      @cas_hash["otp_via_sms"] = true
       expect(json).to eq @cas_hash
     end
 
@@ -433,9 +453,9 @@ describe "AuthenticationProviders API", type: :request do
       call_show(0, 404)
     end
 
-    it "returns unauthorized error" do
+    it "returns forbidden error" do
       course_with_student(course: @course)
-      call_show(0, 401)
+      call_show(0, 403)
     end
 
     it "allows seeing the canvas auth type for any authenticated user" do
@@ -493,9 +513,9 @@ describe "AuthenticationProviders API", type: :request do
       call_destroy(0, 404)
     end
 
-    it "returns unauthorized error" do
+    it "returns forbidden error" do
       course_with_student(course: @course)
-      call_destroy(0, 401)
+      call_destroy(0, 403)
     end
   end
 
@@ -520,7 +540,7 @@ describe "AuthenticationProviders API", type: :request do
 
     it "requires authorization" do
       course_with_student(course: @course)
-      update_settings({}, 401)
+      update_settings({}, 403)
     end
 
     it "sets auth settings" do

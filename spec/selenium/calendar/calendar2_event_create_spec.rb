@@ -20,7 +20,7 @@
 require_relative "../common"
 require_relative "../helpers/calendar2_common"
 require_relative "../../helpers/k5_common"
-require_relative "./pages/calendar_page"
+require_relative "pages/calendar_page"
 
 describe "calendar2" do
   include_context "in-process server selenium tests"
@@ -146,81 +146,28 @@ describe "calendar2" do
         expect(event.title).to eq event_name
       end
 
-      it "creates an event that is recurring", priority: "1" do
+      it "is not able to create an event without a title in edit event view" do
         get "/courses/#{@course.id}/calendar_events/new"
         wait_for_tiny(f("iframe", f(".ic-RichContentEditor")))
-
-        replace_content(f(".title"), "Test Event")
-        replace_content(
-          f("input[type=text][name= 'start_date']"),
-          format_date_for_view(Time.zone.now, "%Y-%m-%d")
-        )
-        replace_content(f("input[type=text][name= 'start_time']"), "6:00am")
-        replace_content(f("input[type=text][name= 'end_time']"), "6:00pm")
-        f("input[type=text][name= 'end_time']").send_keys(:tab)
-        move_to_click("#duplicate_event")
-        replace_content(f("input[type=number][name='duplicate_count']"), 2)
-        expect_new_page_load { f("#editCalendarEventFull").submit }
-        expect(CalendarEvent.count).to eq(3)
-        repeat_event = CalendarEvent.where(title: "Test Event")
-        first_start_date = repeat_event[0].start_at.to_date
-        expect(repeat_event[1].start_at.to_date).to eq(first_start_date + 1.week)
-        expect(repeat_event[2].start_at.to_date).to eq(first_start_date + 2.weeks)
+        replace_content(more_options_title_field, "")
+        more_options_submit_button.click
+        wait_for_ajaximations
+        scroll_page_to_top
+        expect(more_options_error_box).to include_text("You must enter a title")
+        expect(@course.calendar_events.count).to eq(0)
       end
 
-      it "creates recurring section-specific events" do
-        section1 = @course.course_sections.first
-        section2 = @course.course_sections.create!(name: "other section")
+      it "is not able to create an event without a date in edit event view" do
+        get "/courses/#{@course.id}/calendar_events/new"
+        wait_for_tiny(f("iframe", f(".ic-RichContentEditor")))
+        replace_content(more_options_title_field, "Test event")
+        replace_content(more_options_date_field, "")
 
-        day1 = 1.day.from_now.to_date
-        day2 = 2.days.from_now.to_date
-
-        get "/calendar2"
-        move_to_click_element(f(".calendar .fc-week .fc-today"))
+        more_options_submit_button.click
         wait_for_ajaximations
-        f("#edit_event #edit_event_tabs") # using implicit wait for element to be displayed
-        click_option(edit_calendar_event_form_context, @course.name)
-        expect_new_page_load { edit_calendar_event_form_more_options.click }
 
-        # tiny can steal focus from one of the date inputs when it initializes
-        wait_for_tiny(f("#calendar-description"))
-
-        f("#use_section_dates").click
-
-        replace_and_proceed(f("#section_#{section1.id}_start_date"), day1.to_s)
-        replace_and_proceed(f("#section_#{section2.id}_start_date"), day2.to_s)
-
-        ff(".date_start_end_row input.start_time")
-          .select(&:displayed?)
-          .each { |input| replace_and_proceed(input, "11:30am") }
-        ff(".date_start_end_row input.end_time")
-          .select(&:displayed?)
-          .each { |input| replace_and_proceed(input, "1pm") }
-
-        f("#duplicate_event").click
-        replace_content(f("input[type=number][name='duplicate_count']"), 1)
-
-        form = f("#editCalendarEventFull")
-        expect_new_page_load { form.submit }
-
-        expect(CalendarEvent.count).to eq(6) # 2 parent events each with 2 child events
-        s1_events =
-          CalendarEvent
-          .where(context_code: section1.asset_string)
-          .where
-          .not(parent_calendar_event_id: nil)
-          .order(:start_at)
-          .to_a
-        expect(s1_events[1].start_at.to_date).to eq(s1_events[0].start_at.to_date + 1.week)
-
-        s2_events =
-          CalendarEvent
-          .where(context_code: section2.asset_string)
-          .where
-          .not(parent_calendar_event_id: nil)
-          .order(:start_at)
-          .to_a
-        expect(s2_events[1].start_at.to_date).to eq(s2_events[0].start_at.to_date + 1.week)
+        expect(more_options_error_box).to include_text("You must enter a date")
+        expect(@course.calendar_events.count).to eq(0)
       end
 
       it "queries for all the sections in a course when creating an event" do
@@ -234,7 +181,7 @@ describe "calendar2" do
         f("#use_section_dates").click
 
         num_rows = ff(".show_if_using_sections .row_header").length
-        expect(num_rows).to be_equal(num_sections)
+        expect(num_rows).to equal(num_sections)
       end
 
       it "keeps the modal's context changes in the more options screen when editing" do
@@ -295,6 +242,7 @@ describe "calendar2" do
         end
 
         it "users can switch between an account calendar and a user calendar with the same name" do
+          skip "FOO-3525 (10/6/2023)"
           @course.account.name = "nobody+1@example.com"
           @course.account.save!
           enable_course_account_calendar
@@ -402,6 +350,15 @@ describe "calendar2" do
         expect(@event.all_day).to be true
       end
 
+      it "shows a SR alert when an event is created" do
+        get "/calendar2"
+        calendar_create_event_button.click
+        replace_content(edit_calendar_event_form_title, "new event")
+        edit_calendar_event_form_submit_button.click
+        wait_for_ajaximations
+        expect(screenreader_message_holder).to include_text("The event was successfully created")
+      end
+
       it "can create timed events in calendar" do
         @date = Time.zone.now.beginning_of_day
         start_time = "6:30 AM"
@@ -425,10 +382,12 @@ describe "calendar2" do
       end
 
       it "can edit timed events in calendar in Denver" do
+        puts ">>> testing in Denver"
         test_timed_calendar_event_in_tz("America/Denver")
       end
 
       it "can edit timed events in calendar in Tokyo" do
+        puts ">>> testing in Tokyo"
         test_timed_calendar_event_in_tz("Asia/Tokyo")
       end
 

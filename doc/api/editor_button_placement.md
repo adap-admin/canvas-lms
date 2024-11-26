@@ -69,12 +69,19 @@ All of these settings are contained for the **editor_button** placement:
     button. This can be overridden by language-specific settings if desired by
     using the labels setting. This is required if a text value is not set on the main tool configuration.
 
--   icon_url &lt;url&gt; (required if not set on main tool configuration)
+-   icon_url &lt;url&gt; (optional)
 
-    The URL for an icon that identifies your tool in the RCE toolbar. It is
-    recommended that this icon be at least 16x16 px,in PNG or SVG format, and
-    The url must be an https (SSL) URL. This setting is required if icon_url is
-    not set on the main tool configuration.
+    The URL for an icon that identifies your tool in the RCE toolbar. The icon
+    will be shown at 16x16 pixels in the editor toolbar, and at 28x28 pixels in
+    the editor's listing of all tools. It is recommended that this icon be in
+    PNG or SVG format. The url must be an https (SSL) URL.
+
+    After April 2024, if a tool does not provide an icon_url on the
+    editor_button placement or the main tool configuration, a default icon
+    based on the first letter of the tool's name will be used. Before this
+    change, if a tool does not provide an icon_url, the editor_button placement
+    will be removed from the tool's install configuration, and the tool will not
+    be shown in the editor_button placement.
 
 -   labels: &lt;set of locale-label pairs&gt; (optional)
 
@@ -93,7 +100,7 @@ All of these settings are contained for the **editor_button** placement:
     the tool use this to determine if a Deep Linking flow is being requested by
     Canvas and present an appropriate UI. A Deep Linking flow is highly recommended
     for this placement, but is not required. See the
-    <a href="file.content_item.html" target=_"blank">Deep Linking
+    <a href="file.content_item.html" target="_blank">Deep Linking
     documentation</a> for more information, including accepted values.
 
 -   selection_width: &lt;pixels&gt; (optional)

@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Mathml, {mathImageHelper, MathJaxDirective} from '../mathml'
+import {Mathml, mathImageHelper, MathJaxDirective} from '../mathml'
 
 let stub = null
 describe('MathML and MathJax it', () => {
@@ -235,6 +235,26 @@ describe('mathEquationHelper', () => {
       >
     `
     mathImageHelper.catchEquationImages(root)
+    expect(document.querySelectorAll('img[mathjaxified]').length).toEqual(1)
+    expect(document.querySelector('.math_equation_latex').textContent).toEqual('\\(17\\)')
+  })
+
+  it('catchEquationImages doesnt break with an array of equation images', () => {
+    const root = document.body
+    root.innerHTML = `
+      <img id="i2"
+        class="equation_image"
+        src="http://localhost:3000/equation_images/17?scale=1.5"
+      >
+    `
+    const otherhtml = `
+      <img id="i3"
+        class="equation_image"
+        src="http://localhost:3000/equation_images/17?scale=1.5"
+      >
+    `
+    const imgarr = [root, otherhtml]
+    expect(mathImageHelper.catchEquationImages(imgarr)).toBeTruthy()
     expect(document.querySelectorAll('img[mathjaxified]').length).toEqual(1)
     expect(document.querySelector('.math_equation_latex').textContent).toEqual('\\(17\\)')
   })

@@ -17,17 +17,12 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require "ddtrace"
+require "datadog/tracing"
 
 module Canvas
   # This module is currently a wrapper for managing connecting with ddtrace
   # to send APM information to Datadog, but could in the future be re-worked to
   # be configurable for multiple APM backends.
-  #
-  # If running with multiple database clusters in production,
-  # you can set the "canvas_cluster" variable before enabling APM
-  # to make sure each cluster can load it's settings (for sampling rate)
-  # individually.
   #
   # use Canvas::Apm.enable_debug_mode = true to force logging output
   # for every trace we try to write.  Useful for making sure you're getting
@@ -44,7 +39,6 @@ module Canvas
     HOST_SAMPLING_INTERVAL = 10_000
     class << self
       attr_writer :enable_debug_mode, :hostname, :tracer
-      attr_accessor :canvas_cluster
 
       def reset!
         @_app_analytics_enabled = nil
@@ -52,20 +46,23 @@ module Canvas
         @_host_sample_rate = nil
         @_host_sampling_decision = nil
         @_sample_rate = nil
-        @canvas_cluster = nil
         @enable_debug_mode = nil
         @hostname = nil
         @tracer = nil
       end
 
       def config
-        return @_config if @_config.present?
+        unless @_config
 
-        dynamic_settings = DynamicSettings.find(tree: :private)
-        if canvas_cluster.present?
-          dynamic_settings = DynamicSettings.find(tree: :private, cluster: canvas_cluster)
+          return @_config if @_config.present?
+
+          dynamic_settings = DynamicSettings.find(tree: :private)
+          yaml = dynamic_settings["datadog_apm.yml", failsafe: :missing] || "{}"
+          return {} if yaml == :missing
+
+          @_config = YAML.safe_load(yaml)
         end
-        @_config = YAML.safe_load(dynamic_settings["datadog_apm.yml"] || "{}")
+        @_config
       end
 
       def sample_rate
@@ -113,7 +110,7 @@ module Canvas
       end
 
       def rate_sampler
-        Datadog::RateSampler.new(sample_rate)
+        Datadog::Tracing::Sampling::RateSampler.new(sample_rate)
       end
 
       def enable_apm!
@@ -123,14 +120,15 @@ module Canvas
           # this is filtered on the datadog UI side
           # to make sure we don't analyze _everything_
           # which would be very expensive
-          c.analytics_enabled = analytics_enabled?
-          c.tracer sampler:, debug: debug_mode
-          c.use :aws
-          c.use :faraday
-          c.use :graphql
-          c.use :http
-          c.use :rails
-          c.use :redis
+          c.tracing.analytics.enabled = analytics_enabled?
+          c.diagnostics.debug = debug_mode
+          c.tracing.sampler = sampler
+          c.tracing.instrument :aws
+          c.tracing.instrument :faraday
+          c.tracing.instrument :graphql
+          c.tracing.instrument :http
+          c.tracing.instrument :rails
+          c.tracing.instrument :redis
         end
         Delayed::Worker.plugins << Canvas::Apm::InstJobs::Plugin
       end
@@ -170,7 +168,7 @@ module Canvas
       def tracer
         return Canvas::Apm::StubTracer.instance unless configured?
 
-        @tracer || Datadog.tracer
+        @tracer || Datadog::Tracing
       end
 
       # Alternatively you can just call this to get

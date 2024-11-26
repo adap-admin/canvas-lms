@@ -26,6 +26,7 @@ class PlannerController < ApplicationController
   include Api::V1::PlannerItem
 
   before_action :require_user, unless: :public_access?
+  before_action :check_limited_access_for_students, only: %i[index]
   before_action :set_user
   before_action :set_date_range
   before_action :set_params, only: [:index]
@@ -143,8 +144,9 @@ class PlannerController < ApplicationController
         items_response = Rails.cache.fetch(composite_cache_key, expires_in: 1.week) do
           items = collection_for_filter(params[:filter])
           items = Api.paginate(items, self, params.key?(:user_id) ? api_v1_user_planner_items_url : api_v1_planner_items_url)
+          use_html_comment = params[:use_html_comment] || false
           {
-            json: planner_items_json(items, @user, session, { due_after: start_date, due_before: end_date }),
+            json: planner_items_json(items, @user, session, { due_after: start_date, due_before: end_date, use_html_comment: }),
             link: response.headers["Link"].to_s,
           }
         end
@@ -158,17 +160,23 @@ class PlannerController < ApplicationController
   private
 
   def set_user
+    include_visible_courses = params[:include]&.include?("all_courses")
+
     if params.key?(:user_id)
       @user = api_find(User, params[:user_id])
-      return render_unauthorized_action unless @user == @current_user || @user.grants_right?(@current_user, session, :read_as_parent)
+      @user == @current_user || authorized_action(@user, @current_user, :read_as_parent)
     elsif params.key?(:observed_user_id)
-      return render_unauthorized_action if !params.key?(:context_codes) || params[:context_codes].empty?
+      if (!params.key?(:context_codes) || params[:context_codes].empty?) && !include_visible_courses
+        return render_unauthorized_action
+      end
 
       @user = api_find(User, params[:observed_user_id])
       # observers can only specify course context_codes
       course_ids = Course.find_all_by_asset_string(params[:context_codes]).pluck(:id)
+      include_all_visible_courses = params[:context_codes].nil? && include_all_visible_courses
       valid_course_ids = @current_user.observer_enrollments.active.where(associated_user_id: params[:observed_user_id]).shard(@current_user).pluck(:course_id)
-      return render_unauthorized_action unless (course_ids - valid_course_ids).empty?
+      courses = include_all_visible_courses ? [] : course_ids - valid_course_ids
+      render_unauthorized_action unless courses.empty?
     else
       @user = @current_user
     end
@@ -200,12 +208,15 @@ class PlannerController < ApplicationController
                    ungraded_discussion_collection,
                    calendar_events_collection,
                    peer_reviews_collection]
+    collections << sub_assignment_collection if @domain_root_account.feature_enabled?(:discussion_checkpoints)
+
     BookmarkedCollection.merge(*collections)
   end
 
   def unread_items
     collections = [unread_discussion_topic_collection,
                    unread_assignment_collection]
+    collections << unread_sub_assignment_collection if @domain_root_account.feature_enabled?(:discussion_checkpoints)
 
     BookmarkedCollection.merge(*collections)
   end
@@ -255,6 +266,14 @@ class PlannerController < ApplicationController
     collections
   end
 
+  def sub_assignment_collection
+    item_collection("sub_assignment_viewing",
+                    @user.assignments_for_student("viewing", is_sub_assignment: true, **default_opts).preload(:discussion_topic),
+                    SubAssignment,
+                    %i[user_due_date due_at created_at],
+                    :id)
+  end
+
   def ungraded_quiz_collection
     item_collection("ungraded_quizzes",
                     @user.ungraded_quizzes(**default_opts),
@@ -283,9 +302,27 @@ class PlannerController < ApplicationController
                         .where(content_participations: { user_id: @user, workflow_state: "unread" }).union(
                           assign_scope.where(id: disc_assign_ids)
                         ).due_between_for_user(start_date, end_date, @user)
+
     item_collection("unread_assignment_submissions",
                     scope,
                     Assignment,
+                    %i[user_due_date due_at created_at],
+                    :id)
+  end
+
+  def unread_sub_assignment_collection
+    assign_scope = SubAssignment.active.where(context_type: "Course", context_id: @local_course_ids)
+    disc_sub_assign_ids = DiscussionTopic.active.published.where(context_type: "Course", context_id: @local_course_ids)
+                                         .where.not(assignment_id: nil).unread_for(@user).select(:assignment_id)
+    scope = assign_scope.where("assignments.muted IS NULL OR NOT assignments.muted")
+                        .joins(submissions: :content_participations)
+                        .where(content_participations: { user_id: @user, workflow_state: "unread" }).union(
+                          assign_scope.where(parent_assignment_id: disc_sub_assign_ids)
+                        ).due_between_for_user(start_date, end_date, @user)
+
+    item_collection("unread_sub_assignment_submissions",
+                    scope,
+                    SubAssignment,
                     %i[user_due_date due_at created_at],
                     :id)
   end
@@ -360,27 +397,28 @@ class PlannerController < ApplicationController
   end
 
   def set_params
-    includes = Array.wrap(params[:include]) & %w[concluded account_calendars]
+    includes = Array.wrap(params[:include]) & %w[concluded account_calendars all_courses]
     @per_page = params[:per_page] || 50
     @page = params[:page] || "first"
     @include_concluded = includes.include? "concluded"
-    account_calendars_support_enabled = Account.site_admin.feature_enabled?(:account_calendars_planner_support)
-    if account_calendars_support_enabled
-      @include_account_calendars = includes.include? "account_calendars"
-      @enabled_account_calendars = @user&.enabled_account_calendars&.map(&:id) || []
-    else
-      @include_account_calendars = false
-      @enabled_account_calendars = []
-    end
+    @include_account_calendars = includes.include? "account_calendars"
+    @include_all_courses = includes.include? "all_courses"
+    @include_context_codes = params[:context_codes].present? && !params[:context_codes].nil?
 
     # for specs, that do multiple requests in a single spec, we have to reset these ivars
     @course_ids = @group_ids = @user_ids = @account_ids = nil
-    if params[:context_codes].present?
-      context_ids = ActiveRecord::Base.parse_asset_string_list(Array(params[:context_codes]))
+    if @include_context_codes || @include_all_courses
+      context_codes = Array(params[:context_codes])
+      if !@include_context_codes && @include_all_courses
+        opts = {}
+        opts[:observee_user] = @user
+        context_codes = @current_user.menu_courses(nil, opts).pluck(:asset_string)
+      end
+      context_ids = ActiveRecord::Base.parse_asset_string_list(context_codes)
       @course_ids = context_ids["Course"] || []
       @group_ids = context_ids["Group"] || []
       @user_ids = context_ids["User"] || []
-      @account_ids = account_calendars_support_enabled ? context_ids["Account"] || [] : []
+      @account_ids = context_ids["Account"] || []
       # needed for all_ungraded_todo_items, but otherwise we don't need to load the actual
       # objects
       @contexts = Context.find_all_by_asset_string(context_ids) if public_access?
@@ -389,8 +427,10 @@ class PlannerController < ApplicationController
       @user_ids = [@user.id] if params.key?(:observed_user_id) && @user.grants_right?(@current_user, session, :read_as_parent)
     end
 
-    if @include_account_calendars && context_ids["Account"].nil?
-      @account_ids = @enabled_account_calendars
+    allowed_account_calendars = @user&.all_account_calendars&.map { |a| Shard.relative_id_for(a.id, Shard.current, @user.shard) } || []
+    enabled_account_calendars = @user&.enabled_account_calendars&.map { |a| Shard.relative_id_for(a.id, Shard.current, @user.shard) } || []
+    if @include_account_calendars && !context_ids.nil? && context_ids["Account"].nil?
+      @account_ids = enabled_account_calendars
     end
 
     # make IDs relative to the user's shard
@@ -404,8 +444,8 @@ class PlannerController < ApplicationController
       if @user
         @course_ids = @user.course_ids_for_todo_lists(:student, course_ids: @course_ids, include_concluded:)
         @group_ids = @user.group_ids_for_todo_lists(group_ids: @group_ids)
-        @account_ids ||= @enabled_account_calendars
-        @account_ids &= @enabled_account_calendars
+        @account_ids ||= enabled_account_calendars
+        @account_ids &= allowed_account_calendars
         @user_ids ||= [@user.id]
         @user_ids &= [@user.id]
       else
@@ -448,7 +488,7 @@ class PlannerController < ApplicationController
     @context_codes = @local_course_ids.map { |id| "course_#{id}" }
     @context_codes.concat(@local_group_ids.map { |id| "group_#{id}" })
     @context_codes.concat(@local_user_ids.map { |id| "user_#{id}" })
-    @context_codes.concat(@local_account_ids.map { |id| "account_#{id}" }) if account_calendars_support_enabled
+    @context_codes.concat(@local_account_ids.map { |id| "account_#{id}" })
   end
 
   def contexts_cache_key
@@ -499,7 +539,7 @@ class PlannerController < ApplicationController
   def discussion_topic_todo_scopes
     scopes = []
     Shard.partition_by_shard(@pub_contexts) do |contexts|
-      scopes << DiscussionTopic.where(todo_date: @start_date..@end_date, context: contexts).published
+      scopes << DiscussionTopic.where(todo_date: @start_date..@end_date, context: contexts).published_or_post_delayed
     end
     Shard.partition_by_shard(@unpub_contexts) do |contexts|
       scopes << DiscussionTopic.where(todo_date: @start_date..@end_date, context: contexts).active

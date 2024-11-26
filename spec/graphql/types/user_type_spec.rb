@@ -19,8 +19,11 @@
 #
 
 require_relative "../graphql_spec_helper"
+require "helpers/k5_common"
 
 describe Types::UserType do
+  include K5Common
+
   before(:once) do
     student = student_in_course(active_all: true).user
     course = @course
@@ -87,6 +90,12 @@ describe Types::UserType do
     it "returns full name if shortname is not set" do
       @student.update! short_name: nil
       expect(user_type.resolve("shortName")).to eq @student.name
+    end
+  end
+
+  context "uuid" do
+    it "is displayed when requested" do
+      expect(user_type.resolve("uuid")).to eq @student.uuid.to_s
     end
   end
 
@@ -294,6 +303,18 @@ describe Types::UserType do
       expect(
         user_type.resolve(%|enrollments(courseId: "#{@course2.id}") { _id }|)
       ).to eq []
+    end
+
+    it "excludes deactivated enrollments when currentOnly is true" do
+      @student.enrollments.each(&:deactivate)
+      results = user_type.resolve("enrollments(currentOnly: true) { _id }")
+      expect(results).to be_empty
+    end
+
+    it "includes deactivated enrollments when currentOnly is false" do
+      @student.enrollments.each(&:deactivate)
+      results = user_type.resolve("enrollments(currentOnly: false) { _id }")
+      expect(results).not_to be_empty
     end
 
     it "excludes concluded enrollments when excludeConcluded is true" do
@@ -866,7 +887,7 @@ describe Types::UserType do
     end
 
     it "does not return duplicate observers if an observer is observing multiple students in the course" do
-      recipients = [@student, @other_student, @third_student].map(&:id).map(&:to_s)
+      recipients = [@student, @other_student, @third_student].map { |u| u.id.to_s }
       result = teacher_type.resolve("recipientsObservers(contextCode: \"course_#{@course.id}\", recipientIds: #{recipients}) { nodes { _id } } ", current_user: @teacher)
       expect(result).to eq [@observer.id.to_s]
     end
@@ -911,6 +932,77 @@ describe Types::UserType do
       @student.favorites.create!(context: @course1)
       result = type.resolve("favoriteCoursesConnection { nodes { _id } }")
       expect(result).to match_array([@course1.id.to_s])
+    end
+
+    context "dashboard_card" do
+      it "returns the correct dashboard cards if there are no favorite courses" do
+        result = type.resolve("favoriteCoursesConnection { nodes { dashboardCard { assetString } } }")
+        expect(result).to match_array([@course1.asset_string, @course2.asset_string])
+      end
+
+      it "returns the correct dashboard cards if there are favorite courses" do
+        @student.favorites.create!(context: @course1)
+        result = type.resolve("favoriteCoursesConnection { nodes { dashboardCard { assetString } } }")
+        expect(result).to match_array([@course1.asset_string])
+      end
+
+      it "caches dashboard card counts" do
+        @cur_teacher = course_with_teacher(active_all: true).user
+        @published_course = @course
+        @unpublished_course = course_factory(active_course: false)
+        @unpublished_course.enroll_teacher(@cur_teacher).accept!
+
+        teacher_type = GraphQLTypeTester.new(
+          @cur_teacher,
+          current_user: @cur_teacher,
+          domain_root_account: @course.account.root_account,
+          request: ActionDispatch::TestRequest.create
+        )
+
+        enable_cache do
+          teacher_type.resolve("favoriteCoursesConnection { nodes { dashboardCard { assetString } } }")
+          published_count = Rails.cache.read(["last_known_dashboard_cards_published_count", @cur_teacher.global_id].cache_key)
+          unpublished_count = Rails.cache.read(["last_known_dashboard_cards_unpublished_count", @cur_teacher.global_id].cache_key)
+          expect(published_count).to eq 1
+          expect(unpublished_count).to eq 1
+
+          # Publish the unpublished course
+          @unpublished_course.offer!
+          teacher_type.resolve("favoriteCoursesConnection { nodes { dashboardCard { assetString } } }")
+          published_count = Rails.cache.read(["last_known_dashboard_cards_published_count", @cur_teacher.global_id].cache_key)
+          unpublished_count = Rails.cache.read(["last_known_dashboard_cards_unpublished_count", @cur_teacher.global_id].cache_key)
+          expect(published_count).to eq 2
+          expect(unpublished_count).to eq 0
+        end
+      end
+
+      it "caches dashboard card counts for k5" do
+        k5_account = Account.create!(name: "K5 Elementary")
+        toggle_k5_setting(k5_account)
+        @cur_teacher = user_factory(active_all: true)
+        @k5_course1 = course_factory(course_name: "K5 Course 1", active_all: true, account: k5_account)
+        @k5_course1.enroll_teacher(@cur_teacher, enrollment_state: "active")
+
+        teacher_type = GraphQLTypeTester.new(
+          @cur_teacher,
+          current_user: @cur_teacher,
+          domain_root_account: k5_account.root_account,
+          request: ActionDispatch::TestRequest.create
+        )
+
+        enable_cache do
+          teacher_type.resolve("favoriteCoursesConnection { nodes { dashboardCard { assetString } } }")
+          k5_count = Rails.cache.read(["last_known_k5_cards_count", @cur_teacher.global_id].cache_key)
+          expect(k5_count).to eq 1
+
+          # Create and add a new K5 course
+          @k5_course2 = course_factory(course_name: "K5 Course 2", active_all: true, account: k5_account)
+          @k5_course2.enroll_teacher(@cur_teacher, enrollment_state: "active")
+          teacher_type.resolve("favoriteCoursesConnection { nodes { dashboardCard { assetString } } }")
+          k5_count = Rails.cache.read(["last_known_k5_cards_count", @cur_teacher.global_id].cache_key)
+          expect(k5_count).to eq 2
+        end
+      end
     end
   end
 
@@ -1113,6 +1205,53 @@ describe Types::UserType do
     end
   end
 
+  describe "course_progression" do
+    let(:progress_helper) do
+      progress_helper = double(CourseProgress.name)
+      allow(progress_helper).to receive_messages(can_evaluate_progression?: true, normalized_requirement_count: 1)
+      progress_helper
+    end
+
+    before do
+      allow(CourseProgress).to receive(:new).and_return(progress_helper)
+    end
+
+    it "returns nil in a non-course context" do
+      type = GraphQLTypeTester.new(@student, current_user: @student)
+
+      expect(type.resolve("courseProgression { requirements { total } }")).to be_nil
+    end
+
+    it "returns nil when progress cannot be evaluated" do
+      type = GraphQLTypeTester.new(@student, current_user: @teacher, course: @course)
+
+      expect(progress_helper).to receive(:can_evaluate_progression?).and_return(false)
+      expect(type.resolve("courseProgression { requirements { total } }")).to be_nil
+    end
+
+    context "for a user with view_all_grades permission in the course" do
+      it "returns progression for another user" do
+        type = GraphQLTypeTester.new(@student, current_user: @teacher, course: @course)
+
+        expect(type.resolve("courseProgression { requirements { total } }")).to be_truthy
+      end
+    end
+
+    context "for a user without view_all_grades permission in the course" do
+      it "does not return progression for another user" do
+        type = GraphQLTypeTester.new(@student, current_user: @other_student, course: @course)
+
+        expect(type.resolve("courseProgression { requirements { total } }")).to be_nil
+      end
+
+      it "returns progression for self" do
+        type = GraphQLTypeTester.new(@student, current_user: @student, course: @course)
+
+        expect(type.resolve("courseProgression { requirements { total } }")).to be_truthy
+      end
+    end
+  end
+
   describe "submission comments" do
     before(:once) do
       course = Course.create! name: "TEST"
@@ -1169,12 +1308,47 @@ describe Types::UserType do
         expect(query_result[0].to_i).to eq @student_submission_1.id
       end
 
-      it "gets submissions with comments in order of last_comment_at || created_at DESC" do
+      it "gets submissions with comments in order of last_comment_at DESC" do
         student_submission_2 = @assignment2.submissions.find_by(user: @student)
         student_submission_2.add_comment(author: @student, comment: "Fourth comment")
         student_submission_2.add_comment(author: @teacher, comment: "Fifth comment")
 
+        student_submission_2.update_attribute(:last_comment_at, 1.day.ago)
+        @student_submission_1.update_attribute(:last_comment_at, 2.days.ago)
+
         query_result = teacher_type.resolve("viewableSubmissionsConnection { nodes { _id }  }")
+
+        expect(query_result.count).to eq 2
+        expect(query_result[0].to_i).to eq student_submission_2.id
+      end
+
+      it "gets submissions with comments in order of last submission comment if last_comment_at is nil" do
+        student_submission_2 = @assignment2.submissions.find_by(user: @student)
+        student_submission_2.add_comment(author: @student, comment: "Fourth comment")
+        student_submission_2.add_comment(author: @teacher, comment: "Fifth comment")
+
+        student_submission_2.update_attribute(:last_comment_at, nil)
+        @student_submission_1.update_attribute(:last_comment_at, nil)
+
+        query_result = teacher_type.resolve("viewableSubmissionsConnection { nodes { _id }  }")
+
+        expect(query_result.count).to eq 2
+        expect(query_result[0].to_i).to eq student_submission_2.id
+      end
+
+      it "gets submissions with comments in order of last submission comment over last_comment_at" do
+        student_submission_2 = @assignment2.submissions.find_by(user: @student)
+
+        @student_submission_1.submission_comments.last.update_attribute(:created_at, Time.new(2024, 2, 9, 4, 21, 0).utc)
+        @student_submission_1.update_attribute(:last_comment_at, nil)
+
+        student_submission_2.add_comment(author: @student, comment: "Fourth comment", created_at: Time.new(2024, 2, 8, 13, 17, 0).utc)
+        student_submission_2.add_comment(author: @teacher, comment: "Fifth comment", created_at: Time.new(2024, 2, 10, 5, 11, 0).utc)
+        student_submission_2.update_attribute(:last_comment_at, Time.new(2024, 2, 8, 13, 17, 0).utc)
+
+        # Notice: submission 2 is older, but submission 2 has newest submission_comment.
+        query_result = teacher_type.resolve("viewableSubmissionsConnection { nodes { _id }  }")
+
         expect(query_result.count).to eq 2
         expect(query_result[0].to_i).to eq student_submission_2.id
       end
@@ -1225,6 +1399,101 @@ describe Types::UserType do
           expect(query_result[0].to_i).to eq @student_submission_3.id
         end
       end
+    end
+  end
+
+  context "with a user" do
+    before(:once) do
+      @user = user_factory
+    end
+
+    let(:user_type) do
+      GraphQLTypeTester.new(@user, current_user: @user, domain_root_account: @user.account, request: ActionDispatch::TestRequest.create)
+    end
+
+    it "returns the user's inbox labels" do
+      @user.preferences[:inbox_labels] = ["Test 1", "Test 2"]
+      @user.save!
+
+      expect(user_type.resolve("inboxLabels")).to eq @user.inbox_labels
+    end
+
+    it "returns an empty user's inbox labels" do
+      expect(user_type.resolve("inboxLabels")).to eq []
+    end
+  end
+
+  context "ActivityStream" do
+    it "returns the activity stream summary" do
+      @context = @course
+      discussion_topic_model
+      discussion_topic_model(user: @user)
+      announcement_model
+      conversation(User.create, @user)
+      Notification.create(name: "Assignment Due Date Changed", category: "TestImmediately")
+      allow_any_instance_of(Assignment).to receive(:created_at).and_return(4.hours.ago)
+      assignment_model(course: @course)
+      @assignment.update_attribute(:due_at, 1.week.from_now)
+
+      cur_resolver = GraphQLTypeTester.new(@user, current_user: @user, domain_root_account: @course.account.root_account, request: ActionDispatch::TestRequest.create)
+      expect(cur_resolver.resolve("activityStream { summary { type } } ")).to match_array %w[Announcement Conversation DiscussionTopic Message]
+      expect(cur_resolver.resolve("activityStream { summary { count } } ")).to match_array [1, 1, 2, 1]
+      expect(cur_resolver.resolve("activityStream { summary { unreadCount } } ")).to match_array [1, 0, 1, 0]
+      expect(cur_resolver.resolve("activityStream { summary { notificationCategory } } ")).to match_array [nil, nil, nil, "TestImmediately"]
+    end
+  end
+
+  context "Cross-Shard ActivityStream Summary" do
+    specs_require_sharding
+    it "returns the activity stream summary with cross-shard items" do
+      @student = user_factory(active_all: true)
+      @shard1.activate do
+        @account = Account.create!
+        course_factory(active_all: true, account: @account)
+        @course.enroll_student(@student).accept!
+        @context = @course
+        discussion_topic_model
+        discussion_topic_model(user: @user)
+        announcement_model
+        conversation(User.create, @user)
+        Notification.create(name: "Assignment Due Date Changed", category: "TestImmediately")
+        allow_any_instance_of(Assignment).to receive(:created_at).and_return(4.hours.ago)
+        assignment_model(course: @course)
+        @assignment.update_attribute(:due_at, 1.week.from_now)
+        @assignment.update_attribute(:due_at, 2.weeks.from_now)
+      end
+      cur_resolver = GraphQLTypeTester.new(@user, current_user: @user, domain_root_account: @course.account.root_account, request: ActionDispatch::TestRequest.create)
+      expect(cur_resolver.resolve("activityStream { summary { type } } ")).to match_array %w[Announcement Conversation DiscussionTopic Message]
+      expect(cur_resolver.resolve("activityStream { summary { count } } ")).to match_array [1, 1, 2, 2]
+      expect(cur_resolver.resolve("activityStream { summary { unreadCount } } ")).to match_array [1, 0, 1, 0]
+      expect(cur_resolver.resolve("activityStream { summary { notificationCategory } } ")).to match_array [nil, nil, nil, "TestImmediately"]
+    end
+
+    it "filters the activity stream summary to currently active courses if requested" do
+      @student = user_factory(active_all: true)
+      @shard1.activate do
+        @account = Account.create!
+        @course1 = course_factory(active_all: true, account: @account)
+        @course1.enroll_student(@student).accept!
+        @course2 = course_factory(active_all: true, account: @account)
+        course2_enrollment = @course2.enroll_student(@student)
+        course2_enrollment.accept!
+        @dt1 = discussion_topic_model(context: @course1)
+        @dt2 = discussion_topic_model(context: @course2)
+        course2_enrollment.destroy!
+      end
+      cur_resolver = GraphQLTypeTester.new(@user, current_user: @user, domain_root_account: @course.account.root_account, request: ActionDispatch::TestRequest.create)
+      # without filtering to active courses
+      expect(cur_resolver.resolve("activityStream { summary { type } } ")).to match_array ["DiscussionTopic"]
+      expect(cur_resolver.resolve("activityStream { summary { count } } ")).to match_array [2]
+      expect(cur_resolver.resolve("activityStream { summary { unreadCount } } ")).to match_array [2]
+      expect(cur_resolver.resolve("activityStream { summary { notificationCategory } } ")).to match_array [nil]
+
+      # with filtering to active courses
+      expect(cur_resolver.resolve("activityStream(onlyActiveCourses: true) { summary { type } } ")).to match_array ["DiscussionTopic"]
+      expect(cur_resolver.resolve("activityStream(onlyActiveCourses: true) { summary { count } } ")).to match_array [1]
+      expect(cur_resolver.resolve("activityStream(onlyActiveCourses: true) { summary { unreadCount } } ")).to match_array [1]
+      expect(cur_resolver.resolve("activityStream(onlyActiveCourses: true) { summary { notificationCategory } } ")).to match_array [nil]
     end
   end
 end

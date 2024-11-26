@@ -45,6 +45,10 @@ class AuthenticationProvider::LinkedIn < AuthenticationProvider::OAuth2
     ].freeze
   end
 
+  def self.supports_autoconfirmed_email?
+    false
+  end
+
   def login_attribute
     super || "id"
   end
@@ -92,8 +96,9 @@ class AuthenticationProvider::LinkedIn < AuthenticationProvider::OAuth2
   def client_options
     {
       site: "https://api.linkedin.com",
-      authorize_url: "https://www.linkedin.com/uas/oauth2/authorization",
-      token_url: "https://www.linkedin.com/uas/oauth2/accessToken"
+      authorize_url: "https://www.linkedin.com/oauth/v2/authorization",
+      token_url: "https://www.linkedin.com/oauth/v2/accessToken",
+      auth_scheme: :request_body
     }
   end
 

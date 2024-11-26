@@ -67,7 +67,6 @@ module Canvas::Plugins::DefaultPlugins
                             author_website: "http://www.instructure.com",
                             version: "1.0.0",
                             settings_partial: "plugins/linked_in_settings",
-                            validator: "LinkedInValidator",
                             encrypted_settings: [:client_secret])
     Canvas::Plugin.register("microsoft",
                             nil,
@@ -356,6 +355,16 @@ module Canvas::Plugins::DefaultPlugins
                                 app_reviews_endpoint: "/api/v1/lti_apps/:id/reviews"
                               },
                               validator: "AppCenterValidator"
+                            })
+    Canvas::Plugin.register("learnplatform", nil, {
+                              name: -> { t :name, "LearnPlatform" },
+                              description: -> { t :description, "Enable access to the LearnPlatform API to pull product information" },
+                              author: "Instructure",
+                              settings_partial: "plugins/learn_platform_settings",
+                              settings: {
+                                base_url: "https://app.learnplatform.com",
+                              },
+                              encrypted_settings: [:username, :password]
                             })
     Canvas::Plugin.register("pandapub", nil, {
                               name: -> { t :name, "PandaPub" },

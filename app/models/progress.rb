@@ -19,18 +19,21 @@
 #
 
 class Progress < ActiveRecord::Base
-  belongs_to :context, polymorphic:
-      [:content_migration,
-       :course,
-       :account,
-       :group_category,
-       :content_export,
-       :assignment,
-       :attachment,
-       :epub_export,
-       :sis_batch,
-       :course_pace,
-       { context_user: "User", quiz_statistics: "Quizzes::QuizStatistics" }]
+  belongs_to :context, polymorphic: [
+    :content_migration,
+    :course,
+    :account,
+    :group_category,
+    :content_export,
+    :assignment,
+    :attachment,
+    :epub_export,
+    :sis_batch,
+    :course_pace,
+    :context_external_tool,
+    { context_user: "User", quiz_statistics: "Quizzes::QuizStatistics" },
+  ] + (defined?(DsrRequest) ? [:dsr_request] : [])
+
   belongs_to :user
   belongs_to :delayed_job, class_name: "::Delayed::Job", optional: true
 
@@ -41,11 +44,14 @@ class Progress < ActiveRecord::Base
   serialize :results
   attr_reader :total
 
+  scope :is_pending, -> { where(workflow_state: ["queued", "running"]) }
+
   include Workflow
   workflow do
     state :queued do
       event :start, transitions_to: :running
       event :fail, transitions_to: :failed
+      event :cancel, transitions_to: :canceled
     end
     state :running do
       event(:complete, transitions_to: :completed) { self.completion = 100 }
@@ -53,6 +59,7 @@ class Progress < ActiveRecord::Base
     end
     state :completed
     state :failed
+    state :canceled
   end
 
   set_policy do
@@ -114,16 +121,26 @@ class Progress < ActiveRecord::Base
       ActiveRecord::Base.connection.after_transaction_commit do
         job = Delayed::Job.enqueue(work, **enqueue_args)
         update(delayed_job_id: job.id)
+        cancel_orphaned_progresses(job.id) if enqueue_args[:on_conflict] == :overwrite && job.enqueue_result == :updated
         job
       end
     end
   end
 
+  private
+
+  # If a job is enqueued with `on_conflict: :overwrite`, and another job already exists with the same
+  # singleton, then the existing job's handler will be updated to point at the new Progress. Thus, cancel any
+  # other queued Progresses that were pointing at the job (since they'll never get updated).
+  def cancel_orphaned_progresses(job_id)
+    Progress.where(delayed_job_id: job_id, workflow_state: "queued").where.not(id:).update_all(workflow_state: "canceled")
+  end
+
   # (private)
   class Work < Delayed::PerformableMethod
-    def initialize(progress, *args, **kwargs)
+    def initialize(progress, *, **)
       @progress = progress
-      super(*args, **kwargs)
+      super(*, **)
     end
 
     def perform
@@ -141,7 +158,7 @@ class Progress < ActiveRecord::Base
       @progress.message = "Unexpected error, ID: #{er_id || "unknown"}"
       @progress.save
       @progress.fail
-      @context.fail_with_error!(error) if @context.respond_to?(:fail_with_error!)
+      object.fail_with_error!(error) if object.respond_to?(:fail_with_error!)
     end
   end
 end

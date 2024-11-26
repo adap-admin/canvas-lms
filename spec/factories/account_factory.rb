@@ -19,16 +19,14 @@
 #
 module Factories
   def account_model(opts = {})
-    @account = factory_with_protected_attributes(Account, valid_account_attributes.merge(opts))
+    @account = Account.create!(valid_account_attributes.merge(opts))
   end
 
   def stub_rcs_config
     # make sure this is loaded first
     allow(DynamicSettings).to receive(:find).with(any_args).and_call_original
     allow(DynamicSettings).to receive(:find).with("rich-content-service", default_ttl: 5.minutes).and_return(
-      DynamicSettings::FallbackProxy.new(
-        "app-host": ENV["RCE_HOST"] || "http://localhost:3001"
-      )
+      DynamicSettings::FallbackProxy.new({ "app-host": ENV["RCE_HOST"] || "http://localhost:3001" })
     )
 
     allow(Rails.application.credentials).to receive(:dig).and_call_original
@@ -44,7 +42,7 @@ module Factories
   end
 
   def account_rcs_model(opts = {})
-    @account = factory_with_protected_attributes(Account, valid_account_attributes.merge(opts))
+    @account = Account.create!(valid_account_attributes.merge(opts))
   end
 
   def provision_quizzes_next(account)

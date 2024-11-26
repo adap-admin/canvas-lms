@@ -26,6 +26,48 @@ describe "assignments" do
   include GoogleDriveCommon
   include AssignmentsCommon
 
+  def checkpointed_discussion(name, course, student, options = {})
+    defaults = {
+      reply_to_topic_due_at: nil,
+      required_replies_due_at: nil,
+      available_from: nil,
+      available_until: nil
+    }
+    options = defaults.merge(options)
+
+    checkpointed_discussion = DiscussionTopic.create_graded_topic!(course:, title: name)
+
+    Checkpoints::DiscussionCheckpointCreatorService.call(
+      discussion_topic: checkpointed_discussion,
+      checkpoint_label: CheckpointLabels::REPLY_TO_TOPIC,
+      dates: [{
+        type: "override",
+        set_type: "ADHOC",
+        student_ids: [student.id],
+        due_at: options[:reply_to_topic_due_at],
+        unlock_at: options[:available_from],
+        lock_at: options[:available_until],
+      }],
+      points_possible: 3
+    )
+    Checkpoints::DiscussionCheckpointCreatorService.call(
+      discussion_topic: checkpointed_discussion,
+      checkpoint_label: CheckpointLabels::REPLY_TO_ENTRY,
+      dates: [{
+        type: "override",
+        set_type: "ADHOC",
+        student_ids: [student.id],
+        due_at: options[:required_replies_due_at],
+        unlock_at: options[:available_from],
+        lock_at: options[:available_until],
+      }],
+      points_possible: 3,
+      replies_required: 2
+    )
+
+    checkpointed_discussion
+  end
+
   context "as a student" do
     before do
       course_with_student_logged_in
@@ -246,41 +288,34 @@ describe "assignments" do
       end
     end
 
-    context "google drive" do
-      before do
-        PluginSetting.create!(name: "google_drive", settings: {})
-        setup_google_drive
-      end
-
-      after do
-        click_away_accept_alert
-      end
-
-      # This plugin is deprecated and all associated code will soon be removed.
-      # Just make sure the user can't access the form even if it is enabled for now.
-      it "has no google doc tab even if google docs is enabled", priority: "1" do
-        @assignment.update(submission_types: "online_upload")
-        get "/courses/#{@course.id}/assignments/#{@assignment.id}"
-        f(".submit_assignment_link").click
-        wait_for_animations
-
-        expect(f("#content")).not_to contain_css("a[href*='submit_google_doc_form']")
-      end
-    end
-
+    # EVAL-3711 Remove this test when instui_nav feature flag is removed
     it "lists the assignments" do
       ag = @course.assignment_groups.first
 
       get "/courses/#{@course.id}/assignments"
       wait_for_no_such_element { f('[data-view="assignmentGroups"] .loadingIndicator') }
       wait_for_ajaximations
-
       move_to_click("label[for=show_by_type]")
       ag_el = f("#assignment_group_#{ag.id}")
       expect(ag_el).to be_present
       expect(ag_el.text).to match @assignment.name
     end
 
+    it "lists the assignments with the instui_nav flag on" do
+      @course.root_account.enable_feature!(:instui_nav)
+      ag = @course.assignment_groups.first
+
+      get "/courses/#{@course.id}/assignments"
+      wait_for_no_such_element { f('[data-view="assignmentGroups"] .loadingIndicator') }
+      wait_for_ajaximations
+      f('[data-view="showBy"] [type="button"]').click
+      f('[data-testid="show_by_type"]').click
+      ag_el = f("#assignment_group_#{ag.id}")
+      expect(ag_el).to be_present
+      expect(ag_el.text).to match @assignment.name
+    end
+
+    # EVAL-3711 Remove this test when instui_nav feature flag is removed
     it "does not show add/edit/delete buttons" do
       ag = @course.assignment_groups.first
 
@@ -295,6 +330,23 @@ describe "assignments" do
       expect(f("#content")).not_to contain_css("ag_#{ag.id}_manage_link")
     end
 
+    it "does not show add/edit/delete buttons with the instui nav flag on" do
+      @course.root_account.enable_feature!(:instui_nav)
+      ag = @course.assignment_groups.first
+
+      get "/courses/#{@course.id}/assignments"
+      wait_for_no_such_element { f('[data-view="assignmentGroups"] .loadingIndicator') }
+      wait_for_ajaximations
+
+      expect(f("#content")).not_to contain_css("[data-testid='new_assignment_button']")
+      expect(f("#content")).not_to contain_css("[data-testid='new_group_button']")
+      expect(f("#content")).not_to contain_css(".add_assignment")
+      f('[data-view="showBy"] [type="button"]').click
+      f('[data-testid="show_by_type"]').click
+      expect(f("#content")).not_to contain_css("ag_#{ag.id}_manage_link")
+    end
+
+    # EVAL-3711 Remove this test when instui_nav feature flag is removed
     it "defaults to grouping by date" do
       @course.assignments.create!(title: "undated assignment", name: "undated assignment")
 
@@ -309,6 +361,23 @@ describe "assignments" do
       expect(f("#assignment_group_undated")).not_to be_nil
     end
 
+    it "defaults to grouping by date with instui nav flag on" do
+      @course.root_account.enable_feature!(:instui_nav)
+      @course.assignments.create!(title: "undated assignment", name: "undated assignment")
+
+      get "/courses/#{@course.id}/assignments"
+      wait_for_no_such_element { f('[data-view="assignmentGroups"] .loadingIndicator') }
+      wait_for_ajaximations
+
+      f('[data-view="showBy"] [type="button"]').click
+      expect(f('[data-testid="show_by_date"]').attribute("aria-checked")).to eq "true"
+
+      # assuming two undated and two future assignments created above
+      expect(f("#assignment_group_upcoming")).not_to be_nil
+      expect(f("#assignment_group_undated")).not_to be_nil
+    end
+
+    # EVAL-3711 Remove this test when instui_nav feature flag is removed
     it "allowings grouping by assignment group (and remember)" do
       ag = @course.assignment_groups.first
 
@@ -326,6 +395,28 @@ describe "assignments" do
       expect(is_checked("#show_by_type")).to be_truthy
     end
 
+    it "allowings grouping by assignment group (and remember) with the instui nav flag on" do
+      @course.root_account.enable_feature!(:instui_nav)
+      ag = @course.assignment_groups.first
+
+      get "/courses/#{@course.id}/assignments"
+      wait_for_no_such_element { f('[data-view="assignmentGroups"] .loadingIndicator') }
+      wait_for_ajaximations
+
+      f('[data-view="showBy"] [type="button"]').click
+      f('[data-testid="show_by_type"]').click
+      f('[data-view="showBy"] [type="button"]').click
+      expect(f('[data-testid="show_by_type"]').attribute("aria-checked")).to eq "true"
+      expect(f("#assignment_group_#{ag.id}")).not_to be_nil
+
+      get "/courses/#{@course.id}/assignments"
+      wait_for_no_such_element { f('[data-view="assignmentGroups"] .loadingIndicator') }
+      wait_for_ajaximations
+      f('[data-view="showBy"] [type="button"]').click
+      expect(f('[data-testid="show_by_type"]').attribute("aria-checked")).to eq "true"
+    end
+
+    # EVAL-3711 Remove this test when instui_nav feature flag is removed
     it "does not show empty groups" do
       # assuming two undated and two future assignments created above
       empty_ag = @course.assignment_groups.create!(name: "Empty")
@@ -341,6 +432,24 @@ describe "assignments" do
       expect(f("#content")).not_to contain_css("#assignment_group_#{empty_ag.id}")
     end
 
+    it "does not show empty groups with instui nav flag on" do
+      @course.root_account.enable_feature!(:instui_nav)
+      # assuming two undated and two future assignments created above
+      empty_ag = @course.assignment_groups.create!(name: "Empty")
+
+      get "/courses/#{@course.id}/assignments"
+      wait_for_no_such_element { f('[data-view="assignmentGroups"] .loadingIndicator') }
+      wait_for_ajaximations
+
+      expect(f("#content")).not_to contain_css("#assignment_group_overdue")
+      expect(f("#content")).not_to contain_css("#assignment_group_past")
+
+      f('[data-view="showBy"] [type="button"]').click
+      f('[data-testid="show_by_type"]').click
+      expect(f("#content")).not_to contain_css("#assignment_group_#{empty_ag.id}")
+    end
+
+    # EVAL-3711 Remove this test when instui_nav feature flag is removed
     it "shows empty assignment groups if they have a weight" do
       @course.group_weighting_scheme = "percent"
       @course.save!
@@ -356,6 +465,26 @@ describe "assignments" do
       wait_for_ajaximations
 
       move_to_click("label[for=show_by_type]")
+      expect(f("#assignment_group_#{empty_ag.id}")).not_to be_nil
+    end
+
+    it "shows empty assignment groups if they have a weight with the instui nav flag on" do
+      @course.root_account.enable_feature!(:instui_nav)
+      @course.group_weighting_scheme = "percent"
+      @course.save!
+
+      ag = @course.assignment_groups.first
+      ag.group_weight = 90
+      ag.save!
+
+      empty_ag = @course.assignment_groups.create!(name: "Empty", group_weight: 10)
+
+      get "/courses/#{@course.id}/assignments"
+      wait_for_no_such_element { f('[data-view="assignmentGroups"] .loadingIndicator') }
+      wait_for_ajaximations
+
+      f('[data-view="showBy"] [type="button"]').click
+      f('[data-testid="show_by_type"]').click
       expect(f("#assignment_group_#{empty_ag.id}")).not_to be_nil
     end
 
@@ -415,10 +544,11 @@ describe "assignments" do
             end
           end
         end
-        # by enrolling a new user it will do all the DuedateCacher stuff we skipped above
+        # by enrolling a new user it will do all the SubmissionLifecycleManager stuff we skipped above
         course_with_student_logged_in(course: @course)
       end
 
+      # EVAL-3711 Remove this test when instui_nav feature flag is removed
       it "exhausts all pagination of assignment groups" do
         get "/courses/#{@course.id}/assignments"
         wait_for_no_such_element { f('[data-view="assignmentGroups"] .loadingIndicator') }
@@ -431,6 +561,140 @@ describe "assignments" do
 
         move_to_click("label[for=show_by_type]")
         expect(ff('[data-view="assignmentGroups"] .assignment_group').length).to eq(count_to_expect)
+      end
+
+      it "exhausts all pagination of assignment groups with the instui nav flag on" do
+        @course.root_account.enable_feature!(:instui_nav)
+        get "/courses/#{@course.id}/assignments"
+        wait_for_no_such_element { f('[data-view="assignmentGroups"] .loadingIndicator') }
+        wait_for_ajaximations
+        # if there are more assignment_groups visible than we fetch per page,
+        # it must mean that it paginated succcessfully
+
+        count_to_expect = @count_to_make + 1 # add one for the @assignment created in the root `before` block
+        expect(ff('[data-view="assignmentGroups"] .assignment').length).to eq(count_to_expect)
+
+        f('[data-view="showBy"] [type="button"]').click
+        f('[data-testid="show_by_type"]').click
+        expect(ff('[data-view="assignmentGroups"] .assignment_group').length).to eq(count_to_expect)
+      end
+    end
+
+    context "checkpointed" do
+      before do
+        @teacher = teacher_in_course(name: "teacher", course: @course, enrollment_state: :active).user
+        Account.site_admin.enable_feature!(:discussion_checkpoints)
+        @course.root_account.enable_feature!(:discussion_checkpoints)
+
+        @date_in_past = 2.days.ago
+        @date_in_future = 2.days.from_now
+
+        # Checkpointed assignments in undated assignment group
+        @both_undated = checkpointed_discussion("Both Undated", @course, @student)
+
+        # Checkpointed assignments in upcoming assignment group
+        @both_future = checkpointed_discussion(
+          "Both Future",
+          @course,
+          @student,
+          reply_to_topic_due_at: @date_in_future,
+          required_replies_due_at: @date_in_future
+        )
+
+        @undated_future = checkpointed_discussion(
+          "Undated and Future",
+          @course,
+          @student,
+          required_replies_due_at: @date_in_future
+        )
+
+        @future_past = checkpointed_discussion(
+          "Future and Past",
+          @course,
+          @student,
+          reply_to_topic_due_at: @date_in_past + 1.day,
+          required_replies_due_at: @date_in_future
+        )
+        @future_past.assignment.sub_assignments.first.grade_student(@student, grader: @teacher, score: 1)
+
+        # Checkpointed assignments in overdue assignment group
+        @both_overdue = checkpointed_discussion(
+          "Both Overdue",
+          @course,
+          @student,
+          reply_to_topic_due_at: @date_in_past,
+          required_replies_due_at: @date_in_past
+        )
+
+        @undated_overdue = checkpointed_discussion(
+          "Undated and Overdue",
+          @course,
+          @student,
+          required_replies_due_at: @date_in_past
+        )
+
+        @overdue_future = checkpointed_discussion(
+          "Overdue and Future",
+          @course,
+          @student,
+          reply_to_topic_due_at: @date_in_past,
+          required_replies_due_at: @date_in_future
+        )
+
+        @overdue_past = checkpointed_discussion(
+          "Overdue and Past",
+          @course,
+          @student,
+          reply_to_topic_due_at: @date_in_past,
+          required_replies_due_at: @date_in_past
+        )
+        @overdue_past.assignment.sub_assignments.first.grade_student(@student, grader: @teacher, score: 1)
+
+        # Checkpointed assignments in past assignment group
+        @both_past = checkpointed_discussion(
+          "Both Past",
+          @course,
+          @student,
+          reply_to_topic_due_at: @date_in_past - 1.day,
+          required_replies_due_at: @date_in_past - 1.day
+        )
+        @both_past.assignment.sub_assignments.first.grade_student(@student, grader: @teacher, score: 1)
+        @both_past.assignment.sub_assignments.second.grade_student(@student, grader: @teacher, score: 1)
+
+        @undated_past = checkpointed_discussion(
+          "Undated and Past",
+          @course,
+          @student,
+          required_replies_due_at: @date_in_past - 1.day
+        )
+        @undated_past.assignment.sub_assignments.second.grade_student(@student, grader: @teacher, score: 1)
+      end
+
+      it "categorizes checkpointed discussions by date correctly" do
+        undated = [@both_undated]
+        upcoming = [@both_future, @undated_future, @future_past]
+        overdue = [@both_overdue, @undated_overdue, @overdue_future, @overdue_past]
+        past = [@both_past, @undated_past]
+
+        get "/courses/#{@course.id}/assignments"
+        wait_for_no_such_element { f('[data-view="assignmentGroups"] .loadingIndicator') }
+        wait_for_ajaximations
+
+        undated.each do |d|
+          expect(f("#assignment_group_undated #assignment_#{d.assignment.id}")).not_to be_nil
+        end
+
+        upcoming.each do |d|
+          expect(f("#assignment_group_upcoming #assignment_#{d.assignment.id}")).not_to be_nil
+        end
+
+        overdue.each do |d|
+          expect(f("#assignment_group_overdue_assignments #assignment_#{d.assignment.id}")).not_to be_nil
+        end
+
+        past.each do |d|
+          expect(f("#assignment_group_past_assignments #assignment_#{d.assignment.id}")).not_to be_nil
+        end
       end
     end
   end

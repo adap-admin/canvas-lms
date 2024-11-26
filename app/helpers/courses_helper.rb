@@ -29,7 +29,7 @@ module CoursesHelper
     show_assignment_type_icon = opts[:show_assignment_type_icon]
 
     return [nil, "Quiz", "icon-quiz"] if recent_event.is_a?(Quizzes::Quiz)
-    return [nil, "Event", "icon-calendar-day"] unless recent_event.is_a?(Assignment)
+    return [nil, "Event", "icon-calendar-day"] unless recent_event.is_a?(Assignment) || recent_event.is_a?(SubAssignment)
 
     event_type = ["Assignment", "icon-assignment"]
     event_type = ["Quiz", "icon-quiz"] if recent_event.submission_types == "online_quiz"
@@ -37,11 +37,7 @@ module CoursesHelper
 
     # because this happens in a sidebar, the context may be wrong. check and fix
     # it if that's the case.
-    context = if context.instance_of?(recent_event.class) && context.id == recent_event.context_id
-                context
-              else
-                recent_event.context
-              end
+    context = recent_event.context unless context.instance_of?(recent_event.class) && context.id == recent_event.context_id
 
     icon_data = [nil] + event_type
 
@@ -73,10 +69,17 @@ module CoursesHelper
     icon_data
   end
 
+  def format_course_section_date(date = nil)
+    # date ? date_string(date, :long) : t("(no date)")
+    date ? date_string(date, :long) : t("#courses.sections.no_date", "(no date)")
+  end
+
   def recent_event_url(recent_event)
     context = recent_event.context
     if recent_event.is_a?(Assignment)
       context_url(context, :context_assignment_url, id: recent_event.id)
+    elsif recent_event.is_a?(SubAssignment)
+      context_url(context, :context_assignment_url, id: recent_event.parent_assignment_id)
     else
       calendar_url_for(nil, {
                          query: { month: recent_event.start_at.month, year: recent_event.start_at.year },
@@ -121,8 +124,8 @@ module CoursesHelper
     end
   end
 
-  def skip_custom_role?(cr)
-    cr[:count] == 0 && cr[:workflow_state] == "inactive"
+  def skip_custom_role?(custom_role)
+    custom_role[:count] == 0 && custom_role[:workflow_state] == "inactive"
   end
 
   def user_type(course, user, enrollments = nil)
@@ -137,6 +140,7 @@ module CoursesHelper
 
     type
   end
+
   module_function :user_type
 
   def why_cant_i_enable_master_course(course)
@@ -179,5 +183,30 @@ module CoursesHelper
         !tab_is?(tab, :TAB_SETTINGS)
       end
     end
+  end
+
+  def get_sorting_order(curr_col, sorted_col, order)
+    "desc" if (sorted_col.nil? && curr_col == "published") || (curr_col == sorted_col && order != "desc")
+  end
+
+  def get_sorting_icon(curr_col, sorted_col, order)
+    if (curr_col == sorted_col) || (curr_col == "published" && sorted_col.nil?)
+      "icon-mini-arrow-#{(order == "desc") ? "down" : "up"}"
+    else
+      "icon-mini-arrow-double"
+    end
+  end
+
+  def get_courses_params(table, col, params)
+    sort = "#{table}_sort"
+    order = "#{table}_order"
+
+    params
+      .permit(:cc_sort, :cc_order, :pc_sort, :pc_order, :fc_sort, :fc_order)
+      .merge(
+        sort => col,
+        order => get_sorting_order(col, params[sort], params[order]),
+        :focus => table
+      )
   end
 end

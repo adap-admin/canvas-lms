@@ -32,7 +32,8 @@ class ModeratedGrading::ProvisionalGrade < ActiveRecord::Base
   has_many :rubric_assessments, as: :artifact
   has_one :selection,
           class_name: "ModeratedGrading::Selection",
-          foreign_key: :selected_provisional_grade_id
+          foreign_key: :selected_provisional_grade_id,
+          inverse_of: :provisional_grade
 
   belongs_to :source_provisional_grade, class_name: "ModeratedGrading::ProvisionalGrade"
 
@@ -53,6 +54,7 @@ class ModeratedGrading::ProvisionalGrade < ActiveRecord::Base
   scope :scored_by, ->(scorer) { where(scorer_id: scorer) }
   scope :final, -> { where(final: true) }
   scope :not_final, -> { where(final: false) }
+  scope :graded, -> { where.not(graded_at: nil) }
 
   def must_be_final_or_student_in_need_of_provisional_grade
     if final.blank? && !submission.assignment_can_be_moderated_grader?(scorer)

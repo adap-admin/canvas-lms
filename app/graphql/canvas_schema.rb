@@ -21,6 +21,8 @@
 class CanvasSchema < GraphQL::Schema
   query Types::QueryType
   mutation Types::MutationType
+  trace_with GraphQL::Tracing::CallLegacyTracers
+  trace_with GraphQL::Tracing::SentryTrace
 
   use GraphQL::Batch
 
@@ -51,6 +53,8 @@ class CanvasSchema < GraphQL::Schema
     when Assignment then Types::AssignmentType
     when AssignmentGroup then Types::AssignmentGroupType
     when CommentBankItem then Types::CommentBankItemType
+    when CustomGradeStatus then Types::CustomGradeStatusType
+    when StandardGradeStatus then Types::StandardGradeStatusType
     when Conversation then Types::ConversationType
     when CourseSection then Types::SectionType
     when User then Types::UserType
@@ -62,6 +66,7 @@ class CanvasSchema < GraphQL::Schema
     when Group then Types::GroupType
     when GroupCategory then Types::GroupSetType
     when GradingPeriod then Types::GradingPeriodType
+    when GradingPeriodGroup then Types::GradingPeriodGroupType
     when GradingStandard then Types::GradingStandardType
     when ContextModule then Types::ModuleType
     when PostPolicy then Types::PostPolicyType
@@ -91,6 +96,7 @@ class CanvasSchema < GraphQL::Schema
     when ContextExternalTool then Types::ExternalToolType
     when Setting then Types::InternalSettingType
     when AssessmentRequest then Types::AssessmentRequestType
+    when UsageRights then Types::UsageRightsType
     end
   end
 
@@ -109,14 +115,17 @@ class CanvasSchema < GraphQL::Schema
                 Types::ModuleSubHeaderType,
                 Types::InternalSettingType]
 
-  def self.for_federation
-    @federatable_schema ||= Class.new(CanvasSchema) do
-      include ApolloFederation::Schema
+  # GraphQL tuning and defensive settings
+  max_depth GraphQLTuning.max_depth
+  validate_max_errors GraphQLTuning.validate_max_errors
+  max_query_string_tokens GraphQLTuning.max_query_string_tokens
 
-      # TODO: once https://github.com/Gusto/apollo-federation-ruby/pull/135 is
-      # merged and published, we can update the `apollo-federation` gem and
-      # remove this line
-      query Types::QueryType
-    end
+  query_analyzer(CanvasAntiabuseAnalyzer)
+
+  if Rails.env.development?
+    max_complexity GraphQLTuning.max_complexity
+    default_page_size GraphQLTuning.default_page_size
+    default_max_page_size GraphQLTuning.default_max_page_size
+    query_analyzer(LogQueryComplexity)
   end
 end

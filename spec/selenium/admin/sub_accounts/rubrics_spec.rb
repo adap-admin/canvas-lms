@@ -30,6 +30,7 @@ describe "sub account shared rubric specs" do
 
   before do
     course_with_admin_logged_in
+    @course.disable_feature!(:enhanced_rubrics)
   end
 
   it "deletes a rubric" do

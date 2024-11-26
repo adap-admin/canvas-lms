@@ -21,8 +21,7 @@ describe Attachments::Storage do
   before do
     @attachment = attachment_model
     @uuid = "1234-abcd"
-    allow(InstFS).to receive(:direct_upload).and_return(@uuid)
-    allow(InstFS).to receive(:enabled?).and_return(true)
+    allow(InstFS).to receive_messages(direct_upload: @uuid, enabled?: true)
     @file = File.open("public/images/a.png")
   end
 
@@ -32,6 +31,12 @@ describe Attachments::Storage do
       Attachments::Storage.store_for_attachment(@attachment, @file)
       expect(@attachment.md5).to eq "8c1005505bb0b4353992a50533f6108d0c06365b234443d9ccc1190c6acd1d01fa7f8590ac9f46fd83304433b0862dd1c2d18915a8f19aed71903aa2934bdfda"
       expect(@attachment.instfs_uuid).to eq(@uuid)
+    end
+
+    it "infers a filename for direct_upload" do
+      att = Attachment.new
+      expect(InstFS).to receive(:direct_upload).with(file_object: @file, file_name: "a.png")
+      Attachments::Storage.store_for_attachment(att, @file)
     end
 
     it "calls attachment_fu methods if inst-fs is not enabled" do
@@ -56,8 +61,7 @@ describe Attachments::Storage do
 
   describe "detect_filename" do
     it "prioritizes original_filename first" do
-      allow(@file).to receive(:original_filename).and_return("yep")
-      allow(@file).to receive(:filename).and_return("nope")
+      allow(@file).to receive_messages(original_filename: "yep", filename: "nope")
       expect(Attachments::Storage.detect_filename(@file)).to eq("yep")
     end
 

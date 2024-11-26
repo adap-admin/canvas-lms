@@ -19,6 +19,7 @@
 #
 
 require "nokogiri"
+require "rotp"
 
 describe "security" do
   describe "session fixation" do
@@ -64,16 +65,20 @@ describe "security" do
 
       post "/login/canvas", params: { "pseudonym_session[unique_id]" => "nobody@example.com",
                                       "pseudonym_session[password]" => "asdfasdf" }
-      assert_response 302
-      c = response["Set-Cookie"].lines.grep(/\A_normandy_session=/).first
+      assert_response :found
+      lines = response["Set-Cookie"]
+      c = lines.grep(/\A_normandy_session=/).first
       expect(c).not_to match(/expires=/)
       reset!
       https!
+      @pseudonym.update_attribute(:current_login_at, 5.minutes.ago)
+
       post "/login/canvas", params: { "pseudonym_session[unique_id]" => "nobody@example.com",
                                       "pseudonym_session[password]" => "asdfasdf",
                                       "pseudonym_session[remember_me]" => "1" }
-      assert_response 302
-      c = response["Set-Cookie"].lines.grep(/\A_normandy_session=/).first
+      assert_response :found
+      lines = response["Set-Cookie"]
+      c = lines.grep(/\A_normandy_session=/).first
       expect(c).not_to match(/expires=/)
     end
 
@@ -85,9 +90,10 @@ describe "security" do
       https!
       post "/login/canvas", params: { "pseudonym_session[unique_id]" => "nobody@example.com",
                                       "pseudonym_session[password]" => "asdfasdf" }
-      assert_response 302
-      c1 = response["Set-Cookie"].lines.grep(/\Apseudonym_credentials=/).first
-      c2 = response["Set-Cookie"].lines.grep(/\A_normandy_session=/).first
+      assert_response :found
+      lines = response["Set-Cookie"]
+      c1 = lines.grep(/\Apseudonym_credentials=/).first
+      c2 = lines.grep(/\A_normandy_session=/).first
       expect(c1).not_to be_present
       expect(c2).to be_present
     end
@@ -127,6 +133,8 @@ describe "security" do
       get "/profile/settings"
       expect(response).to redirect_to login_url
       expect(flash[:warning]).not_to be_empty
+
+      @p.update_attribute(:current_login_at, 5.minutes.ago)
 
       post "/login/canvas", params: { pseudonym_session: { unique_id: @p.unique_id, password: "asdfasdf" } }
       expect(response).to redirect_to settings_profile_url
@@ -173,7 +181,7 @@ describe "security" do
       post "/login/canvas", params: { "pseudonym_session[unique_id]" => "nobody@example.com",
                                       "pseudonym_session[password]" => "asdfasdf",
                                       "pseudonym_session[remember_me]" => "1" }
-      assert_response 302
+      assert_response :found
       cookie = cookies["pseudonym_credentials"]
       expect(cookie).to be_present
       token = SessionPersistenceToken.find_by_pseudonym_credentials(CGI.unescape(cookie))
@@ -211,6 +219,8 @@ describe "security" do
                                          "pseudonym_session[password]" => "asdfasdf",
                                          "pseudonym_session[remember_me]" => "1" }
       c1 = s1.cookies["pseudonym_credentials"]
+      @p.update_attribute(:current_login_at, 5.minutes.ago)
+
       s2.post "/login/canvas", params: { "pseudonym_session[unique_id]" => "nobody@example.com",
                                          "pseudonym_session[password]" => "asdfasdf",
                                          "pseudonym_session[remember_me]" => "1" }
@@ -248,6 +258,27 @@ describe "security" do
       expect(response).to redirect_to("https://www.example.com/login")
     end
 
+    it "clears pseudonym_credentials when pending otp check fails" do
+      Account.default.settings[:mfa_settings] = :required
+      Account.default.save!
+      @user.update!(otp_secret_key: ROTP::Base32.random)
+      https!
+
+      post "/login/canvas", params: { "pseudonym_session[unique_id]" => "nobody@example.com",
+                                      "pseudonym_session[password]" => "asdfasdf",
+                                      "pseudonym_session[remember_me]" => "1" }
+
+      expect(response).to redirect_to(otp_login_url)
+      expect(session[:pending_otp]).to be true
+      expect(cookies[:pseudonym_credentials]).to be_present
+
+      get "/"
+
+      expect(response).to redirect_to login_url
+      expect(session[:pending_otp]).not_to be_present
+      expect(cookies[:pseudonym_credentials]).not_to be_present
+    end
+
     context "sharding" do
       specs_require_sharding
 
@@ -268,12 +299,13 @@ describe "security" do
   if Canvas.redis_enabled?
     describe "max login attempts" do
       before do
-        Setting.set("login_attempts_total", "2")
-        Setting.set("login_attempts_per_ip", "1")
         u = user_with_pseudonym active_user: true,
                                 username: "nobody@example.com",
                                 password: "asdfasdf"
         u.save!
+        @account = @pseudonym.account
+        @account.settings[:password_policy] = { maximum_login_attempts: 1 }
+        @account.save!
       end
 
       def bad_login(ip)
@@ -283,9 +315,9 @@ describe "security" do
         follow_redirect! while response.redirect?
       end
 
-      it "is limited for the same ip" do
+      it "is restrictive to pseudonym account's configured max attempts" do
         bad_login("5.5.5.5")
-        expect(response.body).to match(/Invalid username/)
+        expect(response.body).to match(/Please verify your username or password and try again/)
         bad_login("5.5.5.5")
         expect(response.body).to match(/Too many failed login attempts/)
         # should still fail
@@ -296,27 +328,9 @@ describe "security" do
         expect(response.body).to match(/Too many failed login attempts/)
       end
 
-      it "has a higher limit for other ips" do
+      it "does not block other users" do
         bad_login("5.5.5.5")
-        expect(response.body).to match(/Invalid username/)
-        bad_login("5.5.5.6") # different IP, so allowed
-        expect(response.body).to match(/Invalid username/)
-        bad_login("5.5.5.7") # different IP, but too many total failures
-        expect(response.body).to match(/Too many failed login attempts/)
-        # should still fail
-        post "/login/canvas",
-             params: { "pseudonym_session[unique_id]" => "nobody@example.com", "pseudonym_session[password]" => "asdfasdf" },
-             headers: { "REMOTE_ADDR" => "5.5.5.7" }
-        follow_redirect! while response.redirect?
-        expect(response.body).to match(/Too many failed login attempts/)
-      end
-
-      it "does not block other users with the same ip" do
-        bad_login("5.5.5.5")
-        expect(response.body).to match(/Invalid username/)
-
-        # schools like to NAT hundreds of people to the same IP, so we don't
-        # ever block the IP address as a whole
+        expect(response.body).to match(/Please verify your username or password and try again/)
         user_with_pseudonym(active_user: true, username: "second@example.com", password: "12341234").save!
         post "/login/canvas",
              params: { "pseudonym_session[unique_id]" => "second@example.com", "pseudonym_session[password]" => "12341234" },
@@ -330,10 +344,12 @@ describe "security" do
         allow_any_instantiation_of(Account.default).to receive(:trusted_account_ids).and_return([account.id])
         @pseudonym.account = account
         @pseudonym.save!
+        @pseudonym.account.settings[:password_policy] = { maximum_login_attempts: 2 }
+        @pseudonym.account.save!
         bad_login("5.5.5.5")
-        expect(response.body).to match(/Invalid username/)
+        expect(response.body).to match(/Please verify your username or password and try again/)
         bad_login("5.5.5.6") # different IP, so allowed
-        expect(response.body).to match(/Invalid username/)
+        expect(response.body).to match(/Please verify your username or password and try again/)
         bad_login("5.5.5.7") # different IP, but too many total failures
         expect(response.body).to match(/Too many failed login attempts/)
         # should still fail
@@ -396,7 +412,7 @@ describe "security" do
       user_session(@admin, @admin.pseudonyms.first)
 
       get "/?become_user_id=#{@student.id}"
-      assert_response 302
+      assert_response :found
       expect(response.location).to match "/users/#{@student.id}/masquerade$"
       expect(session[:masquerade_return_to]).to eq "/"
       expect(session[:become_user_id]).to be_nil
@@ -404,18 +420,18 @@ describe "security" do
       expect(assigns["real_current_user"]).to be_nil
 
       follow_redirect!
-      assert_response 200
+      assert_response :ok
       expect(path).to eq "/users/#{@student.id}/masquerade"
       expect(session[:become_user_id]).to be_nil
       expect(assigns["current_user"].id).to eq @admin.id
       expect(assigns["real_current_user"]).to be_nil
 
       post "/users/#{@student.id}/masquerade"
-      assert_response 302
+      assert_response :found
       expect(session[:become_user_id]).to eq @student.id.to_s
 
       get "/"
-      assert_response 200
+      assert_response :ok
       expect(session[:become_user_id]).to eq @student.id.to_s
       expect(assigns["current_user"].id).to eq @student.id
       expect(assigns["current_pseudonym"]).to eq @student_pseudonym
@@ -426,7 +442,7 @@ describe "security" do
       user_session(@admin, @admin.pseudonyms.first)
 
       get "/?as_user_id=#{@student.id}"
-      assert_response 200
+      assert_response :ok
       expect(session[:become_user_id]).to be_nil
       expect(assigns["current_user"].id).to eq @admin.id
       expect(assigns["real_current_user"]).to be_nil
@@ -436,13 +452,13 @@ describe "security" do
       user_session(@student, @student.pseudonyms.first)
 
       get "/?become_user_id=#{@teacher.id}"
-      assert_response 200
+      assert_response :ok
       expect(session[:become_user_id]).to be_nil
       expect(assigns["current_user"].id).to eq @student.id
       expect(assigns["real_current_user"]).to be_nil
 
       post "/users/#{@teacher.id}/masquerade"
-      assert_response 401
+      assert_response :unauthorized
       expect(assigns["current_user"].id).to eq @student.id
       expect(session[:become_user_id]).to be_nil
     end
@@ -452,7 +468,7 @@ describe "security" do
       user_session(@admin, @admin.pseudonyms.first)
 
       get "/?become_user_id=#{@student.id}"
-      assert_response 302
+      assert_response :found
       expect(response.location).to match "/users/#{@student.id}/masquerade$"
       expect(session[:masquerade_return_to]).to eq "/"
       expect(session[:become_user_id]).to be_nil
@@ -460,7 +476,7 @@ describe "security" do
       expect(assigns["real_current_user"]).to be_nil
 
       follow_redirect!
-      assert_response 200
+      assert_response :ok
       expect(path).to eq "/users/#{@student.id}/masquerade"
       expect(session[:become_user_id]).to be_nil
       expect(assigns["current_user"].id).to eq @admin.id
@@ -470,11 +486,11 @@ describe "security" do
       expect(pv1.real_user_id).to be_nil
 
       post "/users/#{@student.id}/masquerade"
-      assert_response 302
+      assert_response :found
       expect(session[:become_user_id]).to eq @student.id.to_s
 
       get "/"
-      assert_response 200
+      assert_response :ok
       expect(session[:become_user_id]).to eq @student.id.to_s
       expect(assigns["current_user"].id).to eq @student.id
       expect(assigns["real_current_user"].id).to eq @admin.id
@@ -497,6 +513,8 @@ describe "security" do
       follow_redirect!
       expect(response).to redirect_to login_url
       expect(flash[:warning]).not_to be_empty
+
+      @admin.pseudonyms.first.update_attribute(:current_login_at, 5.minutes.ago)
 
       post "/login/canvas", params: { pseudonym_session: { unique_id: @admin.pseudonyms.first.unique_id, password: "password" } }
       expect(response).to redirect_to user_masquerade_url(@student)
@@ -631,54 +649,6 @@ describe "security" do
         get "/accounts/#{Account.default.id}/settings"
         expect(response).to be_successful
         expect(response.body).to match(/Statistics/)
-      end
-
-      it "manage_user_notes" do
-        Account.default.update_attribute(:enable_user_notes, true)
-        course_with_teacher
-        student_in_course
-        @student.update_account_associations
-        @user_note = UserNote.create!(creator: @teacher, user: @student, root_account_id: Account.default.id)
-
-        get "/accounts/#{Account.default.id}/user_notes"
-        assert_status(401)
-
-        get "/accounts/#{Account.default.id}/settings"
-        expect(response).to be_successful
-        expect(response.body).not_to match(/Faculty Journal/)
-
-        get "/users/#{@student.id}/user_notes"
-        assert_status(401)
-
-        post "/users/#{@student.id}/user_notes"
-        assert_status(401)
-
-        get "/users/#{@student.id}/user_notes/#{@user_note.id}"
-        assert_status(401)
-
-        delete "/users/#{@student.id}/user_notes/#{@user_note.id}"
-        assert_status(401)
-
-        add_permission :manage_user_notes
-
-        get "/accounts/#{Account.default.id}/user_notes"
-        expect(response).to be_successful
-
-        get "/accounts/#{Account.default.id}/settings"
-        expect(response).to be_successful
-        expect(response.body).to match(/Faculty Journal/)
-
-        get "/users/#{@student.id}/user_notes"
-        expect(response).to be_successful
-
-        post "/users/#{@student.id}/user_notes.json"
-        expect(response).to be_successful
-
-        get "/users/#{@student.id}/user_notes/#{@user_note.id}.json"
-        expect(response).to be_successful
-
-        delete "/users/#{@student.id}/user_notes/#{@user_note.id}.json"
-        expect(response).to be_successful
       end
 
       it "view_jobs" do
@@ -843,142 +813,6 @@ describe "security" do
       end
 
       it "read_course_content" do
-        @course.root_account.disable_feature!(:granular_permissions_manage_courses)
-        @course.assignments.create!
-        @course.wiki.set_front_page_url!("front-page")
-        @course.wiki.front_page.save!
-        @course.quizzes.create!
-        @course.attachments.create!(uploaded_data: default_uploaded_data)
-
-        get "/courses/#{@course.id}"
-        expect(response).to be_redirect
-
-        get "/courses/#{@course.id}/assignments"
-        assert_status(401)
-
-        get "/courses/#{@course.id}/assignments/syllabus"
-        assert_status(401)
-
-        get "/courses/#{@course.id}/wiki"
-        assert_status(401)
-
-        get "/courses/#{@course.id}/quizzes"
-        assert_status(401)
-
-        get "/courses/#{@course.id}/discussion_topics"
-        assert_status(401)
-
-        get "/courses/#{@course.id}/files"
-        assert_status(401)
-
-        get "/courses/#{@course.id}/copy"
-        assert_status(401)
-
-        get "/courses/#{@course.id}/content_exports"
-        assert_status(401)
-
-        get "/courses/#{@course.id}/details"
-        expect(response).to be_successful
-        html = Nokogiri::HTML5(response.body)
-        expect(html.css(".section .assignments")).to be_empty
-        expect(html.css(".section .syllabus")).to be_empty
-        expect(html.css(".section .pages")).to be_empty
-        expect(html.css(".section .quizzes")).to be_empty
-        expect(html.css(".section .discussions")).to be_empty
-        expect(html.css(".section .files")).to be_empty
-        expect(response.body).not_to match(/Copy this Course/)
-        expect(response.body).not_to match(/Import Course Content/)
-        expect(response.body).not_to match(/Export this Course/)
-
-        add_permission :read_course_content
-        add_permission :read_roster
-        add_permission :read_forum
-
-        get "/courses/#{@course.id}"
-        expect(response).to be_successful
-        expect(response.body).to match(/People/)
-
-        @course.tab_configuration = [{ id: Course::TAB_PEOPLE, hidden: true }]
-        @course.save!
-
-        get "/courses/#{@course.id}/assignments"
-        expect(response).to be_successful
-        expect(response.body).to match(/People/) # still has read_as_admin rights
-
-        get "/courses/#{@course.id}/assignments/syllabus"
-        expect(response).to be_successful
-
-        get "/courses/#{@course.id}/wiki"
-        expect(response).to be_successful
-
-        get "/courses/#{@course.id}/quizzes"
-        expect(response).to be_successful
-
-        get "/courses/#{@course.id}/discussion_topics"
-        expect(response).to be_successful
-
-        get "/courses/#{@course.id}/files"
-        expect(response).to be_successful
-
-        get "/courses/#{@course.id}/copy"
-        assert_status(401)
-
-        get "/courses/#{@course.id}/content_exports"
-        expect(response).to be_successful
-
-        get "/courses/#{@course.id}/details"
-        expect(response).to be_successful
-        html = Nokogiri::HTML5(response.body)
-        expect(html.css(".section .assignments")).not_to be_empty
-        expect(html.css(".section .syllabus")).not_to be_empty
-        expect(html.css(".section .pages")).not_to be_empty
-        expect(html.css(".section .quizzes")).not_to be_empty
-        expect(html.css(".section .discussions")).not_to be_empty
-        expect(html.css(".section .files")).not_to be_empty
-        expect(response.body).not_to match(/Copy this Course/)
-        expect(response.body).not_to match(/Import Course Content/)
-        expect(response.body).to match(/Export Course Content/)
-        expect(response.body).not_to match(/Delete this Course/)
-        expect(response.body).not_to match(/End this Course/)
-        expect(html.css("input#course_account_id")).to be_empty
-        expect(html.css("input#course_enrollment_term_id")).to be_empty
-
-        delete "/courses/#{@course.id}"
-        assert_status(401)
-
-        delete "/courses/#{@course.id}", params: { event: "delete" }
-        assert_status(401)
-
-        add_permission :manage_courses
-
-        get "/courses/#{@course.id}/details"
-        expect(response).to be_successful
-        expect(response.body).to match(/Copy this Course/)
-        expect(response.body).not_to match(/Import Course Content/)
-        expect(response.body).to match(/Export Course Content/)
-        expect(response.body).to_not match(/Delete this Course/)
-
-        add_permission :change_course_state
-
-        get "/courses/#{@course.id}/details"
-        expect(response).to be_successful
-        expect(response.body).to match(/Delete this Course/)
-
-        html = Nokogiri::HTML5(response.body)
-        expect(html.css("#course_account_id")).not_to be_empty
-        expect(html.css("#course_enrollment_term_id")).not_to be_empty
-
-        get "/courses/#{@course.id}/copy"
-        expect(response).to be_successful
-
-        delete "/courses/#{@course.id}", params: { event: "delete" }
-        expect(response).to be_redirect
-
-        expect(@course.reload).to be_deleted
-      end
-
-      it "read_course_content (granular permissions)" do
-        @course.root_account.enable_feature!(:granular_permissions_manage_courses)
         @course.assignments.create!
         @course.wiki.set_front_page_url!("front-page")
         @course.wiki.front_page.save!
@@ -1196,22 +1030,8 @@ describe "security" do
         assert_status(401)
       end
 
-      it "change_course_state" do
+      it "change_course_state :delete" do
         course_with_teacher_logged_in(active_all: 1)
-        @course.root_account.disable_feature!(:granular_permissions_manage_courses)
-        remove_permission(:change_course_state, teacher_role)
-
-        get "/courses/#{@course.id}/settings"
-        expect(response).to be_successful
-        expect(response.body).not_to match "End this Course"
-
-        delete "/courses/#{@course.id}", params: { event: "conclude" }
-        assert_status(401)
-      end
-
-      it "change_course_state :delete (granular permissions)" do
-        course_with_teacher_logged_in(active_all: 1)
-        @course.root_account.enable_feature!(:granular_permissions_manage_courses)
 
         get "/courses/#{@course.id}/settings"
         expect(response).to be_successful

@@ -29,6 +29,8 @@ class ContextController < ApplicationController
 
   include K5Mode
 
+  MAX_MESSAGES_ON_PROFILE = 10
+
   # safely render object and embed tags as part of user content, by using a
   # iframe pointing to the separate files domain that doesn't contain a user's
   # session. see lib/user_content.rb and the user_content calls throughout the
@@ -63,6 +65,7 @@ class ContextController < ApplicationController
   def roster
     return unless authorized_action(@context, @current_user, :read_roster)
 
+    page_has_instui_topnav
     log_asset_access(["roster", @context], "roster", "other")
 
     case @context
@@ -91,9 +94,9 @@ class ContextController < ApplicationController
         view_user_logins: @context.grants_right?(@current_user, session, :view_user_logins),
         manage_students:,
         add_users_to_course: can_add_enrollments,
+        active_granular_enrollment_permissions: @context.root_account.feature_enabled?(:granular_permissions_manage_users) ? get_active_granular_enrollment_permissions(@context) : [],
         read_reports: @context.grants_right?(@current_user, session, :read_reports),
         can_add_groups: can_do(@context.groups.temp_record, @current_user, :create),
-        manage_user_notes: @context.root_account.enable_user_notes && @context.grants_right?(@current_user, :manage_user_notes)
       }
       if @context.root_account.feature_enabled?(:granular_permissions_manage_users)
         js_permissions[:can_allow_course_admin_actions] = manage_admins
@@ -152,10 +155,11 @@ class ContextController < ApplicationController
     end
 
     @secondary_users ||= {}
-    @groups = @context.groups.active rescue []
+    @groups = @context.try(:groups)&.active || []
   end
 
   def prior_users
+    page_has_instui_topnav
     manage_admins = if @context.root_account.feature_enabled?(:granular_permissions_manage_users)
                       :allow_course_admin_actions
                     else
@@ -178,6 +182,7 @@ class ContextController < ApplicationController
 
   def roster_user_services
     if authorized_action(@context, @current_user, :read_roster)
+      page_has_instui_topnav
       @users = @context.users.where(show_user_services: true).order_by_sortable_name
       @users_hash = {}
       @users_order_hash = {}
@@ -207,6 +212,11 @@ class ContextController < ApplicationController
         @accesses = AssetUserAccess.for_user(@user).where(context: contexts).most_recent
         respond_to do |format|
           format.html do
+            add_crumb(t("#crumbs.people", "People"), context_url(@context, :context_users_url))
+            add_crumb(@user.short_name, context_url(@context, :context_user_url, @user))
+            add_crumb(t("#crumbs.access_report", "Access Report"))
+            set_active_tab "people"
+
             @accesses = @accesses.paginate(page: params[:page], per_page: 50)
             @last_activity_at = @context.enrollments.where(user_id: @user).maximum(:last_activity_at)
             @aua_expiration_date = AssetUserAccess.expiration_date
@@ -235,12 +245,23 @@ class ContextController < ApplicationController
         @membership = scope.first
         if @membership
           @enrollments = scope.to_a
-          js_env(COURSE_ID: @context.id,
-                 USER_ID: user_id,
-                 LAST_ATTENDED_DATE: @enrollments.first.last_attended_at,
-                 course: {
-                   id: @context.id,
-                   hideSectionsOnCourseUsersPage: @context.sections_hidden_on_roster_page?(current_user: @current_user)
+          user = @membership&.user
+          js_permissions = {
+            can_manage_user_details: user.grants_right?(@current_user, :manage_user_details)
+          }
+          timezones = I18nTimeZone.all.map { |tz| { name: tz.name, name_with_hour_offset: tz.to_s } }
+          default_timezone_name = @domain_root_account.try(:default_time_zone)&.name || "Mountain Time (US & Canada)"
+          js_env({
+                   COURSE_ID: @context.id,
+                   USER_ID: user_id,
+                   LAST_ATTENDED_DATE: @enrollments.first.last_attended_at,
+                   course: {
+                     id: @context.id,
+                     hideSectionsOnCourseUsersPage: @context.sections_hidden_on_roster_page?(current_user: @current_user)
+                   },
+                   PERMISSIONS: js_permissions,
+                   TIMEZONES: timezones,
+                   DEFAULT_TIMEZONE_NAME: default_timezone_name
                  })
 
           log_asset_access(@membership, "roster", "roster")
@@ -250,7 +271,8 @@ class ContextController < ApplicationController
         @enrollments = []
       end
 
-      @user = @membership.user rescue nil
+      @user = @membership&.user
+      # rubocop:disable Rails/ActionControllerFlashBeforeRender
       unless @user
         case @context
         when Course
@@ -261,13 +283,27 @@ class ContextController < ApplicationController
         redirect_to named_context_url(@context, :context_users_url)
         return
       end
+      # rubocop:enable Rails/ActionControllerFlashBeforeRender
 
       js_env(CONTEXT_USER_DISPLAY_NAME: @user.short_name)
 
       js_bundle :user_name, "context_roster_user"
       css_bundle :roster_user, :pairing_code
 
-      if @domain_root_account.enable_profiles?
+      enable_profiles = @domain_root_account.enable_profiles?
+      show_recent_messages_on_new_roster_user_page =
+        Account.site_admin.feature_enabled?(:show_recent_messages_on_new_roster_user_page)
+      if (!enable_profiles || (enable_profiles && show_recent_messages_on_new_roster_user_page)) &&
+         @user.grants_right?(@current_user, session, :read_profile)
+
+        @topics = @context.active_discussion_topics.reject { |dt| dt.locked_for?(@current_user, check_policies: true) }
+        entries = DiscussionEntry.all_for_user(@user).all_for_topics(@topics).newest_first
+        filtered_entries = entries.select { |entry| entry.grants_right?(@current_user, session, :read) }
+
+        @messages = filtered_entries.take(MAX_MESSAGES_ON_PROFILE)
+      end
+
+      if enable_profiles
         @user_data = profile_data(
           @user.profile,
           @current_user,
@@ -278,23 +314,10 @@ class ContextController < ApplicationController
 
         add_crumb(t("#crumbs.people", "People"), context_url(@context, :context_users_url))
         add_crumb(@user.short_name, context_url(@context, :context_user_url, @user))
-        add_crumb(t("#crumbs.access_report", "Access Report"))
         set_active_tab "people"
 
         render :new_roster_user, stream: can_stream_template?
         return false
-      end
-
-      if @user.grants_right?(@current_user, session, :read_profile)
-        # self and instructors
-        @topics = @context.discussion_topics.active.reject { |a| a.locked_for?(@current_user, check_policies: true) }
-        @messages = []
-        @topics.each do |topic|
-          @messages << topic if topic.user_id == @user.id
-        end
-        @messages += DiscussionEntry.active.where(discussion_topic_id: @topics, user_id: @user).to_a
-
-        @messages = @messages.select { |m| m.grants_right?(@current_user, session, :read) }.sort_by(&:created_at).reverse
       end
 
       add_crumb(t("#crumbs.people", "People"), context_url(@context, :context_users_url))
@@ -332,7 +355,7 @@ class ContextController < ApplicationController
       end.reject { |item| item.is_a?(DiscussionTopic) && !item.restorable? }
 
       @deleted_items += @context.attachments.where(file_state: "deleted").limit(25).to_a
-      if @context.grants_any_right?(@current_user, :manage_groups, :manage_groups_delete)
+      if @context.grants_right?(@current_user, :manage_groups_delete)
         @deleted_items += @context.all_group_categories.where.not(deleted_at: nil).limit(25).to_a
       end
       @deleted_items.sort_by { |item| item.read_attribute(:deleted_at) || item.created_at }.reverse
@@ -348,7 +371,7 @@ class ContextController < ApplicationController
       scope = @context.wiki if type == "wiki_page"
       type = "all_discussion_topic" if type == "discussion_topic"
       type = "all_group_category" if type == "group_category"
-      if %w[all_group_category group].include?(type) && !@context.grants_any_right?(@current_user, :manage_groups, :manage_groups_delete)
+      if %w[all_group_category group].include?(type) && !@context.grants_right?(@current_user, :manage_groups_delete)
         return render_unauthorized_action
       end
 
@@ -366,6 +389,19 @@ class ContextController < ApplicationController
 
       render json: @item
     end
+  end
+
+  def get_active_granular_enrollment_permissions(context)
+    enrollment_granular_permissions_map = {
+      add_teacher_to_course: "TeacherEnrollment",
+      add_ta_to_course: "TaEnrollment",
+      add_designer_to_course: "DesignerEnrollment",
+      add_student_to_course: "StudentEnrollment",
+      add_observer_to_course: "ObserverEnrollment"
+    }
+    enrollment_granular_permissions_map.select do |key, _|
+      context.grants_right?(@current_user, session, key)
+    end.values
   end
 
   def add_enrollment_permissions(context)

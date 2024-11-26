@@ -58,12 +58,10 @@ module Types
 
     field :context_id, ID, null: true
     field :context_type, String, null: true
-    field :title, String, null: false
     field :description, String, null: true
     field :display_name, String, null: true
+    field :title, String, null: false
     field :vendor_guid, String, null: true
-    field :calculation_method, String, null: true
-    field :calculation_int, Integer, null: true
 
     field :calculation_method, String, null: true
     def calculation_method
@@ -99,6 +97,14 @@ module Types
       end
 
       Account.site_admin.grants_right?(current_user, session, :manage_global_outcomes)
+    end
+
+    field :can_archive, Boolean, null: false do
+      argument :context_id, ID, required: true
+      argument :context_type, String, required: true
+    end
+    def can_archive(context_id:, context_type:)
+      outcome.context_type == context_type && outcome.context_id == context_id.to_i
     end
 
     field :assessed, Boolean, null: false

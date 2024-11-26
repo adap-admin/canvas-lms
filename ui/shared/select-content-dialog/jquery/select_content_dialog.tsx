@@ -27,26 +27,27 @@ import splitAssetString from '@canvas/util/splitAssetString'
 import FilesystemObject from '@canvas/files/backbone/models/FilesystemObject'
 import BaseUploader from '@canvas/files/react/modules/BaseUploader'
 import UploadQueue from '@canvas/files/react/modules/UploadQueue'
-import htmlEscape from 'html-escape'
+import htmlEscape from '@instructure/html-escape'
 import iframeAllowances from '@canvas/external-apps/iframeAllowances'
 import SelectContent from '../select_content'
 import setDefaultToolValues from '../setDefaultToolValues'
 import {findLinkForService, getUserServices} from '@canvas/services/findLinkForService'
-import '@canvas/datetime' /* datetime_field */
 import '@canvas/jquery/jquery.ajaxJSON'
-import '@canvas/forms/jquery/jquery.instructure_forms' /* formSubmit, ajaxJSONFiles, getFormData, errorBox */
+import '@canvas/jquery/jquery.instructure_forms' /* formSubmit, ajaxJSONFiles, getFormData, errorBox */
 import 'jqueryui/dialog'
 import '@canvas/util/jquery/fixDialogButtons'
 import '@canvas/jquery/jquery.instructure_misc_helpers' /* replaceTags */
 import '@canvas/jquery/jquery.instructure_misc_plugins' /* showIf */
-import '@canvas/keycodes'
+import '@canvas/jquery-keycodes'
 import '@canvas/loading-image'
 import '@canvas/util/templateData'
-import {DeepLinkResponse} from '@canvas/deep-linking/DeepLinkResponse'
+import type {DeepLinkResponse} from '@canvas/deep-linking/DeepLinkResponse'
 import {contentItemProcessorPrechecks} from '@canvas/deep-linking/ContentItemProcessor'
-import {ResourceLinkContentItem} from '@canvas/deep-linking/models/ResourceLinkContentItem'
-import {EnvContextModules} from '@canvas/global/env/EnvContextModules'
-import {GlobalEnv} from '@canvas/global/env/GlobalEnv'
+import type {ResourceLinkContentItem} from '@canvas/deep-linking/models/ResourceLinkContentItem'
+import type {EnvContextModules} from '@canvas/global/env/EnvContextModules'
+import type {GlobalEnv} from '@canvas/global/env/GlobalEnv.d'
+import replaceTags from '@canvas/util/replaceTags'
+import {EXTERNAL_CONTENT_READY, EXTERNAL_CONTENT_CANCEL} from '@canvas/external-tools/messages'
 
 // @ts-expect-error
 if (!('INST' in window)) window.INST = {}
@@ -79,6 +80,7 @@ type LtiLaunchDefinition = {
   definition_type: 'ContextExternalTool' | 'Lti::MessageHandler'
   definition_id: string
   name: string
+  url: string
   description: string
   domain: string
   // todo: the key here is actually a subset of string
@@ -164,6 +166,12 @@ export const deepLinkingResponseHandler = (event: MessageEvent<DeepLinkResponse>
         $.flashError(I18n.t('Selected content is not an LTI link.'))
         return
       }
+
+      if (event.data.reloadpage) {
+        window.location.reload()
+        return
+      }
+
       const tool: LtiLaunchDefinition = $(
         '#context_external_tools_select .tools .tool.selected'
       ).data('tool')
@@ -191,9 +199,9 @@ export const ltiPostMessageHandler = (tool: LtiLaunchDefinition) => (event: Mess
   if (event.origin === ENV.DEEP_LINKING_POST_MESSAGE_ORIGIN && event.data) {
     if (event.data.subject === 'LtiDeepLinkingResponse') {
       deepLinkingResponseHandler(event)
-    } else if (event.data.subject === 'externalContentReady') {
+    } else if (event.data.subject === EXTERNAL_CONTENT_READY) {
       externalContentReadyHandler(event, tool)
-    } else if (event.data.subject === 'externalContentCancel') {
+    } else if (event.data.subject === EXTERNAL_CONTENT_CANCEL) {
       $('#resource_selection_dialog').dialog('close')
     }
   }
@@ -250,8 +258,21 @@ export function handleContentItemResult(
   if (ENV.DEFAULT_ASSIGNMENT_TOOL_NAME && ENV.DEFAULT_ASSIGNMENT_TOOL_URL) {
     setDefaultToolValues(result, tool)
   }
-
-  $('#external_tool_create_url').val(result.url)
+  const populateUrl = (url: string) => {
+    if (url && url !== '') {
+      if (
+        $('#external_tool_create_url').val() === '' ||
+        window.ENV.FEATURES.lti_overwrite_user_url_input_select_content_dialog
+      ) {
+        $('#external_tool_create_url').val(url)
+      }
+    }
+  }
+  if (typeof result.url !== 'undefined' && result.url !== '') {
+    populateUrl(result.url)
+  } else if (tool.url !== '') {
+    populateUrl(tool.url)
+  }
   if (typeof result.title !== 'undefined') {
     $('#external_tool_create_title').val(result.title)
   } else if ($('#external_tool_create_title').is(':visible')) {
@@ -267,6 +288,10 @@ export function handleContentItemResult(
   setJsonValueIfDefined('#external_tool_create_line_item', result.lineItem)
   setJsonValueIfDefined('#external_tool_create_submission', result.submission)
   setJsonValueIfDefined('#external_tool_create_available', result.available)
+  setJsonValueIfDefined(
+    '#external_tool_create_preserve_existing_assignment_name',
+    result['https://canvas.instructure.com/lti/preserveExistingAssignmentName']
+  )
   if ('text' in result && typeof result.text === 'string') {
     $('#external_tool_create_description').val(result.text)
   }
@@ -344,18 +369,6 @@ export const Events = {
             'data-lti-launch': 'true',
           })
         )
-        if (window.ENV && window.ENV.FEATURES && window.ENV.FEATURES.lti_platform_storage) {
-          $dialog.append(
-            $('<iframe/>', {
-              id: 'post_message_forwarding',
-              name: 'post_message_forwarding',
-              title: 'post_message_forwarding',
-              src: '/post_message_forwarding',
-              sandbox: 'allow-scripts allow-same-origin',
-              style: 'display: none;',
-            })
-          )
-        }
         $dialog.append(`<div class="after_external_content_info_alert screenreader-only" tabindex="0">
             <div class="ic-flash-info">
               <div class="ic-flash__icon" aria-hidden="true">
@@ -371,28 +384,37 @@ export const Events = {
 
         const $iframe = $dialog.find('#resource_selection_iframe')
 
-        const measurements = () => ({
-          iframeWidth: numberOrZero($iframe.outerWidth(true)),
-          iframeHeight: numberOrZero($iframe.outerHeight(true)),
-        })
+        let origIframeWidthStr = $iframe.css('width')
+        let origIframeHeightStr = $iframe.css('height')
+
+        const looksLikePixelMeasurement = (str: string) =>
+          str.match(/[0-9]/) && !str.match(/(%|em)/)
 
         $external_content_info_alerts.on('focus', function () {
-          const {iframeWidth, iframeHeight} = measurements()
+          origIframeWidthStr = $iframe.css('width')
+          origIframeHeightStr = $iframe.css('height')
+          const iframeWidth = parseInt(origIframeWidthStr, 10)
+          const iframeHeight = parseInt(origIframeHeightStr, 10)
           $iframe.css('border', '2px solid #0374B5')
           $(this).removeClass('screenreader-only')
           const alertHeight = numberOrZero($(this).outerHeight(true))
-          $iframe
-            .css('height', `${iframeHeight - alertHeight - 4}px`)
-            .css('width', `${iframeWidth - 4}px`)
+
+          // I'm not sure if the measurements can ever not be of the form
+          // /[0-9]+px/, but just in case it can, don't grossly misinterpret
+          // them
+          if (looksLikePixelMeasurement(origIframeWidthStr)) {
+            $iframe.css('width', `${iframeWidth - 4}px`)
+          }
+          if (looksLikePixelMeasurement(origIframeHeightStr)) {
+            $iframe.css('height', `${iframeHeight - alertHeight - 4}px`)
+          }
           $dialog.scrollLeft(0).scrollTop(0)
         })
 
         $external_content_info_alerts.on('blur', function () {
-          const {iframeWidth, iframeHeight} = measurements()
-          const alertHeight = numberOrZero($(this).outerHeight(true))
           $dialog.find('#resource_selection_iframe').css('border', 'none')
           $(this).addClass('screenreader-only')
-          $iframe.css('height', `${iframeHeight + alertHeight}px`).css('width', `${iframeWidth}px`)
+          $iframe.css('height', origIframeHeightStr).css('width', origIframeWidthStr)
           $dialog.scrollLeft(0).scrollTop(0)
         })
 
@@ -412,9 +434,12 @@ export const Events = {
                 .attr('src', '/images/ajax-loader-medium-444.gif')
             },
             open: () => {
+              $dialog.parent().find('.ui-dialog-titlebar-close').focus()
               window.addEventListener('message', ltiPostMessageHandlerForTool)
             },
             title: I18n.t('link_from_external_tool', 'Link Resource from External Tool'),
+            modal: true,
+            zIndex: 1000,
           })
           .bind('dialogresize', function () {
             $(this)
@@ -454,14 +479,15 @@ export const Events = {
         .dialog('option', 'height', height || frameHeight || 400)
         .dialog('open')
       $dialog.triggerHandler('dialogresize')
-      let url = $.replaceTags(
-        $('#select_content_resource_selection_url').attr('href'),
+      let url = replaceTags(
+        $('#select_content_resource_selection_url').attr('href') as string,
         'id',
         tool.definition_id
       )
       url = url + '?placement=' + placement_type + '&secure_params=' + $('#secure_params').val()
       if ($('#select_context_content_dialog').data('context_module_id')) {
         url += '&context_module_id=' + $('#select_context_content_dialog').data('context_module_id')
+        url += '&com_instructure_course_canvas_resource_type=context_module.external_tool'
       }
       $dialog.find('#resource_selection_iframe').attr({src: url, title: tool.name})
       $(window).on('beforeunload', beforeUnloadHandler)
@@ -498,7 +524,7 @@ export function extractContextExternalToolItemData() {
   return {
     'item[type]': tool_type,
     'item[id]': tool_id,
-    'item[new_tab]': $('#external_tool_create_new_tab').attr('checked') ? '1' : '0',
+    'item[new_tab]': $('#external_tool_create_new_tab').prop('checked') ? '1' : '0',
     'item[indent]': $('#content_tag_indent').val(),
     'item[url]': $('#external_tool_create_url').val(),
     'item[title]': $('#external_tool_create_title').val(),
@@ -510,6 +536,9 @@ export function extractContextExternalToolItemData() {
     'item[description]': $('#external_tool_create_description').val(),
     'item[submission]': $('#external_tool_create_submission').val(),
     'item[available]': $('#external_tool_create_available').val(),
+    'item[preserveExistingAssignmentName]': $(
+      '#external_tool_create_preserve_existing_assignment_name'
+    ).val(),
   } as const
 }
 
@@ -524,6 +553,7 @@ export function resetExternalToolFields() {
   $('#external_tool_create_assignment_id').val('')
   $('#external_tool_create_iframe_width').val('')
   $('#external_tool_create_iframe_height').val('')
+  $('#external_tool_create_preserve_existing_assignment_name').val('')
 }
 
 export type SelectContentDialogOptions = {
@@ -598,6 +628,8 @@ export const selectContentDialog = function (options?: SelectContentDialogOption
         }
         upload_form?.onClose()
       },
+      modal: true,
+      zIndex: 1000,
     })
     .fixDialogButtons()
 
@@ -654,7 +686,7 @@ $(document).ready(function () {
         'item[id]': $(
           '#select_context_content_dialog .module_item_option:visible:first .module_item_select'
         ).val(),
-        'item[new_tab]': $('#external_url_create_new_tab').attr('checked') ? '1' : '0',
+        'item[new_tab]': $('#external_url_create_new_tab').prop('checked') ? '1' : '0',
         'item[indent]': $('#content_tag_indent').val(),
       }
 
@@ -735,7 +767,14 @@ $(document).ready(function () {
           const url = quiz_lti ? $urls.last().attr('href') : $urls.attr('href')
           let data = $(
             '#select_context_content_dialog .module_item_option:visible:first'
-          ).getFormData()
+          ).getFormData<{
+            'quiz[title]'?: string
+            'quiz[assignment_group_id]'?: string
+            'assignment[title]'?: string
+            'assignment[assignment_group_id]'?: string
+            'assignment[post_to_sis]'?: boolean
+            quiz_lti?: number
+          }>()
           if (quiz_lti) {
             data = {
               'assignment[title]': data['quiz[title]'],
@@ -872,7 +911,7 @@ $(document).ready(function () {
 
     $('#select_context_content_dialog .module_item_option').hide()
     if ($(this).val() === 'attachment') {
-      // eslint-disable-next-line react/no-render-return-value
+      // eslint-disable-next-line react/no-render-return-value, no-restricted-properties
       fileSelectBox = ReactDOM.render(
         React.createFactory(FileSelectBox)({
           contextString: ENV.context_asset_string,
@@ -1066,6 +1105,7 @@ function renderFileUploadForm() {
     // toggle from current uploads to the choose files button
     $('#module_attachment_upload_form').show()
     $('#module_attachment_upload_progress').hide()
+    // eslint-disable-next-line no-restricted-properties
     upload_form = ReactDOM.render(
       <UploadForm {...folderProps} />,
       $('#module_attachment_upload_form')[0]
@@ -1074,6 +1114,7 @@ function renderFileUploadForm() {
 }
 
 function renderCurrentUploads() {
+  // eslint-disable-next-line no-restricted-properties
   ReactDOM.render(
     <CurrentUploads onUploadChange={handleUploadOnChange} />,
     $('#module_attachment_upload_progress')[0]

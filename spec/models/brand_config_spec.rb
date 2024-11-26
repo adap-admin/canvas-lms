@@ -18,7 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require_relative "../../db/migrate/20150709205405_create_k12_theme"
+require_relative "../../db/migrate/20111111214312_load_initial_data"
 
 describe BrandConfig do
   it "creates an instance with a parent_md5" do
@@ -204,9 +204,7 @@ describe BrandConfig do
       @json_file = StringIO.new
       @js_file = StringIO.new
       @css_file = StringIO.new
-      allow(@subaccount_bc).to receive(:json_file).and_return(@json_file)
-      allow(@subaccount_bc).to receive(:js_file).and_return(@js_file)
-      allow(@subaccount_bc).to receive(:css_file).and_return(@css_file)
+      allow(@subaccount_bc).to receive_messages(json_file: @json_file, js_file: @js_file, css_file: @css_file)
     end
 
     describe "with cdn disabled" do
@@ -280,7 +278,7 @@ describe BrandConfig do
   end
 
   it "returns a k12 config" do
-    CreateK12Theme.new.up
+    LoadInitialData.new.create_k12_theme
     expect(BrandConfig.k12_config).to be_present
   end
 

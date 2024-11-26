@@ -60,13 +60,14 @@ module Importers
         url = migration.process_domain_substitutions(url) if migration
         item.url = url
       end
-      item.domain = hash[:domain] unless hash[:domain].blank?
+      item.domain = hash[:domain]
       item.privacy_level = hash[:privacy_level] || "name_only"
       item.not_selectable = hash[:not_selectable] if hash[:not_selectable]
       item.consumer_key ||= hash[:consumer_key] || "fake"
       item.shared_secret ||= hash[:shared_secret] || "fake"
       item.developer_key_id ||= hash.dig(:settings, :client_id)
       item.lti_version = hash[:lti_version] || (hash.dig(:settings, :client_id) && "1.3") || (hash.dig(:settings, :use_1_3) && "1.3") || "1.1"
+      item.unified_tool_id = hash[:unified_tool_id] if hash[:unified_tool_id]
       item.settings = create_tool_settings(hash)
 
       Lti::ResourcePlacement::PLACEMENTS.each do |placement|
@@ -106,6 +107,11 @@ module Importers
           end
         end
       end
+
+      if hash[:oidc_initiation_urls].is_a?(Hash)
+        settings[:oidc_initiation_urls] = hash[:oidc_initiation_urls]
+      end
+
       settings
     end
 
@@ -213,14 +219,14 @@ module Importers
     end
 
     def self.matching_settings?(migration, hash, tool, settings, preexisting_tool = false)
-      return if hash[:privacy_level] && tool.privacy_level != hash[:privacy_level]
-      return if migration.migration_type == "canvas_cartridge_importer" && hash[:title] && tool.name != hash[:title]
+      return false if hash[:privacy_level] && tool.privacy_level != hash[:privacy_level]
+      return false if migration.migration_type == "canvas_cartridge_importer" && hash[:title] && tool.name != hash[:title]
 
       if preexisting_tool && (((hash[:consumer_key] || "fake") == "fake") && ((hash[:shared_secret] || "fake") == "fake"))
         # we're matching to existing tools; go with their config if we don't have a real one
         ignore_key_check = true
       end
-      return unless ignore_key_check || (tool.consumer_key == (hash[:consumer_key] || "fake") && tool.shared_secret == (hash[:shared_secret] || "fake"))
+      return false unless ignore_key_check || (tool.consumer_key == (hash[:consumer_key] || "fake") && tool.shared_secret == (hash[:shared_secret] || "fake"))
 
       tool_settings = tool.settings.with_indifferent_access.except(:custom_fields, :vendor_extensions)
       if preexisting_tool

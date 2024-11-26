@@ -69,6 +69,7 @@ module Canvas
       # @return [Array.<String>]
       #  Real paths to the JS files that make up the specified bundle
       delegate :scripts_for, to: :bundler
+      delegate :entries, to: :bundler
 
       # @return [String]
       #  Real path to the asset.
@@ -92,12 +93,12 @@ module Canvas
 
     # Load manifests at most once per instance
     class Registry::ProcessCache
-      def gulp(*args, **kwargs)
-        @gulp ||= Registry::Gulp.new(*args, **kwargs)
+      def gulp(*, **)
+        @gulp ||= Registry::Gulp.new(*, **)
       end
 
-      def webpack(*args, **kwargs)
-        @webpack ||= Registry::Webpack.new(*args, **kwargs)
+      def webpack(*, **)
+        @webpack ||= Registry::Webpack.new(*, **)
       end
     end
 
@@ -123,16 +124,16 @@ module Canvas
         @webpack_manifest = webpack
       end
 
-      def gulp(*args, **kwargs)
+      def gulp(*, **kwargs)
         @gulp ||= Registry::Gulp.new(
-          *args,
+          *,
           **kwargs.merge(manifest: @gulp_manifest)
         )
       end
 
-      def webpack(*args, **kwargs)
+      def webpack(*, **kwargs)
         @webpack ||= Registry::Webpack.new(
-          *args,
+          *,
           **kwargs.merge(manifest: @webpack_manifest)
         )
       end

@@ -92,9 +92,99 @@ describe Types::CourseType do
     end
   end
 
+  describe "relevantGradingPeriodGroup" do
+    let!(:grading_period_group) { Account.default.grading_period_groups.create!(title: "a test group") }
+
+    it "returns the grading period group for the course" do
+      enrollment_term = course.enrollment_term
+      enrollment_term.update(grading_period_group_id: grading_period_group.id)
+      expect(course.relevant_grading_period_group).to eq grading_period_group
+      expect(course_type.resolve("relevantGradingPeriodGroup { _id }")).to eq grading_period_group.id.to_s
+    end
+  end
+
   describe "assignmentsConnection" do
     let_once(:assignment) do
       course.assignments.create! name: "asdf", workflow_state: "unpublished"
+    end
+
+    context "user_id filter" do
+      let_once(:other_student) do
+        other_user = user_factory(active_all: true, active_state: "active")
+        @course.enroll_student(other_user, enrollment_state: "active").user
+      end
+
+      # Create an observer in the course that observes the other_student
+      let_once(:observer) do
+        course_with_observer(course: @course, associated_user_id: other_student.id)
+        @observer
+      end
+
+      # Create an assignment that is only visible to other_student
+      before(:once) do
+        # Set the assigment to active
+        assignment.workflow_state = "active"
+        assignment.save
+
+        @overridden_assignment = course.assignments.create!(title: "asdf",
+                                                            workflow_state: "published",
+                                                            only_visible_to_overrides: true)
+
+        override = assignment_override_model(assignment: @overridden_assignment)
+        override.assignment_override_students.build(user: other_student)
+        override.save!
+      end
+
+      it "filters assignments by userId correctly for students" do
+        expect(
+          course_type.resolve(<<~GQL, current_user: other_student)
+            assignmentsConnection(filter: {userId: "#{other_student.id}"}) { edges { node { _id } } }
+          GQL
+        ).to eq [assignment.id.to_s, @overridden_assignment.id.to_s]
+
+        # the other_student lacks permission to see @student's assignments
+        expect(
+          course_type.resolve(<<~GQL, current_user: other_student)
+            assignmentsConnection(filter: {userId: "#{@student.id}"}) { edges { node { _id } } }
+          GQL
+        ).to eq []
+      end
+
+      it "filters assignments by userId correctly for observers" do
+        expect(
+          course_type.resolve(<<~GQL, current_user: observer)
+            assignmentsConnection(filter: {userId: "#{other_student.id}"}) { edges { node { _id } } }
+          GQL
+        ).to eq [assignment.id.to_s, @overridden_assignment.id.to_s]
+
+        # the observer doesn't observer @student, so it can not see their assignments
+        expect(
+          course_type.resolve(<<~GQL, current_user: observer)
+            assignmentsConnection(filter: {userId: "#{@student.id}"}) { edges { node { _id } } }
+          GQL
+        ).to eq []
+      end
+
+      it "filters assignments by userId correctly for teachers" do
+        expect(
+          course_type.resolve(<<~GQL, current_user: @teacher)
+            assignmentsConnection(filter: {userId: "#{other_student.id}"}) { edges { node { _id } } }
+          GQL
+        ).to eq [assignment.id.to_s, @overridden_assignment.id.to_s]
+
+        # A teacher has permission to see all assignments
+        expect(
+          course_type.resolve(<<~GQL, current_user: @teacher)
+            assignmentsConnection(filter: {userId: "#{@student.id}"}) { edges { node { _id } } }
+          GQL
+        ).to eq [assignment.id.to_s]
+      end
+
+      it "returns visible assignments to current user" do
+        expect(course_type.resolve("assignmentsConnection { edges { node { _id } } }", current_user: @teacher).size).to eq 2
+        expect(course_type.resolve("assignmentsConnection { edges { node { _id } } }", current_user: @student).size).to eq 1
+        expect(course_type.resolve("assignmentsConnection { edges { node { _id } } }", current_user: other_student).size).to eq 2
+      end
     end
 
     it "only returns visible assignments" do
@@ -116,7 +206,7 @@ describe Types::CourseType do
         @term1_assignment1 = course.assignments.create! name: "asdf",
                                                         due_at: 1.5.weeks.ago
         @term2_assignment1 = course.assignments.create! name: ";lkj",
-                                                        due_at: Date.today
+                                                        due_at: Time.zone.today
       end
 
       it "only returns assignments for the current grading period" do
@@ -174,6 +264,12 @@ describe Types::CourseType do
         ).to eq "Default Grading Scheme"
       end
 
+      it "returns grading standard id" do
+        expect(
+          course_type.resolve("gradingStandard { _id }", current_user: @student)
+        ).to eq course.grading_standard_or_default.id
+      end
+
       it "returns grading standard data" do
         expect(
           course_type.resolve("gradingStandard { data { letterGrade } }", current_user: @student)
@@ -191,6 +287,65 @@ describe Types::CourseType do
           course_type.resolve("applyGroupWeights", current_user: @student)
         ).to be false
       end
+    end
+  end
+
+  describe "customGradeStatusesConnection" do
+    before do
+      account_admin_user
+      course.root_account.custom_grade_statuses.create!(
+        color: "#BBB",
+        created_by: @admin,
+        name: "My Status"
+      )
+    end
+
+    it "returns nil when the feature flag is disabled" do
+      Account.site_admin.disable_feature!(:custom_gradebook_statuses)
+      expect(
+        course_type.resolve("customGradeStatusesConnection { edges { node { name } } }", current_user: @teacher)
+      ).to be_nil
+    end
+
+    it "returns nil when the requesting user lacks needed permissions" do
+      expect(
+        course_type.resolve("customGradeStatusesConnection { edges { node { name } } }", current_user: @student)
+      ).to be_nil
+    end
+
+    it "returns the custom grade statuses used by the course" do
+      expect(
+        course_type.resolve("customGradeStatusesConnection { edges { node { name } } }", current_user: @teacher)
+      ).to match_array ["My Status"]
+    end
+
+    it "excludes custom statuses not used by the course" do
+      new_account = Account.create!
+      new_admin = account_admin_user(account: new_account)
+      new_account.custom_grade_statuses.create!(color: "#AAA", created_by: new_admin, name: "Another Status")
+      expect(
+        course_type.resolve("customGradeStatusesConnection { edges { node { name } } }", current_user: @teacher)
+      ).not_to include "Another Status"
+    end
+  end
+
+  describe "gradeStatuses" do
+    before do
+      account_admin_user
+    end
+
+    it "always includes 'late', 'missing', 'none', and 'excused'" do
+      expect(
+        course_type.resolve("gradeStatuses", current_user: @teacher)
+      ).to include("late", "missing", "none", "excused")
+    end
+
+    it "returns 'extended' only when the 'Extended Submission State' feature flag is enabled" do
+      expect do
+        course.root_account.disable_feature!(:extended_submission_state)
+      end.to change {
+        course_type.resolve("gradeStatuses", current_user: @teacher).include?("extended")
+      }.from(true).to(false)
     end
   end
 
@@ -255,6 +410,25 @@ describe Types::CourseType do
       expect(
         course_type.resolve("sectionsConnection { edges { node { _id } } }")
       ).to match_array course.course_sections.active.map(&:to_param)
+    end
+
+    describe "assignmentId filter" do
+      before do
+        other_section_student = course_with_student(active_all: true, course:, section: other_section).user
+        @assignment = course.assignments.create!(only_visible_to_overrides: true)
+        create_adhoc_override_for_assignment(@assignment, other_section_student)
+      end
+
+      let(:query) { "sectionsConnection(filter: { assignmentId: #{@assignment.id} }) { edges { node { _id } } }" }
+
+      it "returns course sections associated with the assignment's assigned students" do
+        expect(course_type.resolve(query)).to match_array [other_section.to_param]
+      end
+
+      it "raises an error if the provided assignment is soft-deleted" do
+        @assignment.destroy
+        expect { course_type.resolve(query) }.to raise_error(/assignment not found/)
+      end
     end
   end
 
@@ -421,6 +595,19 @@ describe Types::CourseType do
             current_user: @teacher
           )
         ).to eq [@teacher, @student1, other_teacher, @student2, @inactive_user].map(&:to_param)
+      end
+
+      it "returns all visible users in alphabetical order by the sortable_name" do
+        expected_users = [@teacher, @student1, other_teacher, @student2, @inactive_user]
+                         .sort_by(&:sortable_name)
+                         .map(&:to_param)
+
+        actual_user_response = course_type.resolve(
+          "usersConnection { edges { node { _id } } }",
+          current_user: @teacher
+        )
+
+        expect(actual_user_response).to eq(expected_users)
       end
 
       it "returns only the specified users" do
@@ -590,41 +777,49 @@ describe Types::CourseType do
       end
 
       it "returns nil for other users's initial totalActivityTime if current user does not have appropriate permissions" do
-        expect(
-          course_type.resolve(
-            "enrollmentsConnection { nodes { totalActivityTime } }",
-            current_user: @student1
-          )
-        ).to eq [nil, 0, nil, nil, nil, nil]
+        expected_total_activity_time = [nil, 0, nil, nil, nil, nil]
+
+        result_total_activity_time = course_type.resolve(
+          "enrollmentsConnection { nodes { totalActivityTime } }",
+          current_user: @student1
+        )
+
+        expect(result_total_activity_time).to match_array(expected_total_activity_time)
       end
 
       it "returns the sisRole of each user" do
-        expect(
-          course_type.resolve(
-            "enrollmentsConnection { nodes { sisRole } }",
-            current_user: @teacher
-          )
-        ).to eq %w[teacher student teacher student student student]
+        expected_sis_roles = %w[teacher student teacher student student student]
+
+        result_sis_roles = course_type.resolve(
+          "enrollmentsConnection { nodes { sisRole } }",
+          current_user: @teacher
+        )
+
+        expect(result_sis_roles).to match_array(expected_sis_roles)
       end
 
       it "returns an htmlUrl for each enrollment" do
-        expect(
-          course_type.resolve(
-            "enrollmentsConnection { nodes { htmlUrl } }",
-            current_user: @teacher,
-            request: ActionDispatch::TestRequest.create
-          )
-        ).to eq([@teacher, @student1, other_teacher, @student2, @inactive_user, @concluded_user]
-          .map { |user| "http://test.host/courses/#{@course.id}/users/#{user.id}" })
+        expected_urls = [@teacher, @student1, other_teacher, @student2, @inactive_user, @concluded_user]
+                        .map { |user| "http://test.host/courses/#{@course.id}/users/#{user.id}" }
+
+        result_urls = course_type.resolve(
+          "enrollmentsConnection { nodes { htmlUrl } }",
+          current_user: @teacher,
+          request: ActionDispatch::TestRequest.create
+        )
+
+        expect(result_urls).to match_array(expected_urls)
       end
 
       it "returns canBeRemoved boolean value for each enrollment" do
-        expect(
-          course_type.resolve(
-            "enrollmentsConnection { nodes { canBeRemoved } }",
-            current_user: @teacher
-          )
-        ).to eq [false, true, true, true, true, true]
+        expected_can_be_removed = [false, true, true, true, true, true]
+
+        result_can_be_removed = course_type.resolve(
+          "enrollmentsConnection { nodes { canBeRemoved } }",
+          current_user: @teacher
+        )
+
+        expect(result_can_be_removed).to match_array(expected_can_be_removed)
       end
 
       describe "filtering" do
@@ -658,6 +853,18 @@ describe Types::CourseType do
             )
           ).to eq [observer_enrollment.id.to_s]
         end
+
+        it "returns only enrollments with the specified states if included" do
+          inactive_student = course.enroll_user(User.create!, "StudentEnrollment", enrollment_state: "inactive").user
+          deleted_student = course.enroll_user(User.create!, "StudentEnrollment", enrollment_state: "deleted").user
+          rejected_student = course.enroll_user(User.create!, "StudentEnrollment", enrollment_state: "rejected").user
+          expect(
+            course_type.resolve(
+              "enrollmentsConnection(filter: {states: [inactive, deleted, rejected]}) { nodes { _id } }",
+              current_user: @teacher
+            )
+          ).to eq [inactive_student.enrollments.first.id.to_s, deleted_student.enrollments.first.id.to_s, rejected_student.enrollments.first.id.to_s]
+        end
       end
     end
   end
@@ -665,6 +872,8 @@ describe Types::CourseType do
   describe "AssignmentGroupConnection" do
     it "returns assignment groups" do
       ag = course.assignment_groups.create!(name: "a group")
+      ag2 = course.assignment_groups.create!(name: "another group")
+      ag2.destroy
       expect(
         course_type.resolve("assignmentGroupsConnection { edges { node { _id } } }")
       ).to eq [ag.to_param]
@@ -683,17 +892,98 @@ describe Types::CourseType do
     end
   end
 
-  describe "GroupSetsConnection" do
+  describe "groupSetsConnection" do
     before(:once) do
+      @teacher_role = Role.get_built_in_role("TeacherEnrollment", root_account_id: Account.default.id)
       @project_groups = course.group_categories.create! name: "Project Groups"
       @student_groups = GroupCategory.student_organized_for(course)
+      @non_collaborative_groups = course.group_categories.create! name: "NC Groups", non_collaborative: true
     end
 
-    it "returns project groups" do
+    it "returns project group sets (not student_organized, not non_collaborative) when not asked for" do
       expect(
         course_type.resolve("groupSetsConnection { edges { node { _id } } }",
                             current_user: @teacher)
       ).to eq [@project_groups.id.to_s]
+    end
+
+    it "includes non_collaborative group sets when asked for by someone with permissions" do
+      @course.account.enable_feature!(:differentiation_tags)
+      RoleOverride::GRANULAR_MANAGE_TAGS_PERMISSIONS.each do |permission|
+        @course.account.role_overrides.create!(
+          permission:,
+          role: @teacher_role,
+          enabled: true
+        )
+      end
+
+      expect(
+        course_type.resolve("groupSetsConnection(includeNonCollaborative: true) { edges { node { _id } } }",
+                            current_user: @teacher)
+      ).to match_array [@project_groups.id.to_s, @non_collaborative_groups.id.to_s]
+    end
+
+    it "does not include non_collaborative group sets when asked for by someone without permissions" do
+      @course.account.enable_feature!(:differentiation_tags)
+      RoleOverride::GRANULAR_MANAGE_TAGS_PERMISSIONS.each do |permission|
+        @course.account.role_overrides.create!(
+          permission:,
+          role: @teacher_role,
+          enabled: false
+        )
+      end
+      expect(
+        course_type.resolve("groupSetsConnection { edges { node { _id } } }",
+                            current_user: @teacher)
+      ).to eq [@project_groups.id.to_s]
+    end
+  end
+
+  describe "groupSets" do
+    before(:once) do
+      @teacher_role = Role.get_built_in_role("TeacherEnrollment", root_account_id: Account.default.id)
+      @project_groups = course.group_categories.create! name: "Project Groups"
+      @student_groups = GroupCategory.student_organized_for(course)
+      @non_collaborative_groups = course.group_categories.create! name: "NC Groups", non_collaborative: true
+    end
+
+    it "returns project group sets (not student_organized, not non_collaborative) when not asked for" do
+      expect(
+        course_type.resolve("groupSets { _id}",
+                            current_user: @teacher)
+      ).to eq [@project_groups.id.to_s]
+    end
+
+    it "includes non_collaborative group sets when asked for by someone with permissions" do
+      @course.account.enable_feature!(:differentiation_tags)
+      RoleOverride::GRANULAR_MANAGE_TAGS_PERMISSIONS.each do |permission|
+        @course.account.role_overrides.create!(
+          permission:,
+          role: @teacher_role,
+          enabled: true
+        )
+      end
+
+      expect(
+        course_type.resolve("groupSets(includeNonCollaborative: true) { _id }",
+                            current_user: @teacher)
+      ).to match_array [@project_groups.id.to_s, @non_collaborative_groups.id.to_s]
+    end
+
+    it "excludes non_collaborative group sets when asked for by someone without permissions" do
+      @course.account.enable_feature!(:differentiation_tags)
+      RoleOverride::GRANULAR_MANAGE_TAGS_PERMISSIONS.each do |permission|
+        @course.account.role_overrides.create!(
+          permission:,
+          role: @teacher_role,
+          enabled: false
+        )
+      end
+
+      expect(
+        course_type.resolve("groupSets(includeNonCollaborative: true) { _id }",
+                            current_user: @teacher)
+      ).to match_array [@project_groups.id.to_s]
     end
   end
 
@@ -820,6 +1110,104 @@ describe Types::CourseType do
     it "returns the final grade override policy" do
       result = course_type.resolve("allowFinalGradeOverride")
       expect(result).to eq @course.allow_final_grade_override
+    end
+  end
+
+  describe "RubricsConnection" do
+    before(:once) do
+      rubric_for_course
+      rubric_association_model(context: course, rubric: @rubric, association_object: course, purpose: "bookmark")
+    end
+
+    it "returns rubrics" do
+      expect(
+        course_type.resolve("rubricsConnection { edges { node { _id } } }")
+      ).to eq [course.rubrics.first.to_param]
+
+      expect(
+        course_type.resolve("rubricsConnection { edges { node { criteriaCount } } }")
+      ).to eq [1]
+
+      expect(
+        course_type.resolve("rubricsConnection { edges { node { workflowState } } }")
+      ).to eq ["active"]
+    end
+  end
+
+  describe "ActivityStream" do
+    it "return activity stream summaries" do
+      cur_course = Course.create!
+      new_teacher = User.create!
+      cur_course.enroll_teacher(new_teacher).accept
+      cur_course.announcements.create! title: "hear ye!", message: "wat"
+      cur_course.discussion_topics.create!
+      cur_resolver = GraphQLTypeTester.new(cur_course, current_user: new_teacher)
+      expect(cur_resolver.resolve("activityStream { summary { type } } ")).to match_array ["DiscussionTopic", "Announcement"]
+      expect(cur_resolver.resolve("activityStream { summary { count } } ")).to match_array [1, 1]
+      expect(cur_resolver.resolve("activityStream { summary { unreadCount } } ")).to match_array [1, 1]
+      expect(cur_resolver.resolve("activityStream { summary { notificationCategory } } ")).to match_array [nil, nil]
+    end
+  end
+
+  describe "moderators" do
+    def execute_query(pagination_options: {}, user: @teacher)
+      options_string = pagination_options.empty? ? "" : "(#{pagination_options.map { |key, value| "#{key}: #{value.inspect}" }.join(", ")})"
+      CanvasSchema.execute(<<~GQL, context: { current_user: user }).dig("data", "course")
+        query {
+          course(id: #{course.id}) {
+            availableModerators#{options_string} {
+              edges {
+                node {
+                  _id
+                  name
+                }
+              }
+              pageInfo {
+                hasNextPage
+                endCursor
+              }
+            }
+            availableModeratorsCount
+          }
+        }
+      GQL
+    end
+
+    before(:once) do
+      @ta = User.create!
+      course.enroll_ta(@ta, enrollment_state: :active)
+    end
+
+    context "when user has permissions to manage assignments" do
+      it "returns availableModerators and availableModeratorsCount" do
+        result = execute_query
+
+        expect(result["availableModerators"]["edges"]).to match_array [
+          { "node" => { "_id" => @teacher.id.to_s, "name" => @teacher.name } },
+          { "node" => { "_id" => @ta.id.to_s, "name" => @ta.name } },
+        ]
+
+        expect(result["availableModeratorsCount"]).to eq 2
+      end
+
+      it "paginate available moderators" do
+        result = execute_query(pagination_options: { first: 1 })
+        expect(result["availableModerators"]["edges"].length).to eq 1
+        expect(result["availableModerators"]["pageInfo"]["hasNextPage"]).to be true
+
+        end_cursor = result["availableModerators"]["pageInfo"]["endCursor"]
+        result = execute_query(pagination_options: { first: 1, after: end_cursor })
+        expect(result["availableModerators"]["edges"].length).to eq 1
+        expect(result["availableModerators"]["pageInfo"]["hasNextPage"]).to be false
+      end
+    end
+
+    context "when user does not have permissions to manage assignments" do
+      it "returns nil" do
+        result = execute_query(user: @student)
+        expect(result["availableModerators"]).to be_nil
+        expect(result["availableModeratorsCount"]).to be_nil
+      end
     end
   end
 end

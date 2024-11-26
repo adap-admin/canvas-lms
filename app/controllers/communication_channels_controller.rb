@@ -20,7 +20,7 @@
 
 # @API Communication Channels
 #
-# API for accessing users' email addresses, SMS phone numbers, and Twitter
+# API for accessing users' email addresses, SMS phone numbers, and X.com
 # communication channels.
 #
 # In this API, the `:user_id` parameter can always be replaced with `self` if
@@ -63,6 +63,16 @@
 #           "description": "The ID of the user that owns this communication channel.",
 #           "example": 1,
 #           "type": "integer"
+#         },
+#         "bounce_count": {
+#           "description": "The number of bounces the channel has experienced. This is reset if the channel sends successfully.",
+#           "example": 0,
+#           "type": "integer"
+#         },
+#         "last_bounce_at": {
+#           "description": "The time the last bounce occurred.",
+#           "example": "2012-05-30T17:00:00Z",
+#           "type": "datetime"
 #         },
 #         "workflow_state": {
 #           "description": "The current state of the communication channel. Possible values are: 'unconfirmed' or 'active'.",
@@ -144,7 +154,9 @@ class CommunicationChannelsController < ApplicationController
   def create
     @user = api_request? ? api_find(User, params[:user_id]) : @current_user
 
-    return render_unauthorized_action unless has_api_permissions?
+    if !has_api_permissions? && params[:communication_channel][:type] != CommunicationChannel::TYPE_PUSH
+      return render_unauthorized_action
+    end
 
     # We are doing the check here because it takes a lot of queries to get from
     # the CC model to the domain_root_account, and 99% of the time that will end
@@ -269,14 +281,17 @@ class CommunicationChannelsController < ApplicationController
         unless @current_user == @user
           session[:return_to] = request.url
           flash[:notice] = t "notices.login_to_confirm", "Please log in to confirm your e-mail address"
-          return redirect_to login_url(pseudonym_session: { unique_id: @user.pseudonym.try(:unique_id) }, expected_user_id: @user.id)
+          redirect_to login_url(pseudonym_session: { unique_id: @user.pseudonym.try(:unique_id) }, expected_user_id: @user.id)
+          return
         end
 
         cc.confirm
         @user.touch
-        flash[:notice] = t "notices.registration_confirmed", "Registration confirmed!"
         return respond_to do |format|
-          format.html { redirect_to redirect_back_or_default(user_profile_url(@current_user)) }
+          format.html do
+            flash[:notice] = t "notices.registration_confirmed", "Registration confirmed!"
+            redirect_to redirect_back_or_default(user_profile_url(@current_user))
+          end
           format.json { render json: cc.as_json(except: [:confirmation_code]) }
         end
       end
@@ -431,7 +446,6 @@ class CommunicationChannelsController < ApplicationController
             failed = true
           end
         else
-          @request = request
           return # render
         end
       end
@@ -459,7 +473,7 @@ class CommunicationChannelsController < ApplicationController
     if @enrollment
       return render_unauthorized_action unless @current_user.can_create_enrollment_for?(@enrollment.course, session, @enrollment.type)
     else
-      return render_unauthorized_action unless @user.grants_any_right?(@current_user, session, :manage, :manage_user_details)
+      return unless authorized_action(@user, @current_user, [:manage, :manage_user_details])
     end
 
     if @enrollment && (@enrollment.invited? || @enrollment.active?)
@@ -475,7 +489,7 @@ class CommunicationChannelsController < ApplicationController
 
   def confirmation_limit_reached
     @user = User.find(params[:user_id])
-    return render_unauthorized_action unless @user.grants_any_right?(@current_user, session, :manage, :manage_user_details)
+    return unless authorized_action(@user, @current_user, [:manage, :manage_user_details])
     return render json: {}, status: :bad_request unless params[:id].present?
 
     @cc = @user.communication_channels.find(params[:id])
@@ -493,11 +507,13 @@ class CommunicationChannelsController < ApplicationController
   end
 
   def redirect_with_success_flash
-    flash[:notice] = t "notices.registration_confirmed", "Registration confirmed!"
     @current_user ||= @user # since dashboard_url may need it
     default_url = confirmation_redirect_url(@communication_channel) || dashboard_url
     respond_to do |format|
-      format.html { redirect_to(@enrollment ? course_url(@course) : redirect_back_or_default(default_url)) }
+      format.html do
+        flash[:notice] = t "notices.registration_confirmed", "Registration confirmed!"
+        redirect_to(@enrollment ? course_url(@course) : redirect_back_or_default(default_url))
+      end
       format.json { render json: { url: @enrollment ? course_url(@course) : default_url } }
     end
   end

@@ -66,6 +66,7 @@ module Api::V1
       methods << "hide_final_grades" if @includes.include?(:hide_final_grades)
       methods << "storage_quota_used_mb" if @includes.include?(:storage_quota_used_mb)
       methods << "account_name" if @includes.include?(:account_name)
+      methods << "global_id" if @includes.include?(:global_id)
       methods
     end
 
@@ -90,12 +91,12 @@ module Api::V1
       clear_unneeded_fields(@hash)
     end
 
-    def self.to_hash(course, user, includes, enrollments, precalculated_permissions: nil, &block)
-      new(course, user, includes, enrollments, precalculated_permissions:, &block).to_hash
+    def self.to_hash(course, user, includes, enrollments, precalculated_permissions: nil, &)
+      new(course, user, includes, enrollments, precalculated_permissions:, &).to_hash
     end
 
     def clear_unneeded_fields(hash)
-      hash.reject { |k, v| (OPTIONAL_FIELDS.include?(k) && v.nil?) }
+      hash.reject { |k, v| OPTIONAL_FIELDS.include?(k) && v.nil? }
     end
 
     def description(course)
@@ -148,7 +149,7 @@ module Api::V1
     end
 
     INCLUDE_CHECKERS.each do |key, val|
-      define_method("include_#{key}".to_sym) do
+      define_method(:"include_#{key}") do
         @includes.include?(val.to_sym)
       end
     end
@@ -270,7 +271,7 @@ module Api::V1
                end
 
       enrollment.send(
-        "#{prefix}_#{current_or_final}_#{score_or_grade}",
+        :"#{prefix}_#{current_or_final}_#{score_or_grade}",
         grading_period_id: current_grading_period.id
       )
     end

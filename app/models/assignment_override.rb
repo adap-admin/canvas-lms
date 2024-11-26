@@ -24,7 +24,11 @@ class AssignmentOverride < ActiveRecord::Base
 
   NOOP_MASTERY_PATHS = 1
 
+  SET_TYPE_ADHOC = "ADHOC"
+  SET_TYPE_COURSE_SECTION = "CourseSection"
+  SET_TYPE_GROUP = "Group"
   SET_TYPE_NOOP = "Noop"
+  SET_TYPE_COURSE = "Course"
 
   simply_versioned keep: 10
 
@@ -32,21 +36,37 @@ class AssignmentOverride < ActiveRecord::Base
   attr_writer :for_nonactive_enrollment
 
   belongs_to :root_account, class_name: "Account"
-  belongs_to :assignment, inverse_of: :assignment_overrides
+  belongs_to :assignment, inverse_of: :assignment_overrides, class_name: "AbstractAssignment"
   belongs_to :quiz, class_name: "Quizzes::Quiz", inverse_of: :assignment_overrides
-  belongs_to :set, polymorphic: [:group, :course_section], exhaustive: false
+  belongs_to :context_module, inverse_of: :assignment_overrides
+  belongs_to :wiki_page, inverse_of: :assignment_overrides
+  belongs_to :discussion_topic, inverse_of: :assignment_overrides
+  belongs_to :attachment, inverse_of: :assignment_overrides
+  belongs_to :set, polymorphic: %i[group course_section course], exhaustive: false
+  belongs_to :parent_override, class_name: "AssignmentOverride", optional: true
+  has_many :child_overrides, class_name: "AssignmentOverride", foreign_key: "parent_override_id", inverse_of: :parent_override, dependent: :destroy
   has_many :assignment_override_students, -> { where(workflow_state: "active") }, inverse_of: :assignment_override, dependent: :destroy, validate: false
   validates :assignment_version, presence: { if: :assignment }
   validates :title, :workflow_state, presence: true
-  validates :set_type, inclusion: ["CourseSection", "Group", "ADHOC", SET_TYPE_NOOP]
+  validates :set_type, inclusion: ["CourseSection", "Group", "ADHOC", SET_TYPE_NOOP, "Course"]
   validates :title, length: { maximum: maximum_string_length, allow_nil: true }
-  concrete_set = ->(override) { ["CourseSection", "Group"].include?(override.set_type) }
+  concrete_set = ->(override) { %w[CourseSection Group Course].include?(override.set_type) }
 
   validates :set, :set_id, presence: { if: concrete_set }
   validates :set_id, uniqueness: { scope: %i[assignment_id set_type workflow_state],
                                    if: ->(override) { override.assignment? && override.active? && concrete_set.call(override) } }
   validates :set_id, uniqueness: { scope: %i[quiz_id set_type workflow_state],
                                    if: ->(override) { override.quiz? && override.active? && concrete_set.call(override) } }
+  validates :set_id, uniqueness: { scope: %i[context_module_id set_type workflow_state],
+                                   if: ->(override) { override.context_module? && override.active? && concrete_set.call(override) } }
+  validates :set_id, uniqueness: { scope: %i[wiki_page_id set_type workflow_state],
+                                   if: ->(override) { override.wiki_page? && override.active? && concrete_set.call(override) } }
+  validates :set_id, uniqueness: { scope: %i[discussion_topic_id set_type workflow_state],
+                                   if: ->(override) { override.discussion_topic? && override.active? && concrete_set.call(override) } }
+  validates :set_id, uniqueness: { scope: %i[attachment_id set_type workflow_state],
+                                   if: ->(override) { override.attachment? && override.active? && concrete_set.call(override) } }
+
+  validate :validate_parent_override_for_sub_assignment
 
   before_create :set_root_account_id
 
@@ -56,8 +76,10 @@ class AssignmentOverride < ActiveRecord::Base
       when CourseSection
         record.errors.add :set, "not from assignment's course" unless record.set.course_id == record.assignment.context_id
       when Group
-        valid_group_category_id = record.assignment.group_category_id || record.assignment.discussion_topic.try(:group_category_id)
+        valid_group_category_id = record.assignment.effective_group_category_id
         record.errors.add :set, "not from assignment's group category" unless record.set.group_category_id == valid_group_category_id
+      when Course
+        record.errors.add :set, "not from assignment's course" unless record.set.id == record.assignment.context_id
       end
     end
   end
@@ -69,8 +91,8 @@ class AssignmentOverride < ActiveRecord::Base
   end
 
   validate do |record|
-    if [record.assignment, record.quiz].all?(&:nil?)
-      record.errors.add :base, "assignment or quiz required"
+    if record.overridable.nil?
+      record.errors.add :base, "assignment, quiz, module, page, discussion, or file required"
     end
   end
 
@@ -78,11 +100,39 @@ class AssignmentOverride < ActiveRecord::Base
     record.assignment_override_students.each do |s|
       next if s.valid?
 
-      s.errors.each do |_, error|
+      s.errors.each do |_, error| # rubocop:disable Style/HashEachMethods
         record.errors.add(:assignment_override_students,
                           error.type,
                           message: error.message)
       end
+    end
+  end
+
+  validate do |record|
+    if record.set_type == "Course" && record.unassign_item
+      record.errors.add :unassign_item, "must be false with set_type Course"
+    end
+  end
+
+  validate do |record|
+    if record.due_at && (record.wiki_page || record.discussion_topic || record.attachment)
+      record.errors.add :due_at, "cannot be set for pages, discussions, or files"
+    end
+  end
+
+  validate do |record|
+    association_count = [record.assignment, record.quiz, record.context_module, record.wiki_page, record.discussion_topic, record.attachment].compact.count
+    has_assignment_and_quiz = association_count == 2 && record.assignment && record.quiz
+    # assignment+quiz can be set simultaneously, but otherwise there should only be 1 association
+    if association_count > 1 && !has_assignment_and_quiz
+      record.errors.add :base, "only one of assignment, quiz, module, page, discussion, or file may be set (except assignment and quiz may both be set)"
+    end
+  end
+
+  validate do |record|
+    if record.context_module? && (record.due_at || record.unlock_at || record.lock_at ||
+      record.due_at_overridden || record.unlock_at_overridden || record.lock_at_overridden)
+      record.errors.add :base, "cannot set dates for context module overrides"
     end
   end
 
@@ -92,15 +142,24 @@ class AssignmentOverride < ActiveRecord::Base
   after_commit :update_cached_due_dates
 
   def set_not_empty?
-    overridable = assignment? ? assignment : quiz
-    ["CourseSection", "Group", SET_TYPE_NOOP].include?(set_type) ||
+    ["CourseSection", "Group", SET_TYPE_NOOP, "Course"].include?(set_type) ||
       (set.any? && overridable.context.current_enrollments.where(user_id: set).exists?)
+  end
+
+  def validate_parent_override_for_sub_assignment
+    if assignment.is_a?(SubAssignment)
+      if parent_override_id.blank?
+        errors.add(:parent_override_id, "must be present for sub-assignment overrides")
+      end
+    elsif parent_override_id.present?
+      errors.add(:parent_override_id, "can only be set for overrides belonging to a SubAssignment")
+    end
   end
 
   def update_grading_period_grades
     return true unless due_at_overridden && saved_change_to_due_at? && !saved_change_to_id?
 
-    course = assignment&.context || quiz&.context || quiz&.assignment&.context
+    course = overridable&.context || quiz&.assignment&.context
     return true unless course&.grading_periods?
 
     grading_period_was = GradingPeriod.for_date_in_course(date: due_at_before_last_save, course:)
@@ -147,7 +206,7 @@ class AssignmentOverride < ActiveRecord::Base
     if update_cached_due_dates?
       if assignment
         assignment.clear_cache_key(:availability)
-        DueDateCacher.recompute(assignment)
+        SubmissionLifecycleManager.recompute(assignment)
       end
       quiz&.clear_cache_key(:availability)
     end
@@ -182,6 +241,22 @@ class AssignmentOverride < ActiveRecord::Base
     !!quiz_id
   end
 
+  def context_module?
+    !!context_module_id
+  end
+
+  def wiki_page?
+    !!wiki_page_id
+  end
+
+  def discussion_topic?
+    !!discussion_topic_id
+  end
+
+  def attachment?
+    !!attachment_id
+  end
+
   workflow do
     state :active
     state :deleted
@@ -191,6 +266,7 @@ class AssignmentOverride < ActiveRecord::Base
   def destroy
     transaction do
       assignment_override_students.reload.destroy_all
+      child_overrides.reload.each(&:destroy)
       self.workflow_state = "deleted"
       default_values
       save!(validate: false)
@@ -240,34 +316,43 @@ class AssignmentOverride < ActiveRecord::Base
     set_type == "ADHOC"
   end
 
+  def course_section?
+    set_type == "CourseSection"
+  end
+
   def mastery_paths?
     set_type == SET_TYPE_NOOP && set_id == NOOP_MASTERY_PATHS
   end
 
   # override set read accessor and set_id read/write accessors so that reading
-  # set/set_id or setting set_id while set_type=ADHOC doesn't try and find the
-  # ADHOC model
-  def set_id
-    read_attribute(:set_id)
-  end
-
+  # set while set_type=ADHOC doesn't try and find the # ADHOC model
   def set
     case self.set_type
     when "ADHOC"
       assignment_override_students.preload(:user).map(&:user)
-    when "CourseSection", "Group"
+    when "CourseSection", "Group", "Course"
       super
     else
       nil
     end
   end
 
-  def set_id=(id)
-    if ["ADHOC", SET_TYPE_NOOP].include? self.set_type
-      write_attribute(:set_id, id)
-    else
-      super
-    end
+  # since we override `set`, we also need to override the implicitly generated polymorphic getters
+  # or else it will try to instantiate `ADHOC` or `Noop`
+  def course
+    set if set_type == "Course"
+  end
+
+  def course_section
+    set if set_type == "CourseSection"
+  end
+
+  def group
+    set if set_type == "Group"
+  end
+
+  def overridable
+    assignment || quiz || context_module || discussion_topic || wiki_page || attachment
   end
 
   def for_nonactive_enrollment?
@@ -289,20 +374,20 @@ class AssignmentOverride < ActiveRecord::Base
   end
 
   def self.override(field)
-    define_method "override_#{field}" do |value|
-      send("#{field}_overridden=", true)
-      send("#{field}=", value)
+    define_method :"override_#{field}" do |value|
+      send(:"#{field}_overridden=", true)
+      send(:"#{field}=", value)
     end
 
-    define_method "clear_#{field}_override" do
-      send("#{field}_overridden=", false)
-      send("#{field}=", nil)
+    define_method :"clear_#{field}_override" do
+      send(:"#{field}_overridden=", false)
+      send(:"#{field}=", nil)
     end
 
     validates "#{field}_overridden", inclusion: { in: [false, true] }
     before_validation do |override|
-      if override.send("#{field}_overridden").nil?
-        override.send("#{field}_overridden=", false)
+      if override.send(:"#{field}_overridden").nil?
+        override.send(:"#{field}_overridden=", false)
       end
       true
     end
@@ -318,7 +403,7 @@ class AssignmentOverride < ActiveRecord::Base
     return Enrollment.none if overrides.empty? || user.nil?
 
     override = overrides.first
-    (override.assignment || override.quiz).context.enrollments_visible_to(user)
+    override.overridable.context.enrollments_visible_to(user)
   end
 
   OVERRIDDEN_DATES = %i[due_at unlock_at lock_at].freeze
@@ -335,19 +420,19 @@ class AssignmentOverride < ActiveRecord::Base
     new_due_at = CanvasTime.fancy_midnight(new_due_at)
     new_all_day, new_all_day_date = Assignment.all_day_interpretation(
       due_at: new_due_at,
-      due_at_was: read_attribute(:due_at),
-      all_day_was: read_attribute(:all_day),
-      all_day_date_was: read_attribute(:all_day_date)
+      due_at_was: due_at,
+      all_day_was: all_day,
+      all_day_date_was: all_day_date
     )
 
-    write_attribute(:due_at, new_due_at)
-    write_attribute(:all_day, new_all_day)
-    write_attribute(:all_day_date, new_all_day_date)
+    super
+    self.all_day = new_all_day
+    self.all_day_date = new_all_day_date
   end
 
   def lock_at=(new_lock_at)
     new_lock_at = self.class.type_for_attribute(:lock_at).cast(new_lock_at) if new_lock_at.is_a?(String)
-    write_attribute(:lock_at, CanvasTime.fancy_midnight(new_lock_at))
+    super(CanvasTime.fancy_midnight(new_lock_at))
   end
 
   def availability_expired?
@@ -377,7 +462,7 @@ class AssignmentOverride < ActiveRecord::Base
     case set_type
     when "ADHOC"
       set
-    when "CourseSection"
+    when "CourseSection", "Course"
       set.participating_students
     when "Group"
       set.participants
@@ -457,10 +542,19 @@ class AssignmentOverride < ActiveRecord::Base
 
   def root_account_id
     # Use the attribute if available, otherwise fall back to getting it from a parent entity
-    super || assignment&.root_account_id || quiz&.root_account_id || quiz&.assignment&.root_account_id
+    super || overridable&.root_account_id || quiz&.assignment&.root_account_id
   end
 
   def set_root_account_id
-    write_attribute(:root_account_id, root_account_id) unless read_attribute(:root_account_id)
+    self.root_account_id = root_account_id unless self[:root_account_id]
+  end
+
+  def sub_assignment_due_dates
+    child_overrides.active.preload(:assignment).map do |child|
+      {
+        sub_assignment_tag: child.assignment&.sub_assignment_tag,
+        due_at: child.due_at
+      }
+    end
   end
 end

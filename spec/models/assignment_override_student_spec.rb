@@ -76,18 +76,18 @@ describe AssignmentOverrideStudent do
     end
 
     it "on creation, recalculates cached due dates on the assignment" do
-      expect(DueDateCacher).to receive(:recompute_users_for_course).with(@student.id, @assignment.context, [@assignment]).once
+      expect(SubmissionLifecycleManager).to receive(:recompute_users_for_course).with(@student.id, @assignment.context, [@assignment]).once
       @assignment_override.assignment_override_students.create!(user: @student)
     end
 
     it "on destroy, recalculates cached due dates on the assignment" do
       override_student = @assignment_override.assignment_override_students.create!(user: @student)
 
-      # Expect DueDateCacher to be called once from AssignmentOverrideStudent after it's destroyed and another time
+      # Expect SubmissionLifecycleManager to be called once from AssignmentOverrideStudent after it's destroyed and another time
       # after it realizes that its corresponding AssignmentOverride can also be destroyed because it now has an empty
       # set of students.  Hence the specific nature of this expectation.
-      expect(DueDateCacher).to receive(:recompute_users_for_course).with(@student.id, @assignment.context, [@assignment]).once
-      expect(DueDateCacher).to receive(:recompute).with(@assignment).once
+      expect(SubmissionLifecycleManager).to receive(:recompute_users_for_course).with(@student.id, @assignment.context, [@assignment]).once
+      expect(SubmissionLifecycleManager).to receive(:recompute).with(@assignment).once
       override_student.destroy
     end
   end
@@ -215,6 +215,10 @@ describe AssignmentOverrideStudent do
     let(:override) { AssignmentOverride.new }
     let(:quiz_id) { 1 }
     let(:assignment_id) { 2 }
+    let(:context_module_id) { 3 }
+    let(:wiki_page_id) { 4 }
+    let(:discussion_topic_id) { 5 }
+    let(:attachment_id) { 6 }
 
     before do
       override_student.assignment_override = override
@@ -249,6 +253,43 @@ describe AssignmentOverrideStudent do
       it "has the quiz's ID" do
         expect(override_student.quiz_id).to eq quiz_id
       end
+    end
+
+    context "when the override has a module" do
+      before do
+        override.context_module_id = context_module_id
+        override_student.send(:default_values)
+      end
+
+      it "has the module's ID" do
+        expect(override_student.context_module_id).to eq context_module_id
+      end
+
+      it "has a nil assignment ID" do
+        expect(override_student.assignment_id).to be_nil
+      end
+
+      it "has a nil quiz ID" do
+        expect(override_student.quiz_id).to be_nil
+      end
+    end
+
+    it "sets default values when the override has a wiki_page" do
+      override.wiki_page_id = wiki_page_id
+      override_student.send(:default_values)
+      expect(override_student.wiki_page_id).to eq wiki_page_id
+    end
+
+    it "sets default values when the override has a discussion_topic" do
+      override.discussion_topic_id = discussion_topic_id
+      override_student.send(:default_values)
+      expect(override_student.discussion_topic_id).to eq discussion_topic_id
+    end
+
+    it "sets default values when the override has an attachment" do
+      override.attachment_id = attachment_id
+      override_student.send(:default_values)
+      expect(override_student.attachment_id).to eq attachment_id
     end
   end
 

@@ -83,10 +83,14 @@ class AccountNotificationsController < ApplicationController
   # @API Index of active global notification for the user
   # Returns a list of all global notifications in the account for the current user
   # Any notifications that have been closed by the user will not be returned, unless
-  # a include_past parameter is passed in as true.
+  # a include_past parameter is passed in as true. Admins can request all global
+  # notifications for the account by passing in an include_all parameter.
   #
   # @argument include_past [Boolean]
   #   Include past and dismissed global announcements.
+  #
+  # @argument include_all  [Boolean]
+  #   Include all global announcements, regardless of user's role. Only available to account admins.
   #
   # @example_request
   #   curl -H 'Authorization: Bearer <token>' \
@@ -95,7 +99,15 @@ class AccountNotificationsController < ApplicationController
   # @returns [AccountNotification]
   def user_index
     include_past = value_to_boolean(params[:include_past])
-    notifications = AccountNotification.for_user_and_account(@current_user, @domain_root_account, include_past:)
+    include_all = value_to_boolean(params[:include_all])
+
+    notifications = if include_all
+                      require_account_admin
+
+                      AccountNotification.for_account(@account, include_past: true)
+                    else
+                      AccountNotification.for_user_and_account(@current_user, @domain_root_account, include_past:)
+                    end
     render json: account_notifications_json(notifications, @current_user, session)
   end
 
@@ -111,6 +123,7 @@ class AccountNotificationsController < ApplicationController
     @context = @current_user.profile
     set_active_tab("past_global_announcements")
     js_bundle :past_global_announcements
+    page_has_instui_topnav
     render html: "", layout: true
   end
 
@@ -235,13 +248,19 @@ class AccountNotificationsController < ApplicationController
         if api_request?
           format.json { render json: account_notification_json(@notification, @current_user, session) }
         else
-          flash[:notice] = t("Announcement successfully created")
-          format.html { redirect_to account_settings_path(@account, anchor: "tab-announcements") }
+          format.html do
+            flash[:notice] = t("Announcement successfully created")
+            redirect_to account_settings_path(@account, anchor: "tab-announcements")
+          end
           format.json { render json: @notification }
         end
       else
-        flash[:error] = t("Announcement creation failed")
-        format.html { redirect_to account_settings_path(@account, anchor: "tab-announcements") } unless api_request?
+        unless api_request?
+          format.html do
+            flash[:error] = t("Announcement creation failed")
+            redirect_to account_settings_path(@account, anchor: "tab-announcements")
+          end
+        end
         format.json { render json: @notification.errors, status: :bad_request }
       end
     end
@@ -331,8 +350,10 @@ class AccountNotificationsController < ApplicationController
     @notification = @account.announcements.find(params[:id])
     @notification.destroy
     respond_to do |format|
-      flash[:message] = t(:announcement_deleted_notice, "Announcement successfully deleted")
-      format.html { redirect_to account_settings_path(@account, anchor: "tab-announcements") }
+      format.html do
+        flash[:message] = t(:announcement_deleted_notice, "Announcement successfully deleted")
+        redirect_to account_settings_path(@account, anchor: "tab-announcements")
+      end
       format.json { render json: @notification }
     end
   end
@@ -345,7 +366,7 @@ class AccountNotificationsController < ApplicationController
 
   def require_account_admin
     require_account_context
-    return false unless authorized_action(@account, @current_user, :manage_alerts)
+    false unless authorized_action(@account, @current_user, :manage_alerts)
   end
 
   def roles_to_add(role_params)

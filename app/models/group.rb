@@ -18,9 +18,9 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require "atom"
-
 class Group < ActiveRecord::Base
+  self.ignored_columns += ["category"]
+
   include Context
   include Workflow
   include CustomValidations
@@ -29,6 +29,9 @@ class Group < ActiveRecord::Base
   validates_allowed_transitions :is_public, false => true
 
   validates :sis_source_id, uniqueness: { scope: :root_account }, allow_nil: true
+
+  attr_readonly :non_collaborative
+  validate :validate_non_collaborative_constraints
 
   # use to skip queries in can_participate?, called by policy block
   attr_accessor :can_participate
@@ -61,6 +64,7 @@ class Group < ActiveRecord::Base
   has_many :messages, as: :context, inverse_of: :context, dependent: :destroy
   belongs_to :wiki
   has_many :wiki_pages, as: :context, inverse_of: :context
+  has_many :wiki_page_lookups, as: :context, inverse_of: :context
   has_many :web_conferences, as: :context, inverse_of: :context, dependent: :destroy
   has_many :collaborations, -> { order(Arel.sql("collaborations.title, collaborations.created_at")) }, as: :context, inverse_of: :context, dependent: :destroy
   has_many :media_objects, as: :context, inverse_of: :context
@@ -74,9 +78,9 @@ class Group < ActiveRecord::Base
            inverse_of: :context,
            class_name: "Lti::ResourceLink",
            dependent: :destroy
+  has_many :favorites, as: :context, inverse_of: :context, dependent: :destroy
 
   before_validation :ensure_defaults
-  before_save :maintain_category_attribute
   before_save :update_max_membership_from_group_category
 
   after_create :refresh_group_discussion_topics
@@ -165,8 +169,9 @@ class Group < ActiveRecord::Base
 
   def allow_self_signup?(user)
     group_category &&
-      (group_category.unrestricted_self_signup? ||
-        (group_category.restricted_self_signup? && has_common_section_with_user?(user)))
+      (!group_category.past_self_signup_end_at? &&
+        (group_category.unrestricted_self_signup? ||
+          (group_category.restricted_self_signup? && has_common_section_with_user?(user))))
   end
 
   def full?
@@ -238,7 +243,7 @@ class Group < ActiveRecord::Base
   end
 
   def has_member?(user)
-    return nil unless user.present?
+    return false unless user.present?
 
     if group_memberships.loaded?
       group_memberships.to_a.find { |gm| gm.accepted? && gm.user_id == user.id }
@@ -248,7 +253,7 @@ class Group < ActiveRecord::Base
   end
 
   def has_moderator?(user)
-    return nil unless user.present?
+    return false unless user.present?
     if group_memberships.loaded?
       return group_memberships.to_a.find { |gm| gm.accepted? && gm.user_id == user.id && gm.moderator }
     end
@@ -271,6 +276,16 @@ class Group < ActiveRecord::Base
 
   def short_name
     name
+  end
+
+  def self.ids_by_student_by_assignment(student_ids, assignment_ids)
+    GroupMembership.for_assignments(assignment_ids)
+                   .for_students(student_ids)
+                   .pluck("assignments.id", "group_memberships.group_id", "group_memberships.user_id")
+                   .each_with_object({}) do |(assignment_id, group_id, user_id), acc|
+                     acc[assignment_id] ||= {}
+                     acc[assignment_id][user_id] = group_id
+                   end
   end
 
   def self.find_all_by_context_code(codes)
@@ -314,6 +329,8 @@ class Group < ActiveRecord::Base
   Bookmarker = BookmarkedCollection::SimpleBookmarker.new(Group, :name, :id)
 
   scope :active, -> { where("groups.workflow_state<>'deleted'") }
+  scope :collaborative, -> { where(non_collaborative: false) }
+  scope :non_collaborative, -> { where(non_collaborative: true) }
   scope :by_name, -> { order(Bookmarker.order_by) }
   scope :uncategorized, -> { where(groups: { group_category_id: nil }) }
 
@@ -333,13 +350,12 @@ class Group < ActiveRecord::Base
   end
 
   def to_atom
-    Atom::Entry.new do |entry|
-      entry.title     = name
-      entry.updated   = updated_at
-      entry.published = created_at
-      entry.links << Atom::Link.new(rel: "alternate",
-                                    href: "/groups/#{id}")
-    end
+    {
+      title: name,
+      updated: updated_at,
+      published: created_at,
+      link: "/groups/#{id}"
+    }
   end
 
   # this method is idempotent
@@ -467,6 +483,7 @@ class Group < ActiveRecord::Base
     self.join_level ||= "invitation_only"
     self.is_public ||= false
     self.is_public = false unless self.group_category.try(:communities?)
+    self.non_collaborative = group_category.non_collaborative if group_category && !non_collaborative_changed?
     set_default_account
   end
   private :ensure_defaults
@@ -486,7 +503,7 @@ class Group < ActiveRecord::Base
   end
 
   def account_id=(new_account_id)
-    write_attribute(:account_id, new_account_id)
+    super
     if account_id_changed?
       self.root_account = reload_account&.root_account
     end
@@ -495,29 +512,37 @@ class Group < ActiveRecord::Base
   # if you modify this set_policy block, note that we've denormalized this
   # permission check for efficiency -- see User#cached_contexts
   set_policy do
-    # Participate means the user is connected to the group somehow and can be
-    given { |user| user && can_participate?(user) && has_member?(user) }
-    can :participate and
-      can :manage_calendar and
-      can :manage_content and
-      can :manage_course_content_add and
-      can :manage_course_content_edit and
-      can :manage_course_content_delete and
-      can :manage_files_add and
-      can :manage_files_edit and
-      can :manage_files_delete and
-      can :manage_wiki_create and
-      can :manage_wiki_delete and
-      can :manage_wiki_update and
-      can :post_to_forum and
-      can :create_collaborations and
-      can :create_forum
+    # Base permissions for users who can participate in the group
+    # Conditions:
+    # - The group is collaborative (`!non_collaborative?`)
+    # - A valid user is present (`user`)
+    # - The user can participate (`can_participate?(user)`)
+    # - The user is a member of the group (`has_member?(user)`)
+    given { |user| !non_collaborative? && user && can_participate?(user) && has_member?(user) }
+    can :participate,
+        :manage_calendar,
+        :manage_content,
+        :manage_course_content_add,
+        :manage_course_content_edit,
+        :manage_course_content_delete,
+        :manage_files_add,
+        :manage_files_edit,
+        :manage_files_delete,
+        :manage_wiki_create,
+        :manage_wiki_delete,
+        :manage_wiki_update,
+        :post_to_forum,
+        :create_collaborations,
+        :create_forum
 
     # Course-level groups don't grant any permissions besides :participate (because for a teacher to add a student to a
     # group, the student must be able to :participate, and the teacher should be able to add students while the course
     # is unpublished and therefore unreadable to said students) unless their containing context can be read by the user
     # in question
-    given { |user, session| context.is_a?(Account) || context.grants_right?(user, session, :read) }
+    # Conditions:
+    # - The group is collaborative (`!non_collaborative?`)
+    # - The context is either an Account or grants read permission to the user
+    given { |user, session| !non_collaborative? && (context.is_a?(Account) || context&.grants_right?(user, session, :read) || false) }
 
     use_additional_policy do
       given { |user| user && has_member?(user) }
@@ -562,57 +587,14 @@ class Group < ActiveRecord::Base
       given { |user, session| grants_right?(user, session, :participate_as_student) && context.allow_student_organized_groups }
       can :create
 
-      #################### Begin legacy permission block #########################
-
       given do |user, session|
-        !context.root_account.feature_enabled?(:granular_permissions_manage_groups) &&
-          context.grants_right?(user, session, :manage_groups)
-      end
-      can %i[
-        create
-        create_collaborations
-        delete
-        manage
-        manage_admin_users
-        allow_course_admin_actions
-        manage_calendar
-        manage_content
-        manage_course_content_add
-        manage_course_content_edit
-        manage_course_content_delete
-        manage_files_add
-        manage_files_edit
-        manage_files_delete
-        manage_students
-        manage_wiki_create
-        manage_wiki_delete
-        manage_wiki_update
-        moderate_forum
-        post_to_forum
-        create_forum
-        read
-        read_forum
-        read_announcements
-        read_roster
-        send_messages
-        send_messages_all
-        update
-        view_unpublished_items
-        read_files
-      ]
-
-      ##################### End legacy permission block ##########################
-
-      given do |user, session|
-        context.root_account.feature_enabled?(:granular_permissions_manage_groups) &&
-          context.grants_right?(user, session, :manage_groups_add)
+        context.grants_right?(user, session, :manage_groups_add)
       end
       can %i[read read_files create]
 
       # permissions to update a group and manage actions within the context of a group
       given do |user, session|
-        context.root_account.feature_enabled?(:granular_permissions_manage_groups) &&
-          context.grants_right?(user, session, :manage_groups_manage)
+        context.grants_right?(user, session, :manage_groups_manage)
       end
       can %i[
         read
@@ -646,8 +628,7 @@ class Group < ActiveRecord::Base
       ]
 
       given do |user, session|
-        context.root_account.feature_enabled?(:granular_permissions_manage_groups) &&
-          context.grants_right?(user, session, :manage_groups_delete)
+        context.grants_right?(user, session, :manage_groups_delete)
       end
       can %i[read read_files delete]
 
@@ -694,6 +675,101 @@ class Group < ActiveRecord::Base
 
       given { |user, session| context&.grants_right?(user, session, :read_email_addresses) }
       can :read_email_addresses
+    end
+
+    ##################### Non-Collaborative Group Permission Block ##########################
+    # Permissions for non-collaborative groups
+    # Conditions:
+    # - The group is non-collaborative (`non_collaborative?`)
+    # - The context grants read permission
+    # - The context grants any manage_tag rights
+    given { |user, session| non_collaborative? && context&.grants_right?(user, session, :read) && context.grants_any_right?(user, session, *RoleOverride::GRANULAR_MANAGE_TAGS_PERMISSIONS) }
+    use_additional_policy do
+      # Base permissions for non-collaborative groups
+      given { |user| user }
+      can :read,
+          :read_roster
+
+      # Permission to send messages
+      # Conditions:
+      # - A valid user is present
+      # - The context grants send_messages right
+      given do |user, session|
+        user && context.grants_right?(user, session, :send_messages)
+      end
+      can :send_messages
+
+      # Permission to send all messages
+      # Conditions:
+      # - A valid user is present
+      # - The context grants send_messages_all right
+      given do |user, session|
+        user && context.grants_right?(user, session, :send_messages_all)
+      end
+      can :send_messages_all
+
+      # Permission to manage/update the group
+      # Conditions:
+      # - A valid user is present
+      # - The context grants manage_tags_manage right
+      given { |user, session| user && context&.grants_right?(user, session, :manage_tags_manage) }
+      can :update,
+          :manage,
+          :manage_admin_users,
+          :allow_course_admin_actions,
+          :manage_students
+
+      # Permission to delete the group
+      # Conditions:
+      # - A valid user is present
+      # - The context grants manage_tags_manage right
+      given { |user, session| user && context.grants_right?(user, session, :manage_tags_delete) }
+      can :delete
+
+      # Permission to create the group
+      # Conditions:
+      # - A valid user is present
+      # - The context grants manage_tags_add right
+      given { |user, session| user && context.grants_right?(user, session, :manage_tags_add) }
+      can :create
+
+      given { |user, session| context&.grants_right?(user, session, :view_group_pages) }
+      can %i[read read_roster read_files]
+
+      given { |user, session| context&.grants_right?(user, session, :read_as_admin) }
+      can :read_as_admin
+
+      given { |user, session| context&.grants_right?(user, session, :read_sis) }
+      can :read_sis
+
+      given { |user, session| context&.grants_right?(user, session, :view_user_logins) }
+      can :view_user_logins
+
+      given { |user, session| context&.grants_right?(user, session, :read_email_addresses) }
+      can :read_email_addresses
+
+      # Permissions purposely excluded from non_collaborative groups because Non_collaborative groups will NEVER
+      # be used as a context that owns content. So no user should ever be able to manage content in a non_collaborative group.
+      # %i[
+      #   manage_calendar
+      #   manage_content
+      #   manage_course_content_add
+      #   manage_course_content_edit
+      #   manage_course_content_delete
+      #   manage_files_add
+      #   manage_files_edit
+      #   manage_files_delete
+      #   manage_wiki_create
+      #   manage_wiki_delete
+      #   manage_wiki_update
+      #   moderate_forum
+      #   post_to_forum
+      #   create_forum
+      #   read_forum
+      #   read_announcements
+      #   view_unpublished_items
+      #   read_files
+      # ]
     end
   end
 
@@ -758,15 +834,15 @@ class Group < ActiveRecord::Base
   end
 
   def self.default_storage_quota
-    Setting.get("group_default_quota", 50.megabytes.to_s).to_i
+    Setting.get("group_default_quota", 50.decimal_megabytes.to_s).to_i
   end
 
   def storage_quota_mb
-    quota / 1.megabyte
+    quota / 1.decimal_megabytes
   end
 
   def storage_quota_mb=(val)
-    self.storage_quota = val.try(:to_i).try(:megabytes)
+    self.storage_quota = val.try(:to_i).try(:decimal_megabytes)
   end
 
   TAB_HOME, TAB_PAGES, TAB_PEOPLE, TAB_DISCUSSIONS, TAB_FILES,
@@ -799,20 +875,8 @@ class Group < ActiveRecord::Base
     true
   end
 
-  def group_category_name
-    read_attribute(:category)
-  end
-
-  def maintain_category_attribute
-    # keep this field up to date even though it's not used (group_category_name
-    # exists solely for the migration that introduces the GroupCategory model).
-    # this way group_category_name is correct if someone mistakenly uses it
-    # (modulo category renaming in the GroupCategory model).
-    write_attribute(:category, self.group_category&.name)
-  end
-
   def as_json(options = nil)
-    json = super(options)
+    json = super
     if json && json["group"]
       # remove anything coming automatically from deprecated db column
       json["group"].delete("category")
@@ -917,6 +981,20 @@ class Group < ActiveRecord::Base
       context.grading_standard_or_default
     else
       GradingStandard.default_instance
+    end
+  end
+
+  private
+
+  def validate_non_collaborative_constraints
+    if non_collaborative?
+      errors.add(:base, "Non-collaborative groups must belong to a course") unless context_type == "Course"
+      errors.add(:base, "Non-collaborative groups cannot have a leader") if leader_id.present?
+      errors.add(:base, "Non-collaborative groups must be private") if is_public
+    end
+
+    if group_category && non_collaborative != group_category.non_collaborative
+      errors.add(:base, "Group non_collaborative status must match its category")
     end
   end
 end

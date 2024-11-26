@@ -16,33 +16,30 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React, {useState} from 'react'
+import React from 'react'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import {GradebookSettings} from '../../../../gradebook/react/default_gradebook/gradebook.d'
 import userSettings from '@canvas/user-settings'
 import doFetchApi from '@canvas/do-fetch-api-effect'
+import type {HandleCheckboxChange} from '../../../types'
+import CheckboxTemplate from './CheckboxTemplate'
 
 const I18n = useI18nScope('enhanced_individual_gradebook')
 
 type Props = {
   saveViewUngradedAsZeroToServer?: boolean | null
-  settings?: GradebookSettings | null
   contextId?: string | null
+  handleCheckboxChange: HandleCheckboxChange
+  includeUngradedAssignments: boolean
 }
 export default function IncludeUngradedAssignmentsCheckbox({
   saveViewUngradedAsZeroToServer,
-  settings,
   contextId,
+  handleCheckboxChange,
+  includeUngradedAssignments,
 }: Props) {
-  const [viewUngraded, setViewUngraded] = useState(
-    saveViewUngradedAsZeroToServer && settings
-      ? settings.view_ungraded_as_zero === 'true'
-      : userSettings.contextGet('include_ungraded_assignments') || false
-  )
-
   const handleViewUngradedChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const checked = event.target.checked
-    setViewUngraded(checked)
+    handleCheckboxChange('includeUngradedAssignments', checked)
     userSettings.contextSet('include_ungraded_assignments', checked)
     if (!saveViewUngradedAsZeroToServer) {
       return
@@ -59,20 +56,11 @@ export default function IncludeUngradedAssignmentsCheckbox({
   }
 
   return (
-    <div
-      className="checkbox"
-      style={{padding: 12, margin: '10px 0px', background: '#eee', borderRadius: 5}}
-    >
-      <label className="checkbox" htmlFor="ungraded_checkbox">
-        <input
-          type="checkbox"
-          id="ungraded_checkbox"
-          name="ungraded_checkbox"
-          checked={viewUngraded}
-          onChange={handleViewUngradedChange}
-        />
-        {I18n.t('View Ungraded as 0')}
-      </label>
-    </div>
+    <CheckboxTemplate
+      dataTestId="include-ungraded-assignments-checkbox"
+      label={I18n.t('View Ungraded as 0')}
+      checked={includeUngradedAssignments}
+      onChange={handleViewUngradedChange}
+    />
   )
 }

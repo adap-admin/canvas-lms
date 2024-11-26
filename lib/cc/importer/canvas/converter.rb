@@ -39,6 +39,7 @@ module CC::Importer::Canvas
       @resources = {}
       @resource_nodes_for_flat_manifest = {}
       @canvas_converter = true
+      @is_discussion_checkpoints_enabled = settings[:is_discussion_checkpoints_enabled] || false
     end
 
     # exports the package into the intermediary json
@@ -46,7 +47,8 @@ module CC::Importer::Canvas
       unzip_archive
       set_progress(5)
 
-      @manifest = open_file(@package_root.item_path(MANIFEST_FILE))
+      # this is cheating; we don't deal properly with namespaces
+      @manifest = open_file_xml(@package_root.item_path(MANIFEST_FILE)).remove_namespaces!
       get_all_resources(@manifest)
 
       convert_all_course_settings

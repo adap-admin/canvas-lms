@@ -19,10 +19,14 @@
 export type {
   GradingScheme,
   GradingSchemeTemplate,
-  GradingSchemeDataRow,
   GradingSchemeUpdateRequest,
   GradingSchemeSummary,
+  GradingSchemeCardData,
 } from './gradingSchemeApiModel'
 
 export {GradingSchemesManagement} from './react/components/GradingSchemesManagement'
 export {GradingSchemesSelector} from './react/components/GradingSchemesSelector'
+export {
+  UsedLocationsModal,
+  type FetchUsedLocationResponse,
+} from './react/components/UsedLocationsModal'

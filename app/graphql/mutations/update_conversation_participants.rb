@@ -39,7 +39,7 @@ class Mutations::UpdateConversationParticipants < Mutations::BaseMutation
     errors = (input[:conversation_ids] - c_ids).index_with { "Unable to find Conversation" }
 
     conversation_participants = current_user.all_conversations.where(conversation_id: c_ids)
-    cp_ids = conversation_participants.map(&:conversation_id).map(&:to_s)
+    cp_ids = conversation_participants.map { |cp| cp.conversation_id.to_s }
     errors.merge!((c_ids - cp_ids).index_with { "Insufficient permissions" })
 
     # update_all cannot be used as the ConversationParticipant model
@@ -47,8 +47,10 @@ class Mutations::UpdateConversationParticipants < Mutations::BaseMutation
     # storage of data differing from what ActiveRecord expects
     unarchivable_states = ["unread", "read"]
     conversation_participants.map do |cp|
+      # the update method will delete from the input hash
+      params_dup = update_params.dup
       InstStatsd::Statsd.increment("inbox.conversation.unarchived.react") if cp.workflow_state == "archived" && unarchivable_states.include?(update_params[:workflow_state])
-      cp.update(update_params)
+      cp.update(params_dup)
     end
     InstStatsd::Statsd.count("inbox.conversation.archived.react", conversation_participants.count) if update_params[:workflow_state] == "archived"
     InstStatsd::Statsd.count("inbox.conversation.starred.react", conversation_participants.count) if update_params[:starred] == true

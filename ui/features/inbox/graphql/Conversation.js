@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {arrayOf, bool, shape, string} from 'prop-types'
+import {arrayOf, bool, number, shape, string} from 'prop-types'
 import {ConversationMessage} from './ConversationMessage'
 import {ConversationParticipant} from './ConversationParticipant'
 import gql from 'graphql-tag'
@@ -31,6 +31,7 @@ export const Conversation = {
       contextId
       contextType
       contextName
+      contextAssetString
       subject
       canReply
       isPrivate
@@ -49,12 +50,14 @@ export const Conversation = {
     contextId: string,
     contextType: string,
     contextName: string,
+    contextAssetString: string,
     subject: string,
     canReply: bool,
     isPrivate: bool,
     conversationMessagesConnection: shape({
       nodes: arrayOf(ConversationMessage.shape),
     }),
+    conversationMessagesCount: number,
     conversationParticipantsConnection: shape({
       nodes: arrayOf(ConversationParticipant.shape),
     }),
@@ -66,6 +69,7 @@ export const Conversation = {
     contextId = '195',
     contextType = 'Course',
     contextName = 'XavierSchool',
+    contextAssetString = 'course_195',
     subject = 'testing 123',
     canReply = true,
     isPrivate = false,
@@ -98,6 +102,7 @@ export const Conversation = {
       pageInfo: PageInfo.mock({hasNextPage: false}),
       __typename: 'ConversationMessageConnection',
     },
+    conversationMessagesCount = 3,
     conversationParticipantsConnection = {
       nodes: [
         ConversationParticipant.mock({
@@ -127,8 +132,10 @@ export const Conversation = {
     contextId,
     contextType,
     contextName,
+    contextAssetString,
     subject,
     conversationMessagesConnection,
+    conversationMessagesCount,
     conversationParticipantsConnection,
     canReply,
     isPrivate,

@@ -18,7 +18,7 @@
 
 import Backbone from '@canvas/backbone'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import tz from '@canvas/timezone'
+import * as tz from '@instructure/moment-utils'
 
 const I18n = useI18nScope('models_DateGroup')
 
@@ -96,6 +96,7 @@ export default class DateGroup extends Backbone.Model {
       pending: this.pending(),
       open: this.open(),
       closed: this.closed(),
+      setType: this.get('set_type'),
     }
   }
 }

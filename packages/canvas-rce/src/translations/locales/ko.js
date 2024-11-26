@@ -21,6 +21,7 @@ import '../tinymce/ko_KR'
 
 const locale = {
   "add_8523c19b": { "message": "추가" },
+  "add_one_9e34a6f8": { "message": "추가하기!" },
   "all_4321c3a1": { "message": "전부" },
   "alpha_15d59033": { "message": "알파" },
   "announcement_fb4cb645": { "message": "공지 사항" },
@@ -64,6 +65,7 @@ const locale = {
   "external_tools_6e77821": { "message": "외부도구" },
   "files_c300e900": { "message": "파일" },
   "files_index_af7c662b": { "message": "파일 색인" },
+  "find_8d605019": { "message": "찾기" },
   "format_4247a9c5": { "message": "형식" },
   "grades_a61eba0a": { "message": "평점" },
   "greek_65c5b3f7": { "message": "그리스 문자" },
@@ -100,7 +102,11 @@ const locale = {
   "new_quiz_34aacba6": { "message": "새 퀴즈" },
   "next_40e12421": { "message": "다음" },
   "no_e16d9132": { "message": "아니요" },
+  "no_pages_created_yet_c379fa6e": {
+    "message": "아직 페이지를 만들지 않았습니다."
+  },
   "no_results_940393cf": { "message": "No results." },
+  "no_results_found_58717065": { "message": "결과가 없음" },
   "none_3b5e34d2": { "message": "없음" },
   "operators_a2ef9a93": { "message": "연산자" },
   "page_50c4823d": { "message": "페이지" },
@@ -108,6 +114,7 @@ const locale = {
   "people_b4ebb13c": { "message": "사용자" },
   "percentage_34ab7c2c": { "message": "퍼센트" },
   "preview_53003fd2": { "message": "미리 보기" },
+  "previous_bd2ac015": { "message": "이전" },
   "quiz_e0dcce8f": { "message": "퀴즈" },
   "quizzes_7e598f57": { "message": "퀴즈" },
   "record_7c9448b": { "message": "녹음/녹화" },
@@ -121,6 +128,7 @@ const locale = {
   "star_8d156e09": { "message": "별표 표시" },
   "start_over_f7552aa9": { "message": "새로 시작" },
   "submit_a3cc6859": { "message": "제출" },
+  "submitting_b90fac62": { "message": "제출 중..." },
   "syllabus_f191f65b": { "message": "요강" },
   "the_document_preview_is_currently_being_processed__7d9ea135": {
     "message": "문서 미리 보기를 처리 중입니다. 나중에 다시 시도하시기 바랍니다."

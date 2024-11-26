@@ -19,10 +19,12 @@
 
 require_relative "../common"
 require_relative "../helpers/context_modules_common"
+require_relative "../../helpers/selective_release_common"
 
 describe "context modules" do
   include_context "in-process server selenium tests"
   include ContextModulesCommon
+  include SelectiveReleaseCommon
 
   before :once do
     @course = course_model.tap(&:offer!)
@@ -461,14 +463,14 @@ describe "context modules" do
     describe "module header icons" do
       it "shows a pill message that says 'Complete All Items'", priority: "1" do
         go_to_modules
-        vaildate_correct_pill_message(@module_1.id, "Complete All Items")
+        validate_correct_pill_message(@module_1.id, "Complete All Items")
       end
 
       it "shows a pill message that says 'Complete One Item'", priority: "1" do
         make_module_1_complete_one
         go_to_modules
 
-        vaildate_correct_pill_message(@module_1.id, "Complete One Item")
+        validate_correct_pill_message(@module_1.id, "Complete One Item")
       end
 
       it "shows a completed icon and unlocks next when module is complete for 'Complete All Items' requirement", priority: "1" do
@@ -487,7 +489,7 @@ describe "context modules" do
         go_to_modules
 
         navigate_to_module_item(0, @assignment_1.title)
-        vaildate_correct_pill_message(@module_1.id, "Complete One Item")
+        validate_correct_pill_message(@module_1.id, "Complete One Item")
         validate_context_module_status_icon(@module_1.id, @completed_icon)
       end
 
@@ -717,6 +719,125 @@ describe "context modules" do
       get "/courses/#{@course.id}/pages/#{page.url}"
 
       expect(f(".user_content")).to include_text(page.body)
+    end
+
+    context "with the selective_release_backend and selective_release_ui_api flags enabled" do
+      before :once do
+        differentiated_modules_on
+        @module1 = @course.context_modules.create!(name: "module 1")
+        @module2 = @course.context_modules.create!(name: "module 2")
+        @module3 = @course.context_modules.create!(name: "module 3")
+      end
+
+      it "shows only modules that a student is assigned" do
+        @module2.assignment_overrides.create!
+        @module3.assignment_overrides.create!(set: @course.default_section)
+
+        go_to_modules
+        expect(f("#context_modules")).to include_text "module 1"
+        expect(f("#context_modules")).not_to include_text "module 2"
+        expect(f("#context_modules")).to include_text "module 3"
+      end
+    end
+  end
+
+  context "discussion_checkpoints" do
+    before :once do
+      @course.root_account.enable_feature!(:discussion_checkpoints)
+      modules = create_modules(1, true)
+
+      @topic = DiscussionTopic.create_graded_topic!(course: @course, title: "checkpointed topic")
+      @c1 = Checkpoints::DiscussionCheckpointCreatorService.call(
+        discussion_topic: @topic,
+        checkpoint_label: CheckpointLabels::REPLY_TO_TOPIC,
+        dates: [{ type: "everyone", due_at: 5.years.ago }, { type: "override", set_type: "ADHOC", student_ids: [@student.id], due_at: 10.days.from_now }],
+        points_possible: 5
+      )
+      @c2 = Checkpoints::DiscussionCheckpointCreatorService.call(
+        discussion_topic: @topic,
+        checkpoint_label: CheckpointLabels::REPLY_TO_ENTRY,
+        dates: [{ type: "everyone", due_at: 5.years.ago }, { type: "override", set_type: "ADHOC", student_ids: [@student.id], due_at: 10.days.from_now }],
+        points_possible: 5,
+        replies_required: 2
+      )
+      modules[0].add_item({ id: @topic.id, type: "discussion_topic" })
+    end
+
+    it "shows checkpoints with a submitted icon only when student has submitted" do
+      rtt = @topic.discussion_entries.create!(user: @student, message: "my reply to topic")
+      2.times do |i|
+        @topic.discussion_entries.create!(
+          user: @student, message: "my reply to entry #{i}", parent_entry: rtt
+        )
+      end
+      user_session(@student)
+      go_to_modules
+      checkpoints = ff("div[data-testid='checkpoint']")
+      expect(checkpoints[0].text).to include("submitted")
+      expect(checkpoints[1].text).to include("submitted")
+    end
+
+    it "shows checkpoints (with applicable override for student) as child items in checkpointed discussions" do
+      user_session(@student)
+      go_to_modules
+      checkpoints = ff("div[data-testid='checkpoint']")
+      expect(checkpoints[0].text).to include("Reply to Topic\n#{datetime_string(@c1.overridden_for(@student).due_at)}")
+      expect(checkpoints[0].text).not_to include("submitted")
+      expect(checkpoints[1].text).to include("Required Replies (#{@topic.reply_to_entry_required_count})\n#{datetime_string(@c2.overridden_for(@student).due_at)}")
+      expect(checkpoints[1].text).not_to include("submitted")
+    end
+
+    it "shows checkpoints (with default due date only when applicable) as child items in checkpointed discussions" do
+      Checkpoints::DiscussionCheckpointUpdaterService.call(
+        discussion_topic: @topic,
+        checkpoint_label: CheckpointLabels::REPLY_TO_TOPIC,
+        dates: [{ type: "everyone", due_at: 5.years.ago }],
+        points_possible: 6
+      )
+
+      Checkpoints::DiscussionCheckpointUpdaterService.call(
+        discussion_topic: @topic,
+        checkpoint_label: CheckpointLabels::REPLY_TO_ENTRY,
+        dates: [{ type: "everyone", due_at: 5.years.ago }],
+        points_possible: 6
+      )
+
+      user_session(@student)
+      go_to_modules
+
+      checkpoints = ff("div[data-testid='checkpoint']")
+      expect(checkpoints[0].text).to include("Reply to Topic\n#{datetime_string(@c1.reload.due_at)}")
+      expect(checkpoints[1].text).to include("Required Replies (#{@topic.reply_to_entry_required_count})\n#{datetime_string(@c2.reload.due_at)}")
+    end
+
+    it "shows checkpoints (with applicable due date override when there is nothing but overrides)" do
+      Checkpoints::DiscussionCheckpointDeleterService.call(
+        discussion_topic: @topic
+      )
+
+      @c1 = Checkpoints::DiscussionCheckpointCreatorService.call(
+        discussion_topic: @topic,
+        checkpoint_label: CheckpointLabels::REPLY_TO_TOPIC,
+        dates: [{ type: "override", set_type: "ADHOC", student_ids: [@student.id], due_at: 10.days.from_now }],
+        points_possible: 5
+      )
+      @c2 = Checkpoints::DiscussionCheckpointCreatorService.call(
+        discussion_topic: @topic,
+        checkpoint_label: CheckpointLabels::REPLY_TO_ENTRY,
+        dates: [{ type: "override", set_type: "ADHOC", student_ids: [@student.id], due_at: 10.days.from_now }],
+        points_possible: 5,
+        replies_required: 2
+      )
+
+      # verify the setup is correct
+      expect([@c1, @c2].none?(&:due_at)).to be_truthy
+
+      user_session(@student)
+      go_to_modules
+
+      checkpoints = ff("div[data-testid='checkpoint']")
+      expect(checkpoints[0].text).to include("Reply to Topic\n#{datetime_string(@c1.overridden_for(@student).due_at)}")
+      expect(checkpoints[1].text).to include("Required Replies (#{@topic.reply_to_entry_required_count})\n#{datetime_string(@c2.overridden_for(@student).due_at)}")
     end
   end
 end

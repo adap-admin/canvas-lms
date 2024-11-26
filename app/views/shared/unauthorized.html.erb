@@ -21,7 +21,6 @@
 <% end %>
 <% @show_left_side = false %>
 <% @show_embedded_chat = false %>
-<% @unauthorized_message ||= t("#application.errors.unauthorized.default", "You do not have access to view this resource.") %>
 <% add_body_class 'full-width' %>
 <div id="unauthorized_message" class="ic-Error-page">
     <% if @needs_cookies %>
@@ -32,7 +31,11 @@
       <h1><%= t('headings.unpublished', %{Not Yet Available}) %></h1>
     <% else %>
       <img class="ic-Error-img" role="presentation" alt="" aria-hidden="true" src="/images/401_permissions.svg">
-      <h1><%= t("Access Denied") %></h1>
+      <% if request.query_parameters[:embedded] %>
+        <h3><%= t("Access Denied") %></h3>
+      <% else %>
+        <h1><%= t("Access Denied") %></h1>
+      <% end %>
     <% end %>
     <% if @unauthorized_message %>
       <p><%= @unauthorized_message %></p>

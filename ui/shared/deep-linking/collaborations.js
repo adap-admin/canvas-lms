@@ -35,12 +35,12 @@ export const addDeepLinkingListener = () => {
  * LTI Advantage handleDeepLinking handler and the
  * LTI 1.1 content item handler.
  */
-export function onExternalContentReady(e, data) {
-  const contentItem = {contentItems: JSON.stringify(data.contentItems)}
-  if (data.service_id) {
-    updateCollaboration(contentItem, data.service_id)
+export function onExternalContentReady({contentItems, service_id, tool_id}) {
+  const contentItem = {contentItems: JSON.stringify(contentItems)}
+  if (service_id) {
+    updateCollaboration(contentItem, service_id, tool_id)
   } else {
-    createCollaboration(contentItem)
+    createCollaboration(contentItem, tool_id)
   }
 }
 
@@ -55,8 +55,9 @@ export const handleDeepLinking = async event => {
     if (typeof item !== 'object') {
       $.flashError(I18n.t('Error retrieving content from tool (bad content item)'))
     } else {
-      onExternalContentReady(event, {
+      onExternalContentReady({
         service_id: event.data?.service_id,
+        tool_id: event.data?.tool_id,
         contentItems: [item],
       })
     }
@@ -69,15 +70,21 @@ export function collaborationUrl(id) {
   return window.location.toString() + '/' + id
 }
 
-function updateCollaboration(contentItem, collab_id) {
-  const url = document.querySelector('.collaboration_' + collab_id + ' a.title')?.href
+function updateCollaboration(contentItem, collab_id, tool_id) {
+  const url =
+    document.querySelector('.collaboration_' + collab_id + ' a.title')?.href +
+    '?tool_id=' +
+    (tool_id || '')
   $.ajaxJSON(url, 'PUT', contentItem, collaborationSuccess, _msg => {
     $.screenReaderFlashMessage(I18n.t('Collaboration update failed'))
   })
 }
 
-function createCollaboration(contentItem) {
-  const url = document.querySelector('#new_collaboration')?.getAttribute('action')
+function createCollaboration(contentItem, tool_id) {
+  const url =
+    document.querySelector('#new_collaboration')?.getAttribute('action') +
+    '?tool_id=' +
+    (tool_id || '')
   $.ajaxJSON(url, 'POST', contentItem, collaborationSuccess, _msg => {
     $.screenReaderFlashMessage(I18n.t('Collaboration creation failed'))
   })

@@ -45,10 +45,10 @@ module Types
     end
 
     global_id_field :id
-    field :name, String, null: true
-    field :rules, AssignmentGroupRulesType, method: :rules_hash, null: true
     field :group_weight, Float, null: true
+    field :name, String, null: true
     field :position, Int, null: true
+    field :rules, AssignmentGroupRulesType, method: :rules_hash, null: true
     field :state, AssignmentGroupState, method: :workflow_state, null: false
 
     implements Interfaces::AssignmentsConnectionInterface
@@ -86,7 +86,7 @@ module Types
     end
 
     def assignments_scope(*args)
-      super(*args).where(assignment_group_id: object.id)
+      super.where(assignment_group_id: object.id)
     end
     private :assignments_scope
   end

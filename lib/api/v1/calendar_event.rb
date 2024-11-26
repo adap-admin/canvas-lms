@@ -32,6 +32,8 @@ module Api::V1::CalendarEvent
   def event_json(event, user, session, options = {})
     if event.is_a?(::CalendarEvent)
       calendar_event_json(event, user, session, options)
+    elsif event.is_a?(::SubAssignment)
+      sub_assignment_event_json(event, user, session, options)
     else
       assignment_event_json(event, user, session, options)
     end
@@ -42,7 +44,7 @@ module Api::V1::CalendarEvent
     include = options[:include]
     include ||= excludes.include?("child_events") ? [] : ["child_events"]
 
-    context = (options[:context] || event.context)
+    context = options[:context] || event.context
     duplicates = options.delete(:duplicates) || []
     participant = nil
 
@@ -194,11 +196,13 @@ module Api::V1::CalendarEvent
     end
     hash["important_dates"] = event.important_dates
     hash["blackout_date"] = event.blackout_date
-    if event[:series_uuid] && event[:rrule] && include.include?("series_natural_language") && Account.site_admin.feature_enabled?(:calendar_series)
-      series_nat_lang = rrule_to_natural_language(event[:rrule])
-      hash["series_natural_language"] = series_nat_lang
+    if event[:series_uuid] && event[:rrule]
+      hash["series_head"] = event.series_head?
+      if include.include?("series_natural_language")
+        series_nat_lang = rrule_to_natural_language(event[:rrule])
+        hash["series_natural_language"] = series_nat_lang
+      end
     end
-    hash["blackout_date"] = event.blackout_date
     hash
   end
 
@@ -228,6 +232,43 @@ module Api::V1::CalendarEvent
       hash["assignment_overrides"] = assignment.applied_overrides.map { |o| assignment_override_json(o) }
     end
     hash["important_dates"] = assignment.important_dates
+    hash
+  end
+
+  def sub_assignment_event_json(sub_assignment, user, session, options = {})
+    excludes = options[:excludes] || []
+    parent_assignment = sub_assignment.parent_assignment
+
+    target_fields = %w[created_at updated_at title all_day all_day_date workflow_state submission_types]
+    target_fields << "description" unless excludes.include?("description")
+    parent_assignment_hash = assignment_json(parent_assignment, user, session, override_dates: false, submission: options[:submission])
+    hash = api_json(sub_assignment, user, session, only: target_fields)
+
+    hash["description"] = api_user_content(hash["description"], sub_assignment.context) unless excludes.include?("description")
+    hash["id"] = "sub_assignment_#{sub_assignment.id}"
+    hash["type"] = "sub_assignment"
+
+    hash["sub_assignment"] = assignment_json(sub_assignment, user, session, override_dates: false, submission: options[:submission])
+    hash["sub_assignment"]["sub_assignment_tag"] = sub_assignment.sub_assignment_tag
+    hash["sub_assignment"]["parent_assignment_id"] = sub_assignment.parent_assignment_id
+    hash["sub_assignment"]["discussion_topic"] = parent_assignment_hash["discussion_topic"]
+
+    # use the parent assignment to construct urls as the sub_assignment cannot be accessed directly
+    html_url = course_assignment_url(parent_assignment.context_id, parent_assignment)
+    hash["html_url"] = html_url
+    hash["sub_assignment"]["html_url"] = html_url
+    hash["url"] = api_v1_calendar_event_url("assignment_#{parent_assignment.id}")
+    hash["sub_assignment"]["submissions_download_url"] = parent_assignment_hash["submissions_download_url"]
+
+    hash["context_code"] = Context.context_code_for(sub_assignment)
+    hash["context_name"] = sub_assignment.context.try(:nickname_for, user)
+    hash["context_color"] = sub_assignment.context.try(:course_color)
+
+    hash["start_at"] = hash["end_at"] = sub_assignment.due_at
+    if sub_assignment.applied_overrides.present?
+      hash["sub_assignment_overrides"] = sub_assignment.applied_overrides.map { |o| assignment_override_json(o) }
+    end
+    hash["important_dates"] = sub_assignment.important_dates
     hash
   end
 
@@ -291,6 +332,7 @@ module Api::V1::CalendarEvent
     hash["participant_type"] = group.participant_type
     hash["url"] = api_v1_appointment_group_url(group)
     hash["html_url"] = appointment_group_url(hash["id"])
+    hash["allow_observer_signup"] = group.allow_observer_signup if Account.site_admin.feature_enabled?(:observer_appointment_groups)
     hash
   ensure
     @context = orig_context

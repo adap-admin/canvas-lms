@@ -23,7 +23,7 @@ import type {
   SubmissionOriginalityData,
   SimilarityEntry,
   CamelizedSubmissionWithOriginalityReport,
-} from '@canvas/grading/grading.d'
+} from './grading.d'
 
 export function isGraded(submission) {
   // TODO: remove when we no longer camelize data in Gradebook
@@ -35,7 +35,7 @@ export function isPostable(submission) {
   // TODO: remove when we no longer camelize data in Gradebook
   const posted_at = submission.posted_at || submission.postedAt
   const has_postable_comments = submission.has_postable_comments || submission.hasPostableComments
-  return !posted_at && (isGraded(submission) || !!has_postable_comments)
+  return !posted_at && (isGraded(submission) || !!has_postable_comments || !!submission.sticker)
 }
 
 export function isHideable(submission) {

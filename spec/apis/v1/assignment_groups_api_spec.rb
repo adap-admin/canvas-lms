@@ -229,6 +229,29 @@ describe AssignmentGroupsController, type: :request do
     expect(json.first["assignments"].first["submission"].pluck("user_id")).to eql [@observed_student.id]
   end
 
+  it "checks to see if submissions are found when a user is both a teacher and an observer" do
+    course_with_observer(active_all: true)
+    @observed_student = create_users(1, return_type: :record).first
+    @course.enroll_student(@observed_student, enrollment_state: "active")
+    @course.enroll_user(@teacher, "ObserverEnrollment", associated_user_id: @observed_student.id, enrollment_state: "active")
+
+    assignment = @course.assignments.create!(title: "title", submission_types: "online_url")
+    assignment.grade_student(@observed_student, grade: 10, grader: @teacher)
+
+    expect(@teacher.enrollments.count).to be 2
+
+    json = api_call_as_user(@teacher,
+                            :get,
+                            "/api/v1/courses/#{@course.id}/assignment_groups?include[]=assignments&include[]=observed_users&include[]=submission",
+                            { controller: "assignment_groups",
+                              action: "index",
+                              format: "json",
+                              course_id: @course.id,
+                              include: %w[assignments observed_users submission] })
+
+    expect(json.first["assignments"].first["submission"].length).to be 1
+  end
+
   it "optionally includes 'grades_published' for moderated assignments" do
     group = @course.assignment_groups.create!(name: "Homework")
     group.update_attribute(:position, 10)
@@ -358,6 +381,47 @@ describe AssignmentGroupsController, type: :request do
       json.each do |ag|
         expect(ag["assignments"]).to all(have_key("assignment_visibility"))
       end
+    end
+  end
+
+  describe "checkpoints in-place" do
+    before do
+      @course.root_account.enable_feature!(:discussion_checkpoints)
+
+      setup_groups
+
+      assignment = @course.assignments.create!(title: "Assignment 1", assignment_group: @group1, has_sub_assignments: true)
+      @c1 = assignment.sub_assignments.create!(context: assignment.context, assignment_group: @group1, sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC, points_possible: 5, due_at: 3.days.from_now)
+      @c2 = assignment.sub_assignments.create!(context: assignment.context, assignment_group: @group1, sub_assignment_tag: CheckpointLabels::REPLY_TO_ENTRY, points_possible: 10, due_at: 5.days.from_now)
+    end
+
+    it "includes checkpoints data on the assignments" do
+      json = api_call(:get,
+                      "/api/v1/courses/#{@course.id}/assignment_groups.json",
+                      {
+                        controller: "assignment_groups",
+                        action: "index",
+                        format: "json",
+                        course_id: @course.id.to_s
+                      },
+                      include: %w[assignments checkpoints])
+
+      # @group1 position is 10, @group2 position is 7
+      # So, @group1 should be second in the list
+      assignment_group = json[1]
+      assignment = assignment_group["assignments"].first
+
+      expect(assignment["has_sub_assignments"]).to be_truthy
+      expect(assignment["checkpoints"]).to be_present
+
+      checkpoints = assignment["checkpoints"]
+
+      expect(checkpoints.length).to eq 2
+      expect(checkpoints.pluck("name")).to match_array [@c1.name, @c2.name]
+      expect(checkpoints.pluck("tag")).to match_array [@c1.sub_assignment_tag, @c2.sub_assignment_tag]
+      expect(checkpoints.pluck("points_possible")).to match_array [@c1.points_possible, @c2.points_possible]
+      expect(checkpoints.pluck("due_at")).to match_array [@c1.due_at.iso8601, @c2.due_at.iso8601]
+      expect(checkpoints.pluck("only_visible_to_overrides")).to match_array [@c1.only_visible_to_overrides, @c2.only_visible_to_overrides]
     end
   end
 
@@ -634,7 +698,7 @@ describe AssignmentGroupsApiController, type: :request do
     @course.assignment_groups.create!(name: "group", rules: rules_in_db)
   end
 
-  context "#show" do
+  describe "#show" do
     before :once do
       course_with_teacher(active_all: true)
       rules_in_db = "drop_lowest:1\ndrop_highest:1\nnever_drop:1\nnever_drop:2\n"
@@ -809,7 +873,7 @@ describe AssignmentGroupsApiController, type: :request do
     end
   end
 
-  context "#create" do
+  describe "#create" do
     before do
       course_with_teacher(active_all: true)
     end
@@ -863,7 +927,7 @@ describe AssignmentGroupsApiController, type: :request do
     end
   end
 
-  context "#update" do
+  describe "#update" do
     let(:assignment_group) do
       @course.assignment_groups.create!(params)
     end
@@ -1039,7 +1103,7 @@ describe AssignmentGroupsApiController, type: :request do
 
         it "cannot change group_weight" do
           params = { group_weight: 75 }
-          call_update.call(params, 401)
+          call_update.call(params, 403)
           expect(@assignment_group.reload.group_weight).to eq(50)
         end
 
@@ -1048,7 +1112,7 @@ describe AssignmentGroupsApiController, type: :request do
           @assignment_group.rules_hash = rules_hash
           @assignment_group.save
           rules_encoded = @assignment_group.rules
-          call_update.call({ rules: { drop_lowest: "1" } }, 401)
+          call_update.call({ rules: { drop_lowest: "1" } }, 403)
           expect(@assignment_group.reload.rules).to eq(rules_encoded)
         end
 
@@ -1086,7 +1150,7 @@ describe AssignmentGroupsApiController, type: :request do
     end
   end
 
-  context "#destroy" do
+  describe "#destroy" do
     before :once do
       course_with_teacher(active_all: true)
       @assignment_group = @course.assignment_groups.create!(name: "Some group", position: 1)

@@ -113,7 +113,7 @@ describe Group do
     context "when the Group belongs to a Course" do
       it "returns the grading scheme being used by the course, if one exists" do
         standard = grading_standard_for(@course)
-        @course.update!(default_grading_standard: standard)
+        @course.update!(grading_standard: standard)
         expect(@group.grading_standard_or_default).to be standard
       end
 
@@ -130,7 +130,7 @@ describe Group do
     end
   end
 
-  context "#peer_groups" do
+  describe "#peer_groups" do
     it "finds all peer groups" do
       context = course_model
       group_category = context.group_categories.create(name: "worldCup")
@@ -140,10 +140,10 @@ describe Group do
       group3 = Group.create!(name: "group3", group_category:, context:)
       group4 = Group.create!(name: "group4", group_category: other_category, context:)
       expect(group1.peer_groups.length).to eq 2
-      expect(group1.peer_groups).to be_include(group2)
-      expect(group1.peer_groups).to be_include(group3)
-      expect(group1.peer_groups).not_to be_include(group1)
-      expect(group1.peer_groups).not_to be_include(group4)
+      expect(group1.peer_groups).to include(group2)
+      expect(group1.peer_groups).to include(group3)
+      expect(group1.peer_groups).not_to include(group1)
+      expect(group1.peer_groups).not_to include(group4)
     end
 
     it "does not find peer groups for student organized groups" do
@@ -158,11 +158,11 @@ describe Group do
   context "atom" do
     it "has an atom name as it's own name" do
       group_model(name: "some unique name")
-      expect(@group.to_atom.title).to eql("some unique name")
+      expect(@group.to_atom[:title]).to eql("some unique name")
     end
 
     it "has a link to itself" do
-      link = @group.to_atom.links.first.to_s
+      link = @group.to_atom[:link]
       expect(link).to eql("/groups/#{@group.id}")
     end
   end
@@ -172,18 +172,18 @@ describe Group do
       user_model
       pseudonym_model(user_id: @user.id)
       @group.add_user(@user)
-      expect(@group.users).to be_include(@user)
+      expect(@group.users).to include(@user)
     end
 
     it "is not able to add a person to the group twice" do
       user_model
       pseudonym_model(user_id: @user.id)
       @group.add_user(@user)
-      expect(@group.users).to be_include(@user)
+      expect(@group.users).to include(@user)
       expect(@group.users.count).to eq 1
       @group.add_user(@user)
       @group.reload
-      expect(@group.users).to be_include(@user)
+      expect(@group.users).to include(@user)
       expect(@group.users.count).to eq 1
     end
 
@@ -195,12 +195,12 @@ describe Group do
       user_model
       pseudonym_model(user_id: @user.id)
       group1.add_user(@user)
-      expect(group1.users).to be_include(@user)
+      expect(group1.users).to include(@user)
 
       group2.add_user(@user)
-      expect(group2.users).to be_include(@user)
+      expect(group2.users).to include(@user)
       group1.reload
-      expect(group1.users).not_to be_include(@user)
+      expect(group1.users).not_to include(@user)
     end
 
     it "adds a user at the right workflow_state by default" do
@@ -249,10 +249,11 @@ describe Group do
   it "grants manage permissions for associated objects to group managers" do
     e = course_with_teacher(active_course: true)
     course = e.context
-    course.root_account.disable_feature!(:granular_permissions_manage_groups)
     teacher = e.user
     group = course.groups.create
-    expect(course.grants_right?(teacher, :manage_groups)).to be_truthy
+    expect(course.grants_right?(teacher, :manage_groups_add)).to be_truthy
+    expect(course.grants_right?(teacher, :manage_groups_manage)).to be_truthy
+    expect(course.grants_right?(teacher, :manage_groups_delete)).to be_truthy
     expect(group.grants_right?(teacher, :manage_wiki_create)).to be_truthy
     expect(group.grants_right?(teacher, :manage_wiki_update)).to be_truthy
     expect(group.grants_right?(teacher, :manage_wiki_delete)).to be_truthy
@@ -262,31 +263,6 @@ describe Group do
     expect(group.wiki.grants_right?(teacher, :update_page)).to be_truthy
     attachment = group.attachments.build
     expect(attachment.grants_right?(teacher, :create)).to be_truthy
-  end
-
-  context "with granular permissions enabled" do
-    before do
-      @course.root_account.enable_feature!(:granular_permissions_manage_groups)
-    end
-
-    it "grants manage permissions for associated objects to group managers" do
-      e = course_with_teacher(active_course: true)
-      course = e.context
-      teacher = e.user
-      group = course.groups.create
-      expect(course.grants_right?(teacher, :manage_groups_add)).to be_truthy
-      expect(course.grants_right?(teacher, :manage_groups_manage)).to be_truthy
-      expect(course.grants_right?(teacher, :manage_groups_delete)).to be_truthy
-      expect(group.grants_right?(teacher, :manage_wiki_create)).to be_truthy
-      expect(group.grants_right?(teacher, :manage_wiki_update)).to be_truthy
-      expect(group.grants_right?(teacher, :manage_wiki_delete)).to be_truthy
-      expect(group.grants_right?(teacher, :manage_files_add)).to be_truthy
-      expect(group.grants_right?(teacher, :manage_files_edit)).to be_truthy
-      expect(group.grants_right?(teacher, :manage_files_delete)).to be_truthy
-      expect(group.wiki.grants_right?(teacher, :update_page)).to be_truthy
-      attachment = group.attachments.build
-      expect(attachment.grants_right?(teacher, :create)).to be_truthy
-    end
   end
 
   it "does not allow a concluded student to participate" do
@@ -449,27 +425,27 @@ describe Group do
     end
   end
 
-  context "#full?" do
+  describe "#full?" do
     it "returns true when category group_limit has been met" do
-      @group.group_category = @course.group_categories.build(name: "foo")
-      @group.group_category.group_limit = 1
+      @group.group_category = @course.group_categories.build(name: "foo", group_limit: 1)
       @group.add_user user_model, "accepted"
+      @group.association(:participating_users).reset
       expect(@group).to be_full
     end
 
     it "returns true when max_membership has been met" do
-      @group.group_category = @course.group_categories.build(name: "foo")
-      @group.group_category.group_limit = 0
+      @group.group_category = @course.group_categories.build(name: "foo", group_limit: 0)
       @group.max_membership = 1
       @group.add_user user_model, "accepted"
+      @group.association(:participating_users).reset
       expect(@group).to be_full
     end
 
     it "returns false when max_membership has not been met" do
-      @group.group_category = @course.group_categories.build(name: "foo")
-      @group.group_category.group_limit = 0
+      @group.group_category = @course.group_categories.build(name: "foo", group_limit: 0)
       @group.max_membership = 2
       @group.add_user user_model, "accepted"
+      @group.association(:participating_users).reset
       expect(@group).not_to be_full
     end
 
@@ -477,9 +453,9 @@ describe Group do
       # no category
       expect(@group).not_to be_full
       # not full
-      @group.group_category = @course.group_categories.build(name: "foo")
-      @group.group_category.group_limit = 2
+      @group.group_category = @course.group_categories.build(name: "foo", group_limit: 2)
       @group.add_user user_model, "accepted"
+      @group.association(:participating_users).reset
       expect(@group).not_to be_full
     end
   end
@@ -585,21 +561,6 @@ describe Group do
     group = Group.create(group_category: gc)
     hash = group.as_json
     expect(hash["group"]["group_category"]).to eq "Something"
-  end
-
-  it "maintains the deprecated category attribute" do
-    course = course_model
-    group = course.groups.create
-    default_category = GroupCategory.student_organized_for(course)
-    expect(group.read_attribute(:category)).to eql(default_category.name)
-    group.group_category = group.context.group_categories.create(name: "my category")
-    group.save
-    group.reload
-    expect(group.read_attribute(:category)).to eql("my category")
-    group.group_category = nil
-    group.save
-    group.reload
-    expect(group.read_attribute(:category)).to eql(default_category.name)
   end
 
   context "has_common_section?" do
@@ -761,11 +722,11 @@ describe Group do
 
     it "is overridden by the account's default_group_storage_quota" do
       a = @group.account
-      a.default_group_storage_quota = 10.megabytes
+      a.default_group_storage_quota = 10.decimal_megabytes
       a.save!
 
       @group.reload
-      expect(@group.quota).to eq 10.megabytes
+      expect(@group.quota).to eq 10.decimal_megabytes
     end
 
     it "inherits from a parent account's default_group_storage_quota" do
@@ -773,20 +734,20 @@ describe Group do
         account = account_model
         subaccount = account.sub_accounts.create!
 
-        account.default_group_storage_quota = 10.megabytes
+        account.default_group_storage_quota = 10.decimal_megabytes
         account.save!
 
         course_factory(account: subaccount)
         @group = group(group_context: @course)
 
-        expect(@group.quota).to eq 10.megabytes
+        expect(@group.quota).to eq 10.decimal_megabytes
 
         # should reload
-        account.default_group_storage_quota = 20.megabytes
+        account.default_group_storage_quota = 20.decimal_megabytes
         account.save!
         @group = Group.find(@group.id)
 
-        expect(@group.quota).to eq 20.megabytes
+        expect(@group.quota).to eq 20.decimal_megabytes
       end
     end
   end
@@ -923,6 +884,191 @@ describe Group do
       } }
       group = group_model(context: account)
       expect(group.usage_rights_required?).to be true
+    end
+  end
+
+  describe ".ids_by_student_by_assignment" do
+    it "returns a hash of assignment_id => user_id => group_id" do
+      first_student = @course.enroll_student(user_model, enrollment_state: "active").user
+      second_student = @course.enroll_student(user_model, enrollment_state: "active").user
+
+      first_group = @group
+      group_category = first_group.group_category
+      first_group.add_user(first_student)
+      second_group = @course.groups.create!(group_category:)
+      second_group.add_user(second_student)
+      assignment = @course.assignments.create!(group_category:)
+
+      aggregate_failures do
+        map = Group.ids_by_student_by_assignment([first_student.id], [assignment.id])
+        expect(map.dig(assignment.id, first_student.id)).to eq first_group.id
+        expect(map.fetch(assignment.id)).not_to have_key(second_student.id)
+
+        map = Group.ids_by_student_by_assignment([first_student.id, second_student.id], [assignment.id])
+        expect(map.dig(assignment.id, first_student.id)).to eq first_group.id
+        expect(map.dig(assignment.id, second_student.id)).to eq second_group.id
+
+        expect(Group.ids_by_student_by_assignment([first_student.id], [])).to be_empty
+      end
+    end
+  end
+
+  describe "non_collaborative groups" do
+    before do
+      @course = Course.create!(name: "Test Course")
+      @teacher = User.create!(name: "Teacher")
+      @student = User.create!(name: "Student")
+      teacher_in_course(course: @course, user: @teacher, active_all: true)
+      student_in_course(course: @course, user: @student, active_all: true)
+
+      @non_collaborative_category = GroupCategory.create!(name: "Non-Collaborative Category", context: @course, non_collaborative: true)
+      @collaborative_category = GroupCategory.create!(name: "Collaborative Category", context: @course, non_collaborative: false)
+    end
+
+    it "can filter out collaborative and noncollaborative groups" do
+      non_collaborative_group = Group.create(context: @course, group_category: @non_collaborative_category, name: "Non-Collaborative Group")
+      collaborative_group = Group.create(context: @course, group_category: @collaborative_category, name: "Collaborative Group")
+
+      expect(Group.non_collaborative).to eq [non_collaborative_group]
+      expect(Group.collaborative).to include(collaborative_group)
+      expect(Group.collaborative).not_to include(non_collaborative_group)
+    end
+
+    it "non_collaborative can be set on creation but cannot be changed afterwards" do
+      # Set non_collaborative on creation
+      group = Group.create(context: @course, group_category: @non_collaborative_category, name: "Test Group")
+      expect(group).to be_valid
+      expect(group.non_collaborative).to be true
+
+      # Attempt to change non_collaborative
+      group.non_collaborative = false
+      group.save
+      expect(group.reload.non_collaborative).to be true
+
+      # Attempt to change non_collaborative using update
+      group.update(non_collaborative: false)
+      expect(group.reload.non_collaborative).to be true
+
+      # Create a group without setting non_collaborative
+      another_group = Group.create(context: @course, group_category: @collaborative_category, name: "Another Test Group")
+      expect(another_group).to be_valid
+      expect(another_group.non_collaborative).to be false
+
+      # Attempt to set non_collaborative after creation
+      another_group.non_collaborative = true
+      another_group.save
+      expect(another_group.reload.non_collaborative).to be false
+    end
+
+    it "must belong to a course" do
+      course_group = Group.new(context: @course, group_category: @non_collaborative_category, name: "Course Group")
+      expect(course_group).to be_valid
+
+      account_group = Group.new(context: @account, group_category: @non_collaborative_category, name: "Account Group")
+      expect(account_group).not_to be_valid
+      expect(account_group.errors[:base]).to include("Non-collaborative groups must belong to a course")
+    end
+
+    it "cannot have a leader" do
+      group_with_leader = Group.new(context: @course, group_category: @non_collaborative_category, name: "Group with Leader", leader: @student)
+      expect(group_with_leader).not_to be_valid
+      expect(group_with_leader.errors[:base]).to include("Non-collaborative groups cannot have a leader")
+
+      group_without_leader = Group.new(context: @course, group_category: @non_collaborative_category, name: "Group without Leader")
+      expect(group_without_leader).to be_valid
+    end
+
+    it "must match the non_collaborative status of its category" do
+      mismatched_group = Group.new(context: @course, name: "Mismatched Group", group_category: @collaborative_category, non_collaborative: true)
+      expect(mismatched_group).not_to be_valid
+      expect(mismatched_group.errors[:base]).to include("Group non_collaborative status must match its category")
+
+      matched_group = Group.new(context: @course, name: "Matched Group", group_category: @non_collaborative_category, non_collaborative: true)
+      expect(matched_group).to be_valid
+    end
+
+    it "sets non_collaborative to true if the group_category is non_collaborative" do
+      group = Group.create!(name: "Non-Collaborative Group", group_category: @non_collaborative_category, context: @course)
+      expect(group.non_collaborative).to be_truthy
+    end
+
+    it "sets non_collaborative to false if the group_category is collaborative" do
+      group = Group.create!(name: "Collaborative Group", group_category: @collaborative_category, context: @course)
+      expect(group.non_collaborative).to be_falsey
+    end
+
+    context "permissions" do
+      before do
+        @group = Group.create!(context: @course, group_category: @non_collaborative_category, name: "Test Group", non_collaborative: true)
+        @course.account.enable_feature!(:differentiation_tags)
+        allow(@course).to receive(:grants_any_right?).with(@teacher, anything, *RoleOverride::GRANULAR_MANAGE_TAGS_PERMISSIONS).and_return(true)
+      end
+
+      it "grants correct permissions to default teachers in non-collaborative groups" do
+        expect(@group.check_policy(@teacher)).to include(
+          :read,
+          :read_roster,
+          :read_files,
+          :send_messages,
+          :send_messages_all,
+          :manage,
+          :manage_admin_users,
+          :allow_course_admin_actions,
+          :manage_students,
+          :update,
+          :read_as_admin,
+          :read_sis,
+          :view_user_logins,
+          :read_email_addresses,
+          :delete,
+          :create
+        )
+      end
+
+      it "checks send_messages permission correctly" do
+        allow(@course).to receive(:grants_right?).and_return(true)
+        allow(@course).to receive(:grants_right?).with(@teacher, anything, :send_messages).and_return(false)
+        expect(@group.check_policy(@teacher)).not_to include(:send_messages)
+      end
+
+      it "checks send_messages_all permission correctly" do
+        allow(@course).to receive(:grants_right?).and_return(true)
+        allow(@course).to receive(:grants_right?).with(@teacher, anything, :send_messages_all).and_return(false)
+        expect(@group.check_policy(@teacher)).not_to include(:send_messages_all)
+      end
+
+      it "checks update and manage permissions correctly" do
+        allow(@course).to receive(:grants_right?).and_return(true)
+        allow(@course).to receive(:grants_right?).with(anything, anything, :manage_tags_manage).and_return(false)
+
+        expect(@group.check_policy(@teacher)).not_to include(:manage, :update, :manage_admin_users, :allow_course_admin_actions, :manage_students)
+      end
+
+      it "checks delete permission correctly" do
+        allow(@course).to receive(:grants_right?).and_return(true)
+        allow(@course).to receive(:grants_right?).with(@teacher, anything, :manage_tags_delete).and_return(false)
+        expect(@group.check_policy(@teacher)).not_to include(:delete)
+      end
+
+      it "checks create permission correctly" do
+        allow(@course).to receive(:grants_right?).and_return(true)
+        allow(@course).to receive(:grants_right?).with(@teacher, anything, :manage_tags_add).and_return(false)
+        expect(@group.check_policy(@teacher)).not_to include(:create)
+      end
+
+      it "does not grant permissions to users without manage_groups or manage_groups_manage" do
+        user = User.create!(name: "Random User")
+        expect(@group.check_policy(user)).to be_empty
+      end
+
+      it "does not grant permissions to a student" do
+        expect(@group.check_policy(@student)).to be_empty
+      end
+
+      it "does not grant permissions to a student who is a group member" do
+        @group.add_user(@student)
+        expect(@group.reload.check_policy(@student)).to be_empty
+      end
     end
   end
 end

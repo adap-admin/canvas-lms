@@ -27,10 +27,9 @@ class FeatureFlag < ActiveRecord::Base
 
   belongs_to :context, polymorphic: %i[account course user]
 
-  self.ignored_columns += %i[visibility manipulate]
-
   validate :valid_state, :feature_applies
   before_save :check_cache
+  before_save :infer_root_account_ids
   after_create :audit_log_create # to make sure we have an ID, must be after
   before_update :audit_log_update
   before_destroy :audit_log_destroy
@@ -67,29 +66,30 @@ class FeatureFlag < ActiveRecord::Base
   def clear_cache
     if context
       self.class.connection.after_transaction_commit do
-        context.feature_flag_cache.delete(context.feature_flag_cache_key(feature))
-        context.touch if Feature.definitions[feature].try(:touch_context) || context.try(:root_account?)
+        context.shard.activate do
+          # Shard scope is not as pertinent for Account or Course context as they
+          # reside on their home shard, but when deleting cache entries for cross-shard
+          # users that have keys prefixed by shard_id, we need to scope appropriately.
+          context.feature_flag_cache.delete(context.feature_flag_cache_key(feature))
+          context.touch if Feature.definitions[feature].try(:touch_context) || context.try(:root_account?)
 
-        if context.is_a?(Account)
-          if context.site_admin?
-            Switchman::DatabaseServer.send_in_each_region(context, :clear_cache_key, {}, :feature_flags)
-          else
-            context.clear_cache_key(:feature_flags)
+          if context.is_a?(Account)
+            if context.site_admin?
+              Switchman::DatabaseServer.send_in_each_region(context, :clear_cache_key, {}, :feature_flags)
+            else
+              context.clear_cache_key(:feature_flags)
+            end
           end
-        end
 
-        if !::Rails.env.production? && context.is_a?(Account) && Account.all_special_accounts.include?(context)
-          Account.clear_special_account_cache!(true)
+          if !::Rails.env.production? && context.is_a?(Account) && Account.all_special_accounts.include?(context)
+            Account.clear_special_account_cache!(true)
+          end
         end
       end
     end
   end
 
   def audit_log_update(operation: :update)
-    # kill switch in case something goes crazy in rolling this out.
-    # TODO: we can yank this guard clause once we're happy with it's stability.
-    return unless Setting.get("write_feature_flag_audit_logs", "true") == "true"
-
     # User feature flags only get changed by the target user,
     # are much higher volume than higher level flags, and are generally
     # uninteresting from a forensics standpoint.  We can save a lot of writes
@@ -142,5 +142,18 @@ class FeatureFlag < ActiveRecord::Base
 
   def check_cache
     clear_cache if changed?
+  end
+
+  def infer_root_account_ids
+    return if root_account_ids.present?
+
+    self.root_account_ids = case context
+                            when Account
+                              [context.resolved_root_account_id]
+                            when Course
+                              [context.root_account_id]
+                            when User
+                              context.root_account_ids
+                            end
   end
 end

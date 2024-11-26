@@ -161,6 +161,22 @@ describe OutcomesController do
         expect(assigns[:js_env][:OUTCOMES_FRIENDLY_DESCRIPTION]).to be false
       end
     end
+
+    context "archive_outcomes" do
+      it "returns true if archive_outcomes feature flag is enabled" do
+        Account.site_admin.enable_feature!(:archive_outcomes)
+        user_session(@admin)
+        get "index", params: { account_id: @account.id }
+        expect(assigns[:js_env][:ARCHIVE_OUTCOMES]).to be true
+      end
+
+      it "returns false if archive_outcomes feature flag is disabled" do
+        Account.site_admin.disable_feature!(:archive_outcomes)
+        user_session(@admin)
+        get "index", params: { account_id: @account.id }
+        expect(assigns[:js_env][:ARCHIVE_OUTCOMES]).to be false
+      end
+    end
   end
 
   context "outcome_average_calculation" do
@@ -176,6 +192,22 @@ describe OutcomesController do
       user_session(@admin)
       get "index", params: { account_id: @account.id }
       expect(assigns[:js_env][:OUTCOME_AVERAGE_CALCULATION]).to be false
+    end
+  end
+
+  context "menu_option_for_outcome_details_page" do
+    it "returns true if menu_option_for_outcome_details_page feature flage is enabled" do
+      Account.site_admin.enable_feature!(:menu_option_for_outcome_details_page)
+      user_session(@admin)
+      get "index", params: { account_id: @account.id }
+      expect(assigns[:js_env][:MENU_OPTION_FOR_OUTCOME_DETAILS_PAGE]).to be true
+    end
+
+    it "returns false if menu_option_for_outcome_details_page feature flage is disabled" do
+      Account.site_admin.disable_feature!(:menu_option_for_outcome_details_page)
+      user_session(@admin)
+      get "index", params: { account_id: @account.id }
+      expect(assigns[:js_env][:MENU_OPTION_FOR_OUTCOME_DETAILS_PAGE]).to be false
     end
   end
 

@@ -20,7 +20,7 @@ import {useGradingSchemeDelete} from '../useGradingSchemeDelete'
 import doFetchApi from '@canvas/do-fetch-api-effect'
 
 import {renderHook} from '@testing-library/react-hooks/dom'
-import {GradingSchemeTemplate} from '../../../gradingSchemeApiModel'
+import type {GradingSchemeTemplate} from '../../../gradingSchemeApiModel'
 import {ApiCallStatus} from '../ApiCallStatus'
 
 const courseId = '11'
@@ -52,6 +52,8 @@ describe('useGradingSchemeDeleteHook', () => {
     const gradingSchemeTemplate: GradingSchemeTemplate = {
       data: [],
       title: 'My Course Grading Scheme',
+      scaling_factor: 1.0,
+      points_based: false,
     }
 
     doFetchApi.mockResolvedValue({
@@ -73,6 +75,8 @@ describe('useGradingSchemeDeleteHook', () => {
     const gradingSchemeTemplate: GradingSchemeTemplate = {
       data: [],
       title: 'My Account Grading Scheme',
+      scaling_factor: 1.0,
+      points_based: false,
     }
 
     doFetchApi.mockResolvedValue({

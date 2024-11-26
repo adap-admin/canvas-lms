@@ -18,13 +18,13 @@
 
 import $ from 'jquery'
 import React from 'react'
-import ReactDOM from 'react-dom'
+import ReactDOM from 'react-dom/client'
 import doFetchApi from '@canvas/do-fetch-api-effect'
 import {showFlashAlert} from '@canvas/alerts/react/FlashAlert'
 import ContextModulesPublishIcon from '../react/ContextModulesPublishIcon'
 import {updateModuleItem, itemContentKey} from '../jquery/utils'
-import RelockModulesDialog from '../backbone/views/RelockModulesDialog'
-import {
+import RelockModulesDialog from '@canvas/relock-modules-dialog'
+import type {
   CanvasId,
   DoFetchModuleResponse,
   DoFetchModuleItemsResponse,
@@ -54,14 +54,18 @@ export function publishModule(courseId: CanvasId, moduleId: CanvasId, skipItems:
   )
 }
 
-export function unpublishModule(courseId: CanvasId, moduleId: CanvasId) {
-  const loadingMessage = I18n.t('Unpublishing module and items')
-  const successMessage = I18n.t('Module and items unpublished')
+export function unpublishModule(courseId: CanvasId, moduleId: CanvasId, skipItems: boolean) {
+  const loadingMessage = skipItems
+    ? I18n.t('Unpublishing module')
+    : I18n.t('Unpublishing module and items')
+  const successMessage = skipItems
+    ? I18n.t('Module unpublished')
+    : I18n.t('Module and items unpublished')
   exportFuncs.batchUpdateOneModuleApiCall(
     courseId,
     moduleId,
     false,
-    false,
+    skipItems,
     loadingMessage,
     successMessage
   )
@@ -260,10 +264,19 @@ export function renderContextModulesPublishIcon(
 ) {
   const publishIcon = findModulePublishIcon(moduleId)
   if (publishIcon) {
+    const moduleElement = $(publishIcon).parents('.context_module')[0]
+    if (moduleElement) {
+      moduleElement.setAttribute('data-workflow-state', published ? 'active' : 'unpublished')
+    }
     const moduleName =
       publishIcon?.closest('.context_module')?.querySelector('.ig-header-title')?.textContent ||
       `module${moduleId}`
-    ReactDOM.render(
+    let root = publishIcon.reactRoot
+    if (root === undefined) {
+      root = ReactDOM.createRoot(publishIcon)
+      publishIcon.reactRoot = root
+    }
+    root?.render(
       <ContextModulesPublishIcon
         courseId={courseId}
         moduleId={moduleId}
@@ -271,8 +284,7 @@ export function renderContextModulesPublishIcon(
         isPublishing={isPublishing}
         published={published}
         loadingMessage={loadingMessage}
-      />,
-      publishIcon
+      />
     )
   }
 }

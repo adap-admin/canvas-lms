@@ -23,7 +23,8 @@ import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
 import PaginatedCollection from '@canvas/pagination/backbone/collections/PaginatedCollection'
 import GroupUser from '../models/GroupUser'
-import h from 'html-escape'
+import h from '@instructure/html-escape'
+import {encodeQueryString} from '@instructure/query-string-encoding'
 
 const I18n = useI18nScope('GroupUserCollection')
 
@@ -54,12 +55,13 @@ GroupUserCollection.prototype.url = function () {
   if (this.markInactiveStudents) {
     params.include.push('active_status')
   }
-  return url_base + $.param(params)
+  return url_base + encodeQueryString(params)
 }
 
 GroupUserCollection.prototype.initialize = function (models) {
   GroupUserCollection.__super__.initialize.apply(this, arguments)
   this.loaded = this.loadedAll = models != null
+  this.lastRequests = []
   this.on('change:group', this.onChangeGroup)
   return (this.model = GroupUser.extend({
     defaults: {
@@ -75,8 +77,10 @@ GroupUserCollection.prototype.load = function (target) {
   }
   this.loadAll = target === 'all'
   this.loaded = true
+
   if (target !== 'none') {
-    this.fetch()
+    const fetchPromise = this.fetch()
+    this.lastRequests.push(fetchPromise)
   }
   return (this.load = function () {})
 }

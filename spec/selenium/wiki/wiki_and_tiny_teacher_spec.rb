@@ -28,12 +28,18 @@ describe "Wiki pages and Tiny WYSIWYG editor" do
       course_with_teacher_logged_in
     end
 
+    it "shows the correct options in 'Users allowed to edit this page' dropdown" do
+      get "/courses/#{@course.id}/pages"
+      f(".new_page").click
+      expect(f("select[name=\"editing_roles\"]").find_elements(:css, "option").map(&:text)).to eq ["Only teachers", "Teachers and students", "Anyone"]
+    end
+
     ["Only teachers", "Teachers and students", "Anyone"].each_with_index do |permission, i|
       it "validates correct permissions for #{permission}" do
         title = "test_page"
         unpublished = false
         edit_roles = "public"
-        validations = ["teachers", "teachers,students", "teachers,students,public"]
+        validations = ["teachers", "teachers,students", "teachers,students,members"]
 
         p = create_wiki_page(title, unpublished, edit_roles)
         get "/courses/#{@course.id}/pages/#{p.title}/edit"

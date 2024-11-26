@@ -19,7 +19,7 @@
 
 import React, {Component} from 'react'
 import {bool, func, instanceOf, number, oneOf, shape, string} from 'prop-types'
-import {ApplyTheme} from '@instructure/ui-themeable'
+import {InstUISettingsProvider} from '@instructure/emotion'
 import {IconButton} from '@instructure/ui-buttons'
 import {Text} from '@instructure/ui-text'
 import {IconCheckMarkSolid, IconExpandStartLine, IconEndSolid} from '@instructure/ui-icons'
@@ -29,19 +29,28 @@ import GradeFormatHelper from '@canvas/grading/GradeFormatHelper'
 
 const I18n = useI18nScope('gradebook')
 
-const themeOverrides = {
-  [IconButton.theme]: {
+const componentOverrides = {
+  IconButton: {
     iconPadding: '0 3px',
     smallHeight: '23px',
   },
 }
 
-function formatGrade(submission, assignment, gradingScheme, enterGradesAs) {
+function formatGrade(
+  submission,
+  assignment,
+  gradingScheme,
+  pointsBasedGradingScheme,
+  enterGradesAs,
+  scalingFactor
+) {
   const formatOptions = {
     defaultValue: '–',
     formatType: enterGradesAs,
     gradingScheme,
+    pointsBasedGradingScheme,
     pointsPossible: assignment.pointsPossible,
+    scalingFactor,
     version: 'final',
   }
 
@@ -83,7 +92,9 @@ export default class ReadOnlyCell extends Component {
     enterGradesAs: oneOf(['gradingScheme', 'passFail', 'percent', 'points']).isRequired,
     gradeIsVisible: bool.isRequired,
     gradingScheme: instanceOf(Array).isRequired,
+    pointsBasedGradingScheme: bool,
     onToggleSubmissionTrayOpen: func.isRequired,
+    scalingFactor: number,
     student: shape({
       id: string.isRequired,
     }).isRequired,
@@ -141,19 +152,36 @@ export default class ReadOnlyCell extends Component {
   }
 
   render() {
-    const {assignment, enterGradesAs, gradeIsVisible, gradingScheme, submission} = this.props
+    const {
+      assignment,
+      enterGradesAs,
+      gradeIsVisible,
+      gradingScheme,
+      pointsBasedGradingScheme,
+      scalingFactor,
+      submission,
+    } = this.props
 
     let content = ''
     if (gradeIsVisible) {
       if (enterGradesAs === 'passFail' && !submission.excused) {
         content = renderCompleteIncompleteGrade(submission.rawGrade)
       } else {
-        content = renderTextGrade(formatGrade(submission, assignment, gradingScheme, enterGradesAs))
+        content = renderTextGrade(
+          formatGrade(
+            submission,
+            assignment,
+            gradingScheme,
+            pointsBasedGradingScheme,
+            enterGradesAs,
+            scalingFactor
+          )
+        )
       }
     }
 
     return (
-      <ApplyTheme theme={themeOverrides}>
+      <InstUISettingsProvider theme={{componentOverrides}}>
         <div className="Grid__GradeCell Grid__ReadOnlyCell">
           <div className="Grid__GradeCell__StartContainer" />
 
@@ -172,7 +200,7 @@ export default class ReadOnlyCell extends Component {
             </div>
           </div>
         </div>
-      </ApplyTheme>
+      </InstUISettingsProvider>
     )
   }
 }

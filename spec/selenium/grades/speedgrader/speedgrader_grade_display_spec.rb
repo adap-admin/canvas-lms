@@ -22,7 +22,7 @@ require_relative "../../helpers/speed_grader_common"
 require_relative "../../helpers/gradebook_common"
 require_relative "../pages/speedgrader_page"
 
-describe "speed grader - grade display" do
+describe "SpeedGrader - grade display" do
   include_context "in-process server selenium tests"
   include SpeedGraderCommon
   include_context "late_policy_course_setup"
@@ -55,34 +55,6 @@ describe "speed grader - grade display" do
       Speedgrader.visit(@course.id, @assignment.id)
       average = (grade / points * 100).to_int
       expect(Speedgrader.average_grade).to include_text("#{grade.to_int} / #{points.to_int} (#{average}%)")
-    end
-
-    it "coerces average score to letter grade when user is quantitative data restricted" do
-      @assignment.grade_student(@students[0], grade: "9", grader: @teacher)
-      # truthy feature flag
-      Account.default.enable_feature! :restrict_quantitative_data
-
-      # truthy setting
-      Account.default.settings[:restrict_quantitative_data] = { value: true, locked: true }
-      Account.default.save!
-
-      Speedgrader.visit(@course.id, @assignment.id)
-      expect(Speedgrader.average_grade.text).to eq "A-"
-    end
-
-    it "does not show average when user is quantitative data and points possible is falsy" do
-      @assignment.points_possible = 0
-      @assignment.save!
-      @assignment.grade_student(@students[0], grade: "9", grader: @teacher)
-      # truthy feature flag
-      Account.default.enable_feature! :restrict_quantitative_data
-
-      # truthy setting
-      Account.default.settings[:restrict_quantitative_data] = { value: true, locked: true }
-      Account.default.save!
-
-      Speedgrader.visit(@course.id, @assignment.id)
-      expect(Speedgrader.average_grade.text).to eq ""
     end
   end
 

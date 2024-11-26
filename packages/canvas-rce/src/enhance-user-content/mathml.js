@@ -16,8 +16,6 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import $ from 'jquery'
-
 const MathJaxDirective = Object.freeze({
   Ignore: 'mathjax_ignore',
   Process: 'mathjax_process',
@@ -41,6 +39,7 @@ const localConfig = {
     },
   },
   showMathMenu: true,
+  messageStyle: 'none',
 }
 
 class Mathml {
@@ -89,7 +88,7 @@ class Mathml {
             mathImageHelper.catchEquationImages(message[1])
           })
           window.MathJax.Hub.Register.MessageHook('Math Processing Error', function (message) {
-            const elem = message[1]
+            const elem = Array.isArray(message[1]) ? message[1][0] : message[1]
             // ".math_equation_latex" is the elem we added for MathJax to typeset the image equation
             if (elem.parentElement?.classList.contains('math_equation_latex')) {
               // The equation we image we were trying to replace and failed is up 1 and back 1.
@@ -103,7 +102,7 @@ class Mathml {
             }
           })
           window.MathJax.Hub.Register.MessageHook('End Math', function (message) {
-            const elem = message[1]
+            const elem = Array.isArray(message[1]) ? message[1][0] : message[1]
             mathImageHelper.removeStrayEquationImages(elem)
             mathImageHelper.nearlyInfiniteStyleFix(elem)
             elem
@@ -111,18 +110,22 @@ class Mathml {
               .forEach(m => m.classList.add('fade-in-equation'))
           })
         } else {
-          // though isMathInElement ignores <math> w/in .hidden-readable elements,
+          // Though isMathInElement ignores <math> with/in .hidden-readable elements,
           // MathJax does not and will process it anyway. This is a problem when
-          // you open the equation editor while editing a quiz and it adds to the DOM
+          // you open the equation editor while editing a quiz, and it adds to the DOM
           // elements that will get saved with the quiz.
           // There's a feature request against MathJax (https://github.com/mathjax/MathJax/issues/505)
           // to add an ignoreClass config prop to the mml2jax processor, but it's not available.
           // Since we want to ignore <math> in .hidden-readable spans, let's remove the MathJunk™
           // right after MathJax adds it.
           window.MathJax.Hub.Register.MessageHook('End Math', function (message) {
-            $(message[1])
-              .find('.hidden-readable [class^="MathJax"], .hidden-readable [id^="MathJax"]')
-              .remove()
+            const elm = Array.isArray(message[1]) ? message[1][0] : message[1]
+            const elements = elm.querySelectorAll(
+              '.hidden-readable [class^="MathJax"], .hidden-readable [id^="MathJax"]'
+            )
+            elements.forEach(function (element) {
+              element.remove()
+            })
           })
         }
 
@@ -177,11 +180,11 @@ class Mathml {
 
     const mathElements = elem.getElementsByTagName('math')
     for (let i = 0; i < mathElements.length; i++) {
-      const $el = $(mathElements[i])
+      const el = mathElements[i]
       if (
-        $el.is(':visible') &&
-        $el.parent('.hidden-readable').length <= 0 &&
-        $el.parent('.MJX_Assistive_MathML').length <= 0 // already mathjax'd
+        el.offsetParent !== null &&
+        !el.closest('.hidden-readable') &&
+        !el.closest('.MJX_Assistive_MathML') // already mathjax'd
       ) {
         return true
       }
@@ -291,6 +294,7 @@ const mathImageHelper = {
   },
 
   catchEquationImages(refnode) {
+    refnode = Array.isArray(refnode) ? refnode[0] : refnode
     // find equation images and replace with inline LaTeX
     const eqimgs = refnode.querySelectorAll('img.equation_image')
     if (eqimgs.length > 0) {
@@ -356,4 +360,4 @@ function handleNewMath(event) {
 
 window.addEventListener(Mathml.processNewMathEventName, handleNewMath)
 
-export {Mathml as default, mathImageHelper, MathJaxDirective}
+export {Mathml, mathImageHelper, MathJaxDirective}

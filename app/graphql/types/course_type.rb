@@ -28,8 +28,8 @@ module Types
   class SubmissionOrderInputType < BaseInputObject
     graphql_name "SubmissionOrderCriteria"
 
-    argument :field, SubmissionOrderFieldType, required: true
     argument :direction, OrderDirectionType, required: false
+    argument :field, SubmissionOrderFieldType, required: true
   end
 
   class CourseType < ApplicationObjectType
@@ -71,6 +71,15 @@ module Types
       value "StudentViewEnrollment"
     end
 
+    class CourseGradeStatus < BaseEnum
+      description "Grade statuses that can be applied to submissions in a course"
+      value "late"
+      value "missing"
+      value "none"
+      value "excused"
+      value "extended"
+    end
+
     class CourseUsersFilterInputType < Types::BaseInputObject
       graphql_name "CourseUsersFilter"
 
@@ -93,22 +102,45 @@ module Types
                required: false
     end
 
+    class CourseSectionsFilterInputType < Types::BaseInputObject
+      graphql_name "CourseSectionsFilter"
+
+      argument :assignment_id,
+               ID,
+               "Only include sections associated with users assigned to this assignment",
+               prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func("Assignment"),
+               required: false
+    end
+
     implements GraphQL::Types::Relay::Node
     implements Interfaces::TimestampInterface
     implements Interfaces::LegacyIDInterface
 
     global_id_field :id
-    key_field_id
 
-    field :name, String, null: false
     field :course_code, String, "course short name", null: true
-    field :syllabus_body, String, null: true
+    field :name, String, null: false
     field :state, CourseWorkflowState, method: :workflow_state, null: false
+    field :syllabus_body, String, null: true
 
     field :assignment_groups_connection,
           AssignmentGroupType.connection_type,
           method: :assignment_groups,
           null: true
+
+    def assignment_groups_connection
+      assignment_groups = object.assignment_groups
+      assignment_groups.where(workflow_state: "available")
+    end
+
+    field :assignment_groups,
+          [AssignmentGroupType],
+          null: true
+
+    def assignment_groups
+      assignment_groups = object.assignment_groups
+      assignment_groups.where(workflow_state: "available")
+    end
 
     field :apply_group_weights, Boolean, null: true
     def apply_group_weights
@@ -151,16 +183,34 @@ module Types
       Loaders::CourseOutcomeAlignmentStatsLoader.load(course) if course&.grants_right?(current_user, session, :manage_outcomes)
     end
 
-    field :sections_connection, SectionType.connection_type, null: true
-    def sections_connection
-      course.active_course_sections
-            .order(CourseSection.best_unicode_collation_key("name"))
+    field :sections_connection, SectionType.connection_type, null: true do
+      argument :filter, CourseSectionsFilterInputType, required: false
+    end
+
+    def sections_connection(filter: {})
+      scope = course.active_course_sections
+
+      if filter[:assignment_id]
+        assignment = course.assignments.active.find(filter[:assignment_id])
+        scope = scope.where(id: assignment.sections_for_assigned_students) if assignment.only_visible_to_overrides?
+      end
+
+      scope.order(CourseSection.best_unicode_collation_key("name"))
+    rescue ActiveRecord::RecordNotFound
+      raise GraphQL::ExecutionError, "assignment not found"
     end
 
     field :modules_connection, ModuleType.connection_type, null: true
     def modules_connection
       course.modules_visible_to(current_user)
             .order("name")
+    end
+
+    field :rubrics_connection, RubricType.connection_type, null: true
+    def rubrics_connection
+      rubric_associations = course.rubric_associations.bookmarked.include_rubric.to_a
+      rubric_associations = Canvas::ICU.collate_by(rubric_associations.select(&:rubric_id).uniq(&:rubric_id)) { |r| r.rubric.title }
+      rubric_associations.map(&:rubric)
     end
 
     field :users_connection, UserType.connection_type, null: true do
@@ -208,6 +258,15 @@ module Types
     field :enrollments_connection, EnrollmentType.connection_type, null: true do
       argument :filter, EnrollmentFilterInputType, required: false
     end
+
+    field :custom_grade_statuses_connection, CustomGradeStatusType.connection_type, null: true
+    def custom_grade_statuses_connection
+      return unless Account.site_admin.feature_enabled?(:custom_gradebook_statuses)
+      return unless course.grants_any_right?(current_user, session, :manage_grades, :view_all_grades)
+
+      course.custom_grade_statuses.active.order(:id)
+    end
+
     def enrollments_connection(filter: {})
       return nil unless course.grants_any_right?(
         current_user,
@@ -218,7 +277,8 @@ module Types
       )
 
       context.scoped_merge!(course:)
-      scope = course.apply_enrollment_visibility(course.all_enrollments, current_user).active
+      scope = course.apply_enrollment_visibility(course.all_enrollments, current_user)
+      scope = filter[:states].present? ? scope.where(workflow_state: filter[:states]) : scope.active
       scope = scope.where(associated_user_id: filter[:associated_user_ids]) if filter[:associated_user_ids].present?
       scope = scope.where(type: filter[:types]) if filter[:types].present?
       scope
@@ -229,6 +289,9 @@ module Types
       GradingPeriod.for(course).order(:start_date)
     end
 
+    field :relevant_grading_period_group, GradingPeriodGroupType, null: true
+    delegate :relevant_grading_period_group, to: :object
+
     field :grading_standard, GradingStandardType, null: true
     def grading_standard
       object.grading_standard_or_default
@@ -237,13 +300,13 @@ module Types
     field :submissions_connection, SubmissionType.connection_type, null: true do
       description "all the submissions for assignments in this course"
 
+      argument :filter, SubmissionFilterInputType, required: false
+      argument :order_by, [SubmissionOrderInputType], required: false
       argument :student_ids,
                [ID],
                "Only return submissions for the given students.",
                prepare: GraphQLHelpers.relay_or_legacy_ids_prepare_func("User"),
                required: false
-      argument :order_by, [SubmissionOrderInputType], required: false
-      argument :filter, SubmissionFilterInputType, required: false
     end
     def submissions_connection(student_ids: nil, order_by: [], filter: {})
       allowed_user_ids = if course.grants_any_right?(current_user, session, :manage_grades, :view_all_grades)
@@ -297,13 +360,48 @@ module Types
       end
     end
 
-    field :group_sets_connection, GroupSetType.connection_type, <<~MD, null: true
-      Project group sets for this course.
-    MD
-    def group_sets_connection
-      if course.grants_any_right?(current_user, :manage_groups, *RoleOverride::GRANULAR_MANAGE_GROUPS_PERMISSIONS)
-        course.group_categories.where(role: nil)
+    def get_group_sets(course, include_non_collaborative: false)
+      return [] unless course
+
+      # Check user permissions
+      can_manage_groups = course&.grants_any_right?(current_user, *RoleOverride::GRANULAR_MANAGE_GROUPS_PERMISSIONS)
+      can_manage_tags   = course&.grants_any_right?(current_user, *RoleOverride::GRANULAR_MANAGE_TAGS_PERMISSIONS)
+
+      # Only return group sets if the user has permission to manage groups or tags
+      return [] unless can_manage_groups || can_manage_tags
+
+      # If a user only has permission to see tags but doesn't want them included, return early
+      return [] if can_manage_tags && !can_manage_groups && !include_non_collaborative
+
+      # Get all GroupCategory models for the context, this includes Tags AND Group Sets
+      group_sets = GroupCategory.where(context: course, role: nil).active
+
+      if can_manage_groups && can_manage_tags
+        group_sets = group_sets.collaborative unless include_non_collaborative
+      elsif can_manage_groups
+        group_sets = group_sets.collaborative
+      elsif can_manage_tags
+        group_sets = group_sets.non_collaborative
       end
+
+      group_sets
+    end
+
+    field :group_sets_connection, GroupSetType.connection_type, null: true do
+      description "Project group sets for this course."
+      argument :include_non_collaborative, Boolean, required: false, default_value: false
+    end
+    def group_sets_connection(include_non_collaborative: false)
+      get_group_sets(course, include_non_collaborative:)
+    end
+
+    # TODO: this is only temporary until the group_sets_connection gets paginated
+    field :group_sets, [GroupSetType], null: true do
+      description "Project group sets for this course."
+      argument :include_non_collaborative, Boolean, required: false, default_value: false
+    end
+    def group_sets(include_non_collaborative: false)
+      get_group_sets(course, include_non_collaborative:)
     end
 
     field :external_tools_connection, ExternalToolType.connection_type, null: true do
@@ -381,5 +479,32 @@ module Types
     end
 
     field :root_outcome_group, LearningOutcomeGroupType, null: false
+
+    field :grade_statuses, [CourseGradeStatus], null: false
+
+    field :dashboard_card, CourseDashboardCardType, "returns dashboard card information for this course", null: true
+    def dashboard_card
+      object
+    end
+
+    field :activity_stream, ActivityStreamType, null: true
+    def activity_stream
+      context.scoped_set!(:context_type, "Course")
+      object
+    end
+
+    field :available_moderators, UserType.connection_type, null: true
+    def available_moderators
+      return unless course.grants_any_right?(current_user, *RoleOverride::GRANULAR_MANAGE_ASSIGNMENT_PERMISSIONS)
+
+      course.moderators
+    end
+
+    field :available_moderators_count, Integer, null: true
+    def available_moderators_count
+      return unless course.grants_any_right?(current_user, *RoleOverride::GRANULAR_MANAGE_ASSIGNMENT_PERMISSIONS)
+
+      course.moderators.size
+    end
   end
 end

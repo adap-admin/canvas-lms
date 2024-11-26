@@ -72,7 +72,9 @@
 #
 class MediaObjectsController < ApplicationController
   include Api::V1::MediaObject
-  include FilesHelper
+  include AttachmentHelper
+
+  MISSED_MEDIA_ADDITIONAL_COST = 200
 
   before_action :load_media_object, except: %i[create_media_object index]
   before_action :load_media_object_from_service, only: %i[show iframe_media_player]
@@ -81,18 +83,30 @@ class MediaObjectsController < ApplicationController
   before_action :require_user, only: %i[index update_media_object]
   protect_from_forgery only: %i[create_media_object media_object_redirect media_object_inline media_object_thumbnail], with: :exception
 
+  def services_jwt_auth_allowed
+    %w[media_object_redirect iframe_media_player].include?(params[:action]) && Account.site_admin.feature_enabled?(:rce_linked_file_urls)
+  end
+
   # @{not an}API Show Media Object Details
   # This isn't an API because it needs to work for non-logged in users (video in public course)
   #
   # Returns the Details of the given Media Object.
   #
   # @example_request
-  #     curl https://<canvas>/media_objects/<media_object_id> \
+  #     curl https://<canvas>/media_objects/<media_object_id>/info \
+  #          -H 'Authorization: Bearer <token>'
+  #
+  # @example_request
+  #     curl https://<canvas>/media_attachments/<attachment_id>/info \
   #          -H 'Authorization: Bearer <token>'
   #
   # @returns MediaObject
   def show
-    render json: media_object_api_json(@media_object, @current_user, session)
+    if Account.site_admin.feature_enabled?(:media_links_use_attachment_id) && @attachment
+      render json: media_attachment_api_json(@attachment, @media_object, @current_user, session)
+    else
+      render json: media_object_api_json(@media_object, @current_user, session)
+    end
   end
 
   # @API List Media Objects
@@ -223,8 +237,14 @@ class MediaObjectsController < ApplicationController
         @media_object.user_entered_title = CanvasTextHelper.truncate_text(params[:user_entered_title], max_length: 255) if params[:user_entered_title].present?
         @media_object.save
       end
-      render json: @media_object.as_json.merge(embedded_iframe_url: media_object_iframe_url(@media_object.media_id))
-      # render :json => media_object_api_json(@media_object, @current_user, session, %w[sources tracks])
+      media_object_json = @media_object.as_json
+      if Account.site_admin.feature_enabled?(:media_links_use_attachment_id)
+        embedded_iframe_url = media_attachment_iframe_url(@media_object.attachment_id)
+        media_object_json["media_object"]["uuid"] = @media_object.attachment.uuid
+      else
+        embedded_iframe_url = media_object_iframe_url(@media_object.media_id)
+      end
+      render json: media_object_json.merge(embedded_iframe_url:)
     end
   end
 
@@ -241,7 +261,26 @@ class MediaObjectsController < ApplicationController
     @media_object&.viewed!
     config = CanvasKaltura::ClientV3.config
     if config
-      redirect_to CanvasKaltura::ClientV3.new.assetSwfUrl(params[:id])
+      if Account.site_admin.feature_enabled?(:authenticated_iframe_content)
+        begin
+          media_source = @media_object.media_sources.find { |ms| ms[:bitrate].to_s == params[:bitrate].to_s } || @media_object.media_sources.min_by { |ms| ms[:bitrate]&.to_i }
+          url = media_source[:url]
+          # keep track of the redirects and use the last one
+          redirect_spy = ->(res) { url = res.header["location"] }
+          CanvasHttp.get(url, redirect_spy:) do |res|
+            raise CanvasHttp::InvalidResponseCodeError, res.code.to_i unless /^2/.match?(res.code.to_s)
+
+            # don't load body
+          end
+          redirect_to url
+        rescue CanvasHttp::InvalidResponseCodeError => e
+          render plain: e.message, status: e.code
+        rescue Errno::ECONNREFUSED, CanvasHttp::Error => e
+          render plain: e.message, status: :bad_request
+        end
+      else
+        redirect_to CanvasKaltura::ClientV3.new.assetSwfUrl(params[:id])
+      end
     else
       render plain: t(:media_objects_not_configured, "Media Objects not configured")
     end
@@ -264,18 +303,27 @@ class MediaObjectsController < ApplicationController
   end
 
   def iframe_media_player
+    if !Account.site_admin.feature_enabled?(:media_links_use_attachment_id) && @attachment
+      return redirect_to(media_object_iframe_path(@media_object.media_id, params: request.query_parameters))
+    end
+
     # Exclude all global includes from this page
     @exclude_account_js = true
     @embeddable = true
 
     media_api_json = if @attachment && @media_object
-                       media_attachment_api_json(@attachment, @media_object, @current_user, session)
+                       media_attachment_api_json(@attachment, @media_object, @current_user, session, verifier: params[:verifier], access_token: params[:access_token], instfs_id: params[:instfs_id])
                      elsif @media_object
                        media_object_api_json(@media_object, @current_user, session)
                      end
 
     js_env media_object: media_api_json if media_api_json
     js_env attachment: !!@attachment
+    js_env attachment_id: @attachment.id if Account.site_admin.feature_enabled?(:media_links_use_attachment_id) && @attachment
+    consolidated_media_player_enabled = @attachment&.context&.account&.feature_enabled?(:consolidated_media_player) || (@attachment.nil? && @media_object&.context&.account&.feature_enabled?(:consolidated_media_player))
+    # this flag is also injected through the normal js_env for the RCE
+    # but it needs to be added separately here for the iframe because of subaccount weirdness
+    js_env[:FEATURES][:consolidated_media_player_iframe] = true if consolidated_media_player_enabled && js_env[:FEATURES]
     js_bundle :media_player_iframe_content
     css_bundle :media_player
     render html: "<div id='player_container'>#{I18n.t("Loading...")}</div>".html_safe,
@@ -294,7 +342,7 @@ class MediaObjectsController < ApplicationController
       raise ActiveRecord::RecordNotFound, "invalid media_object_id" unless @media_object
 
       @media_object.delay(singleton: "retrieve_media_details:#{@media_object.media_id}").retrieve_details
-      increment_request_cost(Setting.get("missed_media_additional_request_cost", "200").to_i)
+      increment_request_cost(MISSED_MEDIA_ADDITIONAL_COST)
     end
 
     @media_object.viewed!

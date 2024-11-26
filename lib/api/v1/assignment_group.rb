@@ -72,6 +72,10 @@ module Api::V1::AssignmentGroup
         ActiveRecord::Associations.preload(assignments, :score_statistic)
       end
 
+      if includes.include?("checkpoints")
+        ActiveRecord::Associations.preload(assignments, :sub_assignments)
+      end
+
       hash["assignments"] = assignments.map do |assignment|
         overrides = if opts[:overrides].present?
                       opts[:overrides].select { |override| override.assignment_id == assignment.id }
@@ -98,7 +102,8 @@ module Api::V1::AssignmentGroup
                                needs_grading_course_proxy:,
                                submission: includes.include?("submission") ? opts[:submissions][assignment.id] : nil,
                                master_course_status: opts[:master_course_status],
-                               include_assessment_requests: includes.include?("assessment_requests"))
+                               include_assessment_requests: includes.include?("assessment_requests"),
+                               include_checkpoints: includes.include?("checkpoints"))
 
         unless opts[:exclude_response_fields].include?("in_closed_grading_period")
           assignment_closed_grading_period_hash = closed_grading_period_hash[json[:id]] || {}

@@ -277,7 +277,7 @@ module Turnitin
       keys = %i[aid assign assignid cid cpw ctl diagnostic dis dtdue dtstart dtpost encrypt fcmd fid gmtime newassign newupw oid pfn pln ptl ptype said tem uem ufn uid uln upw utp]
       keys.each do |key|
         keys_used << key if params[key].present?
-        str += (params[key] || "")
+        str += params[key] || ""
       end
       str += @shared_secret
       Digest::MD5.hexdigest(str)
@@ -344,8 +344,7 @@ module Turnitin
       params = prepare_params(command, fcmd, args)
 
       if post
-        mp = Multipart::Post.new
-        query, headers = mp.prepare_query(params)
+        query, headers = LegacyMultipart::Post.prepare_query(params)
         http = Net::HTTP.new(@host, 443)
         http.use_ssl = true
         http_response = http.start do |con|
@@ -353,9 +352,11 @@ module Turnitin
           con.read_timeout = 30
           begin
             con.request(req, query)
-          rescue
+          rescue => e
             Rails.logger.error("Turnitin API error for account_id #{@account_id}: POSTING FAILED")
             Rails.logger.error(params.to_json)
+            Canvas::Errors.capture(e, { tags: { type: "turnitin_api_unreachable", host: @host, endpoint: @endpoint } })
+            raise e
           end
         end
       else

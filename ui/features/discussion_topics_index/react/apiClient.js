@@ -17,7 +17,7 @@
  */
 
 import axios from '@canvas/axios'
-import {asAxios, getPrefetchedXHR} from '@instructure/js-utils'
+import {asAxios, getPrefetchedXHR} from '@canvas/util/xhr'
 
 export function getDiscussions({contextType: _contextType, contextId: _contextId}, {page}) {
   // In the the index.html.erb view for this page, we use prefetch_xhr to fire off
@@ -71,4 +71,8 @@ export function reorderPinnedDiscussions({contextType, contextId}, order) {
   const postData = {order: order.join(',')}
   const url = `/api/v1/${contextType}s/${contextId}/discussion_topics/reorder`
   return axios.post(url, postData)
+}
+
+export function migrateDiscussionDisallowThreadedReplies({contextId}) {
+  return axios.put(`/api/v1/courses/${contextId}/discussion_topics/migrate_disallow`)
 }

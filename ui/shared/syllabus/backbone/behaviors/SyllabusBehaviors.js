@@ -19,14 +19,14 @@
 import $ from 'jquery'
 import {changeMonth} from '../../jquery/calendar_move' // calendarMonths
 import RichContentEditor from '@canvas/rce/RichContentEditor'
-import '@canvas/datetime' // dateString, datepicker
-import '@canvas/forms/jquery/jquery.instructure_forms' // formSubmit, formErrors
+import '@canvas/jquery/jquery.instructure_forms' // formSubmit, formErrors
 import '@canvas/jquery/jquery.instructure_misc_plugins' // ifExists, showIf
 import '@canvas/loading-image'
 import 'jquery-scroll-to-visible/jquery.scrollTo'
-import 'jqueryui/datepicker'
+import '@canvas/datetime/jquery/datepicker'
 import easy_student_view from '@canvas/easy-student-view'
-import htmlEscape from 'html-escape'
+import htmlEscape from '@instructure/html-escape'
+import {escape} from 'lodash'
 
 RichContentEditor.preloadRemoteModule()
 
@@ -140,7 +140,8 @@ function bindToMiniCalendar() {
     changeMonth($mini_month, `${month}/${day}/${year}`)
     highlightDaysWithEvents()
     selectDate(date)
-    $(`.events_${date}`).ifExists($events => setTimeout(() => selectRow($events), 0)) // focus race condition hack. why do you do this to me, IE?
+    const eventSelector = escape(`.events_${date}`)
+    $(eventSelector).ifExists($events => setTimeout(() => selectRow($events), 0)) // focus race condition hack. why do you do this to me, IE?
   }
 
   $mini_month.on('keypress', '.day_wrapper', ev => {
@@ -207,6 +208,7 @@ const bindToEditSyllabus = function (course_summary_enabled) {
   $edit_course_syllabus_form.on('edit', () => {
     $edit_course_syllabus_form.show()
     $edit_syllabus_link.hide()
+    $edit_syllabus_link.attr('aria-expanded', 'true')
     $course_syllabus.hide()
     $course_syllabus_details.hide()
     easy_student_view.hide()
@@ -215,6 +217,7 @@ const bindToEditSyllabus = function (course_summary_enabled) {
     RichContentEditor.loadNewEditor($course_syllabus_body, {
       focus: true,
       manageParent: true,
+      resourceType: 'syllabus.body',
     })
 
     $('.jump_to_today_link').focus()
@@ -227,6 +230,7 @@ const bindToEditSyllabus = function (course_summary_enabled) {
   $edit_course_syllabus_form.on('hide_edit', () => {
     $edit_course_syllabus_form.hide()
     $edit_syllabus_link.show()
+    $edit_syllabus_link.attr('aria-expanded', 'false')
     $course_syllabus.show()
     easy_student_view.show()
     const text = $.trim($course_syllabus.html())
@@ -279,6 +283,8 @@ const bindToEditSyllabus = function (course_summary_enabled) {
       /*
       xsslint safeString.property syllabus_body
       */
+      // removing the 'enhanced' class allows any math in the syllabus to re-render on save
+      $course_syllabus.removeClass('enhanced')
       $course_syllabus.loadingImage('remove').html(data.course.syllabus_body)
       $course_syllabus.data('syllabus_body', data.course.syllabus_body)
       $course_syllabus_details.hide()

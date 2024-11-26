@@ -44,18 +44,38 @@ describe SubmissionsController do
       expect(assigns[:submission].url).to eql("http://url")
     end
 
-    it "gracefully handles a submission not yet existing for an assigned student" do
-      course_with_student_logged_in(active_all: true)
+    it "creates a submission if a submission does not yet exist for an assigned student" do
+      course_with_student(active_all: true)
+      course_with_teacher_logged_in(course: @course, active_all: true)
       @course.account.enable_service(:avatars)
       @assignment = @course.assignments.create!(title: "some assignment", submission_types: "online_url,online_upload")
-      Submission.find_by(assignment: @assignment, user: @student).destroy
+      # This simulates a scenario where the SubmissionLifecyleManager job to create submissions for assigned students has
+      # not yet completed.
+      @assignment.submissions.find_by(user: @student).destroy
       post "create", params: {
         course_id: @course.id,
         assignment_id: @assignment.id,
         submission: { submission_type: "online_url", url: "url", user_id: @student.id }
       }
 
-      expect(response).to be_successful
+      aggregate_failures do
+        expect(response).to be_redirect
+        expect(@assignment.submissions.where(user: @student).exists?).to be true
+      end
+    end
+
+    it "returns unauthorized if the student is not assigned" do
+      course_with_student(active_all: true)
+      course_with_teacher_logged_in(course: @course, active_all: true)
+      @course.account.enable_service(:avatars)
+      @assignment = @course.assignments.create!(title: "some assignment", submission_types: "online_url,online_upload", only_visible_to_overrides: true)
+      post "create", params: {
+        course_id: @course.id,
+        assignment_id: @assignment.id,
+        submission: { submission_type: "online_url", url: "url", user_id: @student.id }
+      }
+
+      expect(response).to be_unauthorized
     end
 
     it "only emits one live event" do
@@ -268,8 +288,8 @@ describe SubmissionsController do
       expect(assigns[:submission].submission_type).to eql("online_upload")
       expect(assigns[:submission].attachments).not_to be_empty
       expect(assigns[:submission].attachments.length).to be(2)
-      expect(assigns[:submission].attachments.map(&:display_name)).to be_include("doc.doc")
-      expect(assigns[:submission].attachments.map(&:display_name)).to be_include("txt.txt")
+      expect(assigns[:submission].attachments.map(&:display_name)).to include("doc.doc")
+      expect(assigns[:submission].attachments.map(&:display_name)).to include("txt.txt")
     end
 
     it "fails but not raise when the submission is invalid" do
@@ -606,81 +626,6 @@ describe SubmissionsController do
       end
     end
 
-    context "google doc" do
-      before do
-        course_with_student_logged_in(active_all: true)
-        @course.account.enable_service(:avatars)
-        @assignment = @course.assignments.create!(title: "some assignment", submission_types: "online_upload")
-      end
-
-      it "does not save if domain restriction prevents it" do
-        allow(@student).to receive(:gmail).and_return("student@does-not-match.com")
-        account = Account.default
-        flag    = FeatureFlag.new
-        account.settings[:google_docs_domain] = "example.com"
-        account.save!
-        flag.context = account
-        flag.feature = "google_docs_domain_restriction"
-        flag.state = "on"
-        flag.save!
-        mock_user_service = double
-        allow(@user).to receive(:user_services).and_return(mock_user_service)
-        expect(mock_user_service).to receive(:where).with(service: "google_drive")
-                                                    .and_return(double(first: double(token: "token", secret: "secret")))
-        google_docs = double
-        expect(GoogleDrive::Connection).to receive(:new).and_return(google_docs)
-
-        expect(google_docs).to receive(:download).and_return([Net::HTTPOK.new(200, {}, ""), "title", "pdf"])
-        post(:create, params: { course_id: @course.id,
-                                assignment_id: @assignment.id,
-                                submission: { submission_type: "google_doc" },
-                                google_doc: { document_id: "12345" } })
-        expect(response).to be_redirect
-      end
-
-      it "uses instfs to save google doc if instfs is enabled" do
-        allow(InstFS).to receive(:enabled?).and_return(true)
-        uuid = "1234-abcd"
-        allow(InstFS).to receive(:direct_upload).and_return(uuid)
-
-        attachment = @assignment.submissions.first.attachments.new
-        SubmissionsController.new.store_google_doc_attachment(attachment, File.open("public/images/a.png"))
-        expect(attachment.instfs_uuid).to eq uuid
-      end
-
-      it "gracefully reports a gdrive timeout" do
-        mock_user_service = double
-        allow(@user).to receive(:user_services).and_return(mock_user_service)
-        expect(mock_user_service).to receive(:where).with(service: "google_drive")
-                                                    .and_return(double(first: double(token: "token", secret: "secret")))
-        google_docs = double
-        expect(GoogleDrive::Connection).to receive(:new).and_return(google_docs)
-        expect(google_docs).to receive(:download).and_raise(GoogleDrive::ConnectionException, "fake conn timeout")
-        post(:create, params: { course_id: @course.id,
-                                assignment_id: @assignment.id,
-                                submission: { submission_type: "google_doc" },
-                                google_doc: { document_id: "12345" } })
-        expect(response).to be_redirect
-        expect(flash[:error]).to eq("Timed out while talking to google drive")
-      end
-
-      it "gracefully reports an invalid entry" do
-        mock_user_service = double
-        allow(@user).to receive(:user_services).and_return(mock_user_service)
-        expect(mock_user_service).to receive(:where).with(service: "google_drive")
-                                                    .and_return(double(first: double(token: "token", secret: "secret")))
-        google_docs = double
-        expect(GoogleDrive::Connection).to receive(:new).and_return(google_docs)
-        expect(google_docs).to receive(:download).and_raise(GoogleDrive::WorkflowError, "fake bad entry")
-        post(:create, params: { course_id: @course.id,
-                                assignment_id: @assignment.id,
-                                submission: { submission_type: "google_doc" },
-                                google_doc: { document_id: "12345" } })
-        expect(response).to be_redirect
-        expect(flash[:error]).to eq("Google Drive entry was unable to be downloaded")
-      end
-    end
-
     describe "confetti celebrations" do
       before do
         Account.default.enable_feature!(:confetti_for_assignments)
@@ -903,6 +848,53 @@ describe SubmissionsController do
       expect(submission.read?(@teacher)).to be_falsey
     end
 
+    it "mark sub assignment submissions as read if reading parent assignment one's own submission" do
+      @course.root_account.enable_feature!(:discussion_checkpoints)
+      user_session(@student)
+      request.accept = Mime[:json].to_s
+
+      discussion_topic = DiscussionTopic.create_graded_topic!(course: @course, title: "late discussion")
+      due_at = 1.week.from_now
+      Checkpoints::DiscussionCheckpointCreatorService.call(
+        discussion_topic:,
+        checkpoint_label: CheckpointLabels::REPLY_TO_TOPIC,
+        dates: [{ type: "everyone", due_at: }],
+        points_possible: 20
+      )
+
+      Checkpoints::DiscussionCheckpointCreatorService.call(
+        discussion_topic:,
+        checkpoint_label: CheckpointLabels::REPLY_TO_ENTRY,
+        dates: [{ type: "everyone", due_at: }],
+        points_possible: 10,
+        replies_required: 1
+      )
+
+      entry = discussion_topic.discussion_entries.create!(user: @student)
+      sub_entry = discussion_topic.discussion_entries.build
+      sub_entry.parent_id = entry.id
+      sub_entry.user_id = @student.id
+      sub_entry.save!
+      @submission.mark_unread(@student)
+      @submission.save!
+      checkpointed_assignment = Assignment.last
+      reply_to_topic = checkpointed_assignment.sub_assignments.find_by(sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC)
+      reply_to_entry = checkpointed_assignment.sub_assignments.find_by(sub_assignment_tag: CheckpointLabels::REPLY_TO_ENTRY)
+      reply_to_topic.grade_student(@student, grade: 15, grader: @teacher)
+      reply_to_entry.grade_student(@student, grade: 10, grader: @teacher)
+
+      expect(checkpointed_assignment.submissions.find_by(user: @student).unread?(@student)).to be_truthy
+      expect(reply_to_topic.submissions.find_by(user: @student).unread?(@student)).to be_truthy
+      expect(reply_to_entry.submissions.find_by(user: @student).unread?(@student)).to be_truthy
+
+      get :show, params: { course_id: @course.id, assignment_id: checkpointed_assignment.id, id: @student.id }, format: :json
+      expect(response).to be_successful
+
+      expect(checkpointed_assignment.submissions.find_by(user: @student).read?(@student)).to be_truthy
+      expect(reply_to_topic.submissions.find_by(user: @student).read?(@student)).to be_truthy
+      expect(reply_to_entry.submissions.find_by(user: @student).read?(@student)).to be_truthy
+    end
+
     it "renders json with scores for teachers for unposted submissions" do
       @assignment.ensure_post_policy(post_manually: true)
       request.accept = Mime[:json].to_s
@@ -912,6 +904,14 @@ describe SubmissionsController do
       expect(body["grade"]).to eq "10"
       expect(body["published_grade"]).to eq "10"
       expect(body["published_score"]).to eq 10
+    end
+
+    it "renders a submission status pill if the submission has a custom status" do
+      @submission.update!(workflow_state: "submitted")
+      status = CustomGradeStatus.create!(root_account: @course.root_account, name: "CARROT", color: "#000000", created_by: @teacher)
+      @submission.update!(custom_grade_status: status)
+      get :show, params: { course_id: @context.id, assignment_id: @assignment.id, id: @student.id }, format: :json
+      expect(body["custom_grade_status_id"]).to eq status.id
     end
 
     it "renders json without scores for students for unposted submissions" do
@@ -1238,26 +1238,26 @@ describe SubmissionsController do
     context "when the submission's turnitin data contains a report URL" do
       before do
         submission.update!(turnitin_data: { asset_string => { report_url: "MY_GREAT_REPORT" } })
-      end
 
-      it "redirects to the course tool retrieval URL" do
         get "turnitin_report", params: {
           course_id: assignment.context_id,
           assignment_id: assignment.id,
           submission_id: student.id,
           asset_string:
         }
+      end
+
+      it "redirects to the course tool retrieval URL" do
         expect(response).to redirect_to(/#{retrieve_course_external_tools_url(course.id)}/)
       end
 
       it "includes the report URL in the redirect" do
-        get "turnitin_report", params: {
-          course_id: assignment.context_id,
-          assignment_id: assignment.id,
-          submission_id: student.id,
-          asset_string:
-        }
         expect(response).to redirect_to(/MY_GREAT_REPORT/)
+      end
+
+      it "includes prefer_1_1 in the redirect URI" do
+        redirect_uri = URI.parse(response.location)
+        expect(redirect_uri.query.split("&")).to include("prefer_1_1=true")
       end
     end
 
@@ -1311,10 +1311,10 @@ describe SubmissionsController do
       }
     end
 
-    it "renders unauthorized if user does not have view_audit_trail permission" do
+    it "renders forbidden if user does not have view_audit_trail permission" do
       @teacher.account.role_overrides.where(permission: :view_audit_trail).destroy_all
       get :audit_events, params:, format: :json
-      expect(response).to have_http_status(:unauthorized)
+      expect(response).to have_http_status(:forbidden)
     end
 
     it "renders ok if user does have view_audit_trail permission" do

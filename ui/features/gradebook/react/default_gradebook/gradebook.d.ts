@@ -16,6 +16,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+import type {ProgressData, DeprecatedGradingScheme} from '@canvas/grading/grading.d'
+import type {GradeStatusUnderscore} from '@canvas/grading/accountGradingStatus'
 import StudentDatastore from './stores/StudentDatastore'
 import type {StatusColors} from './constants/colors'
 import type {
@@ -23,7 +25,6 @@ import type {
   AttachmentData,
   GradingPeriod,
   GradingPeriodSet,
-  GradingScheme,
   GradingStandard,
   Module,
   ModuleMap,
@@ -45,15 +46,20 @@ export type GradebookSettings = {
   enter_grades_as: any
   filter_columns_by: {
     assignment_group_id: string | null
+    assignment_group_ids?: string[] | null
     grading_period_id: string | null
     context_module_id: string | null
+    context_module_ids?: string[] | null
     end_date: string | null
     start_date: string | null
     submissions: SubmissionFilterValue | null // affects rows too
+    submission_filters?: SubmissionFilterValue[] | null
   }
   filter_rows_by: {
     section_id: string | null
+    section_ids?: string[] | null
     student_group_id: string | null
+    student_group_ids?: string[] | null
   }
   hide_assignment_group_totals: 'false' | 'true'
   hide_total: 'false' | 'true'
@@ -88,6 +94,7 @@ export type GradebookOptions = {
   allow_apply_score_to_ungraded: boolean
   allow_separate_first_last_names: boolean
   allow_view_ungraded_as_zero: boolean
+  assignment_enhancements_enabled: boolean
   assignment_missing_shortcut: boolean
   attachment_url: null | string
   attachment: null | AttachmentData
@@ -105,9 +112,12 @@ export type GradebookOptions = {
   course_url: string
   current_grading_period_id: string
   currentUserId: string
+  custom_column_data_url: string
   custom_column_datum_url: string
   custom_column_url: string
   custom_columns_url: string
+  custom_grade_statuses: GradeStatusUnderscore[]
+  custom_grade_statuses_enabled: boolean
   default_grading_standard: GradingStandard[]
   download_assignment_submissions_url: string
   enhanced_gradebook_filters: boolean
@@ -127,24 +137,29 @@ export type GradebookOptions = {
   gradebook_is_editable: boolean
   gradebook_score_to_ungraded_progress: null | ProgressData
   graded_late_submissions_exist: boolean
+  grades_are_weighted: boolean
   grading_period_set: GradingPeriodSet
-  grading_schemes: GradingScheme[]
-  grading_standard: boolean
+  grading_schemes: DeprecatedGradingScheme[]
+  grading_standard: GradingStandard[]
+  grading_standard_scaling_factor: number
+  grading_standard_points_based: boolean
   group_weighting_scheme: null | string
   has_modules: boolean
-  individual_gradebook_enhancements: boolean
   late_policy: LatePolicy | null
   login_handle_name: null | string
   message_attachment_upload_folder_id: string
+  multiselect_gradebook_filters_enabled: boolean
   outcome_gradebook_enabled: boolean
   performance_controls: PerformanceControlValues
   post_grades_feature: boolean
   post_grades_ltis: Lti[]
   post_manually: boolean
+  proxy_submissions_allowed: boolean
   publish_to_sis_enabled: boolean
   publish_to_sis_url: string
   re_upload_submissions_url: string
   reorder_custom_columns_url: string
+  rubric_assessment_imports_exports_enabled: boolean
   save_view_ungraded_as_zero_to_server: boolean
   sections: Section[]
   setting_update_url: string
@@ -158,6 +173,7 @@ export type GradebookOptions = {
   sis_app_url: null | string
   sis_name: string
   speed_grader_enabled: boolean
+  stickers_enabled: boolean
   student_groups: StudentGroupCategoryMap
   user_asset_string: string
   teacher_notes: {
@@ -219,9 +235,9 @@ export type GradingPeriodAssignmentMap = {
 
 export type CourseContent = {
   contextModules: Module[]
-  courseGradingScheme: GradingScheme | null
-  defaultGradingScheme: GradingScheme | null
-  gradingSchemes: GradingScheme[]
+  courseGradingScheme: DeprecatedGradingScheme | null
+  defaultGradingScheme: DeprecatedGradingScheme | null
+  gradingSchemes: DeprecatedGradingScheme[]
   gradingPeriodAssignments: GradingPeriodAssignmentMap
   assignmentStudentVisibility: {[assignmentId: string]: null | StudentMap}
   latePolicy?: LatePolicyCamelized
@@ -255,6 +271,7 @@ export type PendingGradeInfo = {
   score: number | null
   userId?: string
   valid: boolean
+  subAssignmentTag?: string
 }
 
 export type InitialActionStates = {
@@ -285,6 +302,13 @@ export type Filter = {
   created_at: string
 }
 
+export type EnrollmentFilter = {
+  concluded: boolean
+  inactive: boolean
+}
+
+export type CustomStatusIdString = `custom-status-${string}`
+
 export type SubmissionFilterValue =
   | 'dropped'
   | 'excused'
@@ -296,6 +320,7 @@ export type SubmissionFilterValue =
   | 'late'
   | 'missing'
   | 'resubmitted'
+  | CustomStatusIdString
 
 export type FilterPreset = {
   id: string
@@ -359,10 +384,6 @@ export type ColumnOrderSettings = {
   direction?: SortDirection
   freezeTotalGrade?: boolean | 'true'
   sortType: string
-}
-
-export type ProgressData = {
-  progress: Progress
 }
 
 export type FilteredContentInfo = {
@@ -433,13 +454,6 @@ export type AssignmentWithOverride = {
     course_section_id: string
     due_at: null | Date
   }
-}
-
-export type Progress = {
-  id: string
-  workflow_state: string
-  message?: string
-  updated_at?: string
 }
 
 export type ProgressCamelized = {

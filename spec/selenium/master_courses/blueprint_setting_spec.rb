@@ -34,7 +34,7 @@ describe "master courses - settings" do
 
   it "blueprint course selected in settings", priority: "1" do
     get "/courses/#{@test_course.id}/settings"
-    expect(is_checked("input[type=checkbox][name=course[blueprint]]")).to be_truthy
+    expect(is_checked("input[type=checkbox][name='course[blueprint]']")).to be_truthy
   end
 
   it "blueprint course un-selected in settings", priority: "1" do
@@ -43,7 +43,7 @@ describe "master courses - settings" do
     wait_for_ajaximations
     wait_for_new_page_load { submit_form("#course_form") }
     expect(MasterCourses::MasterTemplate).not_to be_is_master_course @course
-    expect(is_checked("input[type=checkbox][name=course[blueprint]]")).not_to be_truthy
+    expect(is_checked("input[type=checkbox][name='course[blueprint]']")).not_to be_truthy
   end
 
   it "leaves box unchecked for non-blueprint course", priority: "1" do
@@ -72,29 +72,7 @@ describe "master courses - settings" do
     expect(f("#peoplesearch_select_role")).not_to include_text("Student")
   end
 
-  it "enables blueprint setting based on user permission", priority: 2 do
-    @account.root_account.disable_feature!(:granular_permissions_manage_courses)
-    role1 = @account.roles.create!(name: "normal admin", base_role_type: "AccountMembership")
-    @account.role_overrides.create!(role: role1, permission: :manage_courses, enabled: true)
-
-    role2 = @account.roles.create!(name: "blueprint admin", base_role_type: "AccountMembership")
-    @account.role_overrides.create!(permission: :manage_courses, enabled: true, role: role2)
-    @account.role_overrides.create!(permission: :manage_master_courses, enabled: true, role: role2)
-
-    normal_admin = account_admin_user(role: role1, name: "Anakin")
-    blueprint_admin = account_admin_user(role: role2, name: "Obi-Wan")
-
-    user_session(normal_admin)
-    get "/courses/#{@test_course.id}/settings"
-    expect(f("#course_blueprint")).to include_text("Yes")
-
-    user_session(blueprint_admin)
-    get "/courses/#{@test_course.id}/settings"
-    expect(fj('.bcs_check-box:contains("Enable course as a Blueprint Course")')).to be_displayed
-  end
-
-  it "enables blueprint setting based on user permission (granular permissions)" do
-    @account.root_account.enable_feature!(:granular_permissions_manage_courses)
+  it "enables blueprint setting based on user permission" do
     role1 = @account.roles.create!(name: "normal admin", base_role_type: "AccountMembership")
     @account.role_overrides.create!(role: role1, permission: :manage_courses_admin, enabled: true)
 

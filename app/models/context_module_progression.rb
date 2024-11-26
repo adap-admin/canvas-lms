@@ -30,8 +30,8 @@ class ContextModuleProgression < ActiveRecord::Base
 
   after_save :touch_user
 
-  serialize :requirements_met, Array
-  serialize :incomplete_requirements, Array
+  serialize :requirements_met, type: Array
+  serialize :incomplete_requirements, type: Array
 
   validates :user_id, :context_module_id, presence: true
 
@@ -280,7 +280,7 @@ class ContextModuleProgression < ActiveRecord::Base
       score = get_submission_score(sub)
 
       new_score = near_enough?(score, score.round) ? score.round : score if score.present?
-      requirement_met = (score.present? && new_score.to_f >= requirement[:min_score].to_f)
+      requirement_met = score.present? && new_score.to_f >= requirement[:min_score].to_f
       if requirement_met
         remove_incomplete_requirement(requirement[:id])
       else
@@ -314,10 +314,10 @@ class ContextModuleProgression < ActiveRecord::Base
     end
   end
 
-  def update_requirement_met!(*args)
+  def update_requirement_met!(*)
     retry_count = 0
     begin
-      if update_requirement_met(*args)
+      if update_requirement_met(*)
         save!
         delay_if_production.evaluate!
       end

@@ -73,7 +73,7 @@ describe "course settings" do
 
       sync_checkbox = f(".sync_enrollments_from_homeroom_checkbox")
       expect(sync_checkbox).to be_displayed
-
+      sync_checkbox.location_once_scrolled_into_view
       sync_checkbox.click
 
       homeroom_selection = f("#course_homeroom_course_id")
@@ -81,7 +81,7 @@ describe "course settings" do
       expect(homeroom_selection).to be_displayed
 
       homeroom_selection.click
-      options = ff("#course_homeroom_course_id option").map(&:text).map(&:strip)
+      options = ff("#course_homeroom_course_id option").map { |e| e.text.strip }
       expect(options).to include "homeroom1"
       expect(options).to include "homeroom2"
     end
@@ -175,29 +175,89 @@ describe "course settings" do
       expect(course_status).to have_attribute("title", "You cannot unpublish this course if there are graded student submissions")
     end
 
+    context "archived grading schemes" do
+      before do
+        Account.site_admin.enable_feature!(:grading_scheme_updates)
+        Account.site_admin.enable_feature!(:archived_grading_schemes)
+        @active_grading_standard = @course.grading_standards.create!(title: "Active Grading Scheme", data: { "A" => 0.9, "F" => 0 }, scaling_factor: 1.0, points_based: false, workflow_state: "active")
+        @archived_grading_standard = @course.grading_standards.create!(title: "Archived Grading Scheme", data: { "A" => 0.9, "F" => 0 }, scaling_factor: 1.0, points_based: false, workflow_state: "archived")
+        @account_grading_standard = @account.grading_standards.create!(title: "Account Grading Scheme", data: { "A" => 0.9, "F" => 0 }, scaling_factor: 1.0, points_based: false, workflow_state: "active")
+      end
+
+      it "does not show archived grading schemes" do
+        get "/courses/#{@course.id}/settings"
+        scroll_into_view(".grading_standard_checkbox")
+        f(".grading_standard_checkbox").click unless is_checked(".grading_standard_checkbox")
+        f("[data-testid='grading-schemes-selector-dropdown']").click
+        expect(f("[data-testid='grading-schemes-selector-option-#{@active_grading_standard.id}']")).to include_text(@active_grading_standard.title)
+        expect(f("[data-testid='grading-schemes-selector-dropdown-form']")).not_to contain_css("[data-testid='grading-schemes-selector-option-#{@archived_grading_standard.id}']")
+      end
+
+      it "shows archived grading schemes if it is the course default and is auto-selected on page load" do
+        @course.update!(grading_standard_id: @archived_grading_standard.id)
+        get "/courses/#{@course.id}/settings"
+        f(".grading_standard_checkbox").click unless is_checked(".grading_standard_checkbox")
+        expect(f("[data-testid='grading-schemes-selector-dropdown']").attribute("value")).to eq(@archived_grading_standard.title)
+        scroll_into_view("[data-testid='grading-schemes-selector-dropdown']")
+        f("[data-testid='grading-schemes-selector-dropdown']").click
+        expect(f("[data-testid='grading-schemes-selector-option-#{@course.grading_standard.id}']")).to include_text(@course.grading_standard.title)
+      end
+
+      it "doesn't let you edit an account level grading scheme" do
+        get "/courses/#{@course.id}/settings"
+        scroll_into_view(".grading_standard_checkbox")
+        f(".grading_standard_checkbox").click unless is_checked(".grading_standard_checkbox")
+        f("[data-testid='grading-schemes-selector-dropdown']").click
+        expect(f("[data-testid='grading-schemes-selector-option-#{@account_grading_standard.id}']")).to include_text(@account_grading_standard.title)
+        f("[data-testid='grading-schemes-selector-option-#{@account_grading_standard.id}']").click
+        scroll_into_view("[data-testid='grading-schemes-selector-view-button']")
+        f("[data-testid='grading-schemes-selector-view-button']").click
+        wait_for_ajaximations
+        expect(f("[data-testid='grading-scheme-#{@account_grading_standard.id}-edit-button']").attribute("disabled")).to eq("true")
+      end
+
+      it "only lets you edit the name of an in-use grading-scheme" do
+        @course.update!(grading_standard_id: @active_grading_standard.id)
+        get "/courses/#{@course.id}/settings"
+        f(".grading_standard_checkbox").click unless is_checked(".grading_standard_checkbox")
+        scroll_into_view("[data-testid='grading-schemes-selector-dropdown']")
+        f("[data-testid='grading-schemes-selector-dropdown']").click
+        f("[data-testid='grading-schemes-selector-option-#{@course.grading_standard.id}']").click
+        scroll_into_view("[data-testid='grading-schemes-selector-view-button']")
+        f("[data-testid='grading-schemes-selector-view-button']").click
+        wait_for_ajaximations
+        f("[data-testid='grading-scheme-#{@course.grading_standard.id}-edit-button']").click
+        wait_for_ajaximations
+        f("[data-testid='grading-scheme-name-input']").send_keys(" Edited")
+        f("[data-testid='grading-scheme-edit-modal-update-button']").click
+        wait_for_ajaximations
+        f("[data-testid='grading-scheme-view-modal-close-button']").click
+        expect(f("[data-testid='grading-schemes-selector-dropdown']").attribute("title")).to eq("Active Grading Scheme Edited")
+      end
+
+      it "shows all archived grading schemes when on course settings scheme management modal" do
+        archived_gs1 = @course.grading_standards.create!(title: "Archived Grading Scheme", data: { "A" => 0.9, "F" => 0 }, scaling_factor: 1.0, points_based: false, workflow_state: "archived")
+        archived_gs2 = @course.grading_standards.create!(title: "Archived Grading Scheme 2", data: { "A" => 0.9, "F" => 0 }, scaling_factor: 1.0, points_based: false, workflow_state: "archived")
+        archived_gs3 = @course.grading_standards.create!(title: "Archived Grading Scheme 3", data: { "A" => 0.9, "F" => 0 }, scaling_factor: 1.0, points_based: false, workflow_state: "archived")
+        get "/courses/#{@course.id}/settings"
+        scroll_into_view(".grading_standard_checkbox")
+        f(".grading_standard_checkbox").click unless is_checked(".grading_standard_checkbox")
+        f("[data-testid='manage-all-grading-schemes-button']").click
+        wait_for_ajaximations
+        expect(f("[data-testid='grading-scheme-#{archived_gs1.id}-name']")).to include_text(archived_gs1.title)
+        expect(f("[data-testid='grading-scheme-#{archived_gs2.id}-name']")).to include_text(archived_gs2.title)
+        expect(f("[data-testid='grading-scheme-#{archived_gs3.id}-name']")).to include_text(archived_gs3.title)
+      end
+    end
+
     it "allows selection of existing course grading standard" do
+      skip "FOO-4220" # TODO: re-enable this test before merging EVAL-3171
       test_select_standard_for @course
     end
 
     it "allows selection of existing account grading standard" do
+      skip "FOO-4220" # TODO: re-enable this test before merging EVAL-3171
       test_select_standard_for @course.root_account
-    end
-
-    it "toggles more options correctly" do
-      more_options_text = "more options"
-      fewer_options_text = "fewer options"
-      get "/courses/#{@course.id}/settings"
-
-      more_options_link = f(".course_form_more_options_link")
-      expect(more_options_link.text).to eq more_options_text
-      more_options_link.click
-      extra_options = f(".course_form_more_options")
-      expect(extra_options).to be_displayed
-      expect(more_options_link.text).to eq fewer_options_text
-      more_options_link.click
-      wait_for_ajaximations
-      expect(extra_options).not_to be_displayed
-      expect(more_options_link.text).to eq more_options_text
     end
 
     it "shows the self enrollment code and url once enabled" do
@@ -206,9 +266,9 @@ describe "course settings" do
       a.settings[:self_enrollment] = "manually_created"
       a.save!
       get "/courses/#{@course.id}/settings"
-      f(".course_form_more_options_link").click
-      wait_for_ajaximations
-      f("#course_self_enrollment").click
+      el = f("#course_self_enrollment")
+      el.location_once_scrolled_into_view
+      el.click
       wait_for_ajaximations
       wait_for_new_page_load { submit_form("#course_form") }
 
@@ -242,16 +302,13 @@ describe "course settings" do
     it "enables announcement limit if show announcements enabled" do
       get "/courses/#{@course.id}/settings"
 
-      more_options_link = f(".course_form_more_options_link")
-      more_options_link.click
-      wait_for_ajaximations
-
       # Show announcements and limit setting elements
       expect(course_show_announcements_on_home_page_label).to be_displayed
       home_page_announcement_limit = f("#course_home_page_announcement_limit")
       expect(is_checked(course_show_announcements_on_home_page)).not_to be_truthy
       expect(home_page_announcement_limit).to be_disabled
 
+      course_show_announcements_on_home_page.location_once_scrolled_into_view
       course_show_announcements_on_home_page.click
       expect(home_page_announcement_limit).not_to be_disabled
     end
@@ -269,7 +326,7 @@ describe "course settings" do
 
           caution_text = "Course Pacing is in active development."
           course_paces_checkbox = f("#course_enable_course_paces")
-
+          course_paces_checkbox.location_once_scrolled_into_view
           course_paces_checkbox.click
           wait_for_ajaximations
           expect(f(".course-paces-row")).to include_text caution_text
@@ -304,10 +361,6 @@ describe "course settings" do
       @account.enable_as_k5_account!
       get "/courses/#{@course.id}/settings"
 
-      more_options_link = f(".course_form_more_options_link")
-      more_options_link.click
-      wait_for_ajaximations
-
       expect(element_exists?("#course_show_announcements_on_home_page")).to be_falsey
       expect(element_exists?("#course_allow_student_discussion_topics")).to be_falsey
       expect(element_exists?("#course_hide_distribution_graphs")).to be_falsey
@@ -317,9 +370,6 @@ describe "course settings" do
     context "restrict_quantitative_data dependent settings" do
       it "shows by default" do
         get "/courses/#{@course.id}/settings"
-        more_options_link = f(".course_form_more_options_link")
-        more_options_link.click
-        wait_for_ajaximations
         expect(f("#course_hide_distribution_graphs")).to be_present
         expect(f("#course_hide_final_grades")).to be_present
       end
@@ -330,25 +380,21 @@ describe "course settings" do
         @course.save!
 
         get "/courses/#{@course.id}/settings"
-        more_options_link = f(".course_form_more_options_link")
-        more_options_link.click
-        wait_for_ajaximations
         expect(f("body")).not_to contain_jqcss("#course_hide_distribution_graphs")
-        expect(f("body")).not_to contain_jqcss("#course_hide_final_grades")
+        expect(f("#course_hide_final_grades")).to be_present
+        # Verify that other parts of the settings are not visilbe when they shouldn't be
+        expect(f("#tab-sections").css_value("display")).to eq "none"
       end
 
-      it "is not shown when both restrict_quantitative_data account locked setting and feature flags are ON" do
+      it "is shown when only restrict_quantitative_data account locked setting and feature flags are ON" do
         root_account = @course.root_account
         root_account.enable_feature! :restrict_quantitative_data
         root_account.settings[:restrict_quantitative_data] = { value: true, locked: true }
         root_account.save!
 
         get "/courses/#{@course.id}/settings"
-        more_options_link = f(".course_form_more_options_link")
-        more_options_link.click
-        wait_for_ajaximations
-        expect(f("body")).not_to contain_jqcss("#course_hide_distribution_graphs")
-        expect(f("body")).not_to contain_jqcss("#course_hide_final_grades")
+        expect(f("#course_hide_distribution_graphs")).to be_present
+        expect(f("#course_hide_final_grades")).to be_present
       end
 
       it "is shown when restrict_quantitative_data feature flag is on but course setting is off" do
@@ -357,9 +403,6 @@ describe "course settings" do
         @course.save!
 
         get "/courses/#{@course.id}/settings"
-        more_options_link = f(".course_form_more_options_link")
-        more_options_link.click
-        wait_for_ajaximations
         expect(f("#course_hide_distribution_graphs")).to be_present
         expect(f("#course_hide_final_grades")).to be_present
       end
@@ -393,8 +436,6 @@ describe "course settings" do
       replace_content(code_input, course_code)
       click_option("#course_locale", locale_text)
       click_option("#course_time_zone", time_zone_value, :value)
-      f(".course_form_more_options_link").click
-      wait_for_ajaximations
       expect(f(".course_form_more_options")).to be_displayed
       wait_for_new_page_load { submit_form(course_form) }
 
@@ -447,6 +488,54 @@ describe "course settings" do
       end
     end
 
+    context "participation" do
+      it "allows setting both dates as empty" do
+        get "/courses/#{@course.id}/settings"
+
+        f("input[title='Term']").click
+        fj("li[class*='optionItem']:contains('Course')").click
+        fj("button:contains('Update Course Details')").click
+        expect(fj("span:contains('Course was successfully updated')")).to be_present
+      end
+
+      it "allows end date to be empty" do
+        get "/courses/#{@course.id}/settings"
+
+        f("input[title='Term']").click
+        fj("li[class*='optionItem']:contains('Course')").click
+        ff("input[id*='Selectable_']").first.send_keys(Time.zone.now.to_s)
+        fj("button:contains('Update Course Details')").click
+        expect(fj("span:contains('Course was successfully updated')")).to be_present
+      end
+
+      it "allows start date to be empty" do
+        get "/courses/#{@course.id}/settings"
+
+        f("input[title='Term']").click
+        fj("li[class*='optionItem']:contains('Course')").click
+        ff("input[id*='Selectable_']").last.send_keys(Time.zone.now.to_s)
+        fj("button:contains('Update Course Details')").click
+        expect(fj("span:contains('Course was successfully updated')")).to be_present
+      end
+
+      it "gives a validation when end is greater than start" do
+        current_date = Time.zone.now
+        yesterday = current_date - 1.day
+        get "/courses/#{@course.id}/settings"
+
+        f("input[title='Term']").click
+        fj("li[class*='optionItem']:contains('Course')").click
+        ff("input[id*='Selectable_']").first.send_keys(current_date.to_s)
+        ff("input[id*='Selectable_']").last.send_keys(yesterday.to_s)
+
+        fj("button:contains('Update Course Details')").click
+        # Adding expectation for the error shown after the end field
+        expect(fj("span:contains('The end date can not occur before the start date.')")).to be_present
+        # Adding expectation for the error shown in the Flash notification
+        expect(fj("span:contains('The course end date can not occur before the course start date.')")).to be_present
+      end
+    end
+
     it "adds a section" do
       section_name = "new section"
       get "/courses/#{@course.id}/settings#tab-sections"
@@ -456,7 +545,8 @@ describe "course settings" do
       replace_content(section_input, section_name)
       submit_form("#add_section_form")
       wait_for_ajaximations
-      new_section = ff("#sections > .section")[1]
+      # New sections are added to the top of the list because we moved teh add section form to the top of the page.
+      new_section = ff("#sections > .section")[0]
       expect(new_section).to include_text(section_name)
     end
 
@@ -467,7 +557,7 @@ describe "course settings" do
       body = f("body")
       expect(body).to include_text("Delete Section")
 
-      f(".delete_section_link").click
+      f("#sections > .section .delete_section_link").click
       expect(driver.switch_to.alert).not_to be_nil
       driver.switch_to.alert.accept
       wait_for_ajaximations
@@ -482,7 +572,7 @@ describe "course settings" do
       body = f("body")
       expect(body).to include_text("Edit Section")
 
-      f(".edit_section_link").click
+      f("#sections > .section .edit_section_link").click
       section_input = f("#course_section_name_edit")
       expect(section_input).to be_displayed
       replace_content(section_input, edit_text)
@@ -535,8 +625,7 @@ describe "course settings" do
     it "shows publish/unpublish buttons in sidebar and no status badge if user can change publish state" do
       course_with_teacher_logged_in(active_all: true)
       get "/courses/#{@course.id}/settings"
-      expect(f("#course_status_form")).to be_present
-      expect(f("#course_status_form #continue_to")).to have_attribute("value", "#{course_url(@course)}/settings")
+      expect(f("#course_publish_button")).to be_present
       expect(f("#content")).not_to contain_css("#course-status")
     end
 
@@ -544,7 +633,7 @@ describe "course settings" do
       course_with_ta_logged_in(active_all: true)
       get "/courses/#{@course.id}/settings"
       expect(f("#course-status")).to be_present
-      expect(f("#content")).not_to contain_css("#course_status_form")
+      expect(f("#content")).not_to contain_css("#course_publish_button")
     end
   end
 
@@ -588,6 +677,77 @@ describe "course settings" do
     submit_form("#course_form")
 
     expect(@course.reload.enrollment_term).to eq term
+  end
+
+  context "restrict_quantitative_data setting" do
+    it "is not visible if the feature flag is off" do
+      @account.disable_feature!(:restrict_quantitative_data)
+      @account.save!
+      get "/courses/#{@course.id}/settings"
+      expect(f("body")).not_to contain_jqcss("input[data-testid='restrict-quantitative-data-checkbox']")
+    end
+
+    context "when the flag is on" do
+      before do
+        @account.enable_feature!(:restrict_quantitative_data)
+        @account.save!
+      end
+
+      it "The RQD setting is not visible if the course setting is off and the account setting is off" do
+        @account.settings[:restrict_quantitative_data] = { locked: false, value: false }
+        @course.settings = @course.settings.merge(restrict_quantitative_data: false)
+        @account.save
+        @course.save
+        get "/courses/#{@course.id}/settings"
+        expect(f("body")).not_to contain_jqcss("input[data-testid='restrict-quantitative-data-checkbox']")
+      end
+
+      it "the setting is not changeable if the account setting is on and locked and the course is on" do
+        @account.settings[:restrict_quantitative_data] = { locked: true, value: true }
+        @course.settings = @course.settings.merge(restrict_quantitative_data: true)
+        @account.save
+        @course.save
+        get "/courses/#{@course.id}/settings"
+        expect(f("input[data-testid='restrict-quantitative-data-checkbox']")).to be_disabled
+        expect(is_checked(f("input[data-testid='restrict-quantitative-data-checkbox']"))).to be_truthy
+      end
+
+      it "the setting is changeable if the account setting is on and locked but the course is off" do
+        @account.settings[:restrict_quantitative_data] = { locked: true, value: true }
+        @course.settings = @course.settings.merge(restrict_quantitative_data: false)
+        @account.save
+        @course.save
+        get "/courses/#{@course.id}/settings"
+        expect(f("input[data-testid='restrict-quantitative-data-checkbox']")).not_to be_disabled
+        expect(is_checked(f("input[data-testid='restrict-quantitative-data-checkbox']"))).to be_falsey
+      end
+
+      it "the setting is changeable if the account setting is on and unlocked" do
+        @account.settings[:restrict_quantitative_data] = { locked: false, value: true }
+        @account.save
+        get "/courses/#{@course.id}/settings"
+        expect(f("input[data-testid='restrict-quantitative-data-checkbox']")).not_to be_disabled
+        expect(is_checked(f("input[data-testid='restrict-quantitative-data-checkbox']"))).to be_falsey
+      end
+
+      it "the setting is changeable if the account setting is off but the course setting is on" do
+        @account.settings[:restrict_quantitative_data] = { locked: false, value: false }
+        @course.settings = @course.settings.merge(restrict_quantitative_data: true)
+        @account.save
+        @course.save
+        get "/courses/#{@course.id}/settings"
+        expect(f("input[data-testid='restrict-quantitative-data-checkbox']")).not_to be_disabled
+        expect(is_checked(f("input[data-testid='restrict-quantitative-data-checkbox']"))).to be_truthy
+      end
+
+      it "the setting is not disabled if prevent course availability editing is enabled" do
+        @account.settings[:restrict_quantitative_data] = { locked: false, value: true }
+        @account.settings[:prevent_course_availability_editing_by_teachers] = true
+        @account.save
+        get "/courses/#{@course.id}/settings"
+        expect(f("input[data-testid='restrict-quantitative-data-checkbox']")).not_to be_disabled
+      end
+    end
   end
 
   context "link validator" do

@@ -23,10 +23,48 @@ import GradeOverrideEntry from '@canvas/grading/GradeEntry/GradeOverrideEntry'
 import GradeOverrideInfo from '@canvas/grading/GradeEntry/GradeOverrideInfo'
 import FinalGradeOverrides from '../../../../FinalGradeOverrides/index'
 import TotalGradeOverrideCellPropFactory from '../TotalGradeOverrideCellPropFactory'
+import type {DeprecatedGradingScheme} from '@canvas/grading/grading.d'
+import useStore from '../../../../stores'
+
+const mockTotalGradeOverrideStore = (state = {}) => {
+  jest.spyOn(useStore, 'getState').mockImplementation(() => {
+    return {
+      finalGradeOverrideTrayProps: {
+        isFirstStudent: false,
+        isLastStudent: false,
+        studentInfo: {
+          id: '1',
+          avatarUrl: 'https://canvas.instructure.com/images/messages/avatar-50.png',
+          name: 'Student, Test',
+          gradesUrl: 'https://canvas.instructure.com/courses/1/grades#tab-assignments',
+          enrollmentId: '222',
+        },
+        isOpen: false,
+      },
+      finalGradeOverrides: {
+        1101: {
+          courseGrade: {
+            percentage: 88.1,
+            customGradeStatusId: '1',
+          },
+          gradingPeriodGrades: {
+            10: {
+              percentage: 99,
+              customGradeStatusId: '1',
+            },
+          },
+        },
+      },
+      ...state,
+    }
+  })
+
+  return jest.spyOn(useStore, 'setState')
+}
 
 describe('GradebookGrid TotalGradeOverrideCellPropFactory', () => {
   let gradebook
-  let gradingScheme
+  let gradingScheme: DeprecatedGradingScheme
 
   describe('#getProps()', () => {
     let editorOptions
@@ -42,6 +80,8 @@ describe('GradebookGrid TotalGradeOverrideCellPropFactory', () => {
         ],
         id: '2801',
         title: 'Default Grading Scheme',
+        pointsBased: false,
+        scalingFactor: 1.0,
       }
 
       // `gradebook` is a double because CoffeeScript and AMD cannot be imported
@@ -60,6 +100,14 @@ describe('GradebookGrid TotalGradeOverrideCellPropFactory', () => {
         studentCanReceiveGradeOverride(id) {
           return {1101: true, 1102: false}[id]
         },
+
+        gridData: {
+          rows: [{}, {}],
+        },
+
+        options: {
+          custom_grade_statuses_enabled: false,
+        },
       }
 
       gradebook.finalGradeOverrides = new FinalGradeOverrides(gradebook)
@@ -72,8 +120,25 @@ describe('GradebookGrid TotalGradeOverrideCellPropFactory', () => {
       })
 
       editorOptions = {
-        item: {id: '1101'},
+        item: {
+          id: '1101',
+          name: 'Some Student',
+          avatar_url: 'https://canvas.instructure.com/images/messages/avatar-55.png',
+          enrollments: [
+            {
+              id: '222',
+              grades: {
+                html_url: 'https://canvas.instructure.com/courses/1101/grades',
+              },
+            },
+          ],
+        },
+        activeRow: 1,
       }
+    })
+
+    afterEach(() => {
+      jest.resetAllMocks()
     })
 
     function getProps() {
@@ -158,6 +223,83 @@ describe('GradebookGrid TotalGradeOverrideCellPropFactory', () => {
     it('sets .studentIsGradeable to false when the student is not gradeable', () => {
       editorOptions.item.id = '1102'
       expect(getProps().studentIsGradeable).toBe(false)
+    })
+
+    describe('finalGradeOverrideTrayProps state', () => {
+      it('correctly sets finalGradeOverrideTrayProps state', () => {
+        const mockSetState = mockTotalGradeOverrideStore()
+        const {gradeEntry} = getProps()
+        expect(mockSetState).toHaveBeenLastCalledWith({
+          finalGradeOverrideTrayProps: {
+            isFirstStudent: false,
+            isLastStudent: true,
+            studentInfo: {
+              id: '1101',
+              avatarUrl: 'https://canvas.instructure.com/images/messages/avatar-55.png',
+              name: 'Some Student',
+              gradesUrl: 'https://canvas.instructure.com/courses/1101/grades#tab-assignments',
+              enrollmentId: '222',
+            },
+            isOpen: false,
+            gradeEntry,
+          },
+        })
+      })
+    })
+
+    describe('disabledByCustomStatus', () => {
+      it('correctly sets disabledByCustomStatus to true when a user has a custom status with allow_final_grade_value set to false', () => {
+        mockTotalGradeOverrideStore()
+        gradebook.options.custom_grade_statuses_enabled = true
+        gradebook.options.custom_grade_statuses = [
+          {
+            id: '1',
+            title: 'Custom Status',
+            allow_final_grade_value: false,
+          },
+        ]
+        expect(getProps().disabledByCustomStatus).toBe(true)
+      })
+
+      it('correctly sets disabledByCustomStatus to false when a user has a custom status with allow_final_grade_value set to true', () => {
+        mockTotalGradeOverrideStore()
+        gradebook.options.custom_grade_statuses_enabled = true
+        gradebook.options.custom_grade_statuses = [
+          {
+            id: '1',
+            title: 'Custom Status',
+            allow_final_grade_value: true,
+          },
+        ]
+        expect(getProps().disabledByCustomStatus).toBe(false)
+      })
+
+      it('correctly sets disabledByCustomStatus to false when a user does not have a custom status', () => {
+        mockTotalGradeOverrideStore({finalGradeOverrides: {1101: {}}})
+        gradebook.options.custom_grade_statuses_enabled = true
+        gradebook.options.custom_grade_statuses = [
+          {
+            id: '1',
+            title: 'Custom Status',
+            allow_final_grade_value: false,
+          },
+        ]
+        expect(getProps().disabledByCustomStatus).toBe(false)
+      })
+
+      it('correctly sets disabledByCustomStatus to true for a grading period', () => {
+        mockTotalGradeOverrideStore()
+        gradebook.options.custom_grade_statuses_enabled = true
+        gradebook.options.custom_grade_statuses = [
+          {
+            id: '1',
+            title: 'Custom Status',
+            allow_final_grade_value: false,
+          },
+        ]
+        gradebook.gradingPeriodId = '10'
+        expect(getProps().disabledByCustomStatus).toBe(true)
+      })
     })
   })
 })

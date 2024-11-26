@@ -64,11 +64,11 @@ class StudentAssignmentPageV2
     end
 
     def assignment_title(title)
-      fj("h2 span:contains(#{title})")
+      fj("h1 span:contains(#{title})")
     end
 
     def details_toggle
-      f("button[data-test-id='assignments-2-assignment-toggle-details']")
+      f("button[data-testid='assignments-2-assignment-toggle-details']")
     end
 
     def assignment_group_link
@@ -192,15 +192,27 @@ class StudentAssignmentPageV2
     end
 
     def missing_pill
-      f("span[data-test-id='missing-pill']")
+      f("span[data-testid='missing-pill']")
     end
 
     def late_pill
-      f("span[data-test-id='late-pill']")
+      f("span[data-testid='late-pill']")
     end
 
     def rubric_toggle
       f("div[data-testid='rubric-tab']")
+    end
+
+    def peer_review_prompt_modal
+      f('[data-testid="peer-review-prompt-modal"]')
+    end
+
+    def peer_review_prompt_modal_close_button
+      f('[data-testid="peer-review-modal-close-button"]')
+    end
+
+    def view_rubric_button
+      f("button[data-testid='view-rubric-button']")
     end
 
     def similarity_pledge_checkbox
@@ -223,8 +235,8 @@ class StudentAssignmentPageV2
       f("div[data-testid='online_text_entry']")
     end
 
-    def try_again_button
-      f("button[data-testid='try-again-button']")
+    def new_attempt_button
+      f("button[data-testid='new-attempt-button']")
     end
 
     def cancel_attempt_button
@@ -294,6 +306,10 @@ class StudentAssignmentPageV2
 
     def select_grader(grader)
       click_INSTUI_Select_option(f('[data-testid="select-grader-dropdown"]'), grader)
+    end
+
+    def grader_select_dropdown
+      f('[data-testid="select-grader-dropdown"]')
     end
 
     def rubric_comments

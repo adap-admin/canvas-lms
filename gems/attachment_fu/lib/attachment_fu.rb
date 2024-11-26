@@ -129,7 +129,7 @@ module AttachmentFu # :nodoc:
         m.belongs_to :parent, class_name: "::#{base_class}" unless options[:thumbnails].empty?
       end
 
-      storage_mod = AttachmentFu::Backends.const_get("#{options[:storage].to_s.classify}Backend")
+      storage_mod = AttachmentFu::Backends.const_get(:"#{options[:storage].to_s.classify}Backend")
       include storage_mod unless included_modules.include?(storage_mod)
 
       unless parent_options[:processor]
@@ -150,7 +150,7 @@ module AttachmentFu # :nodoc:
           end
         else
           begin
-            processor_mod = AttachmentFu::Processors.const_get("#{attachment_options[:processor].to_s.classify}Processor")
+            processor_mod = AttachmentFu::Processors.const_get(:"#{attachment_options[:processor].to_s.classify}Processor")
             include processor_mod unless included_modules.include?(processor_mod)
           rescue Object
             raise unless load_related_exception?($!)
@@ -299,12 +299,12 @@ module AttachmentFu # :nodoc:
 
     # Sets the content type.
     def content_type=(new_type)
-      write_attribute :content_type, new_type.to_s.strip
+      super(new_type.to_s.strip)
     end
 
     # Sanitizes a filename.
     def filename=(new_name)
-      write_attribute :filename, sanitize_filename(new_name)
+      super(sanitize_filename(new_name))
     end
 
     # Returns the width/height in a suitable format for the image_tag helper: (100x100)
@@ -365,10 +365,13 @@ module AttachmentFu # :nodoc:
         # a new unique filename for this file so any children of this attachment
         # will still be able to get at the original.
         unless new_record?
+          # if the file doesn't have a filename for some reason, it often pulls from the root attachment
+          # but if you remove the root attachment, you lose the filename, so we're saving it first
+          orig_filename = filename
           self.root_attachment = nil
           self.root_attachment_id = nil
           self.workflow_state = nil
-          self.filename = filename.sub(/\A\d+_\d+__/, "")
+          self.filename = orig_filename.sub(/\A\d+_\d+__/, "")
           self.filename = "#{Time.now.to_i}_#{rand(999)}__#{filename}" if filename
         end
         unless attachment_options[:skip_sis]
@@ -394,7 +397,7 @@ module AttachmentFu # :nodoc:
         if (existing_attachment = find_existing_attachment_for_md5)
           self.temp_path = nil if respond_to?(:temp_path=)
           self.temp_data = nil if respond_to?(:temp_data=)
-          write_attribute(:filename, nil) if respond_to?(:filename=)
+          self.filename = nil if respond_to?(:filename=)
           self.root_attachment = existing_attachment
         end
         file_data
@@ -414,8 +417,8 @@ module AttachmentFu # :nodoc:
       shard.activate do
         GuardRail.activate(:secondary) do
           if md5.present? && (ns = infer_namespace)
-            scope = Attachment.where(md5:, namespace: ns, root_attachment_id: nil, content_type:)
-            scope = scope.where.not(filename: nil)
+            scope = Attachment.where(md5:, namespace: ns, root_attachment_id: nil, content_type:, instfs_uuid: nil)
+            scope = scope.where.not(filename: nil).where.not(workflow_state: "pending_upload")
             scope = scope.where.not(id: self) unless new_record?
             scope.detect { |a| a.store.exists? }
           end
@@ -426,14 +429,14 @@ module AttachmentFu # :nodoc:
     def detect_mimetype(file_data)
       if file_data.respond_to?(:content_type) && (file_data.content_type.blank? || file_data.content_type.strip == "application/octet-stream")
         res = nil
-        res ||= File.mime_type?(file_data.original_filename) if file_data.respond_to?(:original_filename)
-        res ||= File.mime_type?(file_data)
+        res ||= File.mime_type(file_data.original_filename) if file_data.respond_to?(:original_filename)
+        res ||= File.mime_type(file_data)
         res ||= "text/plain" unless file_data.respond_to?(:path)
         res || "unknown/unknown"
       elsif file_data.respond_to?(:content_type)
         file_data.content_type
       else
-        File.mime_type?(file_data)
+        File.mime_type(file_data)
       end
     end
 

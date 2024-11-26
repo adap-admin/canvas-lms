@@ -65,6 +65,7 @@ class Pseudonym < ActiveRecord::Base
             inclusion: { in: %w[administrative observer staff student student_other teacher] }
 
   before_save :set_password_changed
+  before_save :clear_login_attribute_if_needed
   before_validation :infer_defaults, :verify_unique_sis_user_id, :verify_unique_integration_id
   after_save :update_account_associations_if_account_changed
   has_a_broadcast_policy
@@ -81,23 +82,36 @@ class Pseudonym < ActiveRecord::Base
             length: { within: 1..MAX_UNIQUE_ID_LENGTH },
             uniqueness: {
               case_sensitive: false,
-              scope: %i[account_id workflow_state authentication_provider_id],
+              scope: %i[account_id workflow_state authentication_provider_id login_attribute],
               if: ->(p) { (p.unique_id_changed? || p.workflow_state_changed?) && p.active? }
             }
 
-  validates :password,
-            confirmation: true,
-            if: :require_password?
+  validates :password, confirmation: true, if: :require_password?
+  validates_each :password, if: :require_password?, &:validate_password
+  validates :password_confirmation, presence: true, if: :require_password?
 
-  validates_each :password,
-                 if: :require_password?,
-                 &Canvas::PasswordPolicy.method(:validate)
-  validates :password_confirmation,
-            presence: true,
-            if: :require_password?
+  ENCRYPTION_PATTERNS = {
+    scrypt: /^\d+\$\d+\$\d+\$[a-fA-F0-9]{64}\$[a-fA-F0-9]{64}$/,
+    sha512: /^[a-fA-F0-9]{128}$/
+  }.freeze
+
+  class << self
+    # we know these fields, and don't want authlogic to connect to the db at boot
+    # to try and infer them
+    def db_setup?
+      true
+    end
+
+    def login_field
+      :unique_id
+    end
+
+    def crypted_password_field
+      :crypted_password
+    end
+  end
 
   acts_as_authentic do |config|
-    config.login_field :unique_id
     config.perishable_token_valid_for = 30.minutes
     # if changing this to a new provider, add the _new_ provider to the transition
     # list for a full deploy first before moving it to primary, so that
@@ -110,11 +124,47 @@ class Pseudonym < ActiveRecord::Base
 
   attr_writer :require_password
 
+  # Determines the type of encryption used for the crypted_password.
+  #
+  # Prior to August 2019, Canvas used a SHA512 hash with salt as the key
+  # derivation function (KDF) for password storage.
+  #
+  # During August 2019, Canvas switched to using scrypt as the KDF.
+  #
+  # Canvas SIS imports additionally support a `ssha_password` field which Canvas
+  # directly stores in the `sis_ssha` field of the pseudonym if provided.
+  #
+  # @return [Symbol, nil] The encryption type, which can be one of the following:
+  #   - :SSHA if the sis_ssha is present (meaning `ssha_password` was provided in a SIS import)
+  #   - :SCRYPT if the crypted_password matches the scrypt pattern (pseudonyms post-August 2019)
+  #   - :SHA512 if the crypted_password matches the sha512 pattern
+  #   - :UNKNOWN if the crypted_password does not match any known patterns
+  #   - nil if the crypted_password is blank
+  def encryption_type
+    return nil if crypted_password.blank?
+
+    return :SSHA if sis_ssha.present?
+
+    if crypted_password.match?(ENCRYPTION_PATTERNS[:scrypt])
+      :SCRYPT
+    elsif crypted_password.match?(ENCRYPTION_PATTERNS[:sha512])
+      :SHA512
+    else
+      :UNKNOWN
+    end
+  end
+
   def require_password?
     # Change from auth_logic: don't require a password just because new_record?
     # is true. just check if the pw has changed or crypted_password_field is
     # blank.
     password_changed? || (send(crypted_password_field).blank? && sis_ssha.blank?) || @require_password
+  end
+
+  def validate_password(attr, val)
+    unless password_auto_generated? && canvas_generated_password?
+      Canvas::Security::PasswordPolicy.validate(self, attr, val)
+    end
   end
 
   acts_as_list scope: :user
@@ -131,6 +181,11 @@ class Pseudonym < ActiveRecord::Base
     p.dispatch :pseudonym_registration_done
     p.to { communication_channel || user.communication_channel }
     p.whenever { @send_registration_done_notification }
+
+    p.dispatch :account_verification
+    p.to { communication_channel || user.communication_channel }
+    p.whenever { saved_change_to_verification_token? }
+    p.data { { from_host: HostUrl.context_host(account) } }
   end
 
   def update_account_associations_if_account_changed
@@ -169,27 +224,77 @@ class Pseudonym < ActiveRecord::Base
     @send_confirmation = false
   end
 
+  def begin_login_attribute_migration!(unique_ids)
+    self.unique_ids = unique_ids
+    if verification_token.present? && updated_at > 5.minutes.ago
+      verification_token_will_change! # force email to be resent
+    else
+      self.verification_token = CanvasSlug.generate(nil, 6)
+    end
+    save!
+  end
+
+  # supply either the verification code emailed to the user
+  # or an admin user who has permission to update the pseudonym
+  def migrate_login_attribute(code: nil, admin_user: nil)
+    return false unless verification_token.present?
+    return false unless code == verification_token || grants_right?(admin_user, :update)
+
+    login_attribute = authentication_provider&.login_attribute
+    return false unless unique_ids.key?(login_attribute)
+
+    update!(unique_id: unique_ids[login_attribute])
+  end
+
   scope :by_unique_id, ->(unique_id) { where("LOWER(unique_id)=LOWER(?)", unique_id.to_s) }
 
   def self.custom_find_by_unique_id(unique_id)
     return unless unique_id
 
-    active_only.by_unique_id(unique_id).merge(
-      where(authentication_provider_id: nil)
-        .or(where(AuthenticationProvider
-          .active
-          .where(auth_type: ["canvas", "ldap"])
-          .where("authentication_provider_id=authentication_providers.id")
-          .arel.exists))
-    )
+    active_only.by_unique_id(unique_id)
+               .merge(
+                 where(authentication_provider_id: nil)
+                   .or(where(AuthenticationProvider
+                     .active
+                     .where(auth_type: ["canvas", "ldap"])
+                     .where("authentication_provider_id=authentication_providers.id")
+                     .arel.exists))
+               )
                .order("authentication_provider_id NULLS LAST").first
   end
 
-  def self.for_auth_configuration(unique_id, aac, include_suspended: false)
-    auth_id = aac.try(:auth_provider_filter)
+  def self.for_auth_configuration(unique_ids, auth_provider, include_suspended: false)
     scope = include_suspended ? active : active_only
-    scope.by_unique_id(unique_id).where(authentication_provider_id: auth_id)
-         .order("authentication_provider_id NULLS LAST").take
+    filter = auth_provider&.auth_provider_filter
+    scope = scope.where(authentication_provider_id: filter)
+    scope = scope.order("authentication_provider_id NULLS LAST") unless filter == auth_provider
+
+    if unique_ids.is_a?(Hash)
+      login_attribute = auth_provider.login_attribute
+      unique_id = unique_ids[login_attribute]
+      # form this query to allow NULL login_attribute on the pseudonym, if it
+      # hasn't been populated yet (i.e. the backfill is not yet complete)
+      scope = scope.by_unique_id(unique_id)
+                   .where(login_attribute: [login_attribute, nil])
+                   .order("login_attribute NULLS LAST")
+    else
+      scope = scope.by_unique_id(unique_ids)
+    end
+
+    result = scope.take
+    if result && unique_ids.is_a?(Hash)
+      result.login_attribute ||= login_attribute
+      result.unique_ids = unique_ids
+      begin
+        result.save! if result.changed?
+      rescue ActiveRecord::RecordNotUnique
+        # race condition; the pseudonym for this auth provider with this
+        # login attribute was created elsewhere. just fail this
+        # request, and have the user try again
+        result = nil
+      end
+    end
+    result
   end
 
   def audit_log_update
@@ -204,9 +309,17 @@ class Pseudonym < ActiveRecord::Base
     @password_changed = password && password_confirmation == password
   end
 
+  def clear_login_attribute_if_needed
+    self.login_attribute = nil if authentication_provider_id.nil? && will_save_change_to_authentication_provider_id?
+  end
+
   def password=(new_pass)
     self.password_auto_generated = false
-    super(new_pass)
+    super
+  end
+
+  def canvas_generated_password?
+    @canvas_generated_password == true
   end
 
   def communication_channel
@@ -221,6 +334,9 @@ class Pseudonym < ActiveRecord::Base
     self.account ||= Account.default
     if (!crypted_password || crypted_password == "") && !@require_password
       generate_temporary_password
+      # this helps us differentiate between a generated password and one that was
+      # provided in a SIS import with password_auto_generated set to true
+      @canvas_generated_password = true
     end
     # treat empty or whitespaced strings as nullable
     self.integration_id = nil if integration_id.blank?
@@ -275,10 +391,13 @@ class Pseudonym < ActiveRecord::Base
       errors.add(:unique_id, "not_email")
       throw :abort
     end
+    self.login_attribute ||= authentication_provider&.login_attribute_for_pseudonyms if new_record?
+
     unless deleted?
       shard.activate do
         existing_pseudo = Pseudonym.active.by_unique_id(unique_id).where(account_id:,
-                                                                         authentication_provider_id:).where.not(id: self).exists?
+                                                                         authentication_provider_id:,
+                                                                         login_attribute:).where.not(id: self).exists?
         if existing_pseudo
           errors.add(:unique_id,
                      :taken,
@@ -314,6 +433,14 @@ class Pseudonym < ActiveRecord::Base
     state :active
     state :deleted
     state :suspended
+
+    state :active do
+      event :suspend!, transitions_to: :suspended
+    end
+
+    state :suspended do
+      event :unsuspend!, transitions_to: :active
+    end
   end
 
   set_policy do
@@ -577,7 +704,7 @@ class Pseudonym < ActiveRecord::Base
     [Shard.default]
   end
 
-  def self.find_all_by_arbitrary_credentials(credentials, account_ids, remote_ip)
+  def self.find_all_by_arbitrary_credentials(credentials, account_ids)
     return [] if credentials[:unique_id].blank? ||
                  credentials[:password].blank?
     if credentials[:unique_id].length > 255
@@ -587,7 +714,7 @@ class Pseudonym < ActiveRecord::Base
       raise ImpossibleCredentialsError, "pseudonym cannot have a unique_id of length #{credentials[:unique_id].length}"
     end
 
-    too_many_attempts = false
+    error = nil
     begin
       associated_shards = associated_shards(credentials[:unique_id])
     rescue => e
@@ -604,24 +731,24 @@ class Pseudonym < ActiveRecord::Base
         .preload(:user)
         .select do |p|
           valid = p.valid_arbitrary_credentials?(credentials[:password])
-          too_many_attempts = true if p.audit_login(remote_ip, valid) == :too_many_attempts
+          error ||= p.audit_login(valid)
           valid
         end
     end
-    return :too_many_attempts if too_many_attempts
+    return error if error
 
     pseudonyms
   end
 
-  def self.authenticate(credentials, account_ids, remote_ip = nil)
+  def self.authenticate(credentials, account_ids)
     pseudonyms = []
     begin
-      pseudonyms = find_all_by_arbitrary_credentials(credentials, account_ids, remote_ip)
+      pseudonyms = find_all_by_arbitrary_credentials(credentials, account_ids)
     rescue ImpossibleCredentialsError
       Rails.logger.info("Impossible pseudonym credentials: #{credentials[:unique_id]}, invalidating session")
       return :impossible_credentials
     end
-    return :too_many_attempts if pseudonyms == :too_many_attempts
+    return pseudonyms if pseudonyms.is_a?(Symbol)
 
     site_admin = pseudonyms.find { |p| p.account_id == Account.site_admin.id }
     # only log them in if these credentials match a single user OR if it matched site admin
@@ -631,8 +758,8 @@ class Pseudonym < ActiveRecord::Base
     end
   end
 
-  def audit_login(remote_ip, valid_password)
-    Canvas::Security::LoginRegistry.audit_login(self, remote_ip, valid_password)
+  def audit_login(valid_password)
+    Canvas::Security::LoginRegistry.audit_login(self, valid_password)
   end
 
   def self.cas_ticket_key(ticket)
@@ -640,11 +767,11 @@ class Pseudonym < ActiveRecord::Base
   end
 
   def cas_ticket_expired?(ticket)
-    return unless Canvas.redis_enabled?
+    return false unless Canvas.redis_enabled?
 
     redis_key = Pseudonym.cas_ticket_key(ticket)
 
-    !!Canvas.redis.get(redis_key)
+    !Canvas.redis.get(redis_key, failsafe: nil).nil?
   end
 
   def self.expire_cas_ticket(ticket)
@@ -653,5 +780,34 @@ class Pseudonym < ActiveRecord::Base
     redis_key = cas_ticket_key(ticket)
 
     Canvas.redis.set(redis_key, true, ex: CAS_TICKET_TTL)
+  end
+
+  def self.oidc_session_key(*subkeys)
+    ["oidc_session_slo", Digest::SHA512.new.update(subkeys.cache_key).hexdigest].cache_key
+  end
+
+  def self.oidc_session_expired?(session)
+    return false unless Canvas.redis_enabled?
+
+    iss = session[:oidc_id_token_iss]
+    sid = session[:oidc_id_token_sid]
+    sub = session[:oidc_id_token_sub]
+    return false unless iss && (sid || sub)
+
+    keys = [sid, sub].compact.map do |key|
+      oidc_session_key("sid", iss, key)
+    end
+    keys.any? do |key|
+      !Canvas.redis.get("oidc_session_slo_#{key}", failsafe: nil).nil?
+    end
+  end
+
+  def self.expire_oidc_session(logout_token)
+    key = if logout_token["sid"]
+            oidc_session_key("sid", logout_token["iss"], logout_token["sid"])
+          else
+            oidc_session_key("sid", logout_token["iss"], logout_token["sub"])
+          end
+    Canvas.redis.set("oidc_session_slo_#{key}", true, ex: CAS_TICKET_TTL)
   end
 end

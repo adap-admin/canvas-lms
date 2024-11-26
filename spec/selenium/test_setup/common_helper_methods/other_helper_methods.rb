@@ -20,20 +20,23 @@
 module OtherHelperMethods
   def stub_kaltura
     # trick kaltura into being activated
-    allow(CanvasKaltura::ClientV3).to receive(:config).and_return({
-                                                                    "domain" => "www.instructuremedia.com",
-                                                                    "resource_domain" => "www.instructuremedia.com",
-                                                                    "partner_id" => "100",
-                                                                    "subpartner_id" => "10000",
-                                                                    "secret_key" => "fenwl1n23k4123lk4hl321jh4kl321j4kl32j14kl321",
-                                                                    "user_secret_key" => "1234821hrj3k21hjk4j3kl21j4kl321j4kl3j21kl4j3k2l1",
-                                                                    "player_ui_conf" => "1",
-                                                                    "kcw_ui_conf" => "1",
-                                                                    "upload_ui_conf" => "1"
-                                                                  })
     kal = double("CanvasKaltura::ClientV3")
     allow(kal).to receive(:startSession).and_return "new_session_id_here"
-    allow(CanvasKaltura::ClientV3).to receive(:new).and_return(kal)
+    allow(CanvasKaltura::ClientV3).to receive_messages(
+      config: {
+        "domain" => "www.instructuremedia.com",
+        "resource_domain" => "www.instructuremedia.com",
+        "partner_id" => "100",
+        "subpartner_id" => "10000",
+        "secret_key" => "fenwl1n23k4123lk4hl321jh4kl321j4kl32j14kl321",
+        "user_secret_key" => "1234821hrj3k21hjk4j3kl21j4kl321j4kl3j21kl4j3k2l1",
+        "player_ui_conf" => "1",
+        "kcw_ui_conf" => "1",
+        "upload_ui_conf" => "1"
+      },
+      new: kal
+    )
+    kal
   end
 
   def page_view(opts = {})
@@ -99,6 +102,13 @@ module OtherHelperMethods
     [filename, fullpath, data, @file]
   end
 
+  def get_permanent_file(filename)
+    @file = File.new(filename)
+    fullpath = File.path(@file)
+    filename = File.basename(@file)
+    [filename, fullpath, @file]
+  end
+
   module EncryptedCookieStoreTestSecret
     cattr_accessor :test_secret
 
@@ -138,6 +148,10 @@ module OtherHelperMethods
 
   def clear_local_storage
     driver.execute_script "localStorage.clear();"
+  end
+
+  def clear_session_storage
+    driver.execute_script "sessionStorage.clear();"
   end
 
   def scroll_height

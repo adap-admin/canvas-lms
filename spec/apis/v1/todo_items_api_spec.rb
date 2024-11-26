@@ -92,14 +92,14 @@ describe UsersController, type: :request do
     get("/api/v1/users/self/todo")
     assert_status(401)
 
-    @course = factory_with_protected_attributes(Course, course_valid_attributes)
+    @course = Course.create!(course_valid_attributes)
     raw_api_call(:get,
                  "/api/v1/courses/#{@course.id}/todo",
                  controller: "courses",
                  action: "todo_items",
                  format: "json",
                  course_id: @course.to_param)
-    assert_status(401)
+    assert_forbidden
   end
 
   it "returns a global user todo list" do
@@ -239,6 +239,25 @@ describe UsersController, type: :request do
     @a2_json["assignment"]["needs_grading_count"] = 2
     update_assignment_json
     expect(strip_secure_params(json.first)).to eq strip_secure_params(@a2_json)
+  end
+
+  it "supports ignore for sub assignments" do
+    @teacher_course.root_account.enable_feature!(:discussion_checkpoints)
+    rtt, _ = graded_discussion_topic_with_checkpoints(context: @teacher_course)
+    student = @teacher_course.students.first
+    rtt.submit_homework(student, body: "checkpoint submission for #{student.name}")
+    api_call(:delete,
+             "/api/v1/users/self/todo/sub_assignment_#{rtt.id}/grading",
+             controller: "users",
+             action: "ignore_item",
+             format: "json",
+             purpose: "grading",
+             asset_string: "sub_assignment_#{rtt.id}",
+             permanent: "0")
+
+    expect(response).to be_successful
+    ignored_asset = Ignore.last.asset
+    expect(ignored_asset).to eq rtt
   end
 
   it "ignores excused assignments for students" do
@@ -447,9 +466,8 @@ describe UsersController, type: :request do
       @student_course = course_factory(active_course: true)
       @student_course.enroll_student(@teacher).accept(true)
       # an assignment i need to submit (needs_submitting)
-      batch = []
-      [120, 13, 147, 79, 161, 119, 81, 57, 134, 21].each do |i|
-        batch << {
+      batch = [120, 13, 147, 79, 161, 119, 81, 57, 134, 21].map do |i|
+        {
           context_type: "Course",
           context_id: @student_course.id,
           root_account_id: @student_course.root_account_id,
@@ -462,9 +480,8 @@ describe UsersController, type: :request do
       end
       Assignment.bulk_insert(batch)
       @student_assignments = @student_course.assignments
-      batch = []
-      @student_assignments.each do |a|
-        batch << {
+      batch = @student_assignments.map do |a|
+        {
           cached_due_date: a.due_date,
           assignment_id: a.id,
           course_id: @student_course.id,
@@ -477,9 +494,8 @@ describe UsersController, type: :request do
       # an assignment i created, and a student who submits the assignment (needs_grading)
       @student = user_factory(active_all: true)
       @teacher_course.enroll_student(@student).accept!
-      batch = []
-      [89, 10, 39, 6, 34, 55, 95, 103, 126, 107].each do |i|
-        batch << {
+      batch = [89, 10, 39, 6, 34, 55, 95, 103, 126, 107].map do |i|
+        {
           context_type: "Course",
           context_id: @teacher_course.id,
           root_account_id: @teacher_course.root_account_id,
@@ -492,9 +508,8 @@ describe UsersController, type: :request do
       end
       Assignment.bulk_insert(batch)
       @teacher_assignments = @teacher_course.assignments
-      batch = []
-      @teacher_assignments.each do |a|
-        batch << {
+      batch = @teacher_assignments.map do |a|
+        {
           cached_due_date: a.due_at,
           assignment_id: a.id,
           course_id: @teacher_course.id,
@@ -570,14 +585,13 @@ describe UsersController, type: :request do
       end
       Assignment.bulk_insert(batch)
 
-      batch = []
       assignments = @student_course.assignments
-      assignments.each do |a|
-        batch << { cached_due_date: 6.days.from_now,
-                   assignment_id: a.id,
-                   course_id: a.context_id,
-                   user_id: @user.id,
-                   workflow_state: "unsubmitted" }
+      batch = assignments.map do |a|
+        { cached_due_date: 6.days.from_now,
+          assignment_id: a.id,
+          course_id: a.context_id,
+          user_id: @user.id,
+          workflow_state: "unsubmitted" }
       end
       Submission.bulk_insert(batch)
 

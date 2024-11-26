@@ -56,7 +56,7 @@ class OriginalityReport < ActiveRecord::Base
   end
 
   def as_json(options = nil)
-    super(options).tap do |h|
+    super.tap do |h|
       h[:file_id] = h.delete :attachment_id
       h[:originality_report_file_id] = h.delete :originality_report_attachment_id
       if lti_link.present?
@@ -66,12 +66,12 @@ class OriginalityReport < ActiveRecord::Base
     end
   end
 
-  def report_launch_path
+  def report_launch_path(submission_assignment = assignment)
     if lti_link.present?
-      course_assignment_resource_link_id_path(course_id: assignment.context_id,
-                                              assignment_id: assignment.id,
+      course_assignment_resource_link_id_path(course_id: submission_assignment.context_id,
+                                              assignment_id: submission_assignment.id,
                                               resource_link_id: lti_link.resource_link_id,
-                                              host: HostUrl.context_host(assignment.context),
+                                              host: HostUrl.context_host(submission_assignment.context),
                                               display: "borderless")
     else
       originality_report_url
@@ -144,7 +144,7 @@ class OriginalityReport < ActiveRecord::Base
     group_submissions.find_each do |s|
       same_or_later_report_exists =
         s.originality_reports.where(attachment_id:)
-         .where("updated_at >= ?", updated_at).exists?
+         .where(updated_at: updated_at..).exists?
       next if same_or_later_report_exists
 
       copy_of_report = dup
@@ -155,7 +155,7 @@ class OriginalityReport < ActiveRecord::Base
       # attachment/submission combo hanging around.
       s.originality_reports
        .where(attachment_id:)
-       .where("updated_at < ?", updated_at)
+       .where(updated_at: ...updated_at)
        .destroy_all
 
       copy_of_report.update!(submission: s, updated_at:)

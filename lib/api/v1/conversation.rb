@@ -22,12 +22,14 @@ module Api::V1::Conversation
   include Api::V1::Json
   include Api::V1::Attachment
 
+  AVATAR_INCLUDE_LIMIT = 100
+
   def conversations_json(conversations, current_user, session, options = {})
     # only process conversations(actually ConversationParticipant) that actually have a Conversation tied to it
     valid_convos = conversations.select(&:conversation)
     include_context_name = options.delete(:include_context_name)
     if include_context_name
-      context_names_by_type_and_id = Context.names_by_context_types_and_ids(valid_convos.map(&:conversation).map(&:context_components))
+      context_names_by_type_and_id = Context.names_by_context_types_and_ids(valid_convos.map { |cp| cp.conversation.context_components })
     end
     valid_convos.map do |c|
       result = conversation_json(c, current_user, session, options)
@@ -59,7 +61,7 @@ module Api::V1::Conversation
     # Changing to account context means users can reply to admins, even if the admin messages from a
     # course they aren't enrolled in
     result[:context_code] =
-      if conversation.conversation.context_type.eql?("Course") && AccountUser.where(user_id: current_user.id).exists?
+      if conversation.conversation.context_type.eql?("Course") && AccountUser.active.where(user_id: current_user.id).exists?
         "account_#{@domain_root_account.id}"
       else
         conversation.conversation.context_code
@@ -92,7 +94,7 @@ module Api::V1::Conversation
   end
 
   def should_include_participant_avatars?(user_count)
-    user_count <= Setting.get("max_conversation_participant_count_for_avatars", "100").to_i
+    user_count <= AVATAR_INCLUDE_LIMIT
   end
 
   def conversation_recipients_json(recipients, current_user, session)

@@ -131,6 +131,7 @@ describe "Module Items API", type: :request do
           "indent" => 0,
           "completion_requirement" => { "type" => "must_submit" },
           "published" => false,
+          "unpublishable" => true,
           "module_id" => @module1.id,
           "quiz_lti" => false
         },
@@ -145,6 +146,7 @@ describe "Module Items API", type: :request do
           "indent" => 0,
           "completion_requirement" => { "type" => "min_score", "min_score" => 10.0 },
           "published" => true,
+          "unpublishable" => true,
           "module_id" => @module1.id,
           "quiz_lti" => false
         },
@@ -159,6 +161,7 @@ describe "Module Items API", type: :request do
           "indent" => 0,
           "completion_requirement" => { "type" => "must_contribute" },
           "published" => true,
+          "unpublishable" => true,
           "module_id" => @module1.id,
           "quiz_lti" => false
         },
@@ -169,6 +172,7 @@ describe "Module Items API", type: :request do
           "title" => @subheader_tag.title,
           "indent" => 0,
           "published" => true,
+          "unpublishable" => true,
           "module_id" => @module1.id,
           "quiz_lti" => false
         },
@@ -182,6 +186,7 @@ describe "Module Items API", type: :request do
           "indent" => 1,
           "completion_requirement" => { "type" => "must_view" },
           "published" => true,
+          "unpublishable" => true,
           "module_id" => @module1.id,
           "new_tab" => nil,
           "quiz_lti" => false
@@ -302,6 +307,7 @@ describe "Module Items API", type: :request do
                            "page_url" => @wiki_page.url,
                            "published" => true,
                            "publish_at" => nil,
+                           "unpublishable" => true,
                            "module_id" => @module2.id,
                            "quiz_lti" => false
                          })
@@ -325,6 +331,7 @@ describe "Module Items API", type: :request do
                            "indent" => 0,
                            "url" => "http://www.example.com/api/v1/courses/#{@course.id}/files/#{@attachment.id}",
                            "published" => false,
+                           "unpublishable" => false,
                            "module_id" => @module2.id,
                            "quiz_lti" => false
                          })
@@ -664,6 +671,55 @@ describe "Module Items API", type: :request do
         expect(tags.map(&:position)).to eq [1, 4, 5, 6]
       end
 
+      it "inserts into correct position if created out of order" do
+        new_module = @course.context_modules.create!(name: "module1")
+        tags = new_module.content_tags
+
+        json3 = api_call(:post,
+                         "/api/v1/courses/#{@course.id}/modules/#{new_module.id}/items",
+                         { controller: "context_module_items_api",
+                           action: "create",
+                           format: "json",
+                           course_id: @course.id.to_s,
+                           module_id: new_module.id.to_s },
+                         { module_item: { title: "title",
+                                          type: "ExternalUrl",
+                                          url: "http://example.com",
+                                          position: 3 } })
+        api_call(:post,
+                 "/api/v1/courses/#{@course.id}/modules/#{new_module.id}/items",
+                 { controller: "context_module_items_api",
+                   action: "create",
+                   format: "json",
+                   course_id: @course.id.to_s,
+                   module_id: new_module.id.to_s },
+                 { module_item: { title: "title",
+                                  type: "ExternalUrl",
+                                  url: "http://example.com",
+                                  position: 1 } })
+
+        api_call(:post,
+                 "/api/v1/courses/#{@course.id}/modules/#{new_module.id}/items",
+                 { controller: "context_module_items_api",
+                   action: "create",
+                   format: "json",
+                   course_id: @course.id.to_s,
+                   module_id: new_module.id.to_s },
+                 { module_item: { title: "title",
+                                  type: "ExternalUrl",
+                                  url: "http://example.com",
+                                  position: 2 } })
+
+        expect(json3["position"]).to eq 3
+
+        tag = new_module.content_tags.where(id: json3["id"]).first
+        expect(tag).not_to be_nil
+        expect(tag.position).to eq 3
+
+        tags.each(&:reload)
+        expect(tags.map(&:position)).to eq [1, 2, 3]
+      end
+
       context "set_completion_requirement" do
         it "sets completion requirement on assignment to min_score" do
           assignment = @course.assignments.create!(name: "pls submit", submission_types: ["online_text_entry"])
@@ -801,6 +857,101 @@ describe "Module Items API", type: :request do
         expect(json["external_url"]).to eq new_url
 
         expect(@external_url_tag.reload.url).to eq new_url
+      end
+
+      context "with external tool tags" do
+        subject do
+          api_call(:put,
+                   "/api/v1/courses/#{@course.id}/modules/#{@module1.id}/items/#{external_tool_tag.id}",
+                   { controller: "context_module_items_api",
+                     action: "update",
+                     format: "json",
+                     course_id: @course.id.to_s,
+                     module_id: @module1.id.to_s,
+                     id: external_tool_tag.id.to_s },
+                   { module_item: { external_url: } })
+        end
+
+        let(:external_tool_tag) do
+          tag = @module1.add_item(type: "context_external_tool",
+                                  title: "Example Tool",
+                                  url: tag_url)
+          tag.content = tool
+          tag.save!
+          tag
+        end
+        let(:tag_url) { "http://example.com/tool/launch" }
+        let(:external_url) { "http://example.org/new_tool" }
+        let(:tool_url) { "http://example.com/tool" }
+        let(:tool) do
+          @course.context_external_tools.create!(name: "a", url: tool_url, consumer_key: "12345", shared_secret: "secret")
+        end
+
+        context "when tool doesn't match" do
+          context "when external_url remains the same" do
+            let(:external_url) { tag_url }
+
+            it "does not change content_id" do
+              expect { subject }.not_to change { external_tool_tag.reload.content_id }
+            end
+          end
+
+          context "when external_url is changed" do
+            it "does not change content_id" do
+              expect { subject }.not_to change { external_tool_tag.reload.content_id }
+            end
+
+            it "saves the new url" do
+              expect(subject["external_url"]).to eq external_url
+              expect(external_tool_tag.reload.url).to eq external_url
+            end
+          end
+        end
+
+        context "when tool matches via domain and url remains the same" do
+          let(:external_url) { tag_url }
+
+          before do
+            tool.domain = "example.com"
+            tool.save!
+          end
+
+          it "does not change content_id" do
+            expect { subject }.not_to change { external_tool_tag.reload.content_id }
+          end
+        end
+
+        context "when new tool matches" do
+          let(:new_tool) do
+            t = tool.dup
+            t.url = external_url
+            t.save!
+            t
+          end
+
+          before do
+            new_tool
+          end
+
+          context "when external_url remains the same" do
+            let(:external_url) { tag_url }
+
+            it "does not change content_id" do
+              expect { subject }.not_to change { external_tool_tag.reload.content_id }
+            end
+          end
+
+          context "when external_url is changed" do
+            it "changes content_id to new tool" do
+              expect { subject }.to change { external_tool_tag.reload.content_id }.from(tool.id).to(new_tool.id)
+            end
+
+            it "saves the new url" do
+              expect(subject["external_url"]).to eq external_url
+              expect(external_tool_tag.reload.url).to eq external_url
+            end
+          end
+        end
       end
 
       it "ignores the url for a non-applicable type" do
@@ -998,7 +1149,7 @@ describe "Module Items API", type: :request do
                      id: @wiki_page_tag.id.to_s },
                    { module_item: { module_id: @module3.id } })
 
-          expect(@module2.reload.content_tags.map(&:id)).not_to be_include @wiki_page_tag.id
+          expect(@module2.reload.content_tags.map(&:id)).not_to include @wiki_page_tag.id
           expect(@module2.updated_at).to be > old_updated_ats[0]
           expect(@module3.reload.content_tags.map(&:id)).to eq [@wiki_page_tag.id]
           expect(@module3.updated_at).to be > old_updated_ats[1]
@@ -1022,7 +1173,7 @@ describe "Module Items API", type: :request do
                      id: @assignment_tag.id.to_s },
                    { module_item: { module_id: @module2.id } })
 
-          expect(@module1.reload.content_tags.map(&:id)).not_to be_include @assignment_tag.id
+          expect(@module1.reload.content_tags.map(&:id)).not_to include @assignment_tag.id
           expect(@module1.updated_at).to be > old_updated_ats[0]
           expect(@module1.completion_requirements.size).to eq 3
           expect(@module1.completion_requirements.detect { |req| req[:id] == @assignment_tag.id }).to be_nil
@@ -1049,7 +1200,7 @@ describe "Module Items API", type: :request do
                      id: @assignment_tag.id.to_s },
                    { module_item: { module_id: @module2.id, position: 2 } })
 
-          expect(@module1.reload.content_tags.map(&:id)).not_to be_include @assignment_tag.id
+          expect(@module1.reload.content_tags.map(&:id)).not_to include @assignment_tag.id
           expect(@module1.updated_at).to be > old_updated_ats[0]
           expect(@module1.completion_requirements.size).to eq 3
           expect(@module1.completion_requirements.detect { |req| req[:id] == @assignment_tag.id }).to be_nil
@@ -1263,6 +1414,23 @@ describe "Module Items API", type: :request do
         expect(json["modules"].size).to be 0
       end
 
+      it "finds a (non-deleted) wiki page by old slug" do
+        @wiki_page.wiki_page_lookups.create!(slug: "an-old-url")
+        json = api_call(:get,
+                        "/api/v1/courses/#{@course.id}/module_item_sequence?asset_type=Page&asset_id=an-old-url",
+                        controller: "context_module_items_api",
+                        action: "item_sequence",
+                        format: "json",
+                        course_id: @course.to_param,
+                        asset_type: "Page",
+                        asset_id: "an-old-url")
+        expect(json["items"].size).to be 1
+        expect(json["items"][0]["prev"]["id"]).to eq @external_url_tag.id
+        expect(json["items"][0]["current"]["id"]).to eq @wiki_page_tag.id
+        expect(json["items"][0]["next"]["id"]).to eq @attachment_tag.id
+        expect(json["modules"].pluck("id").sort).to eq [@module1.id, @module2.id].sort
+      end
+
       it "skips a deleted module" do
         new_tag = @module3.add_item(id: @attachment.id, type: "attachment")
         @module2.destroy
@@ -1440,7 +1608,7 @@ describe "Module Items API", type: :request do
       end
 
       it "requires a student_id specified" do
-        call_select_mastery_path @assignment_tag, 100, nil, expected_status: 401
+        call_select_mastery_path @assignment_tag, 100, nil, expected_status: 403
       end
 
       it "requires an assignment_set_id specified" do
@@ -1757,7 +1925,8 @@ describe "Module Items API", type: :request do
           expect(json["items"][0]["next"]["id"]).to eq quiz_tag.id
         end
 
-        it "does not omit a wiki page item if CYOE is disabled" do
+        it "does not omit a wiki page item if CYOE is disabled and selective release is disabled" do
+          Account.site_admin.disable_feature! :selective_release_backend
           allow(ConditionalRelease::Service).to receive(:enabled_in_context?).and_return(false)
           module_with_page = @course.context_modules.create!(name: "new module")
           assignment = @course.assignments.create!(
@@ -1940,7 +2109,7 @@ describe "Module Items API", type: :request do
                  id: @assignment_tag.id.to_s },
                { module_item: { title: "new name" } },
                {},
-               { expected_status: 401 })
+               { expected_status: 403 })
     end
 
     it "disallows create" do
@@ -1953,7 +2122,7 @@ describe "Module Items API", type: :request do
                  module_id: @module1.id.to_s },
                { module_item: { title: "new name" } },
                {},
-               { expected_status: 401 })
+               { expected_status: 403 })
     end
 
     it "disallows destroy" do
@@ -1967,7 +2136,7 @@ describe "Module Items API", type: :request do
                  id: @assignment_tag.id.to_s },
                {},
                {},
-               { expected_status: 401 })
+               { expected_status: 403 })
     end
 
     it "does not show module item completion for other students" do
@@ -1984,7 +2153,7 @@ describe "Module Items API", type: :request do
                  module_id: @module1.id.to_s },
                {},
                {},
-               { expected_status: 401 })
+               { expected_status: 403 })
 
       api_call(:get,
                "/api/v1/courses/#{@course.id}/modules/#{@module1.id}/items/#{@assignment_tag.id}?student_id=#{student.id}",
@@ -1997,7 +2166,7 @@ describe "Module Items API", type: :request do
                  student_id: student.id.to_s },
                {},
                {},
-               { expected_status: 401 })
+               { expected_status: 403 })
     end
 
     context "mark_as_done" do
@@ -2249,7 +2418,7 @@ describe "Module Items API", type: :request do
                    id: @assignment_tag.id.to_s },
                  { student_id: other_student.id, assignment_set_id: 100 },
                  {},
-                 { expected_status: 401 })
+                 { expected_status: 403 })
       end
 
       context "in a course that is public to auth users" do
@@ -2326,7 +2495,7 @@ describe "Module Items API", type: :request do
                  module_id: @module1.id.to_s },
                {},
                {},
-               { expected_status: 401 })
+               { expected_status: 403 })
       api_call(:get,
                "/api/v1/courses/#{@course.id}/modules/#{@module2.id}/items/#{@attachment_tag.id}",
                { controller: "context_module_items_api",
@@ -2337,7 +2506,7 @@ describe "Module Items API", type: :request do
                  id: @attachment_tag.id.to_s },
                {},
                {},
-               { expected_status: 401 })
+               { expected_status: 403 })
       api_call(:get,
                "/api/v1/courses/#{@course.id}/module_item_redirect/#{@external_url_tag.id}",
                { controller: "context_module_items_api",
@@ -2347,7 +2516,7 @@ describe "Module Items API", type: :request do
                  id: @external_url_tag.id.to_s },
                {},
                {},
-               { expected_status: 401 })
+               { expected_status: 403 })
       api_call(:put,
                "/api/v1/courses/#{@course.id}/modules/#{@module1.id}/items/#{@assignment_tag.id}",
                { controller: "context_module_items_api",
@@ -2358,7 +2527,7 @@ describe "Module Items API", type: :request do
                  id: @assignment_tag.id.to_s },
                { module_item: { title: "new name" } },
                {},
-               { expected_status: 401 })
+               { expected_status: 403 })
       api_call(:post,
                "/api/v1/courses/#{@course.id}/modules/#{@module1.id}/items",
                { controller: "context_module_items_api",
@@ -2368,7 +2537,7 @@ describe "Module Items API", type: :request do
                  module_id: @module1.id.to_s },
                { module_item: { title: "new name" } },
                {},
-               { expected_status: 401 })
+               { expected_status: 403 })
       api_call(:delete,
                "/api/v1/courses/#{@course.id}/modules/#{@module1.id}/items/#{@assignment_tag.id}",
                { controller: "context_module_items_api",
@@ -2379,7 +2548,7 @@ describe "Module Items API", type: :request do
                  id: @assignment_tag.id.to_s },
                {},
                {},
-               { expected_status: 401 })
+               { expected_status: 403 })
       allow(ConditionalRelease::Service).to receive(:enabled_in_context?).and_return(true)
       api_call(:post,
                "/api/v1/courses/#{@course.id}/modules/#{@module1.id}/items/#{@assignment_tag.id}/select_mastery_path",
@@ -2391,7 +2560,7 @@ describe "Module Items API", type: :request do
                  id: @assignment_tag.id.to_s },
                { assignment_set_id: 100 },
                {},
-               { expected_status: 401 })
+               { expected_status: 403 })
     end
   end
 end

@@ -26,9 +26,9 @@ class Mutations::ImportOutcomes < Mutations::BaseMutation
   argument :source_context_id, ID, required: false
   argument :source_context_type, String, required: false
   # after Remove target_context attributes, the target_group_id should be required
-  argument :target_group_id, ID, required: false, prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func("LearningOutcomeGroup")
   argument :target_context_id, ID, required: false
   argument :target_context_type, String, required: false
+  argument :target_group_id, ID, required: false, prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func("LearningOutcomeGroup")
 
   field :progress, Types::ProgressType, null: true
 
@@ -247,7 +247,7 @@ class Mutations::ImportOutcomes < Mutations::BaseMutation
 
       total = ancestors_to_be_imported_map.values.size
       i = 0
-      ancestors_to_be_imported_map.each do |_, ancestors_ids|
+      ancestors_to_be_imported_map.each_value do |ancestors_ids|
         destination_parent_group = target_group
         ancestors_ids.each do |gid|
           unless source_target_groups_map[gid]

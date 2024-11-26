@@ -35,7 +35,6 @@ RSpec.describe Mutations::UpdateDiscussionEntry do
     message: nil,
     remove_attachment: nil,
     file_id: nil,
-    include_reply_preview: nil,
     quoted_entry_id: nil
   )
     <<~GQL
@@ -45,7 +44,6 @@ RSpec.describe Mutations::UpdateDiscussionEntry do
           #{"message: \"#{message}\"" unless message.nil?}
           #{"removeAttachment: #{remove_attachment}" unless remove_attachment.nil?}
           #{"fileId: #{file_id}" unless file_id.nil?}
-          #{"includeReplyPreview: #{include_reply_preview}" unless include_reply_preview.nil?}
           #{"quotedEntryId: #{quoted_entry_id}" unless quoted_entry_id.nil?}
         }) {
           discussionEntry {
@@ -83,6 +81,15 @@ RSpec.describe Mutations::UpdateDiscussionEntry do
     expect(@entry.reload.message).to eq "New message"
   end
 
+  it "sanitizes the entry message" do
+    message = "<script>alert('hi')</script><style>button { color: white !important; }</style><p>Howdy</p>"
+    result = run_mutation(discussion_entry_id: @entry.id, message:)
+    expect(result["errors"]).to be_nil
+    expect(result.dig("data", "updateDiscussionEntry", "errors")).to be_nil
+    expect(result.dig("data", "updateDiscussionEntry", "discussionEntry", "message")).to eq("<p>Howdy</p>")
+    expect(@entry.reload.message).to eq "<p>Howdy</p>"
+  end
+
   it "deletes discussion_entry_drafts for an edit" do
     delete_me = DiscussionEntryDraft.upsert_draft(user: @student, topic: @topic, message: "Howdy Hey", entry: @entry)
     run_mutation(discussion_entry_id: @entry.id, message: "New message")
@@ -114,6 +121,24 @@ RSpec.describe Mutations::UpdateDiscussionEntry do
     expect(@entry.reload.attachment_id).to eq attachment.id
   end
 
+  it "allows students to update discussion entry even without allow_student_forum_attachments permission" do
+    new_message = "updated banana"
+    @course.update!(allow_student_forum_attachments: false)
+    result = run_mutation({ discussion_entry_id: @entry.id, remove_attachment: true, message: new_message }, @student)
+    expect(result["errors"]).to be_nil
+    expect(result.dig("data", "updateDiscussionEntry", "errors")).to be_nil
+    expect(@entry.reload.message).to eq new_message
+  end
+
+  it "allows teachers to update discussion entry even without allow_student_forum_attachments permission" do
+    new_message = "updated banana"
+    @course.update!(allow_student_forum_attachments: false)
+    result = run_mutation({ discussion_entry_id: @entry.id, remove_attachment: true, message: new_message }, @teacher)
+    expect(result["errors"]).to be_nil
+    expect(result.dig("data", "updateDiscussionEntry", "errors")).to be_nil
+    expect(@entry.reload.message).to eq new_message
+  end
+
   it "allows teachers to edit post with student attachment" do
     attachment = attachment_with_context(@student)
     attachment.update!(user: @student)
@@ -129,46 +154,6 @@ RSpec.describe Mutations::UpdateDiscussionEntry do
     expect(@entry.reload.attachment_id).to eq attachment.id
     # Verify that the owner of the attachment did not change when teacher edited message
     expect(@entry.reload.attachment.user.id).to eq @student.id
-  end
-
-  context "include reply preview" do
-    it "cannot be true on a root entry" do
-      result = run_mutation(discussion_entry_id: @entry.id, include_reply_preview: true)
-      expect(result["errors"]).to be_nil
-      expect(result.dig("data", "updateDiscussionEntry", "errors")).to be_nil
-      expect(@entry.reload.include_reply_preview).to be false
-    end
-
-    it "can be true on a reply to a root entry" do
-      parent_entry = @topic.discussion_entries.create!(message: "I am the parent reply", user: @student, attachment: @attachment)
-      entry = @topic.discussion_entries.create!(message: "I am the child reply", user: @student, attachment: @attachment, parent_id: parent_entry.id, include_reply_preview: false, root_entry_id: parent_entry.id)
-      result = run_mutation(discussion_entry_id: entry.id, include_reply_preview: true)
-      expect(result["errors"]).to be_nil
-      expect(result.dig("data", "updateDiscussionEntry", "errors")).to be_nil
-      expect(entry.reload.include_reply_preview).to be true
-    end
-
-    it "does set on reply to a child reply" do
-      parent_entry = @topic.discussion_entries.create!(message: "I am the parent reply", user: @student, attachment: @attachment)
-      child_reply = @topic.discussion_entries.create!(message: "I am the child reply", user: @student, attachment: @attachment, parent_id: parent_entry.id)
-      entry = @topic.discussion_entries.create!(message: "Howdy", user: @student, attachment: @attachment, parent_id: child_reply.id, include_reply_preview: false)
-      result = run_mutation(discussion_entry_id: entry.id, include_reply_preview: true)
-      expect(result["errors"]).to be_nil
-      expect(result.dig("data",
-                        'updateDiscussion
-        Entry',
-                        "errors")).to be_nil
-      expect(entry.reload.include_reply_preview).to be true
-    end
-
-    it "allows removing reply preview" do
-      parent_entry = @topic.discussion_entries.create!(message: "I am the parent reply", user: @student, attachment: @attachment)
-      child_reply = @topic.discussion_entries.create!(message: "I am the child reply", user: @student, attachment: @attachment, parent_id: parent_entry.id)
-      entry = @topic.discussion_entries.create!(message: "Howdy", user: @student, attachment: @attachment, parent_id: child_reply.id, include_reply_preview: true)
-      expect(entry.reload.include_reply_preview).to be true
-      run_mutation(discussion_entry_id: entry.id, include_reply_preview: false)
-      expect(entry.reload.include_reply_preview).to be false
-    end
   end
 
   context "quoted entry id" do
@@ -244,6 +229,19 @@ RSpec.describe Mutations::UpdateDiscussionEntry do
       result = run_mutation(discussion_entry_id: @entry.id, file_id: attachment.id)
       expect(result.dig("data", "updateDiscussionEntry")).to be_nil
       expect(result.dig("errors", 0, "message")).to eq "not found"
+    end
+
+    it "returns validation_error when user does not have attach permissions" do
+      current_attachment_id = @entry.attachment_id
+      attachment = attachment_with_context(@student)
+      attachment.update!(user: @student)
+      @course.update!(allow_student_forum_attachments: false)
+
+      result = run_mutation(discussion_entry_id: @entry.id, file_id: attachment.id)
+      expect(result["errors"]).to be_nil
+      expect(result.dig("data", "updateDiscussionEntry", "errors", 0, "message")).to eq "Insufficient attach permissions"
+      expect(result.dig("data", "updateDiscussionEntry", "discussionEntry", "attachment", "_id")).to be_nil
+      expect(@entry.reload.attachment_id).to eq current_attachment_id
     end
   end
 end

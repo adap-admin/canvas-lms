@@ -46,7 +46,7 @@ describe CrocodocSessionsController do
 
     it "works for the user in the blob" do
       get :show, params: { blob: @blob, hmac: @hmac }
-      expect(response.body).to include "https://crocodoc.com/view/SESSION"
+      expect(response).to redirect_to "https://crocodoc.com/view/SESSION"
     end
 
     it "doesn't work for others" do
@@ -110,9 +110,7 @@ describe CrocodocSessionsController do
   context "Migrate to Canvadocs" do
     before do
       @attachment.submit_to_crocodoc
-      allow(Canvadocs).to receive(:enabled?).and_return true
-      allow(Canvadocs).to receive(:annotations_supported?).and_return true
-      allow(Canvadocs).to receive(:hijack_crocodoc_sessions?).and_return false
+      allow(Canvadocs).to receive_messages(enabled?: true, annotations_supported?: true, hijack_crocodoc_sessions?: false)
 
       allow_any_instance_of(Canvadocs::API).to receive(:session).and_return "id" => "SESSION"
       PluginSetting.create! name: "canvadocs",
@@ -122,12 +120,12 @@ describe CrocodocSessionsController do
     it "redirects to a canvadocs session instead of crocodoc when enabled" do
       allow(Canvadocs).to receive(:hijack_crocodoc_sessions?).and_return true
       get :show, params: { blob: @blob, hmac: @hmac }
-      expect(response.body).to include "https://canvadocs.instructure.docker/sessions/SESSION/view"
+      expect(response).to redirect_to(%r{^https://canvadocs.instructure.docker/sessions/SESSION/view})
     end
 
     it "does not redirect to a canvadocs session instead of crocodoc when disabled" do
       get :show, params: { blob: @blob, hmac: @hmac }
-      expect(response.body).to_not include "https://canvadocs.instructure.docker/sessions/SESSION/view"
+      expect(response).not_to redirect_to(%r{^https://canvadocs.instructure.docker/sessions/SESSION/view})
     end
   end
 end

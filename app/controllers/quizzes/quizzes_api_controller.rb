@@ -204,7 +204,7 @@
 #           "type": "string"
 #         },
 #         "speedgrader_url": {
-#           "description": "Link to Speed Grader for this quiz. Will not be present if quiz is unpublished",
+#           "description": "Link to SpeedGrader for this quiz. Will not be present if quiz is unpublished",
 #           "example": "http://canvas.instructure.com/courses/1/speed_grader?assignment_id=1",
 #           "type": "string"
 #         },
@@ -310,7 +310,7 @@ class Quizzes::QuizzesApiController < ApplicationController
   def index
     if authorized_action(@context, @current_user, :read) && tab_enabled?(@context.class::TAB_QUIZZES)
       log_api_asset_access(["quizzes", @context], "quizzes", "other")
-      updated = @context.quizzes.active.reorder("updated_at DESC").limit(1).pluck(:updated_at).first
+      updated = @context.quizzes.active.reorder("updated_at DESC").limit(1).pick(:updated_at)
       cache_key = ["quizzes",
                    @context.id,
                    @context.quizzes.active.size,
@@ -604,6 +604,6 @@ class Quizzes::QuizzesApiController < ApplicationController
   end
 
   def check_differentiated_assignments
-    return render_unauthorized_action if @current_user && !@quiz.visible_to_user?(@current_user)
+    render_unauthorized_action if @current_user && !@quiz.visible_to_user?(@current_user)
   end
 end

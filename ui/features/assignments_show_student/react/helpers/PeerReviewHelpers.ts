@@ -16,9 +16,9 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {AssignedAssessments} from '../../../../api.d'
+import type {AssignedAssessments} from '../../../../api.d'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import {PeerReviewSubheader} from '../components/PeerReviewPromptModal'
+import type {PeerReviewSubheader} from '../components/PeerReviewPromptModal'
 
 const I18n = useI18nScope('assignments_2_peer_review')
 
@@ -31,6 +31,10 @@ export const getRedirectUrlToFirstPeerReview = (
   if (!assessment) {
     return
   }
+  return getPeerReviewUrl(assessment)
+}
+
+export const getPeerReviewUrl = (assessment: AssignedAssessments) => {
   let url = `/courses/${ENV.COURSE_ID}/assignments/${ENV.ASSIGNMENT_ID}`
   if (assessment.anonymizedUser) {
     url += `?reviewee_id=${assessment.anonymizedUser._id}`

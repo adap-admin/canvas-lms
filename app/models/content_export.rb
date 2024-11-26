@@ -34,26 +34,32 @@ class ContentExport < ActiveRecord::Base
   serialize :settings
 
   attr_writer :master_migration
+  attr_accessor :new_quizzes_export_url, :new_quizzes_export_state
 
   validates :context_id, :workflow_state, presence: true
 
   has_one :job_progress, class_name: "Progress", as: :context, inverse_of: :context
 
   before_save :assign_quiz_migration_limitation_alert
+  before_save :set_new_quizzes_export_settings
   before_create :set_global_identifiers
 
   # export types
   COMMON_CARTRIDGE = "common_cartridge"
   COURSE_COPY = "course_copy"
   MASTER_COURSE_COPY = "master_course_copy"
+  COURSE_TEMPLATE_COPY = "course_template_copy"
   QTI = "qti"
   USER_DATA = "user_data"
   ZIP = "zip"
   QUIZZES2 = "quizzes2"
   CC_EXPORT_TYPES = [COMMON_CARTRIDGE, COURSE_COPY, MASTER_COURSE_COPY, QTI, QUIZZES2].freeze
 
+  class ExternalExportNotCompletedError < StandardError; end
+
   workflow do
     state :created
+    state :waiting_for_external_tool
     state :exporting
     state :exported
     state :exported_for_course_copy
@@ -135,7 +141,15 @@ class ContentExport < ActiveRecord::Base
     quizzes_next? && root_account.feature_enabled?(:newquizzes_on_quiz_page)
   end
 
+  def waiting_for_external_tool?
+    workflow_state == "waiting_for_external_tool"
+  end
+
   def export(opts = {})
+    if waiting_for_external_tool? && !new_quizzes_export_state_completed?
+      raise ExternalExportNotCompletedError
+    end
+
     save if capture_job_id
 
     shard.activate do
@@ -167,6 +181,10 @@ class ContentExport < ActiveRecord::Base
   def reset_and_start_job_progress
     job_progress.try :reset!
     job_progress.try :start!
+  end
+
+  def mark_waiting_for_external_tool
+    self.workflow_state = "waiting_for_external_tool"
   end
 
   def mark_exporting
@@ -366,7 +384,7 @@ class ContentExport < ActiveRecord::Base
     end
   end
 
-  def queue_api_job(opts)
+  def initialize_job_progress
     if job_progress
       p = job_progress
     else
@@ -377,8 +395,6 @@ class ContentExport < ActiveRecord::Base
     p.completion = 0
     p.user = user
     p.save!
-    quizzes2_build_assignment(opts) if new_quizzes_page_enabled?
-    export(opts)
   end
 
   def referenced_files
@@ -386,11 +402,15 @@ class ContentExport < ActiveRecord::Base
   end
 
   def for_course_copy?
-    export_type == COURSE_COPY || export_type == MASTER_COURSE_COPY
+    export_type == COURSE_COPY || export_type == MASTER_COURSE_COPY || export_type == COURSE_TEMPLATE_COPY
   end
 
   def for_master_migration?
     export_type == MASTER_COURSE_COPY
+  end
+
+  def for_course_template?
+    export_type == COURSE_TEMPLATE_COPY
   end
 
   def master_migration
@@ -435,6 +455,14 @@ class ContentExport < ActiveRecord::Base
     else
       create_key(obj)
     end
+  end
+
+  def selected_new_quizzes=(copy_settings)
+    settings[:selected_new_quizzes] = copy_settings
+  end
+
+  def selected_new_quizzes
+    settings[:selected_new_quizzes]
   end
 
   def create_key(obj, prepend = "")
@@ -559,7 +587,7 @@ class ContentExport < ActiveRecord::Base
   end
 
   def settings
-    read_or_initialize_attribute(:settings, {}.with_indifferent_access)
+    self["settings"] ||= {}.with_indifferent_access
   end
 
   def fast_update_progress(val)
@@ -595,6 +623,43 @@ class ContentExport < ActiveRecord::Base
     end
   end
 
+  def prepare_new_quizzes_export(selected_assignments = nil)
+    unless new_quizzes_common_cartridge_enabled?
+      settings[:contains_new_quizzes] = false
+      return
+    end
+
+    nq_assignments = course.assignments.active.type_quiz_lti.where.not(workflow_state: ["failed_to_duplicate", "fail_to_import"])
+
+    is_selective_export = !selected_assignments.nil?
+    if is_selective_export
+      selected_new_quizzes_ids = nq_assignments.where(id: selected_assignments).map { |id| Shard.global_id_for(id) }
+
+      unless selected_new_quizzes_ids.blank?
+        self.selected_new_quizzes = selected_new_quizzes_ids
+      end
+    end
+
+    settings[:contains_new_quizzes] = is_selective_export ? selected_new_quizzes.present? : nq_assignments.count.positive?
+    mark_waiting_for_external_tool if contains_new_quizzes_setting?
+  end
+
+  def contains_new_quizzes?
+    new_quizzes_common_cartridge_enabled? && contains_new_quizzes_setting?
+  end
+
+  def contains_new_quizzes_setting?
+    settings[:contains_new_quizzes] == true
+  end
+
+  def include_new_quizzes_in_export?
+    return false unless new_quizzes_common_cartridge_enabled?
+    return false unless settings[:new_quizzes_export_state] == "completed"
+    return false unless settings[:new_quizzes_export_url].present?
+
+    true
+  end
+
   scope :active, -> { where("content_exports.workflow_state<>'deleted'") }
   scope :not_for_copy, -> { where.not(content_exports: { export_type: [COURSE_COPY, MASTER_COURSE_COPY] }) }
   scope :common_cartridge, -> { where(export_type: COMMON_CARTRIDGE) }
@@ -619,11 +684,26 @@ class ContentExport < ActiveRecord::Base
   scope :without_epub, -> { eager_load(:epub_export).where(epub_exports: { id: nil }) }
   scope :expired, lambda {
     if ContentExport.expire?
-      where("created_at < ?", ContentExport.expire_days.days.ago)
+      where(created_at: ...ContentExport.expire_days.days.ago)
     else
       none
     end
   }
+
+  def set_new_quizzes_export_settings
+    return unless common_cartridge? && new_quizzes_export_state.present?
+
+    settings[:new_quizzes_export_url] = new_quizzes_export_url
+    settings[:new_quizzes_export_state] = new_quizzes_export_state
+  end
+
+  def new_quizzes_export_state_failed?
+    settings[:new_quizzes_export_state] == "failed"
+  end
+
+  def new_quizzes_export_state_completed?
+    settings[:new_quizzes_export_state] == "completed"
+  end
 
   private
 
@@ -633,5 +713,9 @@ class ContentExport < ActiveRecord::Base
 
   def new_quizzes_bank_migration_enabled?
     context_type == "Course" && NewQuizzesFeaturesHelper.new_quizzes_bank_migrations_enabled?(context)
+  end
+
+  def new_quizzes_common_cartridge_enabled?
+    context_type == "Course" && NewQuizzesFeaturesHelper.new_quizzes_common_cartridge_enabled?
   end
 end

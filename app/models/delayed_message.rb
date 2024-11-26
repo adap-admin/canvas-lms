@@ -26,6 +26,7 @@ class DelayedMessage < ActiveRecord::Base
     [
       :discussion_entry,
       :assignment,
+      :sub_assignment,
       :submission_comment,
       :submission,
       :conversation_message,
@@ -66,9 +67,9 @@ class DelayedMessage < ActiveRecord::Base
 
   def summary=(val)
     if !val || val.length < self.class.maximum_text_length
-      write_attribute(:summary, val)
+      super
     else
-      write_attribute(:summary, val[0, self.class.maximum_text_length])
+      super(val[0, self.class.maximum_text_length])
     end
   end
 
@@ -85,7 +86,7 @@ class DelayedMessage < ActiveRecord::Base
     when CommunicationChannel
       where(communication_channel_id: context)
     else
-      where(context_id: context, context_type: context.class.base_class.to_s)
+      where(context:)
     end
   }
 

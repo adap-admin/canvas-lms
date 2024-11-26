@@ -88,15 +88,19 @@ module LtiOutbound
     def generate(overrides = {})
       hash["lti_message_type"] = "basic-lti-launch-request"
       hash["lti_version"] = "LTI-1p0"
+
       hash["resource_link_id"] = link_code
       hash["resource_link_title"] = overrides["resource_link_title"] || tool.name
-      hash["user_id"] = user.opaque_identifier
       hash["text"] = CGI.escape(selected_html) if selected_html
 
       hash["roles"] = user.current_role_types # AccountAdmin, Student, Faculty or Observer
       hash["ext_roles"] = "$Canvas.xuser.allRoles"
 
       hash["custom_canvas_enrollment_state"] = "$Canvas.enrollment.enrollmentState"
+
+      if !tool.anonymous? || !edu_apps_url?
+        hash["user_id"] = user.opaque_identifier
+      end
 
       if tool.include_name?
         hash["lis_person_name_given"] = user.first_name
@@ -151,6 +155,7 @@ module LtiOutbound
       hash["oauth_callback"] = "about:blank"
 
       hash["ext_platform"] = overrides[:platform] if overrides.key?(:platform)
+      hash["ext_lti_student_id"] = overrides[:lti_student_id] if overrides.key?(:lti_student_id)
 
       @variable_expander.expand_variables!(hash)
       hash
@@ -192,6 +197,10 @@ module LtiOutbound
         hash["ext_content_file_extensions"] = "zip,imscc"
         hash["ext_content_return_url"] = return_url
       end
+    end
+
+    def edu_apps_url?
+      url.include? "edu-apps.org"
     end
   end
 end

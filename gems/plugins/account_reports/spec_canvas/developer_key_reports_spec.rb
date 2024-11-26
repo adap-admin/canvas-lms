@@ -26,6 +26,7 @@ describe AccountReports::DeveloperKeyReports do
   subject do
     first_key
     second_key
+    third_key
     site_admin_key
     read_report(report_type, report_opts)
   end
@@ -52,6 +53,13 @@ describe AccountReports::DeveloperKeyReports do
     disable_developer_key_account_binding! dk
     dk
   end
+  let_once(:third_key) do
+    dk = dev_key_model_dyn_reg({ name: "Third Key",
+                                 public_jwk_url: "http://test.com/jwks",
+                                 account: })
+    enable_developer_key_account_binding! dk
+    dk
+  end
   let_once(:site_admin_key) do
     dk = dev_key_model({ name: "Site Admin Key" })
     disable_developer_key_account_binding! dk
@@ -67,7 +75,6 @@ describe AccountReports::DeveloperKeyReports do
   end
   let(:expected_result) do
     [
-
       [
         first_key.global_id,
         first_key.name,
@@ -87,8 +94,17 @@ describe AccountReports::DeveloperKeyReports do
         second_key.tool_configuration.placements.pluck("placement"),
         "Off",
         second_key.scopes
+      ].map(&:to_s),
+      [
+        third_key.global_id,
+        third_key.name,
+        false,
+        third_key.email,
+        "LTI Key",
+        third_key.tool_configuration.placements.pluck(:placement),
+        "On",
+        third_key.scopes
       ].map(&:to_s)
-
     ]
   end
 
@@ -96,7 +112,17 @@ describe AccountReports::DeveloperKeyReports do
     expect(subject).to eq(expected_result)
   end
 
-  describe "the site_admin key is now visible" do
+  context "the first key isn't marked as visible" do
+    before do
+      first_key.update!(visible: false)
+    end
+
+    it "still returns the first key" do
+      expect(subject).to eq(expected_result)
+    end
+  end
+
+  context "the site_admin key is now visible" do
     let(:expected_result) do
       er = super()
       er.append(
@@ -121,7 +147,7 @@ describe AccountReports::DeveloperKeyReports do
       expect(subject).to eq(expected_result)
     end
 
-    describe "the site_admin key is set to allow" do
+    context "the site_admin key is set to on" do
       before do
         site_admin_key.developer_key_account_bindings.first.update!(account: Account.site_admin, workflow_state: "on")
       end
@@ -131,6 +157,34 @@ describe AccountReports::DeveloperKeyReports do
         # goes where on each row.
         expect(subject.find { |row| row[0] == site_admin_key.global_id.to_s }[6]).to eq("On")
       end
+    end
+  end
+
+  context "one of the keys has an overlay that adds an additional placement" do
+    let(:user) { user_model }
+    let(:overlay) do
+      Lti::Overlay.create!(registration: second_key.lti_registration,
+                           account:,
+                           updated_by: user,
+                           data: {
+                             "placements" => {
+                               "module_index_menu_modal" => {
+                                 "message_type" => "LtiResourceLinkRequest",
+                                 "icon_url" => "https://www.example.com/icon.png",
+                               }
+                             }
+                           })
+    end
+
+    let(:expected_result) do
+      super().tap do |er|
+        er[1][5] = %w[course_navigation module_index_menu_modal].to_s
+      end
+    end
+
+    it "adds the additional placement" do
+      overlay
+      expect(subject).to eq(expected_result)
     end
   end
 end

@@ -59,7 +59,8 @@ module CC
       begin
         if for_external_migration? && !@content_export.selective_export?
           # we already know we're exporting all the data so we can begin the external exports now
-          @pending_exports = Canvas::Migration::ExternalContent::Migrator.begin_exports(@course)
+          @pending_exports = Canvas::Migration::ExternalContent::Migrator.begin_exports(@course,
+                                                                                        @content_export)
         end
 
         create_export_dir
@@ -77,6 +78,7 @@ module CC
             # if it's selective, we have to wait until we've completed the rest of the export
             # before we really know what we exported. because magic
             @pending_exports = Canvas::Migration::ExternalContent::Migrator.begin_exports(@course,
+                                                                                          @content_export,
                                                                                           selective: true,
                                                                                           exported_assets: @content_export.exported_assets.to_a)
           end
@@ -85,10 +87,14 @@ module CC
         end
 
         @export_dirs = [@export_dir]
-        if @for_master_migration
+        if @for_master_migration || @content_export&.for_course_template?
           # for efficiency to the max, short-circuit the usual course copy process (i.e. zip up, save, and then unzip again)
           # and instead go straight to the intermediate json
-          converter = CC::Importer::Canvas::Converter.new(unzipped_file_path: @export_dir, deletions: @deletions)
+          converter = CC::Importer::Canvas::Converter.new(
+            unzipped_file_path: @export_dir,
+            deletions: @deletions,
+            is_discussion_checkpoints_enabled: discussion_checkpoints_enabled?
+          )
           @export_dirs << converter.base_export_dir # make sure we clean this up too afterwards
           converter.export
           @export_path = converter.course["full_export_file_path"] # this is the course_export.json
@@ -103,7 +109,7 @@ module CC
           att = Attachment.new
           att.context = @content_export
           att.user = @content_export.user
-          data = Rack::Test::UploadedFile.new(@export_path, @export_type || Attachment.mimetype(@export_path))
+          data = Canvas::UploadedFile.new(@export_path, @export_type || Attachment.mimetype(@export_path))
           Attachments::Storage.store_for_attachment(att, data)
           if att.save
             @content_export.attachment = att
@@ -153,8 +159,8 @@ module CC
       @content_export&.id
     end
 
-    def create_key(*args)
-      @content_export ? @content_export.create_key(*args) : CCHelper.create_key(*args)
+    def create_key(*)
+      @content_export ? @content_export.create_key(*) : CCHelper.create_key(*)
     end
 
     def export_object?(obj, asset_type: nil, ignore_updated_at: false)
@@ -170,14 +176,30 @@ module CC
     end
 
     def epub_export?
-      @content_export ? @content_export.epub_export.present? : nil
+      @content_export ? @content_export.epub_export.present? : false
     end
 
     def for_external_migration?
       @content_export && !(@qti_only_export || epub_export?)
     end
 
+    def include_new_quizzes_in_export?
+      @content_export.include_new_quizzes_in_export?
+    end
+
+    def new_quizzes_export_url
+      @content_export.settings[:new_quizzes_export_url]
+    end
+
+    def common_cartridge?
+      @content_export.common_cartridge?
+    end
+
     private
+
+    def discussion_checkpoints_enabled?
+      @content_export&.context&.root_account&.feature_enabled?(:discussion_checkpoints) || false
+    end
 
     def copy_all_to_zip
       Dir["#{@export_dir}/**/**"].each do |file|
@@ -189,7 +211,7 @@ module CC
     end
 
     def create_export_dir
-      slug = +"common_cartridge_#{@course.id}"
+      slug = "common_cartridge_#{@course.id}"
       slug << "_user_#{@user.id}" if @user
       folder = @migration_config[:data_folder] || Dir.tmpdir
 

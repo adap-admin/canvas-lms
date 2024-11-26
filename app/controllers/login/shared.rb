@@ -18,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 module Login::Shared
-  include FullStoryHelper
-
   def reset_session_for_login
     reset_session_saving_keys(:return_to,
                               :oauth,
@@ -35,13 +33,11 @@ module Login::Shared
     reset_authenticity_token!
     Auditors::Authentication.record(pseudonym, "login")
 
-    # Send metrics for successful login
-    if Setting.get("enable_login_metric", "true") == "true"
-      auth_type = pseudonym&.authentication_provider&.auth_type
-      tags = { auth_type: }
-      tags[:domain] = request.host if Setting.get("enable_login_metric_domain", "true") == "true"
-      InstStatsd::Statsd.increment("login.count", tags:) if auth_type
-    end
+    auth_provider = pseudonym&.authentication_provider
+    auth_type = auth_provider&.auth_type
+    tags = { auth_type:, domain: request.host }
+
+    InstStatsd::Statsd.increment("login.count", tags:) if auth_type
 
     # Since the user just logged in, we'll reset the context to include their info.
     setup_live_events_context
@@ -50,12 +46,15 @@ module Login::Shared
     Canvas::LiveEvents.logged_in(session, user, pseudonym)
 
     otp_passed ||= user.validate_otp_secret_key_remember_me_cookie(cookies["canvas_otp_remember_me"], request.remote_ip)
-    unless otp_passed || pseudonym.authentication_provider.skip_internal_mfa
+    unless otp_passed || auth_provider.skip_internal_mfa
       mfa_settings = user.mfa_settings(pseudonym_hint: @current_pseudonym)
-      if (user.otp_secret_key && mfa_settings == :optional) ||
-         mfa_settings == :required
+      if (mfa_settings == :optional && (user.otp_secret_key || auth_provider.mfa_required)) || mfa_settings == :required
         session[:pending_otp] = true
-        return redirect_to otp_login_url
+        respond_to do |format|
+          format.html { redirect_to otp_login_url }
+          format.json { render json: { otp_required: true }, status: :ok }
+        end
+        return
       end
     end
 
@@ -89,31 +88,36 @@ module Login::Shared
     @current_user = user
     @current_pseudonym = pseudonym
 
-    fullstory_init(@domain_root_account, session)
-
     respond_to do |format|
       if (oauth = session[:oauth2])
+        # redirect to external OAuth provider
         provider = Canvas::OAuth::Provider.new(oauth[:client_id], oauth[:redirect_uri], oauth[:scopes], oauth[:purpose])
         return redirect_to Canvas::OAuth::Provider.confirmation_redirect(self, provider, user)
-      elsif session[:course_uuid] && user &&
-            (course = Course.where(uuid: session[:course_uuid], workflow_state: "created").first)
+
+      elsif session[:course_uuid] && user && (course = Course.where(uuid: session[:course_uuid], workflow_state: "created").first)
+        # redirect to course if session includes valid course UUID
         claim_session_course(course, user)
-        format.html { redirect_to(course_url(course, login_success: "1")) }
+        redirect_target = course_url(course, login_success: "1")
+        format.html { redirect_to redirect_target }
+
       elsif session[:confirm]
-        format.html do
-          redirect_to(registration_confirmation_path(session.delete(:confirm),
-                                                     enrollment: session.delete(:enrollment),
-                                                     login_success: 1,
-                                                     confirm: ((user.id == session.delete(:expected_user_id)) ? 1 : nil)))
-        end
+        # redirect to registration confirmation
+        redirect_target = registration_confirmation_path(session.delete(:confirm),
+                                                         enrollment: session.delete(:enrollment),
+                                                         login_success: 1,
+                                                         confirm: ((user.id == session.delete(:expected_user_id)) ? 1 : nil))
+        format.html { redirect_to redirect_target }
+
       else
         # the URL to redirect back to is stored in the session, so it's
         # assumed that if that URL is found rather than using the default,
         # they must have cookies enabled and we don't need to worry about
         # adding the :login_success param to it.
-        format.html { redirect_to delegated_auth_redirect_uri(redirect_back_or_default(dashboard_url(login_success: "1"))) }
+        redirect_target = delegated_auth_redirect_uri(redirect_back_or_default(dashboard_url(login_success: "1")))
+        format.html { redirect_to redirect_target }
       end
-      format.json { render json: pseudonym.as_json(methods: :user_code), status: :ok }
+
+      format.json { render json: pseudonym.as_json(methods: :user_code).merge(location: redirect_target), status: :ok }
     end
   end
 
@@ -140,5 +144,32 @@ module Login::Shared
 
   def delegated_auth_redirect_uri(uri)
     uri
+  end
+
+  def need_email_verification?(unique_ids, auth_provider)
+    old_login_attribute = auth_provider.settings["old_login_attribute"]
+    if old_login_attribute.present? &&
+       auth_provider.login_attribute != old_login_attribute &&
+       unique_ids.is_a?(Hash) &&
+       unique_ids.key?(old_login_attribute) &&
+       unique_ids.key?(auth_provider.login_attribute)
+      pseudonym = @domain_root_account.pseudonyms.for_auth_configuration(unique_ids[old_login_attribute], auth_provider)
+      if pseudonym
+        pseudonym.begin_login_attribute_migration!(unique_ids)
+        redirect_to login_email_verify_show_url(d: CanvasSecurity.create_jwt({ i: pseudonym.id, e: pseudonym.email }, 15.minutes.from_now))
+        return true
+      end
+    end
+    false
+  end
+
+  protected
+
+  def statsd_timeout_error
+    "auth.timeout_error"
+  end
+
+  def statsd_timeout_cutoff
+    "auth.timeout_cutoff"
   end
 end

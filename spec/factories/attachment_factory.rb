@@ -47,9 +47,7 @@ module Factories
   def attachment_model(opts = {})
     attrs = valid_attachment_attributes(opts).merge(opts)
     attrs.delete(:filename) if attrs.key?(:uploaded_data)
-    @attachment = factory_with_protected_attributes(Attachment, attrs, false)
-    @attachment.save!
-    @attachment
+    @attachment = Attachment.create!(attrs)
   end
 
   def valid_attachment_attributes(opts = {})
@@ -76,12 +74,12 @@ module Factories
     $stub_file_counter ||= 0
     data ||= "ohai#{$stub_file_counter += 1}"
     sio = StringIO.new(data)
-    allow(sio).to receive(:original_filename).and_return(filename)
-    allow(sio).to receive(:content_type).and_return(content_type)
+    allow(sio).to receive_messages(original_filename: filename, content_type:)
     sio
   end
 
   def stub_png_data(filename = "test my file? hai!&.png", data = nil)
+    data ||= file_fixture("instructure.png").read
     stub_file_data(filename, data, "image/png")
   end
 
@@ -102,7 +100,7 @@ module Factories
   alias_method :canvadocable_attachment_model, :crocodocable_attachment_model
 
   def attachment_obj_with_context(obj, opts = {})
-    @attachment = factory_with_protected_attributes(Attachment, valid_attachment_attributes.merge(opts))
+    @attachment = Attachment.create!(valid_attachment_attributes.merge(opts))
     @attachment.context = obj
     @attachment
   end
