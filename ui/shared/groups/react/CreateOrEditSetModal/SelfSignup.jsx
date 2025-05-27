@@ -17,7 +17,7 @@
  */
 
 import React, {useContext} from 'react'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {View} from '@instructure/ui-view'
 import {Text} from '@instructure/ui-text'
 import {Flex} from '@instructure/ui-flex'
@@ -29,25 +29,31 @@ import {bool, func, string} from 'prop-types'
 import {GroupContext} from './context'
 import SelfSignupEndDate from './SelfSignupEndDate'
 
-const I18n = useI18nScope('groups')
+const I18n = createI18nScope('groups')
 
-const HelpText = () => (
-  <div style={{maxWidth: '300px'}}>
-    <p>
-      {I18n.t(
-        'You can create sets of groups where students can sign up on their own. Students are still limited to being in only one group in the set, but this way students can organize themselves into groups instead of needing the teacher to do the work.'
-      )}
-    </p>
-    <p>
-      {I18n.t(
-        'With this option enabled, students can move themselves from one group to another. However, you can set an end date to close self sign-up to prevent students from joining or changing groups after a certain date.'
-      )}
-    </p>
-  </div>
-)
-
-export const SelfSignup = ({onChange, selfSignupEndDateEnabled = false, endDateOnChange, direction}) => {
+export const SelfSignup = ({
+  onChange,
+  selfSignupEndDateEnabled = false,
+  endDateOnChange,
+  direction,
+}) => {
   const {selfSignup, bySection} = useContext(GroupContext)
+
+  const helpText = (
+    <div style={{maxWidth: '300px'}}>
+      <p>
+        {I18n.t(
+          'You can create sets of groups where students can sign up on their own. Students are still limited to being in only one group in the set, but this way students can organize themselves into groups instead of needing the teacher to do the work.',
+        )}
+      </p>
+      <p>
+        {selfSignupEndDateEnabled
+          ? I18n.t('With this option enabled, students can move themselves from one group to another. However, you can set an end date to close self sign-up to prevent students from joining or changing groups after a certain date.')
+          : I18n.t('Note that as long as this option is enabled, students can move themselves from one group to another.')
+        }
+      </p>
+    </div>
+  )
 
   function handleChange(key, val) {
     const result = {selfSignup, bySection}
@@ -55,7 +61,7 @@ export const SelfSignup = ({onChange, selfSignupEndDateEnabled = false, endDateO
     onChange(result)
   }
 
-  const handleEndDateUpdate = (value) => {
+  const handleEndDateUpdate = value => {
     endDateOnChange(value)
   }
 
@@ -63,7 +69,7 @@ export const SelfSignup = ({onChange, selfSignupEndDateEnabled = false, endDateO
     <Flex direction={direction} data-testid="group-self-sign-up-controls">
       <Flex.Item padding="none medium none none">
         <Text>{I18n.t('Self Sign-Up')}</Text>
-        <Tooltip renderTip={<HelpText />} placement="top" on={['click', 'hover', 'focus']}>
+        <Tooltip renderTip={helpText} placement="top" on={['click', 'hover', 'focus']}>
           <IconButton
             color="primary"
             size="small"
@@ -77,7 +83,7 @@ export const SelfSignup = ({onChange, selfSignupEndDateEnabled = false, endDateO
         </Tooltip>
       </Flex.Item>
       <Flex.Item shouldGrow={true}>
-        <View display="block" padding="x-small x-small">
+        <View display="block" padding="x-small x-small" data-testid="allow-self-signup-wrapper">
           <Checkbox
             checked={selfSignup}
             label={I18n.t('Allow self sign-up')}

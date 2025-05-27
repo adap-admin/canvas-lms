@@ -105,6 +105,22 @@ describe WikiPagesApiController, type: :request do
           end
         end
 
+        context "when the page is in a horizon course" do
+          before :once do
+            @course.update! horizon_course: true
+            account = @course.account
+            account.enable_feature!(:horizon_course_setting)
+            account.horizon_account = true
+            account.save!
+          end
+
+          it "allows setting estimated duration" do
+            estimated_duration_attributes = { minutes: 5 }
+            create_wiki_page(@teacher, { title: "New Page", estimated_duration_attributes: })
+            expect(WikiPage.last.estimated_duration.duration).to eq 5.minutes
+          end
+        end
+
         context "when the user does not have manage_wiki_update permission" do
           before :once do
             teacher_role = Role.get_built_in_role("TeacherEnrollment", root_account_id: Account.default.id)
@@ -281,6 +297,17 @@ describe WikiPagesApiController, type: :request do
       json = get_wiki_page(user, 403)
       expect(json["url"]).to be_nil
     end
+
+    it "with file_association_access ff it will add location to file tags" do
+      attachment = attachment_model(context: @course)
+      @course.root_account.enable_feature!(:file_association_access)
+      wiki_body = <<~HTML
+        <img src="/courses/#{@course.id}/files/#{attachment.id}/preview">
+      HTML
+      @page.update(body: wiki_body)
+      json = get_wiki_page(@student)
+      expect(json["body"]).to include("location=#{@page.asset_string}")
+    end
   end
 
   describe "POST 'duplicate'" do
@@ -403,6 +430,34 @@ describe WikiPagesApiController, type: :request do
                                   format: "json",
                                   course_id: @course.id.to_s },
                                 { title: @page.title },
+                                {},
+                                { expected_status: 200 })
+        expect(json["conflict"]).to be true
+      end
+
+      it "is not a conflict when is the same id" do
+        json = api_call_as_user(@teacher,
+                                :get,
+                                "/api/v1/courses/#{@course.id}/page_title_availability",
+                                { controller: "wiki_pages_api",
+                                  action: "check_title_availability",
+                                  format: "json",
+                                  course_id: @course.id.to_s },
+                                { title: @page.title, current_page_id: @page.id },
+                                {},
+                                { expected_status: 200 })
+        expect(json["conflict"]).to be false
+      end
+
+      it "is a conflict when is another id" do
+        json = api_call_as_user(@teacher,
+                                :get,
+                                "/api/v1/courses/#{@course.id}/page_title_availability",
+                                { controller: "wiki_pages_api",
+                                  action: "check_title_availability",
+                                  format: "json",
+                                  course_id: @course.id.to_s },
+                                { title: @page.title, current_page_id: @page.id + 10 },
                                 {},
                                 { expected_status: 200 })
         expect(json["conflict"]).to be true

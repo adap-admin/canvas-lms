@@ -347,6 +347,31 @@ describe OutcomeResultsController do
       expect(links[0]["outcome"]["id"]).to eq @outcome.id
     end
 
+    describe "retrieving outcome rollups with outcome_ids" do
+      before do
+        @student1 = @student
+        @student2 = student_in_course(active_all: true, course: outcome_course, name: "Amy Mammoth").user
+        @student3 = student_in_course(active_all: true, course: outcome_course, name: "Barney Youth").user
+
+        create_result(@student2.id, @outcome, outcome_assignment, 1)
+      end
+
+      before do
+        user_session(@teacher)
+      end
+
+      it "returns correct filtered results when providing outcome_ids" do
+        get "rollups",
+            params: { course_id: @course.id,
+                      outcome_ids: @outcome.id },
+            format: "json"
+        expect(response).to be_successful
+        hash = parse_response(response)
+        expect(hash["rollups"][0]["scores"][0]["links"]["outcome"].to_i).to eq @outcome.id
+        expect(hash["rollups"][1]["scores"][0]["links"]["outcome"].to_i).to eq @outcome.id
+      end
+    end
+
     it "validates aggregate_stat parameter" do
       user_session(@teacher)
       get "rollups",
@@ -371,11 +396,11 @@ describe OutcomeResultsController do
       end
 
       it "increments statsd if a student is viewing their own sLMGB results" do
-        allow(InstStatsd::Statsd).to receive(:increment)
+        allow(InstStatsd::Statsd).to receive(:distributed_increment)
         user_session(@student)
         fetch_student_lmgb_data
         expect(response).to be_successful
-        expect(InstStatsd::Statsd).to have_received(:increment).with(
+        expect(InstStatsd::Statsd).to have_received(:distributed_increment).with(
           "outcomes_page_views",
           tags: { type: "student_lmgb" }
         ).once
@@ -383,33 +408,33 @@ describe OutcomeResultsController do
 
       it "increments statsd if an observer is viewing a linked student\"s sLMGB results" do
         @observer.enrollments.find_by(course_id: @course.id).update!(associated_user_id: @student)
-        allow(InstStatsd::Statsd).to receive(:increment)
+        allow(InstStatsd::Statsd).to receive(:distributed_increment)
         user_session(@observer)
         fetch_student_lmgb_data
         expect(response).to be_successful
-        expect(InstStatsd::Statsd).to have_received(:increment).with(
+        expect(InstStatsd::Statsd).to have_received(:distributed_increment).with(
           "outcomes_page_views",
           tags: { type: "student_lmgb" }
         ).once
       end
 
       it "doesnt increment statsd if an observer is viewing a non-linked student\"s sLMGB results" do
-        allow(InstStatsd::Statsd).to receive(:increment)
+        allow(InstStatsd::Statsd).to receive(:distributed_increment)
         user_session(@observer)
         fetch_student_lmgb_data
         expect(response).not_to be_successful
-        expect(InstStatsd::Statsd).not_to have_received(:increment).with(
+        expect(InstStatsd::Statsd).not_to have_received(:distributed_increment).with(
           "outcomes_page_views",
           tags: { type: "student_lmgb" }
         )
       end
 
       it "doesnt increment a statsd if a teacher is viewing a student\"s sLMGB results" do
-        allow(InstStatsd::Statsd).to receive(:increment)
+        allow(InstStatsd::Statsd).to receive(:distributed_increment)
         user_session(@teacher)
         fetch_student_lmgb_data
         expect(response).to be_successful
-        expect(InstStatsd::Statsd).not_to have_received(:increment).with(
+        expect(InstStatsd::Statsd).not_to have_received(:distributed_increment).with(
           "outcomes_page_views",
           tags: { type: "student_lmgb" }
         )
@@ -999,6 +1024,27 @@ describe OutcomeResultsController do
               end
             end
 
+            it "caches the outcome_ids in the cache key" do
+              outcome_ids = [@outcome.id]
+              cache_key = ["lmgb", "context_uuid", @course.uuid, "current_user_uuid", @teacher.uuid, "account_uuid", @account.uuid, Digest::MD5.hexdigest(outcome_ids.join("|"))]
+
+              expect(controller).to receive(:find_outcomes_service_outcome_results).with(any_args).once.and_return(nil)
+
+              enable_cache do
+                expect(Rails.cache.exist?(cache_key)).to be_falsey
+
+                get "rollups",
+                    params: {
+                      course_id: @course.id,
+                      outcome_ids: @outcome.id,
+                    },
+                    format: "json"
+                expect(response).to be_successful
+
+                expect(Rails.cache.exist?(cache_key)).to be_truthy
+              end
+            end
+
             it "manually created course and user to test caching with different course than outcome_course" do
               manually_created_course = Course.create!(name: "Advanced Strength & Speed", account: @account)
               new_quizzes_assignment(course: manually_created_course, title: "new quiz")
@@ -1530,7 +1576,7 @@ describe OutcomeResultsController do
           json = parse_response(get_rollups(sort_by: "student", sort_order: "desc", add_defaults: true, per_page: 1, page: 1, include: ["outcomes"]))
           ratings = json["linked"]["outcomes"][0]["ratings"]
           expect(ratings.pluck("mastery")).to eq [true, false]
-          expect(ratings.pluck("color")).to eq ["0B874B", "555555"]
+          expect(ratings.pluck("color")).to eq ["03893D", "555555"]
         end
 
         it "does not contain mastery and color information if \"add_defaults\" parameter is not provided" do
@@ -1800,6 +1846,13 @@ describe OutcomeResultsController do
           expect(rollups_student1.count).to eq(2) # enrolled in 2 sections
           expect(rollups_student2.count).to eq(3) # enrolled in 3 sections
           expect(rollups_student3.count).to eq(2) # enrolled in 2 sections
+        end
+
+        it "handles section_id as a string" do
+          json = parse_response(get_rollups({ section_id: @section1.id.to_s }))
+          rollups = json["rollups"].select { |r| r["links"]["user"] == @student1.id.to_s }
+          expect(rollups.count).to eq(1)
+          expect(json["rollups"].first["links"]["user"]).to eq @student1.id.to_s
         end
       end
     end

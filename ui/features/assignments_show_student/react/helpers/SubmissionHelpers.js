@@ -16,9 +16,9 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 
-const I18n = useI18nScope('assignments_2_submission_helpers')
+const I18n = createI18nScope('assignments_2_submission_helpers')
 
 export function friendlyTypeName(type) {
   switch (type) {
@@ -59,4 +59,21 @@ export function totalAllowedAttempts(assignment, submission) {
   return assignment.allowedAttempts != null
     ? assignment.allowedAttempts + (submission?.extraAttempts || 0)
     : null
+}
+
+export const activeTypeMeetsCriteria = (activeSubmissionType, submission) => {
+  switch (activeSubmissionType) {
+    case 'media_recording':
+      return submission?.submissionDraft?.meetsMediaRecordingCriteria
+    case 'online_text_entry':
+      return submission?.submissionDraft?.meetsTextEntryCriteria
+    case 'online_upload':
+      return submission?.submissionDraft?.meetsUploadCriteria
+    case 'online_url':
+      return submission?.submissionDraft?.meetsUrlCriteria
+    case 'student_annotation':
+      return submission?.submissionDraft?.meetsStudentAnnotationCriteria
+    case 'basic_lti_launch':
+      return submission?.submissionDraft?.meetsBasicLtiLaunchCriteria
+  }
 }

@@ -22,11 +22,11 @@ import {getIcon, IconAlarm} from '../../../../assets/user-icons'
 import {IconBlockToolbar} from './IconBlockToolbar'
 import {type IconBlockProps, type IconSize} from './types'
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 
-const I18n = useI18nScope('block-editor/icon-block')
+const I18n = createI18nScope('block-editor')
 
-const IconBlock = ({iconName, size}: IconBlockProps) => {
+const IconBlock = ({iconName, size, color}: IconBlockProps) => {
   const {
     connectors: {connect, drag},
     node,
@@ -43,6 +43,11 @@ const IconBlock = ({iconName, size}: IconBlockProps) => {
     setIcon(() => getIcon(iconName) || IconAlarm)
   }, [iconName])
 
+  const styl: React.CSSProperties = {}
+  if (color) {
+    styl.color = color
+  }
+
   return (
     <div
       role="treeitem"
@@ -50,7 +55,9 @@ const IconBlock = ({iconName, size}: IconBlockProps) => {
       aria-selected={node.events.selected}
       className="block icon-block"
       ref={el => el && connect(drag(el as HTMLElement))}
+      style={styl}
       tabIndex={-1}
+      data-testid="icon-block"
     >
       <Icon size={size} />
     </div>

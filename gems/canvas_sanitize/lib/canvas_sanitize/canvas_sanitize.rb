@@ -222,6 +222,7 @@ module CanvasSanitize # :nodoc:
                "aria-relevant",
                "aria-autocomplete",
                "aria-checked",
+               "aria-description",
                "aria-disabled",
                "aria-expanded",
                "aria-haspopup",
@@ -256,6 +257,7 @@ module CanvasSanitize # :nodoc:
                    "scrolling",
                    "allow", # TODO: remove explicit allow with domain whitelist account setting
                    "sandbox",
+                   "loading",
                    "allowfullscreen",
                    "webkitallowfullscreen",
                    "mozallowfullscreen"].freeze,

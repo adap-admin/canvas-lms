@@ -151,6 +151,45 @@ describe ContextModulesController do
       end
     end
 
+    context "assign to differentiation tags" do
+      before :once do
+        @course.account.enable_feature! :assign_to_differentiation_tags
+        @course.account.tap do |a|
+          a.settings[:allow_assign_to_differentiation_tags] = { value: true }
+          a.save!
+        end
+      end
+
+      it "is true if account setting is on" do
+        user_session(@teacher)
+        get "index", params: { course_id: @course.id }
+        expect(controller.js_env[:ALLOW_ASSIGN_TO_DIFFERENTIATION_TAGS]).to be true
+      end
+
+      it "is false if account setting is off" do
+        @course.account.tap do |a|
+          a.settings[:allow_assign_to_differentiation_tags] = { value: false }
+          a.save!
+        end
+
+        user_session(@teacher)
+        get "index", params: { course_id: @course.id }
+        expect(controller.js_env[:ALLOW_ASSIGN_TO_DIFFERENTIATION_TAGS]).to be false
+      end
+
+      it "'CAN_MANAGE_DIFFERENTIATION_TAGS' env variable is true for permitted users" do
+        user_session(@teacher)
+        get "index", params: { course_id: @course.id }
+        expect(controller.js_env[:CAN_MANAGE_DIFFERENTIATION_TAGS]).to be true
+      end
+
+      it "'CAN_MANAGE_DIFFERENTIATION_TAGS' env variable is false for non permitted users" do
+        user_session(@student)
+        get "index", params: { course_id: @course.id }
+        expect(controller.js_env[:CAN_MANAGE_DIFFERENTIATION_TAGS]).to be false
+      end
+    end
+
     context "tool definitions for placements" do
       subject { get "index", params: { course_id: @course.id } }
 
@@ -509,7 +548,6 @@ describe ContextModulesController do
         @m2 = @course.context_modules.create!
         time = 1.minute.ago
         ContextModule.where(id: [@m1, @m2]).update_all(updated_at: time)
-        @course.account.enable_feature!(:course_paces)
         @course.enable_course_paces = true
         @course.save!
         @primary_pace = course_pace_model(course: @course)
@@ -703,6 +741,23 @@ describe ContextModulesController do
       expect(@external_url_item.reload.indent).to eq 2
     end
 
+    describe "with horizon course" do
+      before do
+        @course.account.enable_feature!(:horizon_course_setting)
+        @course.update!(horizon_course: true)
+      end
+
+      after do
+        @course.account.disable_feature!(:horizon_course_setting)
+        @course.update!(horizon_course: false)
+      end
+
+      it "does not update indent" do
+        put "update_item", params: { course_id: @course.id, id: @external_url_item.id, content_tag: { indent: 2 } }
+        expect(@external_url_item.reload.indent).to eq 0
+      end
+    end
+
     it "updates the url for an external url item" do
       new_url = "http://example.org/new_url"
       put "update_item", params: { course_id: @course.id, id: @external_url_item.id, content_tag: { url: new_url } }
@@ -772,6 +827,58 @@ describe ContextModulesController do
         @teacher.set_preference(:module_links_default_new_tab, false)
         put "update_item", params: { course_id: @course.id, id: @assignment_item.id, content_tag: { new_tab: 1 } }
         expect(@teacher.get_preference(:module_links_default_new_tab)).to be_falsey
+      end
+    end
+
+    describe "estimated_duration" do
+      before do
+        @assignment_item.estimated_duration = EstimatedDuration.new
+        @assignment_item.save!
+      end
+
+      describe "without horizon course" do
+        before do
+          @course.account.disable_feature!(:horizon_course_setting)
+          @course.update!(horizon_course: false)
+        end
+
+        it "does not create estimated_duration" do
+          expect_any_instance_of(ContextModulesController).not_to receive(:get_estimated_duration)
+          put "update_item", params: { course_id: @course.id, id: @assignment_item.id, content_tag: { estimated_duration_minutes: 30 } }
+        end
+      end
+
+      describe "with horizon course" do
+        before do
+          @course.account.enable_feature!(:horizon_course_setting)
+          @course.update!(horizon_course: true)
+        end
+
+        after do
+          @assignment_item.reload.estimated_duration&.destroy!
+        end
+
+        describe "create" do
+          it "does create estimated_duration" do
+            @assignment_item.reload.estimated_duration.destroy!
+            put "update_item", params: { course_id: @course.id, id: @assignment_item.id, content_tag: { estimated_duration_minutes: 30 } }
+            expect(@assignment_item.reload.estimated_duration).to_not be_nil
+          end
+        end
+
+        describe "update" do
+          it "does update estimated_duration" do
+            put "update_item", params: { course_id: @course.id, id: @assignment_item.id, content_tag: { estimated_duration_minutes: 40 } }
+            expect(@assignment_item.reload.estimated_duration.duration.iso8601).to eq("PT40M")
+          end
+        end
+
+        describe "delete" do
+          it "does delete estimated_duration" do
+            put "update_item", params: { course_id: @course.id, id: @assignment_item.id, content_tag: { estimated_duration_minutes: nil } }
+            expect(@assignment_item.reload.estimated_duration).to be_nil
+          end
+        end
       end
     end
   end

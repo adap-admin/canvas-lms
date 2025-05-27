@@ -17,14 +17,14 @@
  */
 
 import React from 'react'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import { useScope as createI18nScope } from '@canvas/i18n'
 import Modal from '@canvas/instui-bindings/react/InstuiModal'
 import RichContentEditor from '@canvas/rce/RichContentEditor'
-import {Link} from '@instructure/ui-link'
-import {bool} from 'prop-types'
+import { Link } from '@instructure/ui-link'
+import { bool } from 'prop-types'
 import doFetchApi from '@canvas/do-fetch-api-effect'
 
-const I18n = useI18nScope('terms_of_service_modal')
+const I18n = createI18nScope('terms_of_service_modal')
 
 const termsOfServiceText = I18n.t('Acceptable Use Policy')
 
@@ -35,28 +35,26 @@ class TermsOfServiceCustomContents extends React.Component {
 
   async componentDidMount() {
     try {
-      const {json, response} = await doFetchApi({
+      const { json, response } = await doFetchApi({
         path: '/api/v1/acceptable_use_policy',
         method: 'GET',
       })
 
       if (response.ok) {
-        this.setState({TERMS_OF_SERVICE_CUSTOM_CONTENT: json?.content || ''})
+        this.setState({ TERMS_OF_SERVICE_CUSTOM_CONTENT: json?.content || '' })
       } else {
-        // eslint-disable-next-line no-console
         console.error(
-          `Failed to load Terms of Service content: ${response.status} ${response.statusText}`
+          `Failed to load Terms of Service content: ${response.status} ${response.statusText}`,
         )
       }
     } catch (error) {
-      // eslint-disable-next-line no-console
       console.error('An error occurred while fetching the Terms of Service content:', error)
     }
   }
 
   render() {
     return this.state.TERMS_OF_SERVICE_CUSTOM_CONTENT ? (
-      <div dangerouslySetInnerHTML={{__html: this.state.TERMS_OF_SERVICE_CUSTOM_CONTENT}} />
+      <div dangerouslySetInnerHTML={{ __html: this.state.TERMS_OF_SERVICE_CUSTOM_CONTENT }} />
     ) : (
       <span>{I18n.t('Loading...')}</span>
     )
@@ -66,10 +64,12 @@ class TermsOfServiceCustomContents extends React.Component {
 export default class TermsOfServiceModal extends React.Component {
   static propTypes = {
     preview: bool,
+    footerLink: bool,
   }
 
   static defaultProps = {
     preview: false,
+    footerLink: false,
   }
 
   state = {
@@ -78,7 +78,7 @@ export default class TermsOfServiceModal extends React.Component {
 
   handleCloseModal = () => {
     this.link.focus()
-    this.setState({open: false})
+    this.setState({ open: false })
   }
 
   handleLinkClick = () => {
@@ -98,6 +98,10 @@ export default class TermsOfServiceModal extends React.Component {
   }
 
   render() {
+    const linkThemeOverrides = this.props.footerLink && window.CANVAS_ACTIVE_BRAND_VARIABLES ? {
+      color: window.CANVAS_ACTIVE_BRAND_VARIABLES['ic-brand-font-color-dark-lightened-15']
+    } : {}
+
     return (
       <span id="terms_of_service_modal">
         <Link
@@ -106,6 +110,8 @@ export default class TermsOfServiceModal extends React.Component {
           }}
           href="#"
           onClick={this.handleLinkClick}
+          isWithinText={!this.props.footerLink}
+          themeOverride={linkThemeOverrides}
         >
           {this.props.preview ? I18n.t('Preview') : termsOfServiceText}
         </Link>
@@ -119,7 +125,7 @@ export default class TermsOfServiceModal extends React.Component {
             <Modal.Body>
               {this.props.preview ? (
                 <div
-                  dangerouslySetInnerHTML={{__html: this.state.TERMS_OF_SERVICE_CUSTOM_CONTENT}}
+                  dangerouslySetInnerHTML={{ __html: this.state.TERMS_OF_SERVICE_CUSTOM_CONTENT }}
                 />
               ) : (
                 <TermsOfServiceCustomContents />

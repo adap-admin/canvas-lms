@@ -189,6 +189,7 @@ shared_context "in-process server selenium tests" do
 
       # if you run into something that doesn't make sense t
       browser_errors_we_dont_care_about = [
+        "because the document's frame is sandboxed and the 'allow-scripts' permission is not set",
         "Warning: Can't perform a React state update on an unmounted component",
         "Replacing React-rendered children with a new root component.",
         "A theme registry has already been initialized.",
@@ -205,6 +206,9 @@ shared_context "in-process server selenium tests" do
         "Warning: Failed propType",
         "Warning: React.render is deprecated",
         "Warning: ReactDOMComponent: Do not access .getDOMNode()",
+        "Invalid prop `margin` `space8` supplied",
+        "unmountComponentAtNode is deprecated and will be removed",
+        "You are calling ReactDOMClient.createRoot() on a container that has already been passed",
         "Please either add a 'report-uri' directive, or deliver the policy via the 'Content-Security-Policy' header.",
         "isMounted is deprecated. Instead, make sure to clean up subscriptions and pending requests in componentWillUnmount to prevent memory leaks",
         "https://www.gstatic.com/_/apps-viewer/_/js/k=apps-viewer.standalone.en_US",
@@ -235,7 +239,9 @@ shared_context "in-process server selenium tests" do
         "Uncaught DOMException: play() failed because the user didn't interact with the document first.",
         "security - Refused to frame 'https://drive.google.com/' because an ancestor violates the following Content Security Policy directive: \"frame-ancestors https://docs.google.com\".",
         "This file should be served over HTTPS.", # tests are not run over https, this error is expected
-        "Uncaught DOMException: signal is aborted without reason" # Investigate as part of LX-2075
+        "Uncaught DOMException: signal is aborted without reason", # Investigate as part of LX-2075
+        "Support for string refs",
+        "DEV_HOST is not defined" # Federated Modules aren't configured to work in Selenium
       ].freeze
 
       javascript_errors = browser_logs.select do |e|
@@ -246,7 +252,7 @@ shared_context "in-process server selenium tests" do
 
       # Crystalball is going to get a few JS errors when using istanbul-instrumenter
       if javascript_errors.present? && ENV["CRYSTALBALL_MAP"] != "1"
-        raise javascript_errors.map(&:message).join("\n\n")
+        raise javascript_errors.map(&:message).join("\n\n").gsub('\\n', "\n")
       end
     end
   end

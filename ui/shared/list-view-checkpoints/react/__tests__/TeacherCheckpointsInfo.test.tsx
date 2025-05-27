@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 - present Instructure, Inc.
+ * Copyright (C) 2023 - present Instructure, Inc.
  *
  * This file is part of Canvas.
  *
@@ -24,9 +24,28 @@ import {TeacherCheckpointsInfo} from '../TeacherCheckpointsInfo'
 // Mock assignments
 const assignmentNoDueDates = {
   id: '1',
+  points_possible: 20,
   checkpoints: [
-    {tag: 'reply_to_topic', due_at: null, overrides: []},
-    {tag: 'reply_to_entry', due_at: null, overrides: []},
+    {
+      tag: 'reply_to_topic',
+      due_at: null,
+      overrides: [],
+      lock_at: null,
+      unlock_at: null,
+      name: '',
+      points_possible: 10,
+      only_visible_to_overrides: false,
+    },
+    {
+      tag: 'reply_to_entry',
+      due_at: null,
+      overrides: [],
+      lock_at: null,
+      unlock_at: null,
+      name: '',
+      points_possible: 10,
+      only_visible_to_overrides: false,
+    },
   ],
   discussion_topic: {
     reply_to_entry_required_count: 4,
@@ -35,9 +54,28 @@ const assignmentNoDueDates = {
 
 const assignmentWithDueDates = {
   id: '2',
+  points_possible: 20,
   checkpoints: [
-    {tag: 'reply_to_topic', due_at: '2024-06-02T12:00:00Z', overrides: []},
-    {tag: 'reply_to_entry', due_at: '2024-06-04T12:00:00Z', overrides: []},
+    {
+      tag: 'reply_to_topic',
+      due_at: '2023-06-02T12:00:00Z',
+      overrides: [],
+      lock_at: '2023-07-02T12:00:00Z',
+      unlock_at: '2023-05-02T12:00:00Z',
+      name: '',
+      points_possible: 10,
+      only_visible_to_overrides: false,
+    },
+    {
+      tag: 'reply_to_entry',
+      due_at: '2023-06-04T12:00:00Z',
+      overrides: [],
+      lock_at: '2023-07-02T12:00:00Z',
+      unlock_at: '2023-05-02T12:00:00Z',
+      name: '',
+      points_possible: 10,
+      only_visible_to_overrides: false,
+    },
   ],
   discussion_topic: {
     reply_to_entry_required_count: 4,
@@ -46,22 +84,77 @@ const assignmentWithDueDates = {
 
 const assignmentWithOverrides = {
   id: '3',
+  points_possible: 20,
   checkpoints: [
     {
       tag: 'reply_to_topic',
-      due_at: '2024-06-02T12:00:00Z',
+      due_at: '2023-06-02T12:00:00Z',
       overrides: [
-        {title: 'Section 1', due_at: '2024-06-03T12:00:00Z'},
-        {title: 'Section 2', due_at: '2024-06-04T12:00:00Z'},
+        {
+          title: 'Section 1',
+          due_at: '2023-06-03T12:00:00Z',
+          lock_at: '2023-07-03T12:00:00Z',
+          unlock_at: '2023-05-03T12:00:00Z',
+          all_day: true,
+          all_day_date: '',
+          assignment_id: '3',
+          id: '',
+          unassign_item: false,
+          student_ids: ['1'],
+        },
+        {
+          title: 'Section 2',
+          due_at: '2023-06-04T12:00:00Z',
+          lock_at: '2023-07-03T12:00:00Z',
+          unlock_at: '2023-05-03T12:00:00Z',
+          all_day: true,
+          all_day_date: '',
+          assignment_id: '3',
+          id: '',
+          unassign_item: false,
+          student_ids: ['1'],
+        },
       ],
+      lock_at: '2023-07-02T12:00:00Z',
+      unlock_at: '2023-05-02T12:00:00Z',
+      name: '',
+      points_possible: 10,
+      only_visible_to_overrides: false,
     },
     {
       tag: 'reply_to_entry',
-      due_at: '2024-06-07T12:00:00Z',
+      due_at: '2023-06-07T12:00:00Z',
       overrides: [
-        {title: 'Section 1', due_at: '2024-06-05T12:00:00Z'},
-        {title: 'Section 2', due_at: '2024-06-06T12:00:00Z'},
+        {
+          title: 'Section 1',
+          due_at: '2023-06-05T12:00:00Z',
+          lock_at: '2023-07-03T12:00:00Z',
+          unlock_at: '2023-05-03T12:00:00Z',
+          all_day: true,
+          all_day_date: '',
+          assignment_id: '3',
+          id: '',
+          unassign_item: false,
+          student_ids: ['1'],
+        },
+        {
+          title: 'Section 2',
+          due_at: '2023-06-06T12:00:00Z',
+          lock_at: '2023-07-03T12:00:00Z',
+          unlock_at: '2023-05-03T12:00:00Z',
+          all_day: true,
+          all_day_date: '',
+          assignment_id: '3',
+          id: '',
+          unassign_item: false,
+          student_ids: ['1'],
+        },
       ],
+      lock_at: '2023-07-02T12:00:00Z',
+      unlock_at: '2023-05-02T12:00:00Z',
+      name: '',
+      points_possible: 10,
+      only_visible_to_overrides: false,
     },
   ],
   discussion_topic: {
@@ -87,14 +180,42 @@ describe('TeacherCheckpointsInfo', () => {
     it('displays formatted due dates when checkpoints have due dates', () => {
       render(<TeacherCheckpointsInfo assignment={assignmentWithDueDates} />)
 
-      expect(screen.getByText('Jun 2')).toBeInTheDocument()
-      expect(screen.getByText('Jun 4')).toBeInTheDocument()
+      expect(screen.getByText('Jun 2, 2023 at 12pm')).toBeInTheDocument()
+      expect(screen.getByText('Jun 4, 2023 at 12pm')).toBeInTheDocument()
     })
 
     it('displays "Multiple Dates" when checkpoints have overrides', () => {
       render(<TeacherCheckpointsInfo assignment={assignmentWithOverrides} />)
 
-      expect(screen.getAllByText('Multiple Dates')).toHaveLength(2)
+      expect(screen.getAllByText('Multiple Dates')).toHaveLength(3)
+    })
+  })
+  describe('availability dates', () => {
+    it('does not show the availability for the row', () => {
+      const {queryByText} = render(<TeacherCheckpointsInfo assignment={assignmentNoDueDates} />)
+
+      expect(queryByText('Available Until:')).not.toBeInTheDocument()
+      expect(queryByText('Not Available Until:')).not.toBeInTheDocument()
+      expect(queryByText('Availability:')).not.toBeInTheDocument()
+    })
+    it('shows the availability for the row', () => {
+      const {queryByText, queryByTestId} = render(
+        <TeacherCheckpointsInfo assignment={assignmentWithDueDates} />,
+      )
+
+      expect(queryByTestId('2_cp_availability')).toBeInTheDocument()
+      expect(queryByText('Available Until:')).toBeInTheDocument()
+      expect(queryByText('Availability:')).not.toBeInTheDocument()
+    })
+    it('shows multiple availability dates for the row', () => {
+      const {queryByText, queryByTestId} = render(
+        <TeacherCheckpointsInfo assignment={assignmentWithOverrides} />,
+      )
+
+      expect(queryByTestId('3_cp_availability')).toBeInTheDocument()
+      expect(queryByText('Available Until:')).not.toBeInTheDocument()
+      expect(queryByText('Availability:')).toBeInTheDocument()
+      expect(screen.getAllByText('Multiple Dates')).toHaveLength(3)
     })
   })
 
@@ -110,14 +231,25 @@ describe('TeacherCheckpointsInfo', () => {
       expect(screen.getAllByText('Everyone else')).toHaveLength(2)
 
       // reply_to_topic due dates
-      expect(screen.getByText('Jun 3')).toBeInTheDocument() // Section 1
-      expect(screen.getByText('Jun 4')).toBeInTheDocument() // Section 2
-      expect(screen.getByText('Jun 2')).toBeInTheDocument() // Everyone else
+      expect(screen.getByText('Jun 3, 2023 at 12pm')).toBeInTheDocument() // Section 1
+      expect(screen.getByText('Jun 4, 2023 at 12pm')).toBeInTheDocument() // Section 2
+      expect(screen.getByText('Jun 2, 2023 at 12pm')).toBeInTheDocument() // Everyone else
 
       // reply_to_entry due dates
-      expect(screen.getByText('Jun 5')).toBeInTheDocument() // Section 1
-      expect(screen.getByText('Jun 6')).toBeInTheDocument() // Section 2
-      expect(screen.getByText('Jun 7')).toBeInTheDocument() // Everyone else
+      expect(screen.getByText('Jun 5, 2023 at 12pm')).toBeInTheDocument() // Section 1
+      expect(screen.getByText('Jun 6, 2023 at 12pm')).toBeInTheDocument() // Section 2
+      expect(screen.getByText('Jun 7, 2023 at 12pm')).toBeInTheDocument() // Everyone else
+    })
+  })
+
+  describe('points possible', () => {
+    it('display points possible for checkpoint', () => {
+      const {queryByText, queryByTestId} = render(
+        <TeacherCheckpointsInfo assignment={assignmentNoDueDates} />,
+      )
+
+      expect(queryByText('20 pts')).toBeInTheDocument()
+      expect(queryByTestId('1_points_possible')).toBeInTheDocument()
     })
   })
 })

@@ -20,38 +20,35 @@
 RSpec.describe Lti::NoticeHandler, type: :model do
   let(:account) { account_model }
   let(:tool) { external_tool_1_3_model }
-  let(:notice_type) { "notice_type" }
-  let(:url) { "http://example.com" }
+  let(:notice_type) { "LtiAssetProcessorSubmissionNotice" }
+  let(:url) { tool.url + "/handler" }
 
-  describe "create" do
-    context "without account" do
-      it "fails" do
-        expect { Lti::NoticeHandler.create!(notice_type:, url:, context_external_tool: tool) }.to raise_error(ActiveRecord::RecordInvalid)
-      end
+  describe "validations" do
+    subject do
+      Lti::NoticeHandler.new(account:, notice_type:, url:, context_external_tool: tool)
     end
 
-    context "without notice_type" do
-      it "fails" do
-        expect { Lti::NoticeHandler.create!(account:, url:, context_external_tool: tool) }.to raise_error(ActiveRecord::NotNullViolation)
-      end
+    it { is_expected.to be_valid }
+
+    it "validates url matches tool domain" do
+      subject.url = "http://definitely-not-the-tool-url.com/"
+      expect(subject).not_to be_valid
     end
 
-    context "without url" do
-      it "fails" do
-        expect { Lti::NoticeHandler.create!(account:, notice_type:, context_external_tool: tool) }.to raise_error(ActiveRecord::NotNullViolation)
-      end
+    it "validates url matches tool redirect uris" do
+      tool.developer_key.redirect_uris = ["http://redirect-url.com/"]
+      tool.developer_key.save!
+      subject.url = "http://redirect-url.com/"
+      expect(subject).to be_valid
     end
 
-    context "without context_external_tool" do
-      it "fails" do
-        expect { Lti::NoticeHandler.create!(account:, notice_type:, url:) }.to raise_error(ActiveRecord::RecordInvalid)
-      end
-    end
-
-    context "with all valid attributes" do
-      it "succeeds" do
-        expect { Lti::NoticeHandler.create!(account:, notice_type:, url:, context_external_tool: tool) }.not_to raise_error
-      end
+    it "allows deletion of handlers with bad urls, max_batch_size, or notice_type" do
+      subject.save!
+      subject.update_column(:url, "http://definitely-not-the-tool-url.com/")
+      subject.update_column(:max_batch_size, 1)
+      subject.update_column(:notice_type, "not_a_notice_type")
+      subject.destroy!
+      expect(subject.workflow_state).to eq("deleted")
     end
   end
 end

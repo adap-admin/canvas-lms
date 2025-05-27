@@ -20,7 +20,7 @@ import {AlertManagerContext} from '@canvas/alerts/react/AlertManager'
 import {ComposeActionButtons} from '../../components/ComposeActionButtons/ComposeActionButtons'
 import {Conversation} from '../../../graphql/Conversation'
 import HeaderInputs from './HeaderInputs'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {Modal} from '@instructure/ui-modal'
 import ModalBody from './ModalBody'
 import ModalHeader from './ModalHeader'
@@ -37,12 +37,11 @@ import {
   SelectStrings,
 } from '@canvas/upload-media-translations'
 import {ConversationContext} from '../../../util/constants'
-import {useLazyQuery, useQuery} from '@apollo/react-hooks'
+import {useLazyQuery, useQuery} from '@apollo/client'
 import {RECIPIENTS_OBSERVERS_QUERY, INBOX_SETTINGS_QUERY} from '../../../graphql/Queries'
-import {ModalBodyContext, translationSeparator} from '../../utils/constants'
-import {translateMessage, handleTranslatedModalBody, stripSignature} from '../../utils/inbox_translator'
+import { TranslationContext, useTranslationContextState } from '../../hooks/useTranslationContext'
 
-const I18n = useI18nScope('conversations_2')
+const I18n = createI18nScope('conversations_2')
 
 const ComposeModalContainer = props => {
   const {setOnFailure, setOnSuccess} = useContext(AlertManagerContext)
@@ -50,7 +49,6 @@ const ComposeModalContainer = props => {
   const [attachments, setAttachments] = useState([])
   const [attachmentsToUpload, setAttachmentsToUpload] = useState([])
   const [subject, setSubject] = useState('')
-  const [body, setBody] = useState('')
   const [addressBookInputValue, setAddressBookInputValue] = useState('')
   const [bodyMessages, setBodyMessages] = useState([])
   const [addressBookMessages, setAddressBookMessages] = useState([])
@@ -64,6 +62,16 @@ const ComposeModalContainer = props => {
   const [loadingObservers, setLoadingObservers] = useState(false)
   const [includeObserversMessages, setIncludeObserversMessages] = useState(null)
   const [activeSignature, setActiveSignature] = useState()
+
+  const [body, setBody] = useState('')
+
+  const contextValues = useTranslationContextState({
+    subject,
+    activeSignature,
+    setModalError: props.setModalError,
+    body,
+    setBody
+  })
 
   const {loading: inboxSettingsLoading} = useQuery(INBOX_SETTINGS_QUERY, {
     onCompleted: data => {
@@ -79,10 +87,6 @@ const ComposeModalContainer = props => {
     },
     skip: !props.inboxSignatureBlock || !props.open,
   })
-  // Translation features
-  const [translating, setTranslating] = useState(false)
-  const [messagePosition, setMessagePosition] = useState(null)
-  const [translationTargetLanguage, setTranslationTargetLanguage] = useState('en')
 
   const [
     getRecipientsObserversQuery,
@@ -97,7 +101,7 @@ const ComposeModalContainer = props => {
     if (recipientsObserversError) {
       setIncludeObserversMessages({
         text: I18n.t('Observers were not included. Please try again.'),
-        type: 'error',
+        type: 'newError',
       })
       setLoadingObservers(false)
     } else if (recipientsObserversDataLoading) {
@@ -149,7 +153,7 @@ const ComposeModalContainer = props => {
         list.map(option => ({
           assetString: option.assetString,
           contextName: option.contextName,
-        }))
+        })),
       )
     }
 
@@ -177,14 +181,14 @@ const ComposeModalContainer = props => {
   }, [])
 
   useEffect(() => {
-    if (!props.isReply && !props.isForward && props.currentCourseFilter) {
+    if (!props.isReply && !props.isForward && props.activeCourseFilterID) {
       setSelectedContext({
-        contextID: props.currentCourseFilter,
-        contextName: getContextName(props.currentCourseFilter),
+        contextID: props.activeCourseFilterID,
+        contextName: getContextName(props.activeCourseFilterID),
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.courses, props.currentCourseFilter, props.isForward, props.isReply])
+  }, [props.courses, props.activeCourseFilterID, props.isForward, props.isReply])
 
   const getRecipientsObserver = () => {
     if (selectedContext?.contextID) {
@@ -232,7 +236,7 @@ const ComposeModalContainer = props => {
     } finally {
       setAttachmentsToUpload(prev => {
         const attachmentsStillUploading = prev.filter(
-          file => !newAttachmentsToUpload.includes(file)
+          file => !newAttachmentsToUpload.includes(file),
         )
         return attachmentsStillUploading
       })
@@ -273,26 +277,6 @@ const ComposeModalContainer = props => {
     }
   }, [props.maxGroupRecipientsMet])
 
-  /** TRANSLATION CODE */
-  const translateBody = isPrimary => {
-    translateBodyWith(isPrimary, body)
-  }
-
-  const translateBodyWith = (isPrimary, bodyText, { tgtLang } = {}) => {
-    setTranslating(true)
-    translateMessage({
-      subject: subject,
-      body: bodyText,
-      signature: activeSignature,
-      tgtLang: typeof tgtLang !== 'undefined' ? tgtLang : translationTargetLanguage,
-      callback: translatedText => {
-        handleTranslatedModalBody(translatedText, isPrimary, activeSignature, setBody, bodyText)
-        setTranslating(false)
-      },
-    })
-  }
-  /**  END TRANSLATION CODE */
-
   const onContextSelect = context => {
     if (context && context?.contextID) {
       setCourseMessages([])
@@ -306,8 +290,8 @@ const ComposeModalContainer = props => {
     const errors = [] // Initialize an array to collect errors
 
     if (!body) {
-      const errorMessage = I18n.t('Please insert a message body.')
-      setBodyMessages([{text: errorMessage, type: 'error'}])
+      const errorMessage = I18n.t('Please insert a message')
+      setBodyMessages([{text: errorMessage, type: 'newError'}])
       errors.push(errorMessage) // Add error message to the array
       isValid = false
     }
@@ -315,12 +299,12 @@ const ComposeModalContainer = props => {
     if (!isSubmissionCommentsType) {
       if (addressBookInputValue !== '') {
         const errorMessage = I18n.t('No matches found. Please insert a valid recipient.')
-        setAddressBookMessages([{text: errorMessage, type: 'error'}])
+        setAddressBookMessages([{text: errorMessage, type: 'newError'}])
         errors.push(errorMessage) // Add error message to the array
         isValid = false
       } else if (props.selectedIds.length === 0) {
-        const errorMessage = I18n.t('Please select a recipient.')
-        setAddressBookMessages([{text: errorMessage, type: 'error'}])
+        const errorMessage = I18n.t('Please select a recipient')
+        setAddressBookMessages([{text: errorMessage, type: 'newError'}])
         errors.push(errorMessage) // Add error message to the array
         isValid = false
       }
@@ -332,7 +316,7 @@ const ComposeModalContainer = props => {
         (!selectedContext || !selectedContext?.contextID)
       ) {
         const errorMessage = I18n.t('Please select a course')
-        setCourseMessages([{text: errorMessage, type: 'error'}])
+        setCourseMessages([{text: errorMessage, type: 'newError'}])
         errors.push(errorMessage) // Add error message to the array
         isValid = false
       }
@@ -367,7 +351,7 @@ const ComposeModalContainer = props => {
           attachmentIds: attachments.map(a => a.id),
           body,
           includedMessages: props.pastConversation?.conversationMessagesConnection.nodes.map(
-            c => c._id
+            c => c._id,
           ),
           mediaCommentId: mediaUploadFile?.mediaObject?.media_object?.media_id,
           mediaCommentType: mediaUploadFile?.mediaObject?.media_object?.media_type,
@@ -379,7 +363,7 @@ const ComposeModalContainer = props => {
           attachmentIds: attachments.map(a => a.id),
           body,
           includedMessages: props.pastConversation?.conversationMessagesConnection.nodes.map(
-            c => c._id
+            c => c._id,
           ),
           recipients: props.selectedIds.map(rec => rec?._id || rec.id),
           mediaCommentId: mediaUploadFile?.mediaObject?.media_object?.media_id,
@@ -434,19 +418,6 @@ const ComposeModalContainer = props => {
 
   if (inboxSettingsLoading) return loadInboxSettingsSpinner()
 
-  const modalBodyContext = {
-    body,
-    setBody,
-    translating,
-    setTranslating,
-    translationTargetLanguage,
-    setTranslationTargetLanguage,
-    messagePosition,
-    setMessagePosition,
-    translateBody,
-    translateBodyWith
-  }
-
   const shouldShowModalSpinner =
     props.sendingMessage && !attachmentsToUpload.length && !uploadingMediaFile
 
@@ -466,7 +437,7 @@ const ComposeModalContainer = props => {
           },
         }}
         render={responsiveProps => (
-          <ModalBodyContext.Provider value={modalBodyContext}>
+          <TranslationContext.Provider value={contextValues}>
             <Modal
               open={props.open}
               onDismiss={props.onDismiss}
@@ -541,7 +512,7 @@ const ComposeModalContainer = props => {
                 />
               </Modal.Footer>
             </Modal>
-          </ModalBodyContext.Provider>
+          </TranslationContext.Provider>
         )}
       />
       <UploadMedia
@@ -592,7 +563,8 @@ ComposeModalContainer.propTypes = {
   maxGroupRecipientsMet: PropTypes.bool,
   submissionCommentsHeader: PropTypes.string,
   modalError: PropTypes.string,
+  setModalError: PropTypes.func,
   isPrivateConversation: PropTypes.bool,
-  currentCourseFilter: PropTypes.string,
+  activeCourseFilterID: PropTypes.string,
   inboxSignatureBlock: PropTypes.bool,
 }

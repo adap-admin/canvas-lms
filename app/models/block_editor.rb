@@ -26,16 +26,26 @@ class BlockEditor < ActiveRecord::Base
 
   LATEST_VERSION = "0.2"
 
-  def self.blank_page
-    file_contents = File.read(File.join("ui", "shared", "block-editor", "react", "assets", "globalTemplates", "blankPage.json"))
-    JSON.parse(file_contents)["node_tree"]["nodes"].to_json
-  end
-
   def set_root_account_id
     self.root_account_id = context&.root_account_id unless root_account_id
   end
 
   def viewer_iframe_html
-    "<iframe class='block_editor_view' src='#{Rails.application.routes.url_helpers.block_editor_path(id)}' />".html_safe # rubocop:disable Rails/OutputSafety
+    html = <<-HTML
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+      }
+      iframe.block_editor_view {
+        height: 100%;
+      }
+    </style>
+    <iframe class='block_editor_view' src='#{Rails.application.routes.url_helpers.block_editor_path(id)}' />
+    HTML
+    html.html_safe # rubocop:disable Rails/OutputSafety
   end
 end

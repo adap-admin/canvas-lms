@@ -18,7 +18,7 @@
 
 import $ from 'jquery'
 import axios from '@canvas/axios'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import PropTypes from 'prop-types'
 import React, {useState, useEffect} from 'react'
 
@@ -27,17 +27,18 @@ import usePostMessage from './hooks/usePostMessage'
 
 import {Alert} from '@instructure/ui-alerts'
 import {Button} from '@instructure/ui-buttons'
+import {Flex} from '@instructure/ui-flex'
 import {Text} from '@instructure/ui-text'
 import {View} from '@instructure/ui-view'
 
-const I18n = useI18nScope('DefaultToolForm')
+const I18n = createI18nScope('DefaultToolForm')
 
 const DefaultToolForm = props => {
   const [launchDefinitions, setLaunchDefinitions] = useState([])
   const toolMessageData = usePostMessage('defaultToolContentReady')
 
   const defaultToolData = launchDefinitions.find(definition =>
-    Object.values(definition.placements).find(placement => placement.url === props.toolUrl)
+    Object.values(definition.placements).find(placement => placement.url === props.toolUrl),
   )
 
   const contentTitle = () => {
@@ -46,10 +47,11 @@ const DefaultToolForm = props => {
     }
     return props.toolName
   }
+
   useEffect(() => {
     const fetchData = async () => {
       const result = await axios.get(
-        `/api/v1/courses/${props.courseId}/lti_apps/launch_definitions?per_page=100&placements%5B%5D=assignment_selection&placements%5B%5D=resource_selection`
+        `/api/v1/courses/${props.courseId}/lti_apps/launch_definitions?per_page=100&placements%5B%5D=assignment_selection&placements%5B%5D=resource_selection`,
       )
       setLaunchDefinitions(result.data)
     }
@@ -61,6 +63,9 @@ const DefaultToolForm = props => {
   }, [defaultToolData, launchDefinitions])
 
   const handleLaunchButton = event => {
+    // clear any errors
+    document.getElementById("default-tool-launch-button")?.classList.remove('error-outline')
+    props.hideErrors("default-tool-launch-button_errors")
     SelectContentDialogEvents.onContextExternalToolSelect(event, $('#default-tool'))
   }
 
@@ -81,14 +86,17 @@ const DefaultToolForm = props => {
   }
 
   return (
-    <View display="block" padding="medium none small small">
+    <Flex direction="column" padding="medium none small none" width="100%">
       <Button
         id="default-tool-launch-button"
         name="default-tool-launch-button"
         onClick={handleLaunchButton}
+        width="100%"
+        textAlign="start"
       >
         {props.toolButtonText}
       </Button>
+      <div id='default-tool-launch-button_errors'></div>
 
       {toolMessageData || props.previouslySelected ? (
         <Alert variant="success" margin="small small 0 0">
@@ -116,7 +124,7 @@ const DefaultToolForm = props => {
           </ul>
         </div>
       )}
-    </View>
+    </Flex>
   )
 }
 
@@ -127,6 +135,7 @@ DefaultToolForm.propTypes = {
   previouslySelected: PropTypes.bool.isRequired,
   toolButtonText: PropTypes.string,
   toolInfoMessage: PropTypes.string,
+  hideErrors: PropTypes.func
 }
 
 DefaultToolForm.defaultProps = {

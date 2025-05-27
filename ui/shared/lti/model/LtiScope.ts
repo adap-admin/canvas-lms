@@ -33,6 +33,9 @@ export const LtiScopes = {
   NrpsContextMembershipReadonly:
     'https://purl.imsglobal.org/spec/lti-nrps/scope/contextmembership.readonly',
   PnsNoticeHandlers: 'https://purl.imsglobal.org/spec/lti/scope/noticehandlers',
+  AssetReadonly: 'https://purl.imsglobal.org/spec/lti/scope/asset.readonly',
+  AssetReport: 'https://purl.imsglobal.org/spec/lti/scope/report',
+  Eula: 'https://purl.imsglobal.org/spec/lti/scope/eula',
   PublicJwkUpdate: 'https://canvas.instructure.com/lti/public_jwk/scope/update',
   DataServicesCreate: 'https://canvas.instructure.com/lti/data_services/scope/create',
   DataServicesUpdate: 'https://canvas.instructure.com/lti/data_services/scope/update',
@@ -54,7 +57,7 @@ export const LtiScopes = {
   ReplaceEditorContent: 'https://canvas.instructure.com/lti/replace_editor_contents',
 } as const
 
-const AllLtiScopes = [
+export const AllLtiScopes = [
   LtiScopes.AgsLineItem,
   LtiScopes.AgsLineItemReadonly,
   LtiScopes.AgsResultReadonly,
@@ -63,6 +66,9 @@ const AllLtiScopes = [
   LtiScopes.FeatureFlagsShow,
   LtiScopes.NrpsContextMembershipReadonly,
   LtiScopes.PnsNoticeHandlers,
+  LtiScopes.AssetReadonly,
+  LtiScopes.AssetReport,
+  LtiScopes.Eula,
   LtiScopes.PublicJwkUpdate,
   LtiScopes.DataServicesCreate,
   LtiScopes.DataServicesUpdate,

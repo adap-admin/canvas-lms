@@ -62,6 +62,7 @@ module Importers
       item.rrule = hash[:rrule]
       item.series_uuid = hash[:series_uuid]
       item.series_head = hash[:series_head]
+      item.blackout_date = hash[:blackout_date]
       item.imported = true
 
       if migration.send_item_notifications?
@@ -122,7 +123,7 @@ module Importers
 
     def self.web_link_attachment_description(hash, context)
       link = context.external_url_hash[hash[:attachment_value]]
-      link ||= context.full_migration_hash["web_link_categories"].pluck("links").flatten.select { |l| l["link_id"] == hash[:attachment_value] } rescue nil
+      link ||= context.full_migration_hash["web_link_categories"]&.pluck("links")&.flatten&.select { |l| l["link_id"] == hash[:attachment_value] }
       return unless link
 
       import_migration_attachment_link(

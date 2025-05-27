@@ -16,35 +16,36 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React, {useState, useEffect, useRef} from 'react'
+import {useMutation} from '@apollo/client'
+import {showFlashError} from '@canvas/alerts/react/FlashAlert'
+import {SET_WORKFLOW} from '@canvas/assignments/graphql/teacher/Mutations'
+import ItemAssignToTray from '@canvas/context-modules/differentiated-modules/react/Item/ItemAssignToTray'
+import DirectShareCourseTray from '@canvas/direct-sharing/react/components/DirectShareCourseTray'
+import DirectShareUserModal from '@canvas/direct-sharing/react/components/DirectShareUserModal'
+import DownloadSubmissionsModal from '@canvas/download-submissions-modal'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import useBoolean from '@canvas/outcomes/react/hooks/useBoolean'
-import {IconButton, Button} from '@instructure/ui-buttons'
+import {assignLocation} from '@canvas/util/globalUtils'
+import {BREAKPOINTS, type Breakpoints} from '@canvas/with-breakpoints'
+import {Button, IconButton} from '@instructure/ui-buttons'
 import {
+  IconCommonsLine,
   IconDownloadLine,
+  IconDuplicateLine,
+  IconEditLine,
+  IconMoreLine,
+  IconSpeedGraderLine,
+  IconTrashLine,
   IconUploadLine,
   IconUserLine,
-  IconDuplicateLine,
-  IconCommonsLine,
-  IconEditLine,
-  IconSpeedGraderLine,
-  IconMoreLine,
-  IconTrashLine,
 } from '@instructure/ui-icons'
 import {Menu} from '@instructure/ui-menu'
-import {useScope as useI18nScope} from '@canvas/i18n'
-import {BREAKPOINTS, type Breakpoints} from '@canvas/with-breakpoints'
-import type {TeacherAssignmentType} from '../graphql/teacher/AssignmentTeacherTypes'
 import {View} from '@instructure/ui-view'
-import DirectShareUserModal from '@canvas/direct-sharing/react/components/DirectShareUserModal'
-import DirectShareCourseTray from '@canvas/direct-sharing/react/components/DirectShareCourseTray'
-import DownloadSubmissionsModal from '@canvas/download-submissions-modal'
-import ItemAssignToTray from '@canvas/context-modules/differentiated-modules/react/Item/ItemAssignToTray'
-import {useMutation} from '@apollo/react-hooks'
-import {SET_WORKFLOW} from '@canvas/assignments/graphql/teacher/Mutations'
-import {showFlashError} from '@canvas/alerts/react/FlashAlert'
-import {ASSIGNMENT_VIEW_TYPES} from './AssignmentHeader'
+import React, {useState, useEffect, useRef} from 'react'
+import type {TeacherAssignmentType} from '../graphql/teacher/AssignmentTeacherTypes'
+import {ASSIGNMENT_VIEW_TYPES} from './AssignmentTypes'
 
-const I18n = useI18nScope('assignment_more_button')
+const I18n = createI18nScope('assignment_more_button')
 
 const OptionsMenu = ({
   type,
@@ -96,14 +97,12 @@ const OptionsMenu = ({
           if (result.errors?.length || !result.data || result.data.errors) {
             showFlashError(I18n.t('This assignment has failed to delete.'))()
           } else {
-            window.location.assign(
-              `/courses/${assignment.course?.lid}/assignments/${assignment?.lid}`
-            )
+            assignLocation(`/courses/${assignment.course?.lid}/assignments/${assignment?.lid}`)
           }
         })
         .catch(() => showFlashError(I18n.t('This assignment has failed to delete.'))())
     } else {
-      window.location.assign(`/courses/${assignment.course?.lid}/assignments`)
+      assignLocation(`/courses/${assignment.course?.lid}/assignments`)
     }
   }
 
@@ -122,6 +121,7 @@ const OptionsMenu = ({
         trigger={
           breakpoints.mobileOnly ? (
             <Button
+              // @ts-expect-error
               elementRef={buttonRefCallback}
               data-testid="assignment-options-button"
               display="block"
@@ -145,6 +145,7 @@ const OptionsMenu = ({
           </Menu.Item>
         )}
         {isSavedView && breakpoints.mobileOnly && (
+          // @ts-expect-error
           <Menu.Item value="Assign To" onClick={setAssignToTrayOpen} data-testid="assign-to-option">
             <IconUserLine size="x-small" />
             <View margin="0 0 0 x-small">{I18n.t('Assign To')}</View>
@@ -164,6 +165,7 @@ const OptionsMenu = ({
         {isSavedView && assignment.hasSubmittedSubmissions && (
           <Menu.Item
             value="Download Submissions"
+            // @ts-expect-error
             onClick={setDownloadSubmissionsModalOpen}
             data-testid="download-submissions-option"
           >
@@ -184,12 +186,14 @@ const OptionsMenu = ({
           </Menu.Item>
         )}
         {isSavedView && (
+          // @ts-expect-error
           <Menu.Item value="Send To" onClick={setSendToModalOpen} data-testid="send-to-option">
             <IconUserLine size="x-small" />
             <View margin="0 0 0 x-small">{I18n.t('Send To')}</View>
           </Menu.Item>
         )}
         {isSavedView && (
+          // @ts-expect-error
           <Menu.Item value="Copy To" onClick={setCopyToTrayOpen} data-testid="copy-to-option">
             <IconDuplicateLine size="x-small" />
             <View margin="0 0 0 x-small">{I18n.t('Copy To')}</View>
@@ -212,14 +216,18 @@ const OptionsMenu = ({
       {isSavedView && (
         <View margin="0">
           <ItemAssignToTray
+            // @ts-expect-error
             open={assignToTray}
+            // @ts-expect-error
             onClose={setAssignToTrayClose}
+            // @ts-expect-error
             onDismiss={setAssignToTrayClose}
             itemType="assignment"
             iconType="assignment"
             locale={ENV.LOCALE || 'env'}
             timezone={ENV.TIMEZONE || 'UTC'}
             courseId={assignment.course?.lid}
+            // @ts-expect-error
             itemName={assignment.name}
             itemContentId={assignment?.lid}
             pointsPossible={assignment.pointsPossible as number}
@@ -230,23 +238,29 @@ const OptionsMenu = ({
             sourceCourseId={assignment.course?.lid}
             contentSelection={{assignments: [assignment?.lid]}}
             onDismiss={() => {
+              // @ts-expect-error
               setCopyToTrayClose()
               buttonRef.current?.focus()
             }}
           />
+          {/* @ts-expect-error */}
           <DirectShareUserModal
             data-testid="send-to-modal"
             open={sendToModal}
             sourceCourseId={assignment.course?.lid}
             contentShare={{content_type: 'assignment', content_id: assignment?.lid}}
             onDismiss={() => {
+              // @ts-expect-error
               setSendToModalClose()
               buttonRef.current?.focus()
             }}
           />
           <DownloadSubmissionsModal
+            // @ts-expect-error
             open={downloadSubmissionsModal}
+            // @ts-expect-error
             handleCloseModal={setDownloadSubmissionsModalClose}
+            // @ts-expect-error
             assignmentId={assignment.lid}
             courseId={assignment.course.lid}
           />

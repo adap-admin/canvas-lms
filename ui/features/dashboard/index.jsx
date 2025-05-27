@@ -19,14 +19,15 @@
 import React from 'react'
 import ReactDOM from 'react-dom'
 import $ from 'jquery'
-import {QueryProvider, queryClient} from '@canvas/query'
+import {QueryClientProvider} from '@tanstack/react-query'
+import {queryClient} from '@canvas/query'
 
 import ready from '@instructure/ready'
 
 import '@canvas/rails-flash-notifications'
 import '@canvas/jquery/jquery.disableWhileLoading'
 import DashboardWrapper from './react/DashboardWrapper'
-// eslint-disable-next-line import/no-named-as-default
+
 import DashboardHeader from './react/DashboardHeader'
 
 ready(() => {
@@ -50,10 +51,10 @@ ready(() => {
 
     if (dashcard_query_enabled) {
       ReactDOM.render(
-        <QueryProvider>
+        <QueryClientProvider client={queryClient}>
           <DashboardWrapper {...dashboardProps} />
-        </QueryProvider>,
-        dashboardHeaderContainer
+        </QueryClientProvider>,
+        dashboardHeaderContainer,
       )
     } else {
       ReactDOM.render(<DashboardHeader {...dashboardProps} />, dashboardHeaderContainer)

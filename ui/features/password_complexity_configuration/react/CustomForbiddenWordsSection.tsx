@@ -27,11 +27,11 @@ import {Link} from '@instructure/ui-link'
 import {IconTrashLine, IconUploadSolid} from '@instructure/ui-icons'
 import ForbiddenWordsFileUpload from './ForbiddenWordsFileUpload'
 import {showFlashAlert} from '@canvas/alerts/react/FlashAlert'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {deleteForbiddenWordsFile} from './apiClient'
 import {executeApiRequest} from '@canvas/do-fetch-api-effect/apiRequest'
 
-const I18n = useI18nScope('password_complexity_configuration')
+const I18n = createI18nScope('password_complexity_configuration')
 
 interface Props {
   currentAttachmentId: number | null
@@ -48,13 +48,13 @@ interface ForbiddenWordsResponse {
 }
 
 export const fetchLatestForbiddenWords = async (
-  attachmentId: number
+  attachmentId: number,
 ): Promise<ForbiddenWordsResponse | null> => {
   const {status, data} = await executeApiRequest<ForbiddenWordsResponse>({
     path: `/api/v1/files/${attachmentId}`,
     method: 'GET',
   })
-  return status === 200 ? data ?? null : null
+  return status === 200 ? (data ?? null) : null
 }
 
 const CustomForbiddenWordsSection = ({
@@ -71,7 +71,7 @@ const CustomForbiddenWordsSection = ({
   const [fileModalOpen, setFileModalOpen] = useState(false)
   const [customForbiddenWordsEnabled, setCustomForbiddenWordsEnabled] = useState(false)
   const [commonPasswordsAttachmentId, setCommonPasswordsAttachmentId] = useState<number | null>(
-    null
+    null,
   )
   const [forbiddenWordsFileEnabled, setForbiddenWordsEnabled] = useState(false)
 
@@ -179,7 +179,7 @@ const CustomForbiddenWordsSection = ({
           <Flex.Item>
             (
             <Link
-              href="https://github.com/instructure/canvas-lms/blob/master/lib/canvas/security/password_policy.rb#L83"
+              href="https://github.com/instructure/canvas-lms/blob/master/lib/canvas/security/password_policy.rb#:~:text=DEFAULT_COMMON_PASSWORDS%20%3D%20%25w%5B"
               target="_blank"
             >
               {I18n.t('see default list here')}
@@ -195,13 +195,14 @@ const CustomForbiddenWordsSection = ({
         >
           <Text size="small">
             {I18n.t(
-              'Upload a list of forbidden words/terms in addition to the default list. The file should be text file (.txt) with a single word or term per line.'
+              'Upload a list of forbidden words/terms in addition to the default list. The file should be text file (.txt) with a single word or term per line.',
             )}
           </Text>
           {(!forbiddenWordsUrl || !forbiddenWordsName || !customForbiddenWordsEnabled) && (
             <View as="div" margin="small 0">
               <Button
                 disabled={!customForbiddenWordsEnabled}
+                // @ts-expect-error
                 renderIcon={IconUploadSolid}
                 onClick={() => setFileModalOpen(true)}
                 data-testid="uploadButton"

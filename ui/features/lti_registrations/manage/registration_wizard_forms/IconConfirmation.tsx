@@ -16,21 +16,20 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React, {useCallback} from 'react'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import React from 'react'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {Heading} from '@instructure/ui-heading'
 import {Flex} from '@instructure/ui-flex'
 import {Text} from '@instructure/ui-text'
 import {TextInput} from '@instructure/ui-text-input'
 import pageNotFoundPandaUrl from '@canvas/images/PageNotFoundPanda.svg'
 import {IconImageLine} from '@instructure/ui-icons'
-import {Button} from '@instructure/ui-buttons'
-import {Modal} from '@instructure/ui-modal'
 import {isValidHttpUrl} from '../../common/lib/validators/isValidHttpUrl'
 import type {FormMessage} from '@instructure/ui-form-field'
 import {useDebouncedCallback} from 'use-debounce'
 import {Img} from '@instructure/ui-img'
 import {
+  isLtiPlacementWithDefaultIcon,
   LtiPlacements,
   LtiPlacementsWithIcons,
   type LtiPlacement,
@@ -39,63 +38,78 @@ import {
 import {RegistrationModalBody} from '../registration_wizard/RegistrationModalBody'
 import type {DeveloperKeyId} from '../model/developer_key/DeveloperKeyId'
 import {i18nLtiPlacement} from '../model/i18nLtiPlacement'
+import type {InternalLtiConfiguration} from '../model/internal_lti_configuration/InternalLtiConfiguration'
+import {ltiToolDefaultIconUrl} from '../model/ltiToolIcons'
+import {getInputIdForField} from '../registration_overlay/validateLti1p3RegistrationOverlayState'
 
-const I18n = useI18nScope('lti_registration.wizard')
+const I18n = createI18nScope('lti_registration.wizard')
 export type IconConfirmationProps = {
+  internalConfig: InternalLtiConfiguration
   name: string
-  defaultIconUrl?: string
   developerKeyId?: DeveloperKeyId
-  allPlacements: LtiPlacement[]
+  allPlacements: readonly LtiPlacement[]
   placementIconOverrides: Partial<Record<LtiPlacementWithIcon, string>>
   setPlacementIconUrl: (placement: LtiPlacementWithIcon, iconUrl: string) => void
-  onNextButtonClicked: () => void
-  onPreviousButtonClicked: () => void
-  reviewing: boolean
+  hasSubmitted: boolean
 }
 
-export const IconConfirmation = ({
-  name,
-  defaultIconUrl,
-  developerKeyId,
-  allPlacements,
-  placementIconOverrides,
-  setPlacementIconUrl,
-  reviewing,
-  onNextButtonClicked,
-  onPreviousButtonClicked,
-}: IconConfirmationProps) => {
-  const placementsWithIcons = React.useMemo(
-    () =>
-      allPlacements.filter((p): p is LtiPlacementWithIcon =>
-        LtiPlacementsWithIcons.includes(p as LtiPlacementWithIcon)
-      ),
-    [allPlacements]
-  )
+export const IconConfirmation = React.memo(
+  ({
+    name,
+    internalConfig,
+    developerKeyId,
+    allPlacements,
+    placementIconOverrides,
+    setPlacementIconUrl,
+    hasSubmitted,
+  }: IconConfirmationProps) => {
+    const [blurStatus, setBlurStatus] = React.useState<
+      Partial<Record<LtiPlacementWithIcon, boolean>>
+    >({})
 
-  const [actualInputValues, setActualInputValues] =
-    React.useState<Partial<Record<LtiPlacementWithIcon, string>>>(placementIconOverrides)
-  const [debouncedUpdate, _, callPending] = useDebouncedCallback(
-    (placement: LtiPlacementWithIcon, value: string) => setPlacementIconUrl(placement, value),
-    500
-  )
+    const handleBlur = React.useCallback(
+      (placement: LtiPlacementWithIcon) =>
+        (event: React.FocusEvent<HTMLInputElement>): void => {
+          setBlurStatus(prev => ({...prev, [placement]: event.currentTarget.value.trim() !== ''}))
+        },
+      [setBlurStatus],
+    )
 
-  const updateIconUrl = React.useCallback(
-    (placement: LtiPlacementWithIcon, value: string) => {
-      setActualInputValues(prev => ({...prev, [placement]: value}))
-      debouncedUpdate(placement, value)
-    },
-    [setActualInputValues, debouncedUpdate]
-  )
+    const placementsWithIcons = React.useMemo(
+      () =>
+        allPlacements
+          .toSorted()
+          .filter((p): p is LtiPlacementWithIcon =>
+            LtiPlacementsWithIcons.includes(p as LtiPlacementWithIcon),
+          ),
+      [allPlacements],
+    )
 
-  React.useEffect(() => {
-    return () => {
-      callPending()
-    }
-  }, [callPending])
+    const [placementImgValues, setPlacementImgValues] =
+      React.useState<Partial<Record<LtiPlacementWithIcon, string>>>(placementIconOverrides)
 
-  return (
-    <>
-      <RegistrationModalBody>
+    const [debouncedImgUrlsUpdate, _, callPending] = useDebouncedCallback(
+      (placement: LtiPlacementWithIcon, value: string) =>
+        setPlacementImgValues(prev => ({...prev, [placement]: value})),
+      500,
+    )
+
+    const updateIconUrl = React.useCallback(
+      (placement: LtiPlacementWithIcon, value: string) => {
+        setPlacementIconUrl(placement, value)
+        debouncedImgUrlsUpdate(placement, value)
+      },
+      [setPlacementImgValues, debouncedImgUrlsUpdate, setPlacementIconUrl],
+    )
+
+    React.useEffect(() => {
+      return () => {
+        callPending()
+      }
+    }, [callPending])
+
+    return (
+      <>
         <Heading level="h3" margin="0 0 x-small 0">
           {I18n.t('Icon URLs')}
         </Heading>
@@ -104,15 +118,21 @@ export const IconConfirmation = ({
             <Text>{I18n.t('Choose what icon displays in each placement (optional).')}</Text>
             <Flex direction="column" gap="medium" margin="medium 0 medium 0">
               {placementsWithIcons.map(placement => {
+                // prefer the placement-specific icon, but fall back to the top-level default
+                const defaultIcon =
+                  internalConfig.placements?.find(p => p.placement === placement)?.icon_url ??
+                  internalConfig.launch_settings?.icon_url
                 return (
                   <IconOverrideInput
+                    handleBlur={handleBlur}
+                    showErrors={(blurStatus[placement] ?? false) || hasSubmitted}
                     key={placement}
                     placement={placement}
                     toolName={name}
-                    defaultIconUrl={defaultIconUrl}
+                    defaultIconUrl={defaultIcon}
                     developerKeyId={developerKeyId}
-                    inputUrl={actualInputValues[placement]}
-                    imageUrl={placementIconOverrides[placement]}
+                    inputUrl={placementIconOverrides[placement]}
+                    imageUrl={placementImgValues[placement]}
                     onInputUrlChange={updateIconUrl}
                   />
                 )
@@ -122,28 +142,11 @@ export const IconConfirmation = ({
         ) : (
           <Text>{I18n.t("This tool doesn't have any placements with configurable icons.")}</Text>
         )}
-      </RegistrationModalBody>
-      <Modal.Footer>
-        <Button margin="small" color="secondary" type="submit" onClick={onPreviousButtonClicked}>
-          {I18n.t('Previous')}
-        </Button>
-        <Button
-          margin="small"
-          color="primary"
-          type="submit"
-          interaction={
-            Object.values(actualInputValues).every(v => !v || isValidHttpUrl(v))
-              ? 'enabled'
-              : 'disabled'
-          }
-          onClick={onNextButtonClicked}
-        >
-          {reviewing ? I18n.t('Back to Review') : I18n.t('Next')}
-        </Button>
-      </Modal.Footer>
-    </>
-  )
-}
+      </>
+    )
+  },
+)
+
 type IconOverrideInputProps = {
   placement: LtiPlacementWithIcon
   toolName: string
@@ -152,10 +155,16 @@ type IconOverrideInputProps = {
   inputUrl?: string
   imageUrl?: string
   onInputUrlChange: (placement: LtiPlacementWithIcon, value: string) => void
+  handleBlur: (
+    placement: LtiPlacementWithIcon,
+  ) => (event: React.FocusEvent<HTMLInputElement>) => void
+  showErrors: boolean
 }
 
 const IconOverrideInput = React.memo(
   ({
+    handleBlur,
+    showErrors,
     placement,
     toolName,
     defaultIconUrl,
@@ -165,24 +174,19 @@ const IconOverrideInput = React.memo(
     onInputUrlChange,
   }: IconOverrideInputProps) => {
     let messages: FormMessage[] = []
-    if (inputUrl && !isValidHttpUrl(inputUrl)) {
+    if (inputUrl && !isValidHttpUrl(inputUrl) && showErrors) {
       messages = [{type: 'error', text: I18n.t('Invalid URL')}]
-    } else if (
-      (
-        [LtiPlacements.EditorButton, LtiPlacements.TopNavigation] as Array<LtiPlacementWithIcon>
-      ).includes(placement) &&
-      !inputUrl &&
-      !defaultIconUrl
-    ) {
-      imageUrl = `${window.location.origin}/lti/tool_default_icon?name=${toolName}`
-      if (developerKeyId) {
-        imageUrl += `&id=${developerKeyId}`
-      }
+    } else if (isLtiPlacementWithDefaultIcon(placement) && !inputUrl && !defaultIconUrl) {
+      imageUrl = ltiToolDefaultIconUrl({
+        base: window.location.origin,
+        toolName,
+        developerKeyId,
+      })
       messages = [
         {
           type: 'hint',
           text: I18n.t(
-            'If left blank, a default icon resembling the one displayed will be provided. Color may vary.'
+            'If left blank, a default icon resembling the one displayed will be provided. Color may vary.',
           ),
         },
       ]
@@ -199,13 +203,19 @@ const IconOverrideInput = React.memo(
       placement: i18nLtiPlacement(placement),
     })
 
+    const renderedImageUrl = imageUrl ?? defaultIconUrl
+
+    const onBlur = React.useMemo(() => handleBlur(placement), [handleBlur, placement])
+
     return (
       <div key={placement}>
         <TextInput
+          id={getInputIdForField(`icon_uri_${placement}`)}
+          onBlur={onBlur}
           renderLabel={<Heading level="h4">{i18nLtiPlacement(placement)}</Heading>}
           placeholder={defaultIconUrl ?? ''}
           renderAfterInput={
-            imageUrl && isValidHttpUrl(imageUrl) ? (
+            renderedImageUrl && isValidHttpUrl(renderedImageUrl) ? (
               <div
                 style={{
                   overflow: 'hidden',
@@ -214,7 +224,8 @@ const IconOverrideInput = React.memo(
                 }}
               >
                 <Img
-                  src={imageUrl}
+                  src={renderedImageUrl}
+                  data-testid={`img-icon-${placement}`}
                   alt={imgTitle}
                   loading="lazy"
                   height="2rem"
@@ -250,5 +261,5 @@ const IconOverrideInput = React.memo(
         />
       </div>
     )
-  }
+  },
 )

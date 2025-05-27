@@ -32,6 +32,12 @@
     "additional_considerations_f3801683": {
         "message": "其他考虑事项"
     },
+    "address_applied_64269b0b": {
+        "message": "已应用地址"
+    },
+    "address_removed_fcb496e0": {
+        "message": "已移除地址"
+    },
     "adjacent_links_with_the_same_url_should_be_a_singl_7a1f7f6c": {
         "message": "具有相同 URL 的相邻链接应该为一个单链接。"
     },
@@ -167,6 +173,9 @@
     "available_folders_694d0436": {
         "message": "可用文件夹"
     },
+    "background_1bc88842": {
+        "message": "背景"
+    },
     "backslash_b2d5442d": {
         "message": "反斜线"
     },
@@ -199,6 +208,15 @@
     },
     "blue_daf8fea9": {
         "message": "蓝色"
+    },
+    "bold_applied_42d547b7": {
+        "message": "已应用粗体"
+    },
+    "bold_removed_da474a5c": {
+        "message": "已移除粗体"
+    },
+    "border_5b08b06d": {
+        "message": "边框"
     },
     "bottom_15a2a9be": {
         "message": "底部"
@@ -341,11 +359,23 @@
     "collapse_to_hide_types_1ab46d2e": {
         "message": "折叠以隐藏 { types }"
     },
+    "color_a363e1b0": {
+        "message": "颜色"
+    },
+    "color_contrast_4c418add": {
+        "message": "色彩对比度"
+    },
+    "color_contrast_ratio_687782f0": {
+        "message": "色彩对比度"
+    },
     "color_picker_6b359edf": {
         "message": "颜色选取器"
     },
     "color_picker_colorname_selected_ad4cf400": {
         "message": "颜色选取器（已选择 { colorName }）"
+    },
+    "color_popup_af39810f": {
+        "message": "色彩弹窗"
     },
     "column_e1ae5c64": {
         "message": "列"
@@ -494,6 +524,9 @@
     "deep_purple_bb3e2907": {
         "message": "深紫色"
     },
+    "default_9db103d": {
+        "message": "默认"
+    },
     "default_bulleted_unordered_list_47079da8": {
         "message": "默认项目符号无序列表"
     },
@@ -574,6 +607,12 @@
     },
     "display_text_link_opens_in_a_new_tab_75e9afc9": {
         "message": "显示文本链接（在新标签页中打开）"
+    },
+    "div_applied_49ad83fc": {
+        "message": "已应用分区"
+    },
+    "div_removed_d13f8e17": {
+        "message": "已移除分区"
     },
     "division_sign_72190870": {
         "message": "除号"
@@ -779,6 +818,9 @@
     "f_function_fe422d65": {
         "message": "F（函数）"
     },
+    "fail_544e5dde": {
+        "message": "失败"
+    },
     "failed_getting_file_contents_e9ea19f4": {
         "message": "文件内容获取失败"
     },
@@ -896,6 +938,9 @@
     "grades_a61eba0a": {
         "message": "评分"
     },
+    "graphics_text_bc9568bc": {
+        "message": "图形文本"
+    },
     "greater_than_e98af662": {
         "message": "大于"
     },
@@ -964,6 +1009,12 @@
     },
     "heading_4_b2e74be7": {
         "message": "标题 4"
+    },
+    "heading_h_applied_eccd294d": {
+        "message": "已应用标题 { h }"
+    },
+    "heading_h_removed_745f24a6": {
+        "message": "已移除标题 { h }"
     },
     "heading_levels_should_not_be_skipped_3947c0e0": {
         "message": "不得跳过标题级别。"
@@ -1121,6 +1172,18 @@
     "infinity_7a10f206": {
         "message": "无穷"
     },
+    "input_field_for_alpha_678265fd": {
+        "message": "α 输入字段"
+    },
+    "input_field_for_blue_561e020a": {
+        "message": "蓝色输入字段"
+    },
+    "input_field_for_green_67f8b2b6": {
+        "message": "绿色输入字段"
+    },
+    "input_field_for_red_86a84615": {
+        "message": "红色输入字段"
+    },
     "insert_593145ef": {
         "message": "插入"
     },
@@ -1135,6 +1198,9 @@
     },
     "intersection_cd4590e4": {
         "message": "相交"
+    },
+    "invalid_description_991e23bb": {
+        "message": "无效的描述"
     },
     "invalid_entry_f7d2a0f5": {
         "message": "无效的输入。"
@@ -1159,6 +1225,12 @@
     },
     "italian_bd3c792d": {
         "message": "意大利语"
+    },
+    "italic_applied_8f59a684": {
+        "message": "已应用斜体"
+    },
+    "italic_removed_17cbab6f": {
+        "message": "已移除斜体"
     },
     "japanese_b5721ca7": {
         "message": "日语"
@@ -1189,6 +1261,9 @@
     },
     "large_9c5e80e7": {
         "message": "大"
+    },
+    "large_text_e7ba08cd": {
+        "message": "大文本"
     },
     "latvian_2bbb6aab": {
         "message": "拉脱维亚语"
@@ -1442,12 +1517,6 @@
     "music_icon_4db5c972": {
         "message": "音乐图标"
     },
-    "must_be_at_least_percentage_22e373b6": {
-        "message": "必须至少达到 { percentage }%"
-    },
-    "must_be_at_least_width_x_height_px_41dc825e": {
-        "message": "必须至少为 { width } x { height }px"
-    },
     "my_files_2f621040": {
         "message": "我的文件"
     },
@@ -1562,6 +1631,9 @@
     "none_selected_b93d56d2": {
         "message": "未选中任何项"
     },
+    "normal_text_7b03da48": {
+        "message": "常规文本"
+    },
     "norwegian_53f391ec": {
         "message": "挪威语"
     },
@@ -1640,8 +1712,8 @@
     "outline_size_a6059a21": {
         "message": "轮廓大小"
     },
-    "p_is_not_a_valid_protocol_which_must_be_ftp_http_h_adf13fc2": {
-        "message": "{ p } 不是有效的协议，必须是 ftp、http、https、mailto、skype、tel 或可以忽略"
+    "p_is_not_a_valid_protocol_b1c4efaa": {
+        "message": "{ p }不是有效的协议。"
     },
     "page_50c4823d": {
         "message": "页面"
@@ -1652,6 +1724,12 @@
     "paragraph_5e5ad8eb": {
         "message": "段落"
     },
+    "paragraph_applied_959b3fe5": {
+        "message": "已应用段落"
+    },
+    "paragraph_removed_d09320e": {
+        "message": "已移除段落"
+    },
     "paragraph_starting_with_start_a59923f8": {
         "message": "以{ start }开始的段落"
     },
@@ -1660,6 +1738,9 @@
     },
     "partial_derivative_4a9159df": {
         "message": "偏（导数）"
+    },
+    "pass_1c19a2b3": {
+        "message": "合格"
     },
     "paste_5963d1c1": {
         "message": "粘贴"
@@ -1678,6 +1759,9 @@
     },
     "percentage_must_be_a_number_8033c341": {
         "message": "百分比必须是数字"
+    },
+    "percentage_must_be_at_least_percentage_a98ca8fc": {
+        "message": "百分数至少必须为 { percentage }%。"
     },
     "performing_arts_icon_f3497486": {
         "message": "表演艺术图标"
@@ -1703,11 +1787,17 @@
     "pi_variant_10f5f520": {
         "message": "Pi（变体）"
     },
+    "pick_a_color_557abfb0": {
+        "message": "选择颜色"
+    },
     "pink_68ad45cb": {
         "message": "粉红色"
     },
     "pixels_52ece7d1": {
         "message": "像素"
+    },
+    "pixels_must_be_at_least_width_x_height_px_e965edd5": {
+        "message": "像素必须至少为 { width } x { height }px"
     },
     "play_1a47eaa7": {
         "message": "播放"
@@ -1721,8 +1811,17 @@
     "please_allow_canvas_to_access_your_microphone_and__dc2c3079": {
         "message": "请允许 Canvas 访问您的麦克风和网络摄像头。"
     },
+    "please_choose_a_file_c2449cc": {
+        "message": "请选择文件"
+    },
     "please_decribe_what_you_would_like_to_compose_27a51be5": {
         "message": "请描述您要撰写的内容。"
+    },
+    "please_enter_a_file_name_f159edc1": {
+        "message": "请输入一个文件名"
+    },
+    "please_select_a_file_of_a_supported_type_1fc578f2": {
+        "message": "请选择支持类型的文件"
     },
     "plus_d43cd4ec": {
         "message": "加号"
@@ -1774,6 +1873,9 @@
     },
     "previous_findtext_8dfbfd30": {
         "message": "上一步{ findText }"
+    },
+    "previously_chosen_colors_f1338315": {
+        "message": "之前选择的颜色"
     },
     "prime_917ea60e": {
         "message": "质"
@@ -2306,9 +2408,6 @@
     "the_first_heading_on_a_page_should_be_an_h2_859089f2": {
         "message": "页面上的第一个标题应该是H2。"
     },
-    "the_following_content_is_partner_provided_ed1da756": {
-        "message": "以下内容由合作伙伴提供"
-    },
     "the_material_is_in_the_public_domain_279c39a3": {
         "message": "材料在公开域中"
     },
@@ -2317,9 +2416,6 @@
     },
     "the_material_is_subject_to_an_exception_e_g_fair_u_a39c8ca2": {
         "message": "材料有例外情况——例如，合理使用、引用权，或版权法规定的其他适用的情况"
-    },
-    "the_preceding_content_is_partner_provided_d753928c": {
-        "message": "以上内容由合作伙伴提供"
     },
     "the_pretty_html_editor_is_not_keyboard_accessible__d6d5d2b": {
         "message": "无法通过键盘访问精美 HTML 编辑器。按 Shift O 打开原始 HTML 编辑器。"
@@ -2416,6 +2512,12 @@
     },
     "unable_to_determine_resource_selection_url_7867e060": {
         "message": "无法确定资源选择 url"
+    },
+    "underline_applied_ae01ec97": {
+        "message": "已应用下划线"
+    },
+    "underline_removed_3693e17c": {
+        "message": "已移除下划线"
     },
     "union_e6b57a53": {
         "message": "并集"
@@ -2674,6 +2776,15 @@
     },
     "yiddish_f96986df": {
         "message": "意第绪语"
+    },
+    "you_are_on_a_color_palette_to_navigate_on_the_pale_227fc3a6": {
+        "message": "您正在使用调色盘。请分别使用“W”、“A”、“S”和“D”在调色盘上向上、左、下或右浏览"
+    },
+    "you_are_on_a_color_slider_to_navigate_the_slider_l_e800f68a": {
+        "message": "您正在使用颜色滑块。请分别使用“A”和“D”在滑块上向左或向右浏览"
+    },
+    "you_are_on_an_alpha_slider_to_navigate_the_slider__3a014dc5": {
+        "message": "您正在使用 α 滑块。请分别使用“A”和“D”在滑块上向左或向右浏览"
     },
     "you_can_replace_by_uploading_a_new_caption_file_6c88ce00": {
         "message": "您可以通过上传新的字幕文件进行替换。"

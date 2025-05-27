@@ -24,6 +24,7 @@ import fetchMock from 'fetch-mock'
 import BlockEditor, {type BlockEditorProps} from '../BlockEditor'
 import {blank_page, blank_section_with_text} from './test-content'
 import {dispatchTemplateEvent, SaveTemplateEvent, DeleteTemplateEvent} from '../types'
+import {LATEST_BLOCK_DATA_VERSION} from '../utils'
 
 const user = userEvent.setup()
 
@@ -38,10 +39,10 @@ function renderEditor(props: Partial<BlockEditorProps> = {}) {
       course_id="1"
       container={container}
       enableResizer={false} // jsdom doesn't render enough for BlockResizer to work
-      content={{version: '0.2', blocks: blank_page}}
+      content={{version: LATEST_BLOCK_DATA_VERSION, blocks: JSON.parse(blank_page)}}
       {...props}
     />,
-    {container}
+    {container},
   )
 }
 
@@ -64,13 +65,21 @@ describe('BlockEditor', () => {
 
   afterEach(() => jest.clearAllMocks())
 
-  it('renders', () => {
+  it('renders', async () => {
     const {getByText, getByLabelText} = renderEditor()
     expect(getByText('Preview')).toBeInTheDocument()
     expect(getByText('Undo')).toBeInTheDocument()
     expect(getByText('Redo')).toBeInTheDocument()
-    expect(getByLabelText('Block Toolbox')).not.toBeChecked()
-    expect(fetchMock.calls().map(call => call[0])).toEqual([can_edit_url])
+    expect(getByLabelText('Block Toolbox')).toBeChecked()
+
+    // Wait for all API calls to complete
+    await waitFor(() => {
+      expect(fetchMock.calls().length).toBeGreaterThan(0)
+    })
+
+    // Verify the first API call is the can_edit check
+    const calls = fetchMock.calls().map(call => call[0])
+    expect(calls[0]).toBe(can_edit_url)
   })
 
   it('warns on content version mismatch', () => {
@@ -106,7 +115,7 @@ describe('BlockEditor', () => {
       expect(domGetByText(previewModal, 'this is text.', {exact: true})).toBeInTheDocument()
 
       const closeButton = domGetByText(previewModal, 'Close', {exact: true}).closest(
-        'button'
+        'button',
       ) as HTMLButtonElement
       await user.click(closeButton)
 

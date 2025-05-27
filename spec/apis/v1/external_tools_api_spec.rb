@@ -454,7 +454,7 @@ describe ExternalToolsController, type: :request do
       ContextExternalTool.create!(
         context: account,
         consumer_key: "key",
-        developer_key: dev_key_model_1_3,
+        developer_key: lti_developer_key_model,
         shared_secret: "secret",
         name: "test tool",
         url: "http://www.tool.com/launch",
@@ -934,6 +934,7 @@ describe ExternalToolsController, type: :request do
     et.custom_fields = { key1: "val1", key2: "val2" }
     et.course_navigation = { :url => "http://www.example.com/ims/lti/course", :visibility => "admins", :text => "Course nav", "default" => "disabled" }
     et.account_navigation = { url: "http://www.example.com/ims/lti/account", text: "Account nav", custom_fields: { "key" => "value" } }
+    et.ActivityAssetProcessor = { url: "http://www.example.com/ims/lti/resource", text: "activity asset processor", display_type: "full_width" }
     et.analytics_hub = { url: "http://www.example.com/ims/lti/resource", text: "analytics hub", display_type: "full_width", visibility: "admins" }
     et.user_navigation = { url: "http://www.example.com/ims/lti/user", text: "User nav" }
     et.editor_button = { url: "http://www.example.com/ims/lti/editor", icon_url: "/images/delete.png", selection_width: 50, selection_height: 50, text: "editor button" }
@@ -1037,7 +1038,6 @@ describe ExternalToolsController, type: :request do
       "id" => et&.id,
       "not_selectable" => et&.not_selectable,
       "workflow_state" => "public",
-      "vendor_help_link" => nil,
       "version" => "1.1",
       "unified_tool_id" => "utid_12345",
       "deployment_id" => et&.deployment_id,
@@ -1093,6 +1093,15 @@ describe ExternalToolsController, type: :request do
         "url" => "http://www.example.com/ims/lti/account",
         "custom_fields" => { "key" => "value" },
         "label" => "Account nav",
+        "selection_height" => 400,
+        "selection_width" => 800
+      },
+      "ActivityAssetProcessor" => {
+        "enabled" => true,
+        "text" => "activity asset processor",
+        "url" => "http://www.example.com/ims/lti/resource",
+        "label" => "activity asset processor",
+        "display_type" => "full_width",
         "selection_height" => 400,
         "selection_width" => 800
       },

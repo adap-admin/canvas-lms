@@ -52,9 +52,9 @@ import {
   TemplateEditor,
 } from '../../types'
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 
-const I18n = useI18nScope('block-editor')
+const I18n = createI18nScope('block-editor')
 
 const moveIcon = `<svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
 <path fill-rule="evenodd" clip-rule="evenodd" d="M8.77359 0L5.00002 3.77358L5.77532 4.54998L8.22638 2.09893V15.901L5.77532 13.451L5.00002 14.2263L8.77359 17.9999L12.5472 14.2263L11.773 13.451L9.3219 15.901V2.09893L11.773 4.54998L12.5472 3.77358L8.77359 0Z" fill="#273540"/>
@@ -143,7 +143,7 @@ const BlockToolbar = ({templateEditor}: BlockToolbarProps) => {
         }
       }
     },
-    [currFocusedIndex, currentToolbarRef, focusable]
+    [currFocusedIndex, currentToolbarRef, focusable],
   )
 
   const handleKey = useCallback(
@@ -171,7 +171,7 @@ const BlockToolbar = ({templateEditor}: BlockToolbarProps) => {
         focusable[focusedIndex]?.focus()
       }
     },
-    [arrowNext, arrowPrev, currFocusedIndex, currentToolbarRef, focusable, node.dom]
+    [arrowNext, arrowPrev, currFocusedIndex, currentToolbarRef, focusable, node.dom],
   )
 
   const handleGoUp = useCallback(
@@ -182,7 +182,7 @@ const BlockToolbar = ({templateEditor}: BlockToolbarProps) => {
         query.node(upnodeId).get()?.dom?.focus()
       }
     },
-    [actions, query, upnodeId]
+    [actions, query, upnodeId],
   )
 
   const handleGoDown = useCallback(
@@ -193,7 +193,7 @@ const BlockToolbar = ({templateEditor}: BlockToolbarProps) => {
         query.node(downnodeId).get()?.dom?.focus()
       }
     },
-    [actions, query, downnodeId]
+    [actions, query, downnodeId],
   )
 
   const handleDeleteNode = useCallback(
@@ -208,7 +208,7 @@ const BlockToolbar = ({templateEditor}: BlockToolbarProps) => {
         actions.selectNode(parentId || 'ROOT')
       })
     },
-    [actions, node.id, query]
+    [actions, node.id, query],
   )
 
   const handleSave = useCallback(
@@ -223,7 +223,7 @@ const BlockToolbar = ({templateEditor}: BlockToolbarProps) => {
       setTemplateType(type)
       setShowEditTemplateModal(true)
     },
-    [node.data.custom.isSection, node.data.name]
+    [node.data.custom.isSection, node.data.name],
   )
 
   const handleSaveTemplate = useCallback(
@@ -245,7 +245,7 @@ const BlockToolbar = ({templateEditor}: BlockToolbarProps) => {
       if (globalTemplate) {
         // for now, we have to extract images from the template and save as files
         const imgmap: ImagesMapping = await saveTemplateImages(
-          query.node(node.id)?.get().dom as HTMLElement
+          query.node(node.id)?.get().dom as HTMLElement,
         )
 
         // update ImageBlocks to point to the saved images
@@ -269,7 +269,7 @@ const BlockToolbar = ({templateEditor}: BlockToolbarProps) => {
       })
       dispatchTemplateEvent(saveTemplateEvent)
     },
-    [node.dom, node.id, query, templateType]
+    [node.dom, node.id, query, templateType],
   )
 
   if (node.data?.custom?.noToolbar) return null
@@ -298,6 +298,7 @@ const BlockToolbar = ({templateEditor}: BlockToolbarProps) => {
             size="small"
             onClick={handleGoUp}
             screenReaderLabel={I18n.t('Go up')}
+            title={I18n.t('Go up')}
             withBackground={false}
             withBorder={false}
             data-testid="block-toolbar-icon-button-go-up"
@@ -314,6 +315,7 @@ const BlockToolbar = ({templateEditor}: BlockToolbarProps) => {
             size="small"
             onClick={handleGoDown}
             screenReaderLabel={I18n.t('Go down')}
+            title={I18n.t('Go down')}
             withBackground={false}
             withBorder={false}
             data-testid="block-toolbar-icon-button-go-down"
@@ -336,6 +338,7 @@ const BlockToolbar = ({templateEditor}: BlockToolbarProps) => {
               size="small"
               elementRef={el => el && drag(el as HTMLElement)}
               screenReaderLabel={I18n.t('Drag to move')}
+              title={I18n.t('Drag to move')}
               withBackground={false}
               withBorder={false}
             >
@@ -352,9 +355,11 @@ const BlockToolbar = ({templateEditor}: BlockToolbarProps) => {
               size="small"
               onClick={handleDeleteNode}
               screenReaderLabel={I18n.t('Delete')}
+              title={I18n.t('Delete')}
               withBackground={false}
               withBorder={false}
               color="danger"
+              data-testid="block-toolbar-icon-button-delete"
             >
               <IconTrashLine />
             </IconButton>
@@ -369,6 +374,7 @@ const BlockToolbar = ({templateEditor}: BlockToolbarProps) => {
               renderIcon={<IconSaveLine />}
               color="secondary"
               themeOverride={{secondaryGhostColor: '#0e68b3'}}
+              data-testid="block-toolbar-icon-button-save-template"
             >
               {I18n.t('Save as template')}
             </CondensedButton>

@@ -21,7 +21,7 @@ import {AuthorInfo} from '../../components/AuthorInfo/AuthorInfo'
 import {DeletedPostMessage} from '../../components/DeletedPostMessage/DeletedPostMessage'
 import {PostMessage} from '../../components/PostMessage/PostMessage'
 import PropTypes from 'prop-types'
-import React, {useContext} from 'react'
+import React, {useContext, useEffect, useRef, useCallback} from 'react'
 import {getDisplayName, userNameToShow} from '../../utils'
 import {SearchContext} from '../../utils/constants'
 import {Attachment} from '../../../graphql/Attachment'
@@ -32,9 +32,71 @@ import {View} from '@instructure/ui-view'
 import {ReplyPreview} from '../../components/ReplyPreview/ReplyPreview'
 import theme from '@instructure/canvas-theme'
 import WithBreakpoints, {breakpointsShape} from '@canvas/with-breakpoints'
+import {useScope as useI18nScope} from '@canvas/i18n'
+import useHighlightStore from '../../hooks/useHighlightStore'
 
 const DiscussionEntryContainerBase = ({breakpoints, ...props}) => {
+  const I18n = useI18nScope('discussion_topics_post')
   const {searchTerm} = useContext(SearchContext)
+
+  const focusableElementRef = useRef(null)
+
+  const addReplyRef = useHighlightStore(state => state.addReplyRef)
+  const removeRef = useHighlightStore(state => state.removeReplyRef)
+  const replyRefs = useHighlightStore(state => state.replyRefs)
+  const clearHighlighted = useHighlightStore(state => state.clearHighlighted)
+  const highlightEl = useHighlightStore(state => state.highlightEl)
+
+  useEffect(() => {
+    // TODO: Check the root entry if this is necessary to keep track of
+    if (props.discussionEntry?._id && focusableElementRef.current) {
+      addReplyRef(props.discussionEntry._id, focusableElementRef.current)
+    }
+
+    return () => {
+      removeRef(props.discussionEntry?._id)
+    }
+  }, [focusableElementRef, props.discussionEntry?._id, addReplyRef, removeRef])
+
+  const handleBlur = useCallback(
+    event => {
+      const nextEl = event.relatedTarget
+
+      const replyRefsArray = Array.from(replyRefs.values())
+
+      if (
+        !nextEl ||
+          (!replyRefsArray.some(ref => ref === nextEl) && !event.target.contains(nextEl))
+      ) {
+        clearHighlighted()
+      }
+    },
+    [replyRefs, clearHighlighted],
+  )
+
+  const handleFocus = useCallback(
+    event => {
+      highlightEl(event.target)
+    },
+    [highlightEl],
+  )
+
+  useEffect(() => {
+    // This component is also used in the main topic view and doesn't have an entry id
+    if (!props.discussionEntry?._id) {
+      return
+    }
+
+    if (focusableElementRef.current) {
+      focusableElementRef.current.addEventListener('blur', handleBlur)
+      focusableElementRef.current.addEventListener('focus', handleFocus)
+
+      return () => {
+        focusableElementRef.current.removeEventListener('blur', handleBlur)
+        focusableElementRef.current.removeEventListener('focus', handleFocus)
+      }
+    }
+  }, [handleBlur, handleFocus, props.discussionEntry?._id])
 
   const getDeletedDisplayName = discussionEntry => {
     const editor = discussionEntry.editor
@@ -45,14 +107,14 @@ const DiscussionEntryContainerBase = ({breakpoints, ...props}) => {
         return userNameToShow(
           editor.displayName || editor.shortName,
           author._id,
-          editor.courseRoles
+          editor.courseRoles,
         )
       }
       if (anonymousAuthor) {
         return userNameToShow(
           editor.displayName || editor.shortName,
           anonymousAuthor._id,
-          editor.courseRoles
+          editor.courseRoles,
         )
       }
     } else {
@@ -61,18 +123,45 @@ const DiscussionEntryContainerBase = ({breakpoints, ...props}) => {
   }
 
   if (props.deleted) {
+    // Adding a focusable element if the deleted entry has subentries
     return (
-      <DeletedPostMessage
-        deleterName={getDeletedDisplayName(props.discussionEntry)}
-        timingDisplay={props.timingDisplay}
-        deletedTimingDisplay={props.editedTimingDisplay}
+      <div
+        ref={el => {
+          if (el) {
+            focusableElementRef.current = el
+            if (props.discussionEntry.subentriesCount) {
+              el.tabIndex = 0
+            }
+          }
+        }}
       >
-        {props.children}
-      </DeletedPostMessage>
+        <DeletedPostMessage
+          deleterName={getDeletedDisplayName(props.discussionEntry)}
+          timingDisplay={props.timingDisplay}
+          deletedTimingDisplay={props.editedTimingDisplay}
+        >
+          {props.children}
+        </DeletedPostMessage>
+      </div>
     )
   }
 
   const hasAuthor = Boolean(props.author || props.anonymousAuthor)
+  const displayedAuthor = props.anonymousAuthor
+    ? props.anonymousAuthor.shortName
+    : props.author
+      ? props.author.displayName
+      : 'Unknown Author'
+
+  const description = props.isTopic
+    ? I18n.t('Post by %{displayedAuthor} from %{date}', {
+        displayedAuthor,
+        date: props.createdAt.split('T')[0],
+      })
+    : I18n.t('Reply to Post by %{displayedAuthor} from %{date}', {
+        displayedAuthor,
+        date: props.createdAt.split('T')[0],
+      })
 
   const depth = props.discussionEntry?.depth || 0
   const threadMode = (depth > 1 && !searchTerm) || props.threadParent
@@ -99,88 +188,106 @@ const DiscussionEntryContainerBase = ({breakpoints, ...props}) => {
   }
 
   return (
-    <Flex direction="column" data-authorid={props.author?._id}>
-      <Flex.Item shouldGrow={true} shouldShrink={true} overflowY="visible">
-        <Flex direction={props.isTopic ? direction : 'row'}>
-          {hasAuthor && (
-            <Flex.Item overflowY="visible" shouldGrow={true} shouldShrink={true} padding={authorInfoPadding}>
-              <AuthorInfo
-                author={props.author}
-                threadParent={props.threadParent}
-                anonymousAuthor={props.anonymousAuthor}
-                editor={props.editor}
-                isUnread={props.isUnread}
-                isForcedRead={props.isForcedRead}
-                isSplitView={props.isSplitView}
-                createdAt={props.timingDisplay}
-                delayedPostAt={props.delayedPostAt}
-                editedTimingDisplay={props.editedTimingDisplay}
-                lastReplyAtDisplay={props.lastReplyAtDisplay}
-                isTopic={props.isTopic}
-                isTopicAuthor={props.isTopicAuthor}
-                discussionEntryVersions={props.discussionEntry?.discussionEntryVersions || []}
-                reportTypeCounts={props.discussionEntry?.reportTypeCounts}
-                threadMode={threadMode}
-                toggleUnread={props.toggleUnread}
-                breakpoints={breakpoints}
-                published={props.discussionTopic?.published}
-                isAnnouncement={props.discussionTopic?.isAnnouncement}
-              />
-            </Flex.Item>
-          )}
-          <Flex.Item
-            align={postUtilitiesAlign}
-            margin={hasAuthor ? postUtilitiesMargin : '0'}
-            overflowX="visible"
-            overflowY="visible"
-            padding="xxx-small 0 0 0"
-            shouldGrow={!hasAuthor}
-          >
-            {props.postUtilities}
-          </Flex.Item>
-        </Flex>
-      </Flex.Item>
-      <Flex.Item
-        padding={hasAuthor ? postMessagePadding : postMessagePaddingNoAuthor}
-        overflowY="visible"
-        overflowX="visible"
+    <>
+      <Flex
+        direction="column"
+        data-authorid={props.author?._id}
+        data-entry-wrapper-id={props.discussionEntry?._id}
+        aria-label={description} // Add aria-label for screen readers
+        elementRef={el => {
+          if (el?.parentElement) {
+            el.parentElement.tabIndex = 0
+            focusableElementRef.current = el.parentElement
+          }
+        }}
       >
-        {props.quotedEntry && <ReplyPreview {...props.quotedEntry} />}
-        <PostMessage
-          isTopic={props.isTopic}
-          threadMode={threadMode && !props.isTopic}
-          discussionEntry={props.discussionEntry}
-          discussionAnonymousState={props.discussionTopic?.anonymousState}
-          canReplyAnonymously={props.discussionTopic?.canReplyAnonymously}
-          title={props.title}
-          message={props.message}
-          attachment={props.attachment}
-          isEditing={props.isEditing}
-          onSave={props.onSave}
-          onCancel={props.onCancel}
-          isSplitView={props.isSplitView}
-          discussionTopic={props.discussionTopic}
+        <Flex.Item shouldGrow={true} shouldShrink={true} overflowY="visible">
+          <Flex direction={props.isTopic ? direction : 'row'}>
+            {hasAuthor && (
+              <Flex.Item
+                overflowY="visible"
+                shouldGrow={true}
+                shouldShrink={true}
+                padding={authorInfoPadding}
+              >
+                <AuthorInfo
+                  author={props.author}
+                  threadParent={props.threadParent}
+                  anonymousAuthor={props.anonymousAuthor}
+                  editor={props.editor}
+                  isUnread={props.isUnread}
+                  isForcedRead={props.isForcedRead}
+                  isSplitView={props.isSplitView}
+                  createdAt={props.timingDisplay}
+                  delayedPostAt={props.delayedPostAt}
+                  editedTimingDisplay={props.editedTimingDisplay}
+                  lastReplyAtDisplay={props.lastReplyAtDisplay}
+                  isTopic={props.isTopic}
+                  isTopicAuthor={props.isTopicAuthor}
+                  discussionEntryVersions={props.discussionEntry?.discussionEntryVersions || []}
+                  reportTypeCounts={props.discussionEntry?.reportTypeCounts}
+                  threadMode={threadMode}
+                  toggleUnread={props.toggleUnread}
+                  breakpoints={breakpoints}
+                  published={props.discussionTopic?.published}
+                  isAnnouncement={props.discussionTopic?.isAnnouncement}
+                />
+              </Flex.Item>
+            )}
+            <Flex.Item
+              align={postUtilitiesAlign}
+              margin={hasAuthor ? postUtilitiesMargin : '0'}
+              overflowX="visible"
+              overflowY="visible"
+              padding="xxx-small 0 0 0"
+              shouldGrow={!hasAuthor}
+            >
+              {props.postUtilities}
+            </Flex.Item>
+          </Flex>
+        </Flex.Item>
+        <Flex.Item
+          padding={hasAuthor ? postMessagePadding : postMessagePaddingNoAuthor}
+          overflowY="visible"
+          overflowX="visible"
         >
-          {props.attachment && (
-            <View as="div" padding="small none none">
-              <Link href={props.attachment.url}>{props.attachment.displayName}</Link>
-            </View>
-          )}
-          {props.children}
-          {!props.isTopic && (
-            <hr
-              data-testid="post-separator"
-              style={{
-                height: theme.borders.widthSmall,
-                borderColor: '#E8EAEC',
-                margin: `${theme.spacing.medium} 0`,
-                ...additionalSeparatorStyles,
-              }}
-            />
-          )}
-        </PostMessage>
-      </Flex.Item>
-    </Flex>
+          {props.quotedEntry && <ReplyPreview {...props.quotedEntry} />}
+          <PostMessage
+            isTopic={props.isTopic}
+            threadMode={threadMode && !props.isTopic}
+            discussionEntry={props.discussionEntry}
+            discussionAnonymousState={props.discussionTopic?.anonymousState}
+            canReplyAnonymously={props.discussionTopic?.canReplyAnonymously}
+            title={props.title}
+            message={props.message}
+            attachment={props.attachment}
+            isEditing={props.isEditing}
+            onSave={props.onSave}
+            onCancel={props.onCancel}
+            isSplitView={props.isSplitView}
+            discussionTopic={props.discussionTopic}
+          >
+            {props.attachment && (
+              <View as="div" padding="small none none">
+                <Link href={props.attachment.url}>{props.attachment.displayName}</Link>
+              </View>
+            )}
+            {props.children}
+          </PostMessage>
+        </Flex.Item>
+      </Flex>
+      {!props.isTopic && (
+        <hr
+          data-testid="post-separator"
+          style={{
+            height: theme.borders.widthSmall,
+            borderColor: '#E8EAEC',
+            margin: `${theme.spacing.medium} 0`,
+            ...additionalSeparatorStyles,
+          }}
+        />
+      )}
+    </>
   )
 }
 

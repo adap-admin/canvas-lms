@@ -49,6 +49,8 @@ class TokensController < ApplicationController
   # @argument token[purpose] [Required, String] The purpose of the token.
   # @argument token[expires_at] [DateTime] The time at which the token will expire.
   # @argument token[scopes][] [Array] The scopes to associate with the token.
+  #   Ignored if the default developer key does not have the "enable scopes" option enabled.
+  #   In such cases, the token will inherit the user's permissions instead.
   #
   def create
     token_params = access_token_params
@@ -77,6 +79,8 @@ class TokensController < ApplicationController
   #
   # The ID can be the actual database ID of the token, or the 'token_hint' value.
   #
+  # Regenerating an expired token requires a new expiration date.
+  #
   # @argument token[purpose] [String] The purpose of the token.
   # @argument token[expires_at] [DateTime] The time at which the token will expire.
   # @argument token[scopes][] [Array] The scopes to associate with the token.
@@ -92,8 +96,11 @@ class TokensController < ApplicationController
     end
 
     token_params = access_token_params
-    if Canvas::Plugin.value_to_boolean(token_params.delete(:regenerate)) &&
-       @token.manually_created?
+    if Canvas::Plugin.value_to_boolean(token_params.delete(:regenerate)) && @token.manually_created?
+      if @token.expired? && !token_params.key?(:permanent_expires_at)
+        return render json: { errors: { message: "cannot regenerate an expired token without a new expiration date" } }, status: :bad_request
+      end
+
       @token.generate_token(true)
       # if it's regenerated while masquerading, set it back to pending
       @token.workflow_state = "pending" unless @context == logged_in_user

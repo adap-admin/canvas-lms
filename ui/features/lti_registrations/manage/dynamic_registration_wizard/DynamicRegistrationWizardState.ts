@@ -16,18 +16,13 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import create from 'zustand'
+import {create} from 'zustand'
 import type {AccountId} from '../model/AccountId'
 import type {DynamicRegistrationToken} from '../model/DynamicRegistrationToken'
-import type {RegistrationOverlay} from '../model/RegistrationOverlay'
-import type {DeveloperKeyId} from '../model/developer_key/DeveloperKeyId'
-import type {LtiImsRegistration} from '../model/lti_ims_registration/LtiImsRegistration'
-import type {LtiImsRegistrationId} from '../model/lti_ims_registration/LtiImsRegistrationId'
 import {
-  createRegistrationOverlayStore,
-  type RegistrationOverlayState,
-  type RegistrationOverlayStore,
-} from '../registration_wizard/registration_settings/RegistrationOverlayState'
+  createDynamicRegistrationOverlayStore,
+  type DynamicRegistrationOverlayStore,
+} from './DynamicRegistrationOverlayState'
 import type {DynamicRegistrationWizardService} from './DynamicRegistrationWizardService'
 import {
   formatApiResultError,
@@ -37,9 +32,8 @@ import {
 } from '../../common/lib/apiResult/ApiResult'
 import type {LtiRegistrationId} from '../model/LtiRegistrationId'
 import type {UnifiedToolId} from '../model/UnifiedToolId'
-import type {LtiPlacement} from '../model/LtiPlacement'
-import type {LtiPlacementOverlay} from '../model/PlacementOverlay'
-
+import type {LtiRegistrationWithConfiguration} from '../model/LtiRegistration'
+import type {LtiConfigurationOverlay} from '../model/internal_lti_configuration/LtiConfigurationOverlay'
 /**
  * Steps are:
  * 1. Open modal, prompting for url
@@ -65,10 +59,10 @@ export interface DynamicRegistrationActions {
   loadRegistrationToken: (
     accountId: AccountId,
     dynamicRegistrationUrl: string,
-    unifiedToolId?: UnifiedToolId
+    unifiedToolId?: UnifiedToolId,
   ) => void
 
-  loadRegistration: (accountId: AccountId, imsRegistrationId: LtiImsRegistrationId) => void
+  loadRegistration: (accountId: AccountId, registrationId: LtiRegistrationId) => void
   /**
    * Enables the developer key for the given registration
    * and closes the modal
@@ -80,21 +74,18 @@ export interface DynamicRegistrationActions {
    */
   enableAndClose: (
     accountId: AccountId,
-    imsRegistrationId: LtiImsRegistrationId,
     registrationId: LtiRegistrationId,
-    developerKeyId: DeveloperKeyId,
-    overlay: RegistrationOverlay,
+    overlay: LtiConfigurationOverlay,
     adminNickname: string,
-    onSuccess: () => void
+    onSuccess: () => void,
   ) => Promise<unknown>
 
   updateAndClose: (
     accountId: AccountId,
-    imsRegistrationId: LtiImsRegistrationId,
     registrationId: LtiRegistrationId,
-    overlay: RegistrationOverlay,
+    overlay: LtiConfigurationOverlay,
     adminNickname: string,
-    onSuccess: () => void
+    onSuccess: () => void,
   ) => Promise<unknown>
 
   /**
@@ -102,12 +93,14 @@ export interface DynamicRegistrationActions {
    * and closes the modal. The previous state must be a confirmation state.
    *
    * @param prevState The previous state of the modal
-   * @param developerKeyId The id of the developer key to delete
+   * @param accountId The account id the tool is being registered for
+   * @param registrationId The id of the registration to delete
    * @returns The result of the delete operation
    */
   deleteKey: (
     prevState: ReviewingStateType,
-    developerKeyId: DeveloperKeyId
+    accountId: AccountId,
+    registrationId: LtiRegistrationId,
   ) => Promise<ApiResult<unknown>>
   /**
    * Transition to a new confirmation state, copying the
@@ -121,7 +114,7 @@ export interface DynamicRegistrationActions {
   transitionToConfirmationState(
     prevState: ConfirmationStateType,
     newState: ConfirmationStateType,
-    reviewing?: boolean
+    reviewing?: boolean,
   ): void
   transitionToReviewingState(prevState: ConfirmationStateType): void
 }
@@ -166,13 +159,18 @@ export type ConfirmationStateType = Exclude<
 >
 type ReviewingStateType = Exclude<ConfirmationStateType, 'Enabling' | 'DeletingDevKey' | 'Updating'>
 
+export const isReviewingState = (
+  state: DynamicRegistrationWizardState,
+): state is ConfirmationState<ReviewingStateType> =>
+  state._type.endsWith('Confirmation') || state._type === 'Reviewing'
+
 /**
  * Helper for constructing a 'confirmation' state (a substate of the confirmation screen)
  */
 export type ConfirmationState<Tag extends string> = {
   _type: Tag
-  registration: LtiImsRegistration
-  overlayStore: RegistrationOverlayStore
+  registration: LtiRegistrationWithConfiguration
+  overlayStore: DynamicRegistrationOverlayStore
   reviewing: boolean
 }
 
@@ -198,7 +196,7 @@ const stateFor =
 const stateForTag =
   <K extends DynamicRegistrationWizardState['_type']>(
     _type: K,
-    value: Omit<Extract<DynamicRegistrationWizardState, {_type: K}>, '_type'>
+    value: Omit<Extract<DynamicRegistrationWizardState, {_type: K}>, '_type'>,
   ) =>
   () => ({state: {_type, ...value}})
 
@@ -210,9 +208,9 @@ const stateForTag =
 const confirmationState =
   <Tag extends ConfirmationStateType>(_type: Tag) =>
   (
-    registration: LtiImsRegistration,
-    overlayStore: RegistrationOverlayStore,
-    reviewing = false
+    registration: LtiRegistrationWithConfiguration,
+    overlayStore: DynamicRegistrationOverlayStore,
+    reviewing = false,
   ): DynamicRegistrationWizardState => ({
     _type,
     registration,
@@ -242,15 +240,15 @@ const stateFrom =
   (
     mkNewState: (
       oldState: Extract<DynamicRegistrationWizardState, {_type: T}>,
-      actions: DynamicRegistrationActions
-    ) => DynamicRegistrationWizardState
+      actions: DynamicRegistrationActions,
+    ) => DynamicRegistrationWizardState,
   ) =>
   (oldState: {state: DynamicRegistrationWizardState} & DynamicRegistrationActions) => {
     if (oldState.state._type === _type) {
       return {
         state: mkNewState(
           oldState.state as Extract<DynamicRegistrationWizardState, {_type: T}>,
-          oldState
+          oldState,
         ),
       }
     } else {
@@ -261,7 +259,7 @@ const stateFrom =
 type StateUpdater = (
   updater: (s: {state: DynamicRegistrationWizardState} & DynamicRegistrationActions) => {
     state: DynamicRegistrationWizardState
-  }
+  },
 ) => void
 
 /**
@@ -283,10 +281,10 @@ export const mkUseDynamicRegistrationWizardState = (service: DynamicRegistration
       loadRegistrationToken: (
         accountId: AccountId,
         dynamicRegistrationUrl: string,
-        unifiedToolId?: UnifiedToolId
+        unifiedToolId?: UnifiedToolId,
       ) => {
         set(stateFor({_type: 'RequestingToken'}))
-        // eslint-disable-next-line promise/catch-or-return
+
         service
           .fetchRegistrationToken(accountId, dynamicRegistrationUrl, unifiedToolId)
           .then(resp => {
@@ -303,15 +301,13 @@ export const mkUseDynamicRegistrationWizardState = (service: DynamicRegistration
                   set(
                     stateForTag('LoadingRegistration', {
                       registrationToken: resp.data,
-                    })
+                    }),
                   )
-                  // eslint-disable-next-line promise/catch-or-return
+
                   service.getRegistrationByUUID(accountId, resp.data.uuid).then(reg => {
                     if (isSuccessful(reg)) {
-                      const store: RegistrationOverlayStore = createRegistrationOverlayStore(
-                        reg.data.client_name,
-                        reg.data
-                      )
+                      const store: DynamicRegistrationOverlayStore =
+                        createDynamicRegistrationOverlayStore(reg.data.name, reg.data)
                       set(stateFor(confirmationState('PermissionConfirmation')(reg.data, store)))
                     } else {
                       set(stateFor(errorState(formatApiResultError(reg))))
@@ -331,14 +327,14 @@ export const mkUseDynamicRegistrationWizardState = (service: DynamicRegistration
        * @param accountId ID of the account the Lti::IMS::Registration is associated with
        * @param registrationId ID of the Lti::IMS::Registration to load
        */
-      loadRegistration: async (accountId: AccountId, registrationId: LtiImsRegistrationId) => {
+      loadRegistration: async (accountId: AccountId, registrationId: LtiRegistrationId) => {
         set(stateFor({_type: 'LoadingRegistration'}))
-        const reg = await service.getRegistrationById(accountId, registrationId)
+        const reg = await service.fetchLtiRegistration(accountId, registrationId)
 
         if (isSuccessful(reg)) {
-          const store: RegistrationOverlayStore = createRegistrationOverlayStore(
-            reg.data.client_name,
-            reg.data
+          const store: DynamicRegistrationOverlayStore = createDynamicRegistrationOverlayStore(
+            reg.data.name,
+            reg.data,
           )
 
           set(stateFor(confirmationState('Reviewing')(reg.data, store, true)))
@@ -348,49 +344,56 @@ export const mkUseDynamicRegistrationWizardState = (service: DynamicRegistration
       },
       enableAndClose: async (
         accountId: AccountId,
-        imsRegistrationId: LtiImsRegistrationId,
         registrationId: LtiRegistrationId,
-        developerKeyId: DeveloperKeyId,
-        overlay: RegistrationOverlay,
+        overlay: LtiConfigurationOverlay,
         adminNickname: string,
-        onSuccess: () => void
+        onSuccess: () => void,
       ) => {
         set(stateFrom('Reviewing')(state => enabling(state.registration, state.overlayStore)))
-        const results = await Promise.all([
-          service.updateRegistrationOverlay(accountId, imsRegistrationId, overlay),
-          service.updateDeveloperKeyWorkflowState(accountId, developerKeyId, 'on'),
-          service.updateAdminNickname(accountId, registrationId, adminNickname),
-        ])
-        if (results.every(isSuccessful)) {
+        // We explicitly don't send the config, as we can't update the base config for Dynamic Registration.
+
+        const result = await service.updateRegistration({
+          accountId,
+          registrationId,
+          overlay,
+          adminNickname,
+          workflowState: 'on',
+        })
+        if (isSuccessful(result)) {
           onSuccess()
         } else {
-          set(stateFor(errorState(formatApiResultError(results.find(isUnsuccessful)!))))
+          set(stateFor(errorState(formatApiResultError(result))))
         }
       },
       updateAndClose: async (
         accountId: AccountId,
-        imsRegistrationId: LtiImsRegistrationId,
         registrationId: LtiRegistrationId,
-        overlay: RegistrationOverlay,
+        overlay: LtiConfigurationOverlay,
         adminNickname: string,
-        onSuccess: () => void
+        onSuccess: () => void,
       ) => {
         set(stateFrom('Reviewing')(state => updating(state.registration, state.overlayStore)))
 
-        const results = await Promise.all([
-          service.updateRegistrationOverlay(accountId, imsRegistrationId, overlay),
-          service.updateAdminNickname(accountId, registrationId, adminNickname),
-        ])
+        const result = await service.updateRegistration({
+          accountId,
+          registrationId,
+          overlay,
+          adminNickname,
+        })
 
-        if (results.every(isSuccessful)) {
+        if (isSuccessful(result)) {
           onSuccess()
         } else {
-          set(stateFor(errorState(formatApiResultError(results.find(isUnsuccessful)!))))
+          set(stateFor(errorState(formatApiResultError(result))))
         }
       },
-      deleteKey: async (prevState: ReviewingStateType, developerKeyId: DeveloperKeyId) => {
+      deleteKey: async (
+        prevState: ReviewingStateType,
+        accountId: AccountId,
+        registrationId: LtiRegistrationId,
+      ) => {
         set(stateFrom(prevState)(state => deleting(state.registration, state.overlayStore)))
-        const result = await service.deleteDeveloperKey(developerKeyId)
+        const result = await service.deleteRegistration(accountId, registrationId)
         if (isUnsuccessful(result)) {
           set(stateFor(errorState(formatApiResultError(result))))
         }
@@ -399,14 +402,14 @@ export const mkUseDynamicRegistrationWizardState = (service: DynamicRegistration
       transitionToConfirmationState: (
         prevState: ConfirmationStateType,
         newState: ConfirmationStateType,
-        reviewing?: boolean
+        reviewing?: boolean,
       ) =>
         set(
           stateFrom(prevState)(a => ({
             ...a,
             reviewing: reviewing ?? a.reviewing,
             _type: newState,
-          }))
+          })),
         ),
       transitionToReviewingState: (prevState: ConfirmationStateType) =>
         set(
@@ -414,17 +417,10 @@ export const mkUseDynamicRegistrationWizardState = (service: DynamicRegistration
             ...a,
             _type: 'Reviewing',
             reviewing: true,
-          }))
+          })),
         ),
-    })
+    }),
   )
-
-export const placementInState = (
-  state: RegistrationOverlayState,
-  placement: LtiPlacement
-): LtiPlacementOverlay | undefined => {
-  return state.registration.placements?.find(p => p.type === placement)
-}
 
 const originOfUrl = (urlStr: string) => {
   const url = new URL(urlStr)

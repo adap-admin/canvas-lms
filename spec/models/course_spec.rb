@@ -40,18 +40,6 @@ describe Course do
     context "outcome imports" do
       include_examples "outcome import context examples"
 
-      describe "relationships" do
-        it { is_expected.to have_one(:late_policy).dependent(:destroy).inverse_of(:course) }
-        it { is_expected.to have_one(:default_post_policy).inverse_of(:course) }
-
-        it { is_expected.to have_many(:post_policies).dependent(:destroy).inverse_of(:course) }
-        it { is_expected.to have_many(:assignment_post_policies).inverse_of(:course) }
-        it { is_expected.to have_many(:feature_flags) }
-        it { is_expected.to have_many(:lti_resource_links).class_name("Lti::ResourceLink") }
-
-        it { is_expected.to have_many(:block_editor_templates).class_name("BlockEditorTemplate").inverse_of(:context) }
-      end
-
       describe "lti2 proxies" do
         include_context "lti2_course_spec_helper"
 
@@ -1031,31 +1019,9 @@ describe Course do
         expect(@course.grants_right?(@admin2, :reset_content)).to be_falsey
       end
 
-      it "grants create_tool_manually to the proper individuals" do
+      it "grants manage_lti_* to the proper individuals" do
         course_with_teacher(active_all: true)
-        @course.root_account.disable_feature!(:granular_permissions_manage_lti)
-        @teacher = user_factory(active_all: true)
-        @course.enroll_teacher(@teacher).accept!
 
-        @ta = user_factory(active_all: true)
-        @course.enroll_ta(@ta).accept!
-
-        @designer = user_factory(active_all: true)
-        @course.enroll_designer(@designer).accept!
-
-        @student = user_factory(active_all: true)
-        @course.enroll_student(@student).accept!
-
-        clear_permissions_cache
-        expect(@course.grants_right?(@teacher, :create_tool_manually)).to be_truthy
-        expect(@course.grants_right?(@ta, :create_tool_manually)).to be_truthy
-        expect(@course.grants_right?(@designer, :create_tool_manually)).to be_truthy
-        expect(@course.grants_right?(@student, :create_tool_manually)).to be_falsey
-      end
-
-      it "grants manage_lti_* to the proper individuals (granular permissions)" do
-        course_with_teacher(active_all: true)
-        @course.root_account.enable_feature!(:granular_permissions_manage_lti)
         @teacher = user_factory(active_all: true)
         @course.enroll_teacher(@teacher).accept!
 
@@ -1674,6 +1640,141 @@ describe Course do
     expect { Marshal.dump(c) }.not_to raise_error
   end
 
+  describe "attatchments" do
+    before do
+      @course_with_attachments = course_factory(course_name: "Attachments")
+      @root_folder = Folder.root_folders(@course_with_attachments).first
+      @deleted_attachment = attachment_with_context(
+        @course_with_attachments,
+        folder: @root_folder,
+        filename: "replaceable.txt",
+        file_state: "deleted",
+        workflow_state: "processed"
+      )
+    end
+
+    describe "find" do
+      context "when the replacement attachment file is hidden" do
+        let(:new_attachment) do
+          attachment_with_context(
+            @course_with_attachments,
+            folder: @root_folder,
+            filename: "replaceable.txt",
+            file_state: "hidden",
+            workflow_state: "processed"
+          )
+        end
+
+        before do
+          @deleted_attachment.replacement_attachment = new_attachment
+          @deleted_attachment.save!
+        end
+
+        context "when the hidden_attachments_replacement_chain site admin flag is enabled" do
+          before do
+            Account.site_admin.enable_feature! :hidden_attachments_replacement_chain
+          end
+
+          it "returns the replacement attachment" do
+            expect(@course_with_attachments.attachments.find(@deleted_attachment.id).id).to eq new_attachment.id
+          end
+        end
+
+        context "when the hidden_attachments_replacement_chain site admin flag is disabled" do
+          before do
+            Account.site_admin.disable_feature! :hidden_attachments_replacement_chain
+          end
+
+          it "returns the original attachment" do
+            expect(@course_with_attachments.attachments.find(@deleted_attachment.id).id).to eq @deleted_attachment.id
+          end
+        end
+      end
+
+      context "when the replacement attachment is deleted too" do
+        let(:new_attachment) do
+          attachment_with_context(
+            @course_with_attachments,
+            folder: @root_folder,
+            filename: "replaceable.txt",
+            file_state: "deleted",
+            workflow_state: "processed"
+          )
+        end
+
+        before do
+          @deleted_attachment.replacement_attachment = new_attachment
+          @deleted_attachment.save!
+        end
+
+        context "when the hidden_attachments_replacement_chain site admin flag is enabled" do
+          before do
+            Account.site_admin.enable_feature! :hidden_attachments_replacement_chain
+          end
+
+          it "returns the original attachment" do
+            expect(@course_with_attachments.attachments.find(@deleted_attachment.id).id).to eq @deleted_attachment.id
+          end
+        end
+
+        context "when the hidden_attachments_replacement_chain site admin flag is disabled" do
+          before do
+            Account.site_admin.disable_feature! :hidden_attachments_replacement_chain
+          end
+
+          it "returns the original attachment" do
+            expect(@course_with_attachments.attachments.find(@deleted_attachment.id).id).to eq @deleted_attachment.id
+          end
+        end
+      end
+    end
+  end
+
+  describe "users_visible_to with section filtering" do
+    before :once do
+      @course = Account.default.courses.create!
+      @section1 = @course.course_sections.create!(name: "Section 1")
+      @section2 = @course.course_sections.create!(name: "Section 2")
+      @section3 = @course.course_sections.create!(name: "Section 3")
+      @student1 = user_with_pseudonym
+      @student2 = user_with_pseudonym
+      @student3 = user_with_pseudonym
+      @course.enroll_student(@student1, section: @section1, enrollment_state: "active")
+      @course.enroll_student(@student2, section: @section2, enrollment_state: "active")
+      @course.enroll_student(@student3, section: @section3, enrollment_state: "active")
+      @teacher = user_with_pseudonym
+      @course.enroll_teacher(@teacher, enrollment_state: "active")
+    end
+
+    it "filters users by section_ids" do
+      visible_users = @course.users_visible_to(@teacher, false, section_ids: [@section1.id, @section2.id])
+      expect(visible_users.pluck(:id)).to include(@student1.id, @student2.id)
+      expect(visible_users.pluck(:id)).not_to include(@student3.id)
+    end
+
+    it "returns all users when no section_ids are provided" do
+      visible_users = @course.users_visible_to(@teacher)
+      expect(visible_users.pluck(:id)).to include(@student1.id, @student2.id, @student3.id)
+    end
+
+    it "returns empty when filtering by non-existent section" do
+      visible_users = @course.users_visible_to(@teacher, false, section_ids: [99_999])
+      expect(visible_users.count).to eq(0)
+    end
+
+    it "handles section filtering with enrollment state filtering" do
+      @course.enrollments.where(user_id: @student2.id).first.conclude
+      visible_users = @course.users_visible_to(
+        @teacher,
+        false,
+        section_ids: [@section1.id, @section2.id],
+        exclude_enrollment_state: "completed"
+      )
+      expect(visible_users.pluck(:id)).to include(@student1.id)
+      expect(visible_users.pluck(:id)).not_to include(@student2.id, @student3.id)
+    end
+  end
+
   describe "course_section_visibility" do
     before :once do
       @course = Account.default.courses.create!
@@ -2079,7 +2180,7 @@ describe Course do
     it "orders assignments and groups by position" do
       @assignment_group_1, @assignment_group_2 = [@course.assignment_groups.create!(name: "Some Assignment Group 1", group_weight: 100), @course.assignment_groups.create!(name: "Some Assignment Group 2", group_weight: 100)].sort_by(&:id)
 
-      now = Time.now
+      now = Time.zone.now
 
       g1a1 = @course.assignments.create!(title: "Assignment 01", due_at: now + 1.day, position: 3, assignment_group: @assignment_group_1, points_possible: 10)
       @course.assignments.create!(title: "Assignment 02", due_at: now + 1.day, position: 1, assignment_group: @assignment_group_1, points_possible: 10)
@@ -2139,7 +2240,7 @@ describe Course do
 
       assignment_group = @course.assignment_groups.create!(name: "Some Assignment Group 1")
 
-      now = Time.now
+      now = Time.zone.now
 
       @course.assignments.create!(title: "Assignment 01", due_at: now + 1.day, position: 1, assignment_group:, points_possible: 10)
       @course.assignments.create!(title: "Assignment 02", due_at: nil, position: 1, assignment_group:, points_possible: 10)
@@ -2608,6 +2709,32 @@ describe Course do
     end
   end
 
+  describe "#update_lti_context_controls" do
+    let(:course) { course_model(account:) }
+    let(:account) { account_model }
+    let(:new_parent_account) { account_model }
+
+    before do
+      allow(Lti::ContextControl).to receive(:update_paths_for_reparent)
+    end
+
+    describe "when course parent changes" do
+      it "updates paths for Controls" do
+        course.update!(account: new_parent_account)
+        expect(Lti::ContextControl).to have_received(:update_paths_for_reparent).with(course, account.id, new_parent_account.id)
+      end
+    end
+
+    describe "with new course" do
+      let(:new_course) { course_model }
+
+      it "does not update paths" do
+        new_course
+        expect(Lti::ContextControl).not_to have_received(:update_paths_for_reparent)
+      end
+    end
+  end
+
   describe "#tabs_available" do
     context "teachers" do
       before :once do
@@ -2644,23 +2771,13 @@ describe Course do
 
       describe "TAB_COURSE_PACES" do
         it "is included when course paces is enabled" do
-          @course.account.enable_feature!(:course_paces)
           @course.enable_course_paces = true
           @course.save!
           tabs = @course.tabs_available(@user).pluck(:id)
           expect(tabs).to include(Course::TAB_COURSE_PACES)
         end
 
-        it "is not included if the flag is off" do
-          @course.account.disable_feature!(:course_paces)
-          @course.enable_course_paces = true
-          @course.save!
-          tabs = @course.tabs_available(@user).pluck(:id)
-          expect(tabs).not_to include(Course::TAB_COURSE_PACES)
-        end
-
         it "is not included if the course has it disabled" do
-          @course.account.enable_feature!(:course_paces)
           @course.enable_course_paces = false
           @course.save!
           tabs = @course.tabs_available(@user).pluck(:id)
@@ -2779,7 +2896,6 @@ describe Course do
       end
 
       it "shows people tab with granular permissions if hidden" do
-        @course.root_account.enable_feature!(:granular_permissions_manage_users)
         @course.tab_configuration = [{
           id: Course::TAB_PEOPLE,
           label: "People",
@@ -3053,6 +3169,20 @@ describe Course do
           end
         end
       end
+
+      describe "with horizon_course account setting on" do
+        before :once do
+          @course.account.enable_feature!(:horizon_course_setting)
+          @course.update!(horizon_course: true)
+          @course.save!
+        end
+
+        it "renames the syllabus tab to overview" do
+          @course.enable_course_paces = true
+          syllabus_tab = @course.tabs_available(@user).find { |t| t[:id] == Course::TAB_SYLLABUS }
+          expect(syllabus_tab[:label]).to eq("Overview")
+        end
+      end
     end
 
     context "students" do
@@ -3062,7 +3192,6 @@ describe Course do
 
       describe "TAB_COURSE_PACES" do
         it "is not included" do
-          @course.account.enable_feature!(:course_paces)
           @course.enable_course_paces = true
           @course.save!
           tabs = @course.tabs_available(@user).pluck(:id)
@@ -3085,7 +3214,6 @@ describe Course do
       end
 
       it "hides people tab with granular permissions if hidden" do
-        @course.root_account.enable_feature!(:granular_permissions_manage_users)
         @course.tab_configuration = [{
           id: Course::TAB_PEOPLE,
           label: "People",
@@ -5076,7 +5204,7 @@ describe Course do
     context "appointment cancellation" do
       before :once do
         course_with_student(active_all: true)
-        @ag = AppointmentGroup.create!(title: "test", contexts: [@course], new_appointments: [["2010-01-01 13:00:00", "2010-01-01 14:00:00"], ["#{Time.now.year + 1}-01-01 13:00:00", "#{Time.now.year + 1}-01-01 14:00:00"]])
+        @ag = AppointmentGroup.create!(title: "test", contexts: [@course], new_appointments: [["2010-01-01 13:00:00", "2010-01-01 14:00:00"], ["#{Time.zone.now.year + 1}-01-01 13:00:00", "#{Time.zone.now.year + 1}-01-01 14:00:00"]])
         @ag.appointments.each do |a|
           a.reserve_for(@user, @user)
         end
@@ -5954,39 +6082,6 @@ describe Course do
         @shard1.activate do
           acct = Account.create!
           course_with_student(active_all: 1, account: acct)
-          @course.root_account.disable_feature!(:granular_permissions_manage_course_content)
-        end
-        @site_admin = user_factory
-        site_admin = Account.site_admin
-        site_admin.account_users.create!(user: @user)
-
-        @shard1.activate do
-          expect(@course.grants_right?(@site_admin, :manage_content)).to be_truthy
-          expect(@course.grants_right?(@teacher, :manage_content)).to be_truthy
-          expect(@course.grants_right?(@student, :manage_content)).to be_falsey
-        end
-
-        expect(@course.grants_right?(@site_admin, :manage_content)).to be_truthy
-      end
-
-      enable_cache do
-        # do it in a different order
-        @shard1.activate do
-          expect(@course.grants_right?(@student, :manage_content)).to be_falsey
-          expect(@course.grants_right?(@teacher, :manage_content)).to be_truthy
-          expect(@course.grants_right?(@site_admin, :manage_content)).to be_truthy
-        end
-
-        expect(@course.grants_right?(@site_admin, :manage_content)).to be_truthy
-      end
-    end
-
-    it "properly returns site admin permissions from another shard (granular permissions)" do
-      enable_cache do
-        @shard1.activate do
-          acct = Account.create!
-          course_with_student(active_all: 1, account: acct)
-          @course.root_account.enable_feature!(:granular_permissions_manage_course_content)
         end
         @site_admin = user_factory
         site_admin = Account.site_admin
@@ -6727,13 +6822,12 @@ describe Course do
 
     it "shows all modules to teachers even when course is concluded" do
       @course.complete!
-      expect(@course.grants_right?(@teacher, :manage_content)).to be(false)
+      expect(@course.grants_right?(@teacher, :manage_course_content_edit)).to be(false)
       expect(@course.modules_visible_to(@teacher).pluck(:name)).to contain_exactly("published 1", "published 2", "unpublished")
     end
 
-    context "when the selective_release_backend flag is enabled" do
+    context "differentiated modules" do
       before :once do
-        Account.site_admin.enable_feature! :selective_release_backend
         @m2.assignment_overrides.create!
       end
 
@@ -6813,6 +6907,65 @@ describe Course do
     end
   end
 
+  describe "visible_module_items_by_module" do
+    let(:prepare_modules) do
+      @module1 = @course.context_modules.create!(workflow_state: "published")
+      @context_module1_item1 = @module1.add_item(type: "sub_header", title: "item 1")
+      @context_module1_item1.publish!
+      @module2 = @course.context_modules.create!(workflow_state: "published")
+      @context_module2_item1 = @module2.add_item(type: "sub_header", title: "item 2")
+      @context_module2_item1.publish!
+    end
+
+    context "when user is teacher" do
+      before do
+        course_with_teacher(active_all: true)
+        prepare_modules
+      end
+
+      context "when module exist on the course" do
+        subject { @course.visible_module_items_by_module(@teacher, @module1) }
+
+        it "should return the tags for the given module" do
+          expect(subject.length).to be(1)
+          expect(subject.first).to eql(@context_module1_item1)
+        end
+      end
+
+      context "when module not exist on the course" do
+        subject { @course.visible_module_items_by_module(@teacher, double("mock", id: "noop")) }
+
+        it "should return empty list" do
+          expect(subject.length).to be(0)
+        end
+      end
+    end
+
+    context "when user is student" do
+      before do
+        course_with_student(active_all: true)
+        prepare_modules
+      end
+
+      context "when module exist on the course" do
+        subject { @course.visible_module_items_by_module(@student, @module1) }
+
+        it "should return the tags for the given module" do
+          expect(subject.length).to be(1)
+          expect(subject.first).to eql(@context_module1_item1)
+        end
+      end
+
+      context "when module not exist on the course" do
+        subject { @course.visible_module_items_by_module(@student, double("mock", id: "noop")) }
+
+        it "should return empty list" do
+          expect(subject.length).to be(0)
+        end
+      end
+    end
+  end
+
   describe "#update_enrolled_users" do
     it "updates user associations when deleted" do
       course_with_student(active_all: true)
@@ -6820,6 +6973,40 @@ describe Course do
       @course.destroy
       @user.reload
       expect(@user.associated_accounts).to be_blank
+    end
+  end
+
+  describe "archival" do
+    before :once do
+      course_with_student(active_all: true)
+    end
+
+    it "identifies archived courses via predicate and scope" do
+      expect(@course.archived?).to be false
+      expect(Course.archived).to be_empty
+
+      @course.archive!
+      expect(@course.archived?).to be true
+      expect(Course.archived).to eq [@course]
+    end
+
+    it "sets the archived_at timestamp on the course and enrollments when archived individually" do
+      student_in_course.destroy # test that this enrollment is not part of the archive
+      @course.archive!
+      expect(@course.archived_at).to be_present
+      expect(@course.all_enrollments.pluck(:type, :workflow_state, :archived_at)).to match_array(
+        [["TeacherEnrollment", "deleted", @course.archived_at],
+         ["StudentEnrollment", "deleted", @course.archived_at],
+         ["StudentEnrollment", "deleted", nil]]
+      )
+    end
+
+    it "sets the archived_at timestamp on courses and enrollments when archived in bulk" do
+      courses = [@course, course_with_student(active_all: true).course]
+      Course.destroy_batch(courses, archive: true)
+      dates = courses.flat_map { |c| [c.reload.archived_at] + c.all_enrollments.pluck(:archived_at) }
+      expect(dates.uniq.size).to eq 1
+      expect(dates.first).to be_present
     end
   end
 
@@ -7251,10 +7438,6 @@ describe Course do
     context "timing when course is published" do
       let(:publish_time) { 300_000 }
 
-      before :once do
-        Account.default.enable_feature!(:course_paces)
-      end
-
       it "logs the timing of a course to statsd with course pacing enabled" do
         allow(InstStatsd::Statsd).to receive(:timing)
 
@@ -7360,7 +7543,6 @@ describe Course do
 
     context "assignment count when course is published" do
       before do
-        Account.default.enable_feature!(:course_paces)
         allow(InstStatsd::Statsd).to receive(:count)
         @course = Course.create!
         create_assignments([@course.id], 2)
@@ -7390,7 +7572,7 @@ describe Course do
         allow(InstStatsd::Statsd).to receive(:increment)
         allow(InstStatsd::Statsd).to receive(:decrement)
 
-        Course.create!(restrict_enrollments_to_course_dates: true, conclude_at: Time.now, settings: { enable_course_paces: true }).offer!
+        Course.create!(restrict_enrollments_to_course_dates: true, conclude_at: Time.zone.now, settings: { enable_course_paces: true }).offer!
         expect(InstStatsd::Statsd).to have_received(:increment).with("course.paced.has_end_date").once
 
         Course.last.update! restrict_enrollments_to_course_dates: false
@@ -7401,7 +7583,7 @@ describe Course do
         allow(InstStatsd::Statsd).to receive(:increment)
         allow(InstStatsd::Statsd).to receive(:decrement)
 
-        Course.create!(restrict_enrollments_to_course_dates: true, conclude_at: Time.now).offer!
+        Course.create!(restrict_enrollments_to_course_dates: true, conclude_at: Time.zone.now).offer!
         expect(InstStatsd::Statsd).to have_received(:increment).with("course.unpaced.has_end_date").once
 
         Course.last.update! settings: { enable_course_paces: true }
@@ -7412,7 +7594,7 @@ describe Course do
       it "increments and decrements on pace status and end date existence concurrently" do
         allow(InstStatsd::Statsd).to receive(:increment)
         allow(InstStatsd::Statsd).to receive(:decrement)
-        Course.create!(restrict_enrollments_to_course_dates: true, conclude_at: Time.now).offer!
+        Course.create!(restrict_enrollments_to_course_dates: true, conclude_at: Time.zone.now).offer!
         expect(InstStatsd::Statsd).to have_received(:increment).with("course.unpaced.has_end_date").once
 
         Course.last.update! restrict_enrollments_to_course_dates: false, settings: { enable_course_paces: true }
@@ -7427,7 +7609,7 @@ describe Course do
       it "ignores unpublished date having changes" do
         allow(InstStatsd::Statsd).to receive(:increment)
         allow(InstStatsd::Statsd).to receive(:decrement)
-        Course.create!(restrict_enrollments_to_course_dates: true, conclude_at: Time.now)
+        Course.create!(restrict_enrollments_to_course_dates: true, conclude_at: Time.zone.now)
         expect(InstStatsd::Statsd).not_to have_received(:increment).with("course.unpaced.has_end_date")
         Course.last.update! settings: { enable_course_paces: true }
         expect(InstStatsd::Statsd).not_to have_received(:decrement).with("course.unpaced.has_end_date")
@@ -7437,8 +7619,7 @@ describe Course do
 
     context "course with course pacing on or off" do
       before do
-        Account.default.enable_feature!(:course_paces)
-        allow(InstStatsd::Statsd).to receive(:increment)
+        allow(InstStatsd::Statsd).to receive(:distributed_increment)
         allow(InstStatsd::Statsd).to receive(:decrement)
         @course = Course.create!
       end
@@ -7448,20 +7629,20 @@ describe Course do
         @course.save!
         @course.offer!
 
-        expect(InstStatsd::Statsd).to have_received(:increment).with("course.paced.paced_courses").once
+        expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("course.paced.paced_courses").once
       end
 
       it "does not increment when only option is updated" do
         @course.enable_course_paces = true
         @course.save!
 
-        expect(InstStatsd::Statsd).not_to have_received(:increment).with("course.paced.paced_courses")
+        expect(InstStatsd::Statsd).not_to have_received(:distributed_increment).with("course.paced.paced_courses")
       end
 
       it "increments count for non-paced course when initially published" do
         @course.offer!
 
-        expect(InstStatsd::Statsd).to have_received(:increment).with("course.unpaced.paced_courses").once
+        expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("course.unpaced.paced_courses").once
       end
 
       it "increments paced count on already published course from when going from unpaced to paced" do
@@ -7469,43 +7650,42 @@ describe Course do
         @course.enable_course_paces = true
         @course.save!
 
-        expect(InstStatsd::Statsd).to have_received(:increment).with("course.paced.paced_courses").once
+        expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("course.paced.paced_courses").once
       end
 
       it "increments paced count on already published course from when going from paced to unpaced" do
         @course.enable_course_paces = true
         @course.save!
         @course.offer!
-        expect(InstStatsd::Statsd).to have_received(:increment).with("course.paced.paced_courses").once
+        expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("course.paced.paced_courses").once
 
         @course.enable_course_paces = false
         @course.save!
 
-        expect(InstStatsd::Statsd).to have_received(:increment).with("course.unpaced.paced_courses").once
+        expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("course.unpaced.paced_courses").once
       end
 
       it "increments the appropriate bucket when republishing" do
         @course.enable_course_paces = true
         @course.save!
         @course.offer!
-        expect(InstStatsd::Statsd).to have_received(:increment).with("course.paced.paced_courses").once
-        expect(InstStatsd::Statsd).not_to have_received(:increment).with("course.unpaced.paced_courses")
+        expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("course.paced.paced_courses").once
+        expect(InstStatsd::Statsd).not_to have_received(:distributed_increment).with("course.unpaced.paced_courses")
 
         @course.claim!
 
         @course.enable_course_paces = false
         @course.save!
-        expect(InstStatsd::Statsd).not_to have_received(:increment).with("course.unpaced.paced_courses")
+        expect(InstStatsd::Statsd).not_to have_received(:distributed_increment).with("course.unpaced.paced_courses")
 
         @course.offer!
-        expect(InstStatsd::Statsd).to have_received(:increment).with("course.unpaced.paced_courses").once
+        expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("course.unpaced.paced_courses").once
       end
     end
 
     context "course format logging" do
       before do
-        Account.default.enable_feature!(:course_paces)
-        allow(InstStatsd::Statsd).to receive(:increment)
+        allow(InstStatsd::Statsd).to receive(:distributed_increment)
         allow(InstStatsd::Statsd).to receive(:decrement)
         @course = Course.create!
       end
@@ -7515,7 +7695,7 @@ describe Course do
         @course.save!
         @course.offer!
 
-        expect(InstStatsd::Statsd).to have_received(:increment).with("course.unpaced.unset").once
+        expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("course.unpaced.unset").once
       end
 
       it "increments the course format count for unset when paced course published for the first time" do
@@ -7524,7 +7704,7 @@ describe Course do
         @course.save!
         @course.offer!
 
-        expect(InstStatsd::Statsd).to have_received(:increment).with("course.paced.unset").once
+        expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("course.paced.unset").once
       end
 
       it "increments the course format count for blended when unpaced course published for the first time" do
@@ -7532,7 +7712,7 @@ describe Course do
         @course.save!
         @course.offer!
 
-        expect(InstStatsd::Statsd).to have_received(:increment).with("course.unpaced.blended").once
+        expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("course.unpaced.blended").once
         expect(InstStatsd::Statsd).not_to have_received(:decrement).with("course.unpaced.blended")
       end
 
@@ -7542,7 +7722,7 @@ describe Course do
         @course.save!
         @course.offer!
 
-        expect(InstStatsd::Statsd).to have_received(:increment).with("course.paced.blended").once
+        expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("course.paced.blended").once
       end
 
       it "increments the course format count for on_campus when unpaced course published for the first time" do
@@ -7550,7 +7730,7 @@ describe Course do
         @course.save!
         @course.offer!
 
-        expect(InstStatsd::Statsd).to have_received(:increment).with("course.unpaced.on_campus").once
+        expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("course.unpaced.on_campus").once
       end
 
       it "increments the course format count for on_campus when paced course published for the first time" do
@@ -7559,7 +7739,7 @@ describe Course do
         @course.save!
         @course.offer!
 
-        expect(InstStatsd::Statsd).to have_received(:increment).with("course.paced.on_campus").once
+        expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("course.paced.on_campus").once
       end
 
       it "increments the course format count for online when unpaced course published for the first time" do
@@ -7567,7 +7747,7 @@ describe Course do
         @course.save!
         @course.offer!
 
-        expect(InstStatsd::Statsd).to have_received(:increment).with("course.unpaced.online").once
+        expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("course.unpaced.online").once
       end
 
       it "increments the course format count for online when paced course published for the first time" do
@@ -7576,14 +7756,14 @@ describe Course do
         @course.save!
         @course.offer!
 
-        expect(InstStatsd::Statsd).to have_received(:increment).with("course.paced.online").once
+        expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("course.paced.online").once
       end
 
       it "does not increment unpaced stat when only option is updated and not published" do
         @course.course_format = nil
         @course.save!
 
-        expect(InstStatsd::Statsd).not_to have_received(:increment).with("course.unpaced.unset")
+        expect(InstStatsd::Statsd).not_to have_received(:distributed_increment).with("course.unpaced.unset")
       end
 
       it "does not increment paced stat when only option is updated and not published" do
@@ -7591,7 +7771,7 @@ describe Course do
         @course.enable_course_paces = true
         @course.save!
 
-        expect(InstStatsd::Statsd).not_to have_received(:increment).with("course.paced.unset")
+        expect(InstStatsd::Statsd).not_to have_received(:distributed_increment).with("course.paced.unset")
       end
 
       it "increments unset count on already published unpaced course" do
@@ -7599,8 +7779,8 @@ describe Course do
         @course.enable_course_paces = true
         @course.save!
 
-        expect(InstStatsd::Statsd).to have_received(:increment).with("course.unpaced.unset").once
-        expect(InstStatsd::Statsd).to have_received(:increment).with("course.paced.unset").once
+        expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("course.unpaced.unset").once
+        expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("course.paced.unset").once
       end
 
       it "increments change to online on unpaced course" do
@@ -7608,8 +7788,8 @@ describe Course do
         @course.course_format = "online"
         @course.save!
 
-        expect(InstStatsd::Statsd).to have_received(:increment).with("course.unpaced.unset").once
-        expect(InstStatsd::Statsd).to have_received(:increment).with("course.unpaced.online").once
+        expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("course.unpaced.unset").once
+        expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("course.unpaced.online").once
       end
 
       it "increments blended count on already published paced course" do
@@ -7619,24 +7799,24 @@ describe Course do
         @course.course_format = "blended"
         @course.save!
 
-        expect(InstStatsd::Statsd).to have_received(:increment).with("course.paced.unset").once
-        expect(InstStatsd::Statsd).to have_received(:increment).with("course.paced.blended").once
+        expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("course.paced.unset").once
+        expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("course.paced.blended").once
       end
 
       it "paced course starts blended goes to unpaced and format unset" do
         @course.enable_course_paces = true
         @course.course_format = "blended"
         @course.save!
-        expect(InstStatsd::Statsd).not_to have_received(:increment).with("course.paced.blended")
+        expect(InstStatsd::Statsd).not_to have_received(:distributed_increment).with("course.paced.blended")
 
         @course.offer!
-        expect(InstStatsd::Statsd).to have_received(:increment).with("course.paced.blended").once
+        expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("course.paced.blended").once
 
         @course.course_format = nil
         @course.enable_course_paces = false
         @course.save!
 
-        expect(InstStatsd::Statsd).to have_received(:increment).with("course.unpaced.unset").once
+        expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("course.unpaced.unset").once
       end
     end
   end
@@ -7866,7 +8046,7 @@ describe Course do
 
       describe "updates metric if setting is enabled/disabled" do
         before do
-          allow(InstStatsd::Statsd).to receive(:increment)
+          allow(InstStatsd::Statsd).to receive(:distributed_increment)
         end
 
         it "increments enabled log when setting is turned on" do
@@ -7875,7 +8055,7 @@ describe Course do
           @course.save!
           expect(@course.restrict_quantitative_data).to be true
 
-          expect(InstStatsd::Statsd).to have_received(:increment).with("course.settings.restrict_quantitative_data.enabled").once
+          expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("course.settings.restrict_quantitative_data.enabled").once
         end
 
         it "increments disabled log when setting is turned off" do
@@ -7887,8 +8067,8 @@ describe Course do
           @course.save!
           expect(@course.restrict_quantitative_data).to be false
 
-          expect(InstStatsd::Statsd).to have_received(:increment).with("course.settings.restrict_quantitative_data.enabled").once.ordered
-          expect(InstStatsd::Statsd).to have_received(:increment).with("course.settings.restrict_quantitative_data.disabled").once.ordered
+          expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("course.settings.restrict_quantitative_data.enabled").once.ordered
+          expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("course.settings.restrict_quantitative_data.disabled").once.ordered
         end
 
         it "doesn't increment either log when settings update but RQD setting is unchanged" do
@@ -7897,8 +8077,8 @@ describe Course do
           @course.save!
           expect(@course.hide_final_grade).to be true
 
-          expect(InstStatsd::Statsd).not_to have_received(:increment).with("course.settings.restrict_quantitative_data.enabled")
-          expect(InstStatsd::Statsd).not_to have_received(:increment).with("course.settings.restrict_quantitative_data.disabled")
+          expect(InstStatsd::Statsd).not_to have_received(:distributed_increment).with("course.settings.restrict_quantitative_data.enabled")
+          expect(InstStatsd::Statsd).not_to have_received(:distributed_increment).with("course.settings.restrict_quantitative_data.disabled")
         end
       end
 
@@ -8212,6 +8392,98 @@ describe Course do
     it "only includes active groups in active associations" do
       expect(@course.active_groups).to contain_exactly(@collaborative_group)
       expect(@course.active_differentiation_tags).to contain_exactly(@differentiation_tag)
+    end
+  end
+
+  describe "#set_horizon_course" do
+    it "does not set horizon_course when account is not a horizon account" do
+      account = Account.create!
+
+      course = account.courses.create!
+      expect(course.horizon_course).to be_falsey
+    end
+
+    it "sets horizon_course when creating a course in a horizon account" do
+      account = Account.create!
+      account.enable_feature!(:horizon_course_setting)
+      account.horizon_account = true
+      account.save!
+
+      course = account.courses.create!
+      course.save!
+      expect(course.horizon_course).to be true
+    end
+
+    it "updates horizon_course when moving a course to a horizon account" do
+      regular_account = Account.create!
+
+      horizon_account = Account.create!
+      horizon_account.enable_feature!(:horizon_course_setting)
+      horizon_account.horizon_account = true
+      horizon_account.save!
+
+      course = regular_account.courses.create!
+      expect(course.horizon_course).to be_falsey
+
+      course.account = horizon_account
+      course.save!
+      expect(course.horizon_course).to be true
+    end
+
+    it "does not run the callback on regular course updates" do
+      course = Account.default.courses.create!
+      expect(course).not_to receive(:set_horizon_course)
+
+      course.name = "New Course Name"
+      course.save!
+    end
+
+    it "disables horizon_course when a course disables horizon_account" do
+      account = Account.create!
+      account.enable_feature!(:horizon_course_setting)
+      account.horizon_account = true
+      account.save!
+
+      course = account.courses.create!
+      course.save!
+      expect(course.horizon_course).to be true
+
+      account.horizon_account = false
+      account.save!
+      expect(account.horizon_account[:value]).to be false
+      expect(course.reload.horizon_course).to be_falsey
+
+      course2 = account.courses.create!
+      course2.save!
+      expect(course2.horizon_course).to be_falsey
+    end
+
+    it "disables horizon_course for a sub-account course when horizon_account is disabled for parent account" do
+      parent_account = Account.create!
+      parent_account.enable_feature!(:horizon_course_setting)
+      parent_account.horizon_account = true
+      parent_account.save!
+
+      sub_account = parent_account.sub_accounts.create!
+      course = sub_account.courses.create!
+      course.save!
+      expect(course.horizon_course).to be true
+
+      parent_account.horizon_account = false
+      parent_account.save!
+      expect(parent_account.horizon_account[:value]).to be false
+      expect(course.reload.horizon_course).to be_falsey
+    end
+  end
+
+  describe "copied assets" do
+    it "returns courses that copied a page" do
+      source_course = Course.create!
+      source_page = source_course.wiki_pages.create!(title: "My Page")
+      copied_course = Course.create!
+      migration_id = CC::CCHelper.create_key(source_page, global: true)
+      copied_course.wiki_pages.create!(title: "My Page", migration_id:)
+      expect(Course.copied_asset("page_#{source_page.id}")).to include(copied_course)
     end
   end
 end

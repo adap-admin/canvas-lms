@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import PropTypes from 'prop-types'
 import React from 'react'
 import {RadioInputGroup, RadioInput} from '@instructure/ui-radio-input'
@@ -24,7 +24,7 @@ import {Checkbox} from '@instructure/ui-checkbox'
 import {ScreenReaderContent} from '@instructure/ui-a11y-content'
 import {confirm} from '@canvas/instui-bindings/react/Confirm'
 
-const I18n = useI18nScope('react_developer_keys')
+const I18n = createI18nScope('react_developer_keys')
 
 export default class DeveloperKeyStateControl extends React.Component {
   confirmStateChange = (developerKey, newState) => {
@@ -35,18 +35,18 @@ export default class DeveloperKeyStateControl extends React.Component {
         newState === 'on'
           ? I18n.t('Turn On Developer Key')
           : newState === 'off'
-          ? I18n.t('Turn Off Developer Key')
-          : newState === 'allow'
-          ? I18n.t('Set Developer Key to "Allow"')
-          : undefined,
+            ? I18n.t('Turn Off Developer Key')
+            : newState === 'allow'
+              ? I18n.t('Set Developer Key to "Allow"')
+              : undefined,
       confirmButtonLabel:
         newState === 'on'
           ? I18n.t('Switch to On')
           : newState === 'off'
-          ? I18n.t('Switch to Off')
-          : newState === 'allow'
-          ? I18n.t('Switch to Allow')
-          : I18n.t('Confirm'),
+            ? I18n.t('Switch to Off')
+            : newState === 'allow'
+              ? I18n.t('Switch to Allow')
+              : I18n.t('Confirm'),
       message: keyName
         ? I18n.t('Are you sure you want to change the state of the developer key "%{keyName}"?', {
             keyName,
@@ -65,8 +65,8 @@ export default class DeveloperKeyStateControl extends React.Component {
       this.props.actions.setBindingWorkflowState(
         this.props.developerKey,
         this.props.ctx.params.contextId,
-        newValue
-      )
+        newValue,
+      ),
     )
   }
 

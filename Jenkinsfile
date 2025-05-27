@@ -70,7 +70,7 @@ def getLocalWorkDir() {
 }
 
 def isPatchsetPublishable() {
-  env.PUBLISH_PATCHSET_IMAGE == "1"
+  env.PUBLISH_PATCHSET_IMAGE == '1'
 }
 
 def isPatchsetRetriggered() {
@@ -117,7 +117,7 @@ def postFn(status) {
       }
     }
 
-    build(job: "/Canvas/helpers/junit-uploader", parameters: [
+    build(job: '/Canvas/helpers/junit-uploader', parameters: [
       string(name: 'GERRIT_REFSPEC', value: "${env.GERRIT_REFSPEC}"),
       string(name: 'GERRIT_EVENT_TYPE', value: "${env.GERRIT_EVENT_TYPE}"),
       string(name: 'SOURCE', value: "${env.JOB_NAME}/${env.BUILD_NUMBER}"),
@@ -311,6 +311,12 @@ pipeline {
     stage('Environment') {
       steps {
         script {
+          def canvasRailsOverrideValue = commitMessageFlag('canvas-rails') as String
+
+          if (canvasRailsOverrideValue) {
+            env.CANVAS_RAILS = canvasRailsOverrideValue
+          }
+
           lock(label: 'canvas_build_global_mutex', quantity: 1) {
             timeout(60) {
               // Skip translation builds for patchsets uploaded by svc.cloudjenkins
@@ -329,11 +335,11 @@ pipeline {
                 // vote. Work around this by disabling the build start message and setting EMULATE_BUILD_START=1
                 // in the Build Parameters section.
                 // https://issues.jenkins.io/browse/JENKINS-28339
-                if (commitMessageFlag("emulate-build-start") as Boolean) {
-                  submitGerritReview("", "Build Started ${RUN_DISPLAY_URL}")
+                if (commitMessageFlag('emulate-build-start') as Boolean) {
+                  submitGerritReview('', "Build Started ${RUN_DISPLAY_URL}")
                 }
 
-                if (commitMessageFlag("skip-ci") as Boolean) {
+                if (commitMessageFlag('skip-ci') as Boolean) {
                   currentBuild.result = 'NOT_BUILT'
                   submitGerritReview('--label Lint-Review=-2', 'Build not executed due to [skip-ci] flag')
                   error '[skip-ci] flag enabled: skipping the build'
@@ -455,7 +461,7 @@ pipeline {
                         finalStep
                       ]
 
-                      buildDockerImageStage.patchsetImage(asyncSteps.join("\n"))
+                      buildDockerImageStage.patchsetImage(asyncSteps.join('\n'))
                     }
 
                   extendedStage(filesChangedStage.STAGE_NAME_POST_BUILD)
@@ -473,7 +479,7 @@ pipeline {
                   extendedStage('Generate Crystalball Prediction')
                     .hooks(buildSummaryReportHooks.call())
                     .obeysAllowStages(false)
-                    .required(!configuration.isChangeMerged() && env.GERRIT_REFSPEC != "refs/heads/master")
+                    .required(!configuration.isChangeMerged() && env.GERRIT_REFSPEC != 'refs/heads/master')
                     .timeout(2)
                     .execute { stageConfig, buildConfig ->
                       if (filesChangedStage.hasErbFiles(buildConfig)) {
@@ -490,7 +496,7 @@ pipeline {
                           done
 
                           docker exec -t general-build-container bash -c 'cat log/crystalball.log'
-                          docker cp \$(docker ps -qa -f name=general-build-container):/usr/src/app/crystalball_spec_list.txt ./tmp/crystalball_spec_list.txt
+                          docker cp $(docker ps -qa -f name=general-build-container):/usr/src/app/crystalball_spec_list.txt ./tmp/crystalball_spec_list.txt
                         '''
                         archiveArtifacts allowEmptyArchive: true, artifacts: 'tmp/crystalball_spec_list.txt'
 
@@ -518,7 +524,7 @@ pipeline {
                     .required(!configuration.isChangeMerged() && env.GERRIT_PROJECT == 'canvas-lms' && sh(script: "${WORKSPACE}/build/new-jenkins/locales-changes.sh", returnStatus: true) == 0)
                     .execute {
                         submitGerritReview('--label Lint-Review=-2', 'This commit contains only changes to config/locales/, this could be a bad sign!')
-                      }
+                    }
 
                   extendedStage('Webpack Bundle Size Check')
                     .hooks(buildSummaryReportHooks.call())
@@ -568,8 +574,18 @@ pipeline {
 
                     extendedStage('Augment Manifest').waitsFor(BUILD_DOCKER_IMAGE_STAGE, 'Builder').execute {
                       sh """#!/bin/bash -ex
-                      docker manifest create --amend $PATCHSET_TAG $PATCHSET_TAG $PATCHSET_TAG-arm64
-                      docker manifest push $PATCHSET_TAG
+                      # Check if the tag is already a manifest list
+                      if docker manifest inspect $PATCHSET_TAG 2>/dev/null | grep -q "manifests"; then
+                        echo "Warning: $PATCHSET_TAG is already a manifest list. Skipping manifest creation."
+                        # Show current manifest for debugging
+                        echo "Current manifest:"
+                        docker manifest inspect $PATCHSET_TAG
+                        exit 0
+                      else
+                        echo "Creating manifest list for $PATCHSET_TAG..."
+                        docker manifest create --amend $PATCHSET_TAG $PATCHSET_TAG $PATCHSET_TAG-arm64
+                        docker manifest push $PATCHSET_TAG
+                      fi
                       """
                     }
                   }
@@ -611,7 +627,11 @@ pipeline {
                       def nestedStages = [:]
 
                       callableWithDelegate(lintersStage.bundleStage(nestedStages, buildConfig))()
-                      callableWithDelegate(lintersStage.codeStage(nestedStages))()
+                      callableWithDelegate(lintersStage.gergichLintersStage(nestedStages))()
+                      callableWithDelegate(lintersStage.miscJsChecksStage(nestedStages))()
+                      callableWithDelegate(lintersStage.eslintStage(nestedStages))()
+                      callableWithDelegate(lintersStage.biomeStage(nestedStages, buildConfig))()
+                      callableWithDelegate(lintersStage.typescriptStage(nestedStages))()
                       callableWithDelegate(lintersStage.masterBouncerStage(nestedStages))()
                       callableWithDelegate(lintersStage.yarnStage(nestedStages, buildConfig))()
 
@@ -631,7 +651,7 @@ pipeline {
 
                   // Trigger Crystalball map build if spec files were added or removed, will not vote on builds.
                   // Only trigger for main-postmerge job.
-                  if (env.JOB_NAME == "Canvas/main-postmerge" && configuration.isChangeMerged() && filesChangedStage.hasNewDeletedSpecFiles(buildConfig)) {
+                  if (env.JOB_NAME == 'Canvas/main-postmerge' && configuration.isChangeMerged() && filesChangedStage.hasNewDeletedSpecFiles(buildConfig)) {
                     build(wait: false, job: 'Canvas/helpers/crystalball-map')
                   }
 
@@ -656,6 +676,7 @@ pipeline {
                       string(name: 'DYNAMODB_IMAGE_TAG', value: "${env.DYNAMODB_IMAGE_TAG}"),
                       string(name: 'POSTGRES_IMAGE_TAG', value: "${env.POSTGRES_IMAGE_TAG}"),
                       string(name: 'SKIP_CRYSTALBALL', value: "${env.SKIP_CRYSTALBALL || setupStage.hasGemOverrides()}"),
+                      string(name: 'RSPECQ_UPDATE_TIMINGS', value: "${env.RSPECQ_UPDATE_TIMINGS || 0}"),
                       string(name: 'UPSTREAM_TAG', value: "${env.BUILD_TAG}"),
                       string(name: 'UPSTREAM', value: "${env.JOB_NAME}"),
                     ])

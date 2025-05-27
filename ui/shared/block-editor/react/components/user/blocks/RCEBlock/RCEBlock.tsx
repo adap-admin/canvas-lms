@@ -23,9 +23,9 @@ import CanvasRce from '@canvas/rce/react/CanvasRce'
 import {useClassNames} from '../../../../utils'
 import {type RCEBlockProps} from './types'
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 
-const I18n = useI18nScope('block-editor/rce-block')
+const I18n = createI18nScope('block-editor')
 
 export const RCEBlock = ({id, text, onContentChange}: RCEBlockProps) => {
   const {actions, enabled} = useEditor(state => ({
@@ -64,7 +64,7 @@ export const RCEBlock = ({id, text, onContentChange}: RCEBlockProps) => {
       })
       onContentChange?.(content)
     },
-    [onContentChange, setProp]
+    [onContentChange, setProp],
   )
 
   const handleKey = useCallback(
@@ -82,7 +82,7 @@ export const RCEBlock = ({id, text, onContentChange}: RCEBlockProps) => {
         setEditable(true)
       }
     },
-    [editable]
+    [editable],
   )
 
   if (enabled && selected) {

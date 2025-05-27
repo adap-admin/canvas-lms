@@ -18,7 +18,7 @@
 
 import React from 'react'
 import {createRoot} from 'react-dom/client'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
 import '@canvas/jquery/jquery.ajaxJSON'
 import '@canvas/jquery/jquery.instructure_forms' /* formSubmit, fillFormData, getFormData, formErrors */
@@ -35,7 +35,7 @@ import ConfirmCommunicationChannel from '../react/ConfirmCommunicationChannel'
 import ConfirmEmailAddress from '../react/ConfirmEmailAddress'
 import ResendConfirmation from '../react/ResendConfirmation'
 
-const I18n = useI18nScope('profile')
+const I18n = createI18nScope('profile')
 
 $(document).ready(function () {
   $('.channel_list tr').hover(
@@ -43,12 +43,12 @@ $(document).ready(function () {
       if ($(this).hasClass('unconfirmed')) {
         let title = I18n.t(
           'titles.contact_not_confirmed',
-          'This contact has not been confirmed.  Click the address for more details'
+          'This contact has not been confirmed.  Click the address for more details',
         )
         if ($(this).closest('.email_channels').length > 0) {
           title = I18n.t(
             'titles.email_not_confirmed',
-            'This email has not been confirmed.  Click the address for more details'
+            'This email has not been confirmed.  Click the address for more details',
           )
         }
         $(this).attr('title', title)
@@ -58,7 +58,7 @@ $(document).ready(function () {
     function () {
       $(this).attr('title', '')
       $(this).find('a.path').parent().attr('title', $(this).find('a.path').text())
-    }
+    },
   )
 
   const registerCommunicationForm = {
@@ -84,7 +84,7 @@ $(document).ready(function () {
           .find('.path')
           .attr(
             'title',
-            I18n.t('titles.unconfirmed_click_to_confirm', 'Unconfirmed.  Click to confirm')
+            I18n.t('titles.unconfirmed_click_to_confirm', 'Unconfirmed.  Click to confirm'),
           )
         $channel.fillTemplateData({
           data: {path},
@@ -172,7 +172,7 @@ $(document).ready(function () {
             const channel = await registerCommunicationForm.sendRequest(
               address,
               type,
-              enableEmailLogin
+              enableEmailLogin,
             )
             registerCommunicationForm.success(channel, channelElement)
           } catch {
@@ -185,7 +185,7 @@ $(document).ready(function () {
           root.unmount()
           target.focus()
         }}
-      />
+      />,
     )
   })
 
@@ -273,7 +273,7 @@ $(document).ready(function () {
             onError={() => confirmCommunicationChannelForm.error()}
           >
             {resendConfirmation}
-          </ConfirmCommunicationChannel>
+          </ConfirmCommunicationChannel>,
         )
       } else {
         const mountPoint = document.getElementById('confirm_email_address_mount_point')
@@ -288,7 +288,7 @@ $(document).ready(function () {
             }}
           >
             {resendConfirmation}
-          </ConfirmEmailAddress>
+          </ConfirmEmailAddress>,
         )
       }
     }
@@ -312,7 +312,7 @@ $(document).ready(function () {
         .addClass('default')
         .find('a.default_link')
         .append(
-          $('<span class="screenreader-only" />').text(I18n.t('This is the default email address'))
+          $('<span class="screenreader-only" />').text(I18n.t('This is the default email address')),
         )
       $('.default_email.display_data').text(data.user.communication_channel.path)
     })

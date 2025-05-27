@@ -221,6 +221,9 @@ grading_scheme_updates:
   applies_to: SiteAdmin
   display_name: Improve Letter Grading Scheme Usability
   description: Teachers and Account Managers will be able to more easily manage letter grading schemes for accounts, courses, and assignments.
+  environments:
+    development:
+      state: allowed_on # enable by deault for local development
 custom_gradebook_statuses:
   state: hidden
   applies_to: SiteAdmin
@@ -328,8 +331,9 @@ customizable_default_due_time:
 platform_service_speedgrader:
   state: hidden
   applies_to: Course
-  display_name: Modernized SpeedGrader Platform
+  display_name: Performance and Usability Upgrades for SpeedGrader
   description: This feature provides a new SpeedGrader platform experience with a focus on improved performance for large courses.
+  after_state_change_proc: log_modernized_speedgrader_metrics
   environments:
     ci:
       state: allowed
@@ -400,3 +404,58 @@ rubric_assessment_imports_exports:
       state: allowed
     development:
       state: allowed
+rubric_self_assessment:
+  state: hidden
+  applies_to: RootAccount
+  root_opt_in: true
+  display_name: Rubric Self Assessments
+  description: This feature allows rubric self assessments to be enabled for an assignment. Students can assess their own submission using the assignment rubric.
+  environments:
+    ci:
+      state: allowed
+    development:
+      state: allowed
+ai_rubrics:
+  state: hidden
+  applies_to: Course
+  root_opt_in: true
+  beta: true
+  display_name: AI Generated Rubrics
+  description: Give rubric creators the option to generate rubric criteria automatically based on an assignment description via a large language model (LLM).
+use_body_word_count:
+  state: allowed_on # this is intentional. we want to enable this upon deploy so we start populating word count.
+  applies_to: SiteAdmin
+  display_name: Use body_word_count for displaying submission word count
+  description: For text entry submisisons, the word count is currently calculated on-the-fly which can lead to load time issues. With this flag enabled, the value will be read from the new body_word_count column.
+graphql_honor_anonymous_grading:
+  state: hidden
+  applies_to: SiteAdmin
+  display_name: GraphQL API Honors Anonymous Grading
+  description: GraphQL API will return anonymous data for assignments and courses with anonymous grading enabled.
+  environments:
+    ci:
+      state: on
+    development:
+      state: on
+submission_comment_media_auto_captioning:
+  state: allowed_on
+  applies_to: Account
+  display_name: Auto Captioning of Media Submission Comments
+  description: This feature enables automatic captioning of media submission comments.
+  environments:
+    ci:
+      state: allowed
+    development:
+      state: allowed
+post_grades_enhanced_modal:
+  state: hidden
+  display_name: Post Grades Enhanced Modal
+  description: Accessible refactor of Sync Grades dialog
+  applies_to: Course
+  root_opt_in: true
+project_lhotse:
+  state: hidden
+  applies_to: Course
+  display_name: Grading Assistance
+  description: Enables the new AI-assisted grading tool inside of the Modernized Speedgrader for assignments in this course.
+  hidden: true

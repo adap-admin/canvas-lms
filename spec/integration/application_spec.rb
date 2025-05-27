@@ -48,7 +48,6 @@ describe "site-wide" do
   end
 
   it "does set ETag header for API/xhr requests" do
-    allow_any_instance_of(EnableRackChunking).to receive(:chunkable_version?).and_return(true)
     course_with_teacher_logged_in
     get "/api/v1/courses"
     assert_status(200)
@@ -59,6 +58,14 @@ describe "site-wide" do
     get "/login"
     expect(assigns[:files_domain]).to be_falsey
     expect(response[content_security_policy]).to eq "frame-ancestors 'self' ;"
+  end
+
+  it "includes horizon_domain in the content-security-policy header" do
+    account = Account.default
+    account.settings[:horizon_domain] = "test-domain.example.com"
+    account.save!
+    get "/login"
+    expect(response[content_security_policy]).to eq "frame-ancestors 'self' test-domain.example.com;"
   end
 
   it "does not set content-security-policy when on a files domain" do

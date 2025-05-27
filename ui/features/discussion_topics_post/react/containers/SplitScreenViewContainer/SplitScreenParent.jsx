@@ -23,7 +23,7 @@ import {Discussion} from '../../../graphql/Discussion'
 import {DiscussionEntry} from '../../../graphql/DiscussionEntry'
 import {Flex} from '@instructure/ui-flex'
 import {Highlight} from '../../components/Highlight/Highlight'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {getDisplayName, isTopicAuthor, responsiveQuerySizes} from '../../utils'
 import {DiscussionManagerUtilityContext} from '../../utils/constants'
 import {DiscussionEntryContainer} from '../DiscussionEntryContainer/DiscussionEntryContainer'
@@ -38,17 +38,18 @@ import {
   UPDATE_SPLIT_SCREEN_VIEW_DEEPLY_NESTED_ALERT,
   UPDATE_DISCUSSION_ENTRY_PARTICIPANT,
 } from '../../../graphql/Mutations'
-import {useMutation} from '@apollo/react-hooks'
+import {useMutation} from '@apollo/client'
 import {View} from '@instructure/ui-view'
 import {ReportReply} from '../../components/ReportReply/ReportReply'
 import {AlertManagerContext} from '@canvas/alerts/react/AlertManager'
 import {useUpdateDiscussionThread} from '../../hooks/useUpdateDiscussionThread'
+import {useEventHandler, KeyboardShortcuts} from '../../KeyboardShortcuts/useKeyboardShortcut'
 
-const I18n = useI18nScope('discussion_posts')
+const I18n = createI18nScope('discussion_posts')
 
 export const SplitScreenParent = ({isEditing, setIsEditing, ...props}) => {
   const [updateSplitScreenViewDeeplyNestedAlert] = useMutation(
-    UPDATE_SPLIT_SCREEN_VIEW_DEEPLY_NESTED_ALERT
+    UPDATE_SPLIT_SCREEN_VIEW_DEEPLY_NESTED_ALERT,
   )
   const {toggleUnread, updateDiscussionThreadReadState} = useUpdateDiscussionThread({
     discussionEntry: props.discussionEntry,
@@ -80,6 +81,16 @@ export const SplitScreenParent = ({isEditing, setIsEditing, ...props}) => {
     },
   })
 
+  const onThreadReplyKeyboard = e => {
+    if (
+      e.detail.entryId === props.discussionEntry._id &&
+      props?.discussionEntry?.permissions?.reply
+    ) {
+      props.setRCEOpen(true)
+    }
+  }
+  useEventHandler(KeyboardShortcuts.ON_THREAD_REPLY_KEYBOARD, onThreadReplyKeyboard)
+
   if (props?.discussionEntry?.permissions?.reply) {
     threadActions.push(
       <ThreadingToolbar.Reply
@@ -90,14 +101,21 @@ export const SplitScreenParent = ({isEditing, setIsEditing, ...props}) => {
         isReadOnly={props.RCEOpen}
         replyButtonRef={props.replyButtonRef}
         isSplitScreenView={true}
-      />
+      />,
     )
   }
 
-  if (
+  const canViewAndRate =
     props.discussionEntry.permissions.viewRating &&
     (props.discussionEntry.permissions.rate || props.discussionEntry.ratingSum > 0)
-  ) {
+  const toggleRatingKeyboard = e => {
+    if (canViewAndRate && e.detail.entryId === props.discussionEntry._id) {
+      props.onToggleRating(props.discussionEntry)
+    }
+  }
+  useEventHandler(KeyboardShortcuts.TOGGLE_RATING_KEYBOARD, toggleRatingKeyboard)
+
+  if (canViewAndRate) {
     threadActions.push(
       <ThreadingToolbar.Like
         key={`like-${props.discussionEntry.id}`}
@@ -112,7 +130,7 @@ export const SplitScreenParent = ({isEditing, setIsEditing, ...props}) => {
         likeCount={props.discussionEntry.ratingSum || 0}
         interaction={props.discussionEntry.permissions.rate ? 'enabled' : 'disabled'}
         isSplitScreenView={true}
-      />
+      />,
     )
   }
 
@@ -125,9 +143,16 @@ export const SplitScreenParent = ({isEditing, setIsEditing, ...props}) => {
         authorName={getDisplayName(props.discussionEntry)}
         onClick={toggleUnread}
         isSplitScreenView={true}
-      />
+      />,
     )
   }
+
+  const onShowRepliesKeyboard = e => {
+    if (e.detail.entryId === props.discussionEntry._id && props.discussionEntry.lastReply) {
+      props.setRCEOpen(false)
+    }
+  }
+  useEventHandler(KeyboardShortcuts.ON_SHOW_REPLIES_KEYBOARD, onShowRepliesKeyboard)
 
   if (props.discussionEntry.lastReply) {
     threadActions.push(
@@ -144,8 +169,32 @@ export const SplitScreenParent = ({isEditing, setIsEditing, ...props}) => {
         isExpanded={false}
         onClick={() => props.setRCEOpen(false)}
         authorName={getDisplayName(props.discussionEntry)}
-      />
+      />,
     )
+  }
+
+  const onDeleteKeyboard = e => {
+    if (
+      e.detail.entryId === props.discussionEntry._id &&
+      props.discussionEntry.permissions?.delete
+    ) {
+      props.onDelete(props.discussionEntry)
+    }
+  }
+  useEventHandler(KeyboardShortcuts.ON_DELETE_KEYBOARD, onDeleteKeyboard)
+
+  const onEditKeyboard = e => {
+    if (
+      e.detail.entryId === props.discussionEntry._id &&
+      props.discussionEntry.permissions?.update
+    ) {
+      onEdit()
+    }
+  }
+  useEventHandler(KeyboardShortcuts.ON_EDIT_KEYBOARD, onEditKeyboard)
+
+  const onEdit = () => {
+    setIsEditing(true)
   }
 
   return (
@@ -191,16 +240,19 @@ export const SplitScreenParent = ({isEditing, setIsEditing, ...props}) => {
                 <Text size={responsiveProps.textSize}>
                   {props.discussionEntry.depth > 3
                     ? I18n.t(
-                        'Deeply nested replies are no longer supported. Your reply will appear on the first page of this thread.'
+                        'Deeply nested replies are no longer supported. Your reply will appear on the first page of this thread.',
                       )
                     : I18n.t(
-                        'Deeply nested replies are no longer supported. Your reply will appear on on the page you are currently on.'
+                        'Deeply nested replies are no longer supported. Your reply will appear on on the page you are currently on.',
                       )}
                 </Text>
               </Alert>
             )}
           <View as="div" padding={responsiveProps.padding}>
-            <Highlight isHighlighted={props.isHighlighted}>
+            <Highlight
+              isHighlighted={props.isHighlighted}
+              discussionEntryId={props.discussionEntry._id}
+            >
               <Flex padding="small">
                 <Flex.Item shouldShrink={true} shouldGrow={true}>
                   <DiscussionEntryContainer
@@ -216,14 +268,9 @@ export const SplitScreenParent = ({isEditing, setIsEditing, ...props}) => {
                         isUnread={!props.discussionEntry.entryParticipant?.read}
                         onToggleUnread={props.onToggleUnread}
                         onDelete={props.discussionEntry.permissions?.delete ? props.onDelete : null}
-                        onEdit={
-                          props.discussionEntry.permissions?.update
-                            ? () => {
-                                setIsEditing(true)
-                              }
-                            : null
-                        }
+                        onEdit={props.discussionEntry.permissions?.update ? onEdit : null}
                         goToTopic={props.goToTopic}
+                        permalinkId={props.discussionEntry._id}
                         onOpenInSpeedGrader={
                           props.discussionTopic.permissions?.speedGrader
                             ? props.onOpenInSpeedGrader
@@ -281,18 +328,18 @@ export const SplitScreenParent = ({isEditing, setIsEditing, ...props}) => {
                     createdAt={props.discussionEntry.createdAt}
                     editedAt={props.discussionEntry.editedAt}
                     timingDisplay={DateHelper.formatDatetimeForDiscussions(
-                      props.discussionEntry.createdAt
+                      props.discussionEntry.createdAt,
                     )}
                     editedTimingDisplay={DateHelper.formatDatetimeForDiscussions(
-                      props.discussionEntry.editedAt
+                      props.discussionEntry.editedAt,
                     )}
                     lastReplyAtDisplay={DateHelper.formatDatetimeForDiscussions(
-                      props.discussionEntry.lastReply?.createdAt
+                      props.discussionEntry.lastReply?.createdAt,
                     )}
                     deleted={props.discussionEntry.deleted}
                     isTopicAuthor={isTopicAuthor(
                       props.discussionTopic.author,
-                      props.discussionEntry.author
+                      props.discussionEntry.author,
                     )}
                     quotedEntry={props.discussionEntry.quotedEntry}
                     attachment={props.discussionEntry.attachment}
@@ -352,4 +399,6 @@ SplitScreenParent.propTypes = {
   goToTopic: PropTypes.func,
   replyButtonRef: PropTypes.any,
   moreOptionsButtonRef: PropTypes.any,
+  isEditing: PropTypes.bool,
+  setIsEditing: PropTypes.func,
 }

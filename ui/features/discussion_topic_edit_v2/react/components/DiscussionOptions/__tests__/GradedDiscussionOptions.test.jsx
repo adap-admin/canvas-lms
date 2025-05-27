@@ -51,20 +51,20 @@ const renderGradedDiscussionOptions = (props = {}) => {
 }
 describe('GradedDiscussionOptions', () => {
   it('renders', () => {
-    const {getByText} = renderGradedDiscussionOptions()
+    const {getAllByText, getByText} = renderGradedDiscussionOptions()
     expect(getByText('Points Possible')).toBeInTheDocument()
     expect(getByText('Display Grade As')).toBeInTheDocument()
     expect(getByText('Assignment Group')).toBeInTheDocument()
-    expect(getByText('Peer Reviews')).toBeInTheDocument()
+    expect(getAllByText('Peer Reviews')).toHaveLength(1)
     expect(getByText('Assignment Settings')).toBeInTheDocument()
   })
 
   it('renders with null points possible value', () => {
-    const {getByText} = renderGradedDiscussionOptions({pointsPossible: null})
+    const {getAllByText, getByText} = renderGradedDiscussionOptions({pointsPossible: null})
     expect(getByText('Points Possible')).toBeInTheDocument()
     expect(getByText('Display Grade As')).toBeInTheDocument()
     expect(getByText('Assignment Group')).toBeInTheDocument()
-    expect(getByText('Peer Reviews')).toBeInTheDocument()
+    expect(getAllByText('Peer Reviews')).toHaveLength(1)
     expect(getByText('Assignment Settings')).toBeInTheDocument()
   })
 
@@ -75,12 +75,11 @@ describe('GradedDiscussionOptions', () => {
     })
   })
 
-  describe('with selective_release_ui_api enabled', () => {
+  describe('with selective release', () => {
     beforeEach(() => {
       fetchMock.get(SECTIONS_URL, [])
       fetchMock.get(STUDENTS_URL, [])
       fetchMock.get(COURSE_SETTINGS_URL, {hide_final_grades: false})
-      ENV.FEATURES.selective_release_ui_api = true
       ENV.COURSE_ID = '1'
     })
 

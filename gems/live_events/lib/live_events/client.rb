@@ -98,7 +98,7 @@ module LiveEvents
       false
     end
 
-    def post_event(event_name, payload, time = Time.now, ctx = {}, partition_key = nil)
+    def post_event(event_name, payload, time = Time.zone.now, ctx = {}, partition_key = nil)
       statsd_prefix = "live_events.events"
       tags = { event: event_name }
 
@@ -121,7 +121,7 @@ module LiveEvents
 
       unless pusher.push(event, partition_key)
         LiveEvents.logger.error("Error queueing job for live event: #{event.to_json}")
-        LiveEvents.statsd&.increment("#{statsd_prefix}.queue_full_errors", tags:)
+        LiveEvents.statsd&.distributed_increment("#{statsd_prefix}.queue_full_errors", tags:)
       end
     end
   end

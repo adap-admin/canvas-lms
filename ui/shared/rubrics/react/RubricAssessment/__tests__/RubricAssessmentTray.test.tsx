@@ -32,7 +32,7 @@ describe('RubricAssessmentTray Tests', () => {
         onDismiss={jest.fn()}
         onSubmit={jest.fn()}
         {...props}
-      />
+      />,
     )
   }
 
@@ -49,7 +49,7 @@ describe('RubricAssessmentTray Tests', () => {
     viewMode: string,
     isPeerReview = false,
     freeFormCriterionComments = false,
-    props?: Partial<RubricAssessmentTrayProps>
+    props?: Partial<RubricAssessmentTrayProps>,
   ) => {
     const component = freeFormCriterionComments
       ? renderFreeformComponent({isPeerReview, ...props})
@@ -162,7 +162,7 @@ describe('RubricAssessmentTray Tests', () => {
       const updatedRubric = {
         ...RUBRIC_DATA,
         criteria: RUBRIC_DATA.criteria.map(criterion =>
-          criterion.id === '2' ? {...criterion, ignoreForScoring: true} : criterion
+          criterion.id === '2' ? {...criterion, ignoreForScoring: true} : criterion,
         ),
       }
 
@@ -410,7 +410,7 @@ describe('RubricAssessmentTray Tests', () => {
       })
 
       it('should not select a rating when user entered points do not match a rating points value', () => {
-        const {getByTestId, queryByTestId} = renderComponentModern('Horizontal')
+        const {getByTestId} = renderComponentModern('Horizontal')
         expect(getByTestId('rubric-assessment-instructor-score')).toHaveTextContent('0 pts')
         const input = getByTestId('criterion-score-2') as HTMLInputElement
         fireEvent.change(input, {target: {value: '20'}})
@@ -447,7 +447,7 @@ describe('RubricAssessmentTray Tests', () => {
             'Horizontal',
             false,
             true,
-            {rubricSavedComments: {1: ['comment 1']}}
+            {rubricSavedComments: {1: ['comment 1']}},
           )
           const commentLibrary = getByTestId('comment-library-1')
           fireEvent.click(commentLibrary)
@@ -519,7 +519,7 @@ describe('RubricAssessmentTray Tests', () => {
         const updatedRubric = {
           ...RUBRIC_DATA,
           criteria: RUBRIC_DATA.criteria.map(criterion =>
-            criterion.id === '2' ? {...criterion, ignoreForScoring: true} : criterion
+            criterion.id === '2' ? {...criterion, ignoreForScoring: true} : criterion,
           ),
         }
 
@@ -599,7 +599,7 @@ describe('RubricAssessmentTray Tests', () => {
       it('should not render Vertical option when free form comments are enabled', () => {
         const {getByTestId, queryByRole} = renderFreeformComponent()
         const viewModeSelect = getByTestId(
-          'rubric-assessment-view-mode-select'
+          'rubric-assessment-view-mode-select',
         ) as HTMLSelectElement
 
         fireEvent.click(viewModeSelect)
@@ -611,7 +611,7 @@ describe('RubricAssessmentTray Tests', () => {
         const updatedRubric = {
           ...RUBRIC_DATA,
           criteria: RUBRIC_DATA.criteria.map(criterion =>
-            criterion.id === '2' ? {...criterion, ignoreForScoring: true} : criterion
+            criterion.id === '2' ? {...criterion, ignoreForScoring: true} : criterion,
           ),
         }
 
@@ -685,7 +685,7 @@ describe('RubricAssessmentTray Tests', () => {
         const {getByTestId, queryByTestId, queryByRole} = renderComponent({isPreviewMode: true})
 
         const viewModeSelect = getByTestId(
-          'rubric-assessment-view-mode-select'
+          'rubric-assessment-view-mode-select',
         ) as HTMLSelectElement
 
         fireEvent.click(viewModeSelect)
@@ -728,6 +728,14 @@ describe('RubricAssessmentTray Tests', () => {
         hidePoints: false,
       })
       expect(queryAllByTestId('modern-view-out-of-points')).toHaveLength(2)
+    })
+  })
+
+  describe('selfAssessment test', () => {
+    it('should display self assessment instructions and score', () => {
+      const {getByTestId} = renderComponent({isSelfAssessment: true})
+      expect(getByTestId('rubric-self-assessment-instructions')).toBeInTheDocument()
+      expect(getByTestId('rubric-self-assessment-instructor-score')).toBeInTheDocument()
     })
   })
 })

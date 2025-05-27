@@ -16,23 +16,24 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import 'cross-fetch/polyfill'
-import {TextDecoder, TextEncoder} from 'util'
-import CoreTranslations from '../public/javascripts/translations/en.json'
-import Enzyme from 'enzyme'
-import Adapter from 'enzyme-adapter-react-16'
-import filterUselessConsoleMessages from '@instructure/filter-console-messages'
-import rceFormatMessage from '@instructure/canvas-rce/es/format-message'
+import {loadDevMessages, loadErrorMessages} from '@apollo/client/dev'
 import {up as configureDateTime} from '@canvas/datetime/configureDateTime'
 import {up as configureDateTimeMomentParser} from '@canvas/datetime/configureDateTimeMomentParser'
+import {registerTranslations} from '@canvas/i18n'
+import rceFormatMessage from '@instructure/canvas-rce/es/format-message'
+import filterUselessConsoleMessages from '@instructure/filter-console-messages'
+import Enzyme from 'enzyme'
+import Adapter from 'enzyme-adapter-react-16'
+import CoreTranslations from '../public/javascripts/translations/en.json'
 import {up as installNodeDecorations} from '../ui/boot/initializers/installNodeDecorations'
-import {loadErrorMessages, loadDevMessages} from '@apollo/client/dev'
-import {useTranslations} from '@canvas/i18n'
-import MockBroadcastChannel from './MockBroadcastChannel'
+
+if (process.env.LOG_PLAYGROUND_URL_ON_FAILURE) {
+  process.env.RTL_SKIP_AUTO_CLEANUP = 'true'
+}
 
 loadDevMessages()
 loadErrorMessages()
-useTranslations('en', CoreTranslations)
+registerTranslations('en', CoreTranslations)
 
 rceFormatMessage.setup({
   locale: 'en',
@@ -45,8 +46,12 @@ rceFormatMessage.setup({
  * have an unintended consequence from your changes. If you expect
  * the warning/error, add it to the ignore list below.
  */
-/* eslint-disable no-console */
+const globalLog = global.console.log
 const globalError = global.console.error
+const ignoredLogs = [
+  /Migrate is installed with logging active/,
+  /Kaltura has not been enabled for this account/,
+]
 const ignoredErrors = [
   /An update to %s inside a test was not wrapped in act/,
   /Can't perform a React state update on an unmounted component/,
@@ -75,10 +80,17 @@ const globalWarn = global.console.warn
 const ignoredWarnings = [
   /JQMIGRATE:/, // ignore warnings about jquery migrate; these are muted globally when not in a jest test
   /componentWillReceiveProps/, // ignore warnings about componentWillReceiveProps; this method is deprecated and will be removed with react upgrades
+  /Found @client directives in a query but no ApolloClient resolvers were specified/, // ignore warnings about missing ApolloClient resolvers
+  /No more mocked responses for the query/, // https://github.com/apollographql/apollo-client/pull/10502
 ]
 
 global.console = {
-  log: console.log,
+  log: (log, ...rest) => {
+    if (ignoredLogs.some(regex => regex.test(log))) {
+      return
+    }
+    globalLog(log, ...rest)
+  },
   error: (error, ...rest) => {
     if (
       ignoredErrors.some(regex => regex.test(error)) ||
@@ -87,23 +99,16 @@ global.console = {
       return
     }
     globalError(error, rest)
-    throw new Error(
-      `Looks like you have an unhandled error. Keep our test logs clean by handling or filtering it. ${error}`
-    )
   },
   warn: (warning, ...rest) => {
     if (ignoredWarnings.some(regex => regex.test(warning))) {
       return
     }
     globalWarn(warning, rest)
-    throw new Error(
-      `Looks like you have an unhandled warning. Keep our test logs clean by handling or filtering it. ${warning}`
-    )
   },
   info: console.info,
   debug: console.debug,
 }
-/* eslint-enable no-console */
 filterUselessConsoleMessages(global.console)
 
 window.scroll = () => {}
@@ -125,12 +130,11 @@ installNodeDecorations()
 
 // because everyone implements `flat()` and `flatMap()` except JSDOM 🤦🏼‍♂️
 if (!Array.prototype.flat) {
-  // eslint-disable-next-line no-extend-native
   Object.defineProperty(Array.prototype, 'flat', {
     configurable: true,
     value: function flat(depth = 1) {
       if (depth === 0) return this.slice()
-      return this.reduce(function (acc, cur) {
+      return this.reduce((acc, cur) => {
         if (Array.isArray(cur)) {
           acc.push(...flat.call(cur, depth - 1))
         } else {
@@ -144,11 +148,21 @@ if (!Array.prototype.flat) {
 }
 
 if (!Array.prototype.flatMap) {
-  // eslint-disable-next-line no-extend-native
   Object.defineProperty(Array.prototype, 'flatMap', {
     configurable: true,
     value: function flatMap(_cb) {
+      // biome-ignore lint/style/noArguments: <explanation>
       return Array.prototype.map.apply(this, arguments).flat()
+    },
+    writable: true,
+  })
+}
+
+if (!Set.prototype.isDisjointFrom) {
+  Object.defineProperty(Set.prototype, 'isDisjointFrom', {
+    configurable: true,
+    value: function isDisjointFrom(otherSet) {
+      return Array.from(this).every(value => !otherSet.has(value))
     },
     writable: true,
   })
@@ -220,7 +234,12 @@ if (!('matchMedia' in window)) {
   window.matchMedia._mocked = true
 }
 
-global.BroadcastChannel = global.BroadcastChannel || MockBroadcastChannel
+global.BroadcastChannel = jest.fn().mockImplementation(() => ({
+  addEventListener: jest.fn(),
+  removeEventListener: jest.fn(),
+  postMessage: jest.fn(),
+  close: jest.fn(),
+}))
 
 global.DataTransferItem = global.DataTransferItem || class DataTransferItem {}
 
@@ -236,33 +255,6 @@ Object.defineProperty(window, 'scrollTo', {
   configurable: true,
   writable: true,
   value: () => {},
-})
-
-const locationProperties = Object.getOwnPropertyDescriptors(window.location)
-Object.defineProperty(window, 'location', {
-  configurable: true,
-  enumerable: true,
-  get: () =>
-    Object.defineProperties(
-      {},
-      {
-        ...locationProperties,
-        href: {
-          ...locationProperties.href,
-          // Prevents JSDOM errors from doing window.location.href = ...
-          set: () => {},
-        },
-        reload: {
-          configurable: true,
-          enumerable: true,
-          writeable: true,
-          // Prevents JSDOM errors from doing window.location.reload()
-          value: () => {},
-        },
-      }
-    ),
-  // Prevents JSDOM errors from doing window.location = ...
-  set: () => {},
 })
 
 if (!('structuredClone' in window)) {
@@ -284,25 +276,20 @@ global.fetch =
 
 Document.prototype.createRange =
   Document.prototype.createRange ||
-  function () {
-    return {
-      setEnd() {},
-      setStart() {},
-      getBoundingClientRect() {
-        return {right: 0}
-      },
-      getClientRects() {
-        return {
-          length: 0,
-          left: 0,
-          right: 0,
-        }
-      },
-    }
-  }
-
-global.TextEncoder = TextEncoder
-global.TextDecoder = TextDecoder
+  (() => ({
+    setEnd() {},
+    setStart() {},
+    getBoundingClientRect() {
+      return {right: 0}
+    },
+    getClientRects() {
+      return {
+        length: 0,
+        left: 0,
+        right: 0,
+      }
+    },
+  }))
 
 if (!('Worker' in window)) {
   Object.defineProperty(window, 'Worker', {

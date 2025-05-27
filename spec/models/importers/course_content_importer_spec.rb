@@ -488,13 +488,6 @@ describe Course do
         expect(@course.enable_course_paces).to be true
       end
 
-      it "is set to false when originally true, but with the FF off" do
-        import_data = { course: { enable_course_paces: "true" } }.with_indifferent_access
-        @course.root_account.disable_feature!(:course_paces)
-        Importers::CourseContentImporter.import_content(@course, import_data, nil, migration)
-        expect(@course.enable_course_paces).to be false
-      end
-
       it "is set to false when originally false" do
         import_data = { course: { enable_course_paces: "false" } }.with_indifferent_access
         Importers::CourseContentImporter.import_content(@course, import_data, nil, migration)
@@ -514,6 +507,54 @@ describe Course do
         migration = ContentMigration.create!(context: @course, user: usr, source_course: @course, migration_settings: { import_blueprint_settings: true })
         expect(Importers::BlueprintSettingsImporter).not_to receive(:process_migration)
         Importers::CourseContentImporter.import_content(@course, {}, nil, migration)
+      end
+    end
+
+    describe "conditional_release" do
+      let(:migration) { build_migration(@course, {}, all_course_settings: true) }
+
+      it "is set to true when originally true" do
+        import_data = { course: { conditional_release: "true" } }.with_indifferent_access
+        Importers::CourseContentImporter.import_content(@course, import_data, nil, migration)
+        expect(@course.conditional_release).to be true
+      end
+
+      it "is set to false when originally false" do
+        import_data = { course: { conditional_release: "false" } }.with_indifferent_access
+        Importers::CourseContentImporter.import_content(@course, import_data, nil, migration)
+
+        expect(@course.conditional_release).to be false
+      end
+    end
+
+    describe "default_due_time" do
+      let(:migration) { build_migration(@course, {}, all_course_settings: true) }
+
+      it "is correctly imported" do
+        import_data = { course: { default_due_time: "02:10:00" } }.with_indifferent_access
+        Importers::CourseContentImporter.import_content(@course, import_data, nil, migration)
+        expect(@course.default_due_time).to eq "02:10:00"
+      end
+    end
+
+    describe "hide_sections_on_course_users_page" do
+      let(:migration) { build_migration(@course, {}, all_course_settings: true) }
+
+      before do
+        @course.course_sections.create!
+        @course.course_sections.create!
+      end
+
+      it "is set to true when originally true" do
+        import_data = { course: { hide_sections_on_course_users_page: "true" } }.with_indifferent_access
+        Importers::CourseContentImporter.import_content(@course, import_data, nil, migration)
+        expect(@course.hide_sections_on_course_users_page).to be true
+      end
+
+      it "is set to false when originally false" do
+        import_data = { course: { hide_sections_on_course_users_page: "false" } }.with_indifferent_access
+        Importers::CourseContentImporter.import_content(@course, import_data, nil, migration)
+        expect(@course.hide_sections_on_course_users_page).to be false
       end
     end
   end
@@ -540,17 +581,17 @@ describe Course do
                                                                       new_start_date: "2014-5-11",
                                                                       new_end_date: "2014-7-5"
                                                                     })
-      unlock_at = DateTime.new(2014, 3, 23, 0, 0)
-      due_at    = DateTime.new(2014, 3, 29, 23, 59)
-      lock_at   = DateTime.new(2014, 4, 1, 23, 59)
+      unlock_at = Time.zone.local(2014, 3, 23, 0, 0)
+      due_at    = Time.zone.local(2014, 3, 29, 23, 59)
+      lock_at   = Time.zone.local(2014, 4, 1, 23, 59)
 
       new_unlock_at = Importers::CourseContentImporter.shift_date(unlock_at, options)
       new_due_at    = Importers::CourseContentImporter.shift_date(due_at, options)
       new_lock_at   = Importers::CourseContentImporter.shift_date(lock_at, options)
 
-      expect(new_unlock_at).to eq DateTime.new(2014, 6,  1, 0, 0)
-      expect(new_due_at).to    eq DateTime.new(2014, 6,  7, 23, 59)
-      expect(new_lock_at).to   eq DateTime.new(2014, 6, 10, 23, 59)
+      expect(new_unlock_at).to eq Time.zone.local(2014, 6,  1, 0, 0)
+      expect(new_due_at).to    eq Time.zone.local(2014, 6,  7, 23, 59)
+      expect(new_lock_at).to   eq Time.zone.local(2014, 6, 10, 23, 59)
     end
 
     it "returns error when removing dates and new_sis_integrations is enabled" do
@@ -644,6 +685,55 @@ describe Course do
     end
   end
 
+  describe "shift_date_options_from_migration" do
+    let(:course) { course_model }
+    let(:migration) do
+      course.content_migrations.create!(
+        migration_settings: {
+          date_shift_options: {}
+        },
+        source_course: Course.create!
+      )
+    end
+
+    before do
+      allow(course).to receive_messages(real_start_date: Date.parse("2023-01-01"), real_end_date: Date.parse("2023-12-31"))
+      allow(Importers::CourseContentImporter).to receive(:shift_date_options).and_call_original
+    end
+
+    describe "fill_missing_dates_from_source_course FF" do
+      context "when the feature flag is disabled" do
+        it "doesn't call shift_date_options with source_course if dates were not filled from course" do
+          allow(migration.course).to receive_messages(real_start_date: nil, real_end_date: nil)
+          Importers::CourseContentImporter.shift_date_options_from_migration(migration)
+          expect(Importers::CourseContentImporter).not_to have_received(:shift_date_options)
+            .with(migration.source_course, migration.date_shift_options)
+        end
+      end
+
+      context "when the feature flag is enabled" do
+        before do
+          Account.site_admin.enable_feature!(:fill_missing_dates_from_source_course)
+          allow(migration.source_course).to receive_messages(real_start_date: Date.parse("2024-01-01"), real_end_date: Date.parse("2024-12-31"))
+        end
+
+        it "doesn't call shift_date_options with source_course if dates were filled from course" do
+          Importers::CourseContentImporter.shift_date_options_from_migration(migration)
+          expect(Importers::CourseContentImporter).not_to have_received(:shift_date_options)
+            .with(migration.source_course, migration.date_shift_options)
+        end
+
+        it "call shift_date_options with source_course if dates were not filled from course" do
+          allow(course).to receive_messages(real_start_date: nil, real_end_date: nil)
+          Importers::CourseContentImporter.shift_date_options_from_migration(migration)
+          expect(Importers::CourseContentImporter).to have_received(:shift_date_options)
+            .with(migration.source_course, migration.date_shift_options)
+            .exactly(:once)
+        end
+      end
+    end
+  end
+
   describe "import_media_objects" do
     before do
       @kmh = double(KalturaMediaFileHandler)
@@ -731,24 +821,43 @@ describe Course do
   end
 
   describe "audit logging" do
-    it "logs content migration in audit logs" do
-      course_factory
+    subject { Importers::CourseContentImporter.import_content(course, data, params, migration) }
 
+    let(:course) { course_factory }
+    let(:data) do
       json = File.read(File.join(IMPORT_JSON_DIR, "assessments.json"))
-      data = JSON.parse(json).with_indifferent_access
-
-      params = { "copy" => { "quizzes" => { "i7ed12d5eade40d9ee8ecb5300b8e02b2" => true } } }
-
-      migration = ContentMigration.create!(context: @course)
+      JSON.parse(json).with_indifferent_access
+    end
+    let(:params) { { "copy" => { "quizzes" => { "i7ed12d5eade40d9ee8ecb5300b8e02b2" => true } } } }
+    let(:migration) do
+      migration = ContentMigration.create!(context: course)
       migration.migration_settings[:migration_ids_to_import] = params
-      migration.source_course = @course
+      migration.source_course = course
       migration.initiated_source = :manual
       migration.user = @user
+      migration.started_at = Time.zone.now
       migration.save!
+      migration
+    end
 
-      expect(Auditors::Course).to receive(:record_copied).once.with(migration.source_course, @course, migration.user, source: migration.initiated_source)
+    it "logs content migration in audit logs" do
+      expect(Auditors::Course).to receive(:record_copied).once.with(migration.source_course, course, migration.user, source: migration.initiated_source)
+      expect(Lti::PlatformNotificationService).to receive(:notify_tools_in_course).once.with(course, anything)
+      expect(Lti::Pns::LtiContextCopyNoticeBuilder).to receive(:new).once.with(course:, copied_at: migration.started_at.iso8601, source_course: migration.source_course)
 
-      Importers::CourseContentImporter.import_content(@course, data, params, migration)
+      subject
+    end
+
+    context "with lti_context_copy_notice flag disabled" do
+      before do
+        course.root_account.disable_feature!(:lti_context_copy_notice)
+      end
+
+      it "does not send LTI Platform Notice" do
+        expect(Lti::PlatformNotificationService).not_to receive(:notify_tools_in_course)
+
+        subject
+      end
     end
   end
 
@@ -873,7 +982,7 @@ describe Course do
     subject { Importers::CourseContentImporter.import_content(@course, {}, {}, migration) }
 
     before do
-      allow(InstStatsd::Statsd).to receive(:increment)
+      allow(InstStatsd::Statsd).to receive(:distributed_increment)
       allow(InstStatsd::Statsd).to receive(:timing)
     end
 
@@ -885,7 +994,7 @@ describe Course do
 
     it "logs import successes" do
       subject
-      expect(InstStatsd::Statsd).to have_received(:increment).with("content_migrations.import_success").once
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("content_migrations.import_success").once
     end
 
     it "logs import duration" do
@@ -898,7 +1007,7 @@ describe Course do
     it "logs import failures" do
       allow(Auditors::Course).to receive(:record_copied).and_raise("Something went wrong at the last minute")
       expect { subject }.to raise_error("Something went wrong at the last minute")
-      expect(InstStatsd::Statsd).to have_received(:increment).with("content_migrations.import_failure").once
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("content_migrations.import_failure").once
     end
 
     it "Does not log duration on failures" do
@@ -948,6 +1057,54 @@ describe Course do
       it "returns false" do
         expect(Importers::CourseContentImporter.error_on_dates?(item, attributes)).to be false
       end
+    end
+  end
+
+  describe "any_shift_date_missing?" do
+    it "returns false when all dates are present" do
+      options = {
+        old_start_date: "2023-01-01",
+        old_end_date: "2023-12-31",
+        new_start_date: "2024-01-01",
+        new_end_date: "2024-12-31"
+      }
+      expect(Importers::CourseContentImporter.any_shift_date_missing?(options)).to be false
+    end
+
+    it "returns true when old_start_date is missing" do
+      options = {
+        old_end_date: "2023-12-31",
+        new_start_date: "2024-01-01",
+        new_end_date: "2024-12-31"
+      }
+      expect(Importers::CourseContentImporter.any_shift_date_missing?(options)).to be true
+    end
+
+    it "returns true when old_end_date is missing" do
+      options = {
+        old_start_date: "2023-01-01",
+        new_start_date: "2024-01-01",
+        new_end_date: "2024-12-31"
+      }
+      expect(Importers::CourseContentImporter.any_shift_date_missing?(options)).to be true
+    end
+
+    it "returns true when new_start_date is missing" do
+      options = {
+        old_start_date: "2023-01-01",
+        old_end_date: "2023-12-31",
+        new_end_date: "2024-12-31"
+      }
+      expect(Importers::CourseContentImporter.any_shift_date_missing?(options)).to be true
+    end
+
+    it "returns true when new_end_date is missing" do
+      options = {
+        old_start_date: "2023-01-01",
+        old_end_date: "2023-12-31",
+        new_start_date: "2024-01-01"
+      }
+      expect(Importers::CourseContentImporter.any_shift_date_missing?(options)).to be true
     end
   end
 end

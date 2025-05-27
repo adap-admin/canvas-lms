@@ -44,15 +44,30 @@ class Mutations::UpdateDiscussionTopic < Mutations::DiscussionBase
     discussion_topic = DiscussionTopic.find(input[:discussion_topic_id])
     raise GraphQL::ExecutionError, "insufficient permission" unless discussion_topic.grants_right?(current_user, :update)
 
+    if input[:message] != discussion_topic.message && discussion_topic.editing_restricted?(:content)
+      # editing is impossible frontwise, so we're just gonna ignore auto formatting
+      input[:message] = discussion_topic.message
+    end
+
     if input[:anonymous_state].present? && discussion_topic.discussion_subentry_count > 0
       return validation_error(I18n.t("Anonymity settings are locked due to a posted reply"))
     end
 
+    if !discussion_topic.checkpoints? && input.dig(:assignment, :for_checkpoints) && (discussion_topic.discussion_entries&.active&.any? || discussion_topic.assignment&.has_student_submissions?)
+      return validation_error(I18n.t("If there are replies, checkpoints cannot be enabled."))
+    end
+
     unless input[:anonymous_state].nil?
+      unless input[:anonymous_state] == "off"
+        locked = input[:group_category_id].present?
+        locked ||= input[:assignment].present? && input[:assignment][:set_assignment]
+        return validation_error(I18n.t("Anonymity settings are locked for group and/or graded discussions")) if locked
+      end
+
       discussion_topic.anonymous_state = (input[:anonymous_state] == "off") ? nil : input[:anonymous_state]
     end
 
-    if (!input.key?(:ungraded_discussion_overrides) && !Account.site_admin.feature_enabled?(:selective_release_ui_api)) || discussion_topic.is_announcement
+    if discussion_topic.is_announcement
       # TODO: deprecate discussion_topic_section_visibilities for assignment_overrides LX-1498
       set_sections(input[:specific_sections], discussion_topic)
       invalid_sections = verify_specific_section_visibilities(discussion_topic) || []
@@ -63,7 +78,14 @@ class Mutations::UpdateDiscussionTopic < Mutations::DiscussionBase
     end
 
     unless input[:published].nil?
-      input[:published] ? discussion_topic.publish! : discussion_topic.unpublish!
+      was_published = discussion_topic.published?
+      if input[:published] && !was_published
+        discussion_topic.publish!
+      elsif input[:published] && was_published
+        discussion_topic.edit!
+      else
+        discussion_topic.unpublish!
+      end
     end
 
     if !input[:remove_attachment].nil? && input[:remove_attachment]
@@ -79,6 +101,14 @@ class Mutations::UpdateDiscussionTopic < Mutations::DiscussionBase
       discussion_topic.discussion_type = input[:discussion_type]
     end
 
+    # Validating default expand input data
+    if input.key?(:expanded) && input.key?(:expanded_locked) && !input[:expanded] && input[:expanded_locked]
+      return validation_error(I18n.t("Cannot set default thread state locked, when threads are collapsed"))
+    end
+
+    #  we need this to be set before the process commands since those will add group_category_id from the input
+    is_already_a_group_discussion = discussion_topic.group_category_id.present?
+
     process_common_inputs(input, discussion_topic.is_announcement, discussion_topic)
     process_future_date_inputs(input.slice(:delayed_post_at, :lock_at), discussion_topic)
     process_locked_parameter(input[:locked], discussion_topic) unless input[:locked].nil?
@@ -87,8 +117,22 @@ class Mutations::UpdateDiscussionTopic < Mutations::DiscussionBase
       # If discussion topic has checkpoints, the sum of possible points cannot exceed the max for the assignment
       err_message = validate_possible_points_with_checkpoints(input)
       return validation_error(err_message) unless err_message.nil?
-      # If discussion topic has checkpoints, it cannot also be assigned to a group category
-      return validation_error(I18n.t("Group discussions cannot have checkpoints.")) if input[:group_category_id].present?
+
+      if input[:checkpoints].present?
+        # If discussion topic has checkpoints, the sum of possible points cannot exceed the max for the assignment
+        err_message = validate_possible_points_with_checkpoints(input)
+        return validation_error(err_message) unless err_message.nil?
+
+        if is_already_a_group_discussion
+          # Already a group discussion
+          if !discussion_topic.checkpoints? && !discussion_topic.context.checkpoints_group_discussions_enabled?
+            return validation_error(I18n.t("Group discussions cannot have checkpoints."))
+          end
+        elsif input[:group_category_id].present? && !discussion_topic.context.checkpoints_group_discussions_enabled?
+          # Not already a group discussion, but trying to make it one
+          return validation_error(I18n.t("Group discussions cannot have checkpoints."))
+        end
+      end
     end
 
     # Save the discussion topic before updating the assignment if the group category is being updated,
@@ -106,13 +150,14 @@ class Mutations::UpdateDiscussionTopic < Mutations::DiscussionBase
           updated_assignment_args = input[:assignment].to_h.merge(
             id: assignment_id.to_s
           )
+
           set_discussion_assignment_association(updated_assignment_args, discussion_topic)
 
           # Instantiate and execute UpdateAssignment mutation
           assignment_mutation = Mutations::UpdateAssignment.new(object: nil, context:, field: nil)
           assignment_result = assignment_mutation.resolve(input: updated_assignment_args)
-          discussion_topic.lock_at = input[:assignment][:lock_at] if input[:assignment][:lock_at]
-          discussion_topic.unlock_at = input[:assignment][:unlock_at] if input[:assignment][:unlock_at]
+          discussion_topic.lock_at = input[:assignment][:lock_at] if input[:assignment][:set_assignment] != false
+          discussion_topic.unlock_at = input[:assignment][:unlock_at] if input[:assignment][:set_assignment] != false
 
           if assignment_result[:errors]
             return { errors: assignment_result[:errors] }
@@ -139,8 +184,8 @@ class Mutations::UpdateDiscussionTopic < Mutations::DiscussionBase
         end
 
         discussion_topic.assignment = assignment_create_result[:assignment]
-        discussion_topic.lock_at = input[:assignment][:lock_at] if input[:assignment][:lock_at]
-        discussion_topic.unlock_at = input[:assignment][:unlock_at] if input[:assignment][:unlock_at]
+        discussion_topic.lock_at = input[:assignment][:lock_at]
+        discussion_topic.unlock_at = input[:assignment][:unlock_at]
       end
 
       # Assignment must be present to set checkpoints

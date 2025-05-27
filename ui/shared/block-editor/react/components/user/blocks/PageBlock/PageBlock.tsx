@@ -21,9 +21,9 @@ import {useClassNames, getScrollParent} from '../../../../utils'
 import {ScreenReaderContent} from '@instructure/ui-a11y-content'
 import {KBNavigator} from '../../../../utils/KBNavigator'
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 
-const I18n = useI18nScope('block-editor/page-block')
+const I18n = createI18nScope('block-editor')
 
 export type PageBlockProps = {
   children?: React.ReactNode
@@ -53,11 +53,13 @@ export const PageBlock = ({children}: PageBlockProps) => {
   // happens as the initial json is loaded.
   // This unselects whatever was last and scrolls to the top.
   useEffect(() => {
-    requestAnimationFrame(() => {
-      actions.selectNode()
-      const scrollingContainer = getScrollParent()
-      scrollingContainer.scrollTo({top: 0, behavior: 'instant'})
-    })
+    if (enabled) {
+      requestAnimationFrame(() => {
+        actions.selectNode()
+        const scrollingContainer = getScrollParent()
+        scrollingContainer.scrollTo({top: 0, behavior: 'instant'})
+      })
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -75,10 +77,11 @@ export const PageBlock = ({children}: PageBlockProps) => {
           }
         }
       } else if (kbnav) {
+        // @ts-expect-error
         kbnav.key(e, actions, query, selectedNodeId)
       }
     },
-    [actions, kbnav, query, selectedNodeId]
+    [actions, kbnav, query, selectedNodeId],
   )
 
   // Per the w3c:
@@ -87,14 +90,16 @@ export const PageBlock = ({children}: PageBlockProps) => {
   // If a node is selected before the tree receives focus, focus is set on the selected node.
   const handleFocus: React.FocusEventHandler<HTMLDivElement> = useCallback(
     (e: React.FocusEvent) => {
-      if (e.target === pageRef.current) {
-        e.preventDefault()
-        actions.selectNode('ROOT')
-        const scrollingContainer = getScrollParent()
-        scrollingContainer.scrollTo({top: 0, behavior: 'instant'})
+      if (enabled) {
+        if (e.target === pageRef.current) {
+          e.preventDefault()
+          actions.selectNode('ROOT')
+          const scrollingContainer = getScrollParent()
+          scrollingContainer.scrollTo({top: 0, behavior: 'instant'})
+        }
       }
     },
-    [actions]
+    [actions, enabled],
   )
 
   const handlePaste = useCallback((_e: React.ClipboardEvent<HTMLDivElement>) => {

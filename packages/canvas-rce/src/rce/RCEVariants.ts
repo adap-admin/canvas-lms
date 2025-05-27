@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2024 - present Instructure, Inc.
+ * Copyright (C) 2025 - present Instructure, Inc.
  *
  * This file is part of Canvas.
  *
@@ -45,6 +45,12 @@ export const RCEVariantValues = ['full', 'lite', 'text-only', 'text-block'] as c
 
 export type RCEVariant = (typeof RCEVariantValues)[number]
 
+export type StatusBarOptions = {
+  aiTextTools?: boolean
+  isDesktop?: boolean
+  removeResizeButton?: boolean
+}
+
 export function getMenubarForVariant(variant: RCEVariant): MenuBarSpec {
   if (variant === 'full') {
     return 'edit view insert format tools table'
@@ -84,7 +90,7 @@ export function getMenuForVariant(variant: RCEVariant): MenusSpec {
 
 export function getToolbarForVariant(
   variant: RCEVariant,
-  ltiToolFavorites: string[] = []
+  ltiToolFavorites: string[] = [],
 ): ToolbarGroupSetting[] {
   if (variant === 'lite') {
     return [
@@ -198,27 +204,32 @@ export function getToolbarForVariant(
   ]
 }
 
+const DESKTOP_FEATURES: StatusBarFeature[] = ['keyboard_shortcuts', 'a11y_checker', 'word_count']
+const MOBILE_FEATURES: StatusBarFeature[] = ['a11y_checker', 'word_count']
+const EXTENDED_FEATURES: StatusBarFeature[] = ['html_view', 'fullscreen']
+
 export function getStatusBarFeaturesForVariant(
   variant: RCEVariant,
-  ai_text_tools: boolean = false
+  options: StatusBarOptions = {
+    aiTextTools: false,
+    isDesktop: true,
+    removeResizeButton: false,
+  },
 ): StatusBarFeature[] {
-  if (variant === 'lite' || variant === 'text-only') {
-    return ['keyboard_shortcuts', 'a11y_checker', 'word_count']
-  }
   if (variant === 'text-block') {
     return []
   }
 
-  const full_features: StatusBarFeature[] = [
-    'keyboard_shortcuts',
-    'a11y_checker',
-    'word_count',
-    'html_view',
-    'fullscreen',
-    'resize_handle',
-  ]
-  if (ai_text_tools) {
-    full_features.push('ai_tools')
+  const platformFeatures = options.isDesktop ? DESKTOP_FEATURES : MOBILE_FEATURES
+
+  if (variant === 'lite' || variant === 'text-only') {
+    return platformFeatures
   }
-  return full_features
+
+  return [
+    ...platformFeatures,
+    ...EXTENDED_FEATURES,
+    ...(options.removeResizeButton ? [] : ['resize_handle']),
+    ...(options.aiTextTools ? ['ai_tools'] : []),
+  ] as StatusBarFeature[]
 }

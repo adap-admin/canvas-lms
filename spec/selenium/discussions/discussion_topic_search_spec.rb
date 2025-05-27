@@ -37,6 +37,23 @@ describe "Discussion Topic Search" do
       )
     end
 
+    it "doesn't render error page when searching", :ignore_js_errors do
+      @topic.discussion_entries.create!(
+        user: @teacher, message: "bar"
+      )
+      (1..5).each do |number|
+        @topic.discussion_entries.create!(
+          user: @teacher,
+          message: "foo #{number}"
+        )
+      end
+      student = student_in_course(course: @course, name: "Jeff", active_all: true).user
+      user_session(student)
+      get "/courses/#{@course.id}/discussion_topics/#{@topic.id}"
+      f("input[placeholder='Search entries or author...']").send_keys("bar")
+      expect(f("body")).not_to contain_jqcss("h1:contains('Sorry, Something Broke')")
+    end
+
     it "search only replies that matches parameter" do
       @topic.discussion_entries.create!(
         user: @teacher, message: "bar"
@@ -101,7 +118,7 @@ describe "Discussion Topic Search" do
       f("input[placeholder='Search entries or author...']").send_keys("foo")
       wait_for(method: nil, timeout: 5) { fj("span:contains('foo bar)").displayed? }
       expect(fj("span:contains('foo bar')")).to be_present
-      f("span.discussions-filter-by-menu").click
+      f("[data-testid='toggle-filter-menu']").click
       wait_for_ajaximations
       fj("li li:contains('Unread')").click
       wait_for_ajaximations
@@ -177,7 +194,7 @@ describe "Discussion Topic Search" do
       expect(fj("span:contains('foo 9')")).to be_present
       expect(fj("button[aria-current='page']:contains('2')")).to be_present
 
-      f("span.discussions-filter-by-menu").click
+      f("[data-testid='toggle-filter-menu']").click
       wait_for_ajaximations
       fj("li li:contains('Unread')").click
       wait_for_ajaximations

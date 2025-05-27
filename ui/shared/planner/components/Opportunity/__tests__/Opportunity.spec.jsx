@@ -47,7 +47,9 @@ it('calls the onClick prop when dismissed is clicked', async () => {
   const tempProps = defaultProps()
   tempProps.dismiss = jest.fn()
   const wrapper = render(<Opportunity {...tempProps} />)
-  const dismissButton = wrapper.getByText('Dismiss this is a description about the opportunity').closest('button')
+  const dismissButton = wrapper
+    .getByText('Dismiss this is a description about the opportunity')
+    .closest('button')
   await userEvent.click(dismissButton)
   expect(tempProps.dismiss).toHaveBeenCalled()
 })
@@ -84,7 +86,7 @@ it('registers itself as animatable', () => {
       registerAnimatable={fakeRegister}
       deregisterAnimatable={fakeDeregister}
       animatableIndex={42}
-    />
+    />,
   )
   expect(fakeRegister).toHaveBeenCalledWith('opportunity', ref.current, 42, ['1'])
 
@@ -96,7 +98,7 @@ it('registers itself as animatable', () => {
       registerAnimatable={fakeRegister}
       deregisterAnimatable={fakeDeregister}
       animatableIndex={43}
-    />
+    />,
   )
   expect(fakeDeregister).toHaveBeenCalledWith('opportunity', ref.current, ['1'])
   expect(fakeRegister).toHaveBeenCalledWith('opportunity', ref.current, 43, ['2'])

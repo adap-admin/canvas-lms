@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import React, {useEffect, useState} from 'react'
 import PropTypes from 'prop-types'
 import {Modal} from '@instructure/ui-modal'
@@ -27,8 +27,10 @@ import BBBModalOptions from '../BBBModalOptions/BBBModalOptions'
 import BaseModalOptions from '../BaseModalOptions/BaseModalOptions'
 import {SETTINGS_TAB, ATTENDEES_TAB} from '../../../util/constants'
 import {Spinner} from '@instructure/ui-spinner'
+import {IconWarningSolid} from '@instructure/ui-icons'
+import {View} from '@instructure/ui-view'
 
-const I18n = useI18nScope('video_conference')
+const I18n = createI18nScope('video_conference')
 
 export const VideoConferenceModal = ({
   availableAttendeesList,
@@ -56,27 +58,27 @@ export const VideoConferenceModal = ({
   const defaultName = ENV.context_name ? `${ENV.context_name} Conference` : 'Conference'
   const [name, setName] = useState(isEditing ? props.name : defaultName)
   const [conferenceType, setConferenceType] = useState(
-    isEditing ? props.type : window.ENV.conference_type_details[0].type
+    isEditing ? props.type : window.ENV.conference_type_details[0].type,
   )
   const [duration, setDuration] = useState(isEditing ? props.duration : 60)
   const [options, setOptions] = useState(isEditing ? props.options : OPTIONS_DEFAULT)
 
   const [description, setDescription] = useState(isEditing ? props.description : '')
   const [invitationOptions, setInvitationOptions] = useState(
-    isEditing ? props.invitationOptions : INVITATION_OPTIONS_DEFAULT
+    isEditing ? props.invitationOptions : INVITATION_OPTIONS_DEFAULT,
   )
   const [attendeesOptions, setAttendeesOptions] = useState(
-    isEditing ? props.attendeesOptions : ATTENDEES_OPTIONS_DEFAULT
+    isEditing ? props.attendeesOptions : ATTENDEES_OPTIONS_DEFAULT,
   )
   const [showAddressBook, setShowAddressBook] = useState(false)
   const [selectedAttendees, setSelectedAttendees] = useState(
-    props.selectedAttendees ? props.selectedAttendees : []
+    props.selectedAttendees ? props.selectedAttendees : [],
   )
   const [startCalendarDate, setStartCalendarDate] = useState(
-    props.startCalendarDate ? props.startCalendarDate : new Date().toISOString()
+    props.startCalendarDate ? props.startCalendarDate : new Date().toISOString(),
   )
   const [endCalendarDate, setEndCalendarDate] = useState(
-    props.endCalendarDate ? props.endCalendarDate : new Date().toISOString()
+    props.endCalendarDate ? props.endCalendarDate : new Date().toISOString(),
   )
 
   const [showCalendarOptions, setShowCalendarOptions] = useState(false)
@@ -96,10 +98,26 @@ export const VideoConferenceModal = ({
     setEndCalendarDate(newValue)
   }
 
+  const retrieveErrorMessage = error => (
+    <span>
+      <View as="span" display="inline-block" margin="0 xxx-small xx-small 0">
+        <IconWarningSolid />
+      </View>
+      &nbsp;
+      {error}
+    </span>
+  )
+
   const setAndValidateName = nameToBeValidated => {
     if (nameToBeValidated.length > 255) {
       setNameValidationMessages([
-        {text: I18n.t('Name must be less than 255 characters'), type: 'error'},
+        {text: retrieveErrorMessage(I18n.t('Name must not exceed 255 characters')), type: 'error'},
+      ])
+    }
+    else if (nameToBeValidated.length === 0) {
+      setName("")
+      setNameValidationMessages([
+        {text: retrieveErrorMessage(I18n.t('Please fill this field')), type: 'error'},
       ])
     } else {
       setNameValidationMessages([])
@@ -109,12 +127,17 @@ export const VideoConferenceModal = ({
 
   const setAndValidateDuration = durationToBeValidated => {
     if (durationToBeValidated.toString().length > 8) {
+      setDurationValidationMessages([
+        {text: retrieveErrorMessage(I18n.t('Duration must be less than or equal to 99,999,999 minutes')), type: 'error'},
+      ])
       if (durationValidationMessages.length === 0) {
         setDuration(durationToBeValidated)
       }
+    } else if (Number(durationToBeValidated) === 0) {
       setDurationValidationMessages([
-        {text: I18n.t('Duration must be less than 99,999,999 minutes'), type: 'error'},
+        {text: retrieveErrorMessage(I18n.t('Duration must be greater than 0 minute')), type: 'error'},
       ])
+      setDuration(durationToBeValidated)
     } else {
       setDurationValidationMessages([])
       setDuration(durationToBeValidated)
@@ -124,7 +147,7 @@ export const VideoConferenceModal = ({
   const setAndValidateDescription = descriptionToBeValidated => {
     if (descriptionToBeValidated.length > 2500) {
       setDescriptionValidationMessages([
-        {text: I18n.t('Description must be less than 2500 characters'), type: 'error'},
+        {text: retrieveErrorMessage(I18n.t('Description must not exceed 2500 characters')), type: 'error'},
       ])
     } else {
       setDescriptionValidationMessages([])

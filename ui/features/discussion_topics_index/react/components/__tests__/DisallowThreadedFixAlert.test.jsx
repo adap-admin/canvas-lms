@@ -27,12 +27,12 @@ describe('DisallowThreadedFixAlert', () => {
     window.ENV = {
       COURSE_ID: '1',
       permissions: {
-        moderate: true
+        moderate: true,
       },
       HAS_SIDE_COMMENT_DISCUSSIONS: true,
       current_context: {
-        type: 'Course'
-      }
+        type: 'Course',
+      },
     }
   })
 
@@ -41,10 +41,10 @@ describe('DisallowThreadedFixAlert', () => {
   })
 
   it('renders the alert and buttons', () => {
-      const {getByText} = render(<DisallowThreadedFixAlert />)
-      expect(getByText(/around disallowing threaded replies/)).toBeInTheDocument()
-      expect(getByText('Dismiss')).toBeInTheDocument()
-      expect(getByText('Make All Discussions Threaded')).toBeInTheDocument()
+    const {getByText} = render(<DisallowThreadedFixAlert />)
+    expect(getByText(/around disallowing threaded replies/)).toBeInTheDocument()
+    expect(getByText('Dismiss')).toBeInTheDocument()
+    expect(getByText('Make All Discussions Threaded')).toBeInTheDocument()
   })
 
   it('does not render the alert if the user does not have permissions', () => {
@@ -81,7 +81,7 @@ describe('DisallowThreadedFixAlert', () => {
     const {getByText, getByTestId, queryAllByText} = render(<DisallowThreadedFixAlert />)
     const updateAllButton = getByTestId('disallow_threaded_fix_alert_update_all')
     await userEvent.click(updateAllButton)
-    expect(queryAllByText('Make All Discussions Threaded').length).toBe(3) // alert button, modal title, confirm button
+    expect(queryAllByText('Make All Discussions Threaded')).toHaveLength(3) // alert button, modal title, confirm button
     expect(getByText('Cancel')).toBeInTheDocument()
   })
 
@@ -90,7 +90,9 @@ describe('DisallowThreadedFixAlert', () => {
     const dismissButton = getByTestId('disallow_threaded_fix_alert_dismiss')
     expect(window.localStorage.getItem('disallow_threaded_fix_alert_dismissed_1')).toBeNull()
     await userEvent.click(dismissButton)
-    await waitFor(() => expect(queryByText(/around disallowing threaded replies/)).not.toBeInTheDocument())
+    await waitFor(() =>
+      expect(queryByText(/around disallowing threaded replies/)).not.toBeInTheDocument(),
+    )
     expect(window.localStorage.getItem('disallow_threaded_fix_alert_dismissed_1')).toBe('true')
   })
 })

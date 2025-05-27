@@ -32,9 +32,10 @@ describe('QuizModal', () => {
     return render(
       <Editor resolver={{QuizModal}}>
         <Frame>
+          {/* @ts-expect-error */}
           <QuizModal {...props} />
         </Frame>
-      </Editor>
+      </Editor>,
     )
   }
 

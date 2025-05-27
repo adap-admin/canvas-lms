@@ -16,23 +16,25 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React from 'react'
-import {useScope as useI18nScope} from '@canvas/i18n'
-import {Link} from '@instructure/ui-link'
-import {Pill} from '@instructure/ui-pill'
-import {Text} from '@instructure/ui-text'
-import {List} from '@instructure/ui-list'
-import {Spinner} from '@instructure/ui-spinner'
-import FeaturedHelpLink from './FeaturedHelpLink'
-import {View} from '@instructure/ui-view'
-import {Flex} from '@instructure/ui-flex'
-import {ScreenReaderContent, PresentationContent} from '@instructure/ui-a11y-content'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import tourPubSub from '@canvas/tour-pubsub'
-import {useQuery} from '@canvas/query'
-import helpLinksQuery from '../queries/helpLinksQuery'
+import {replaceLocation} from '@canvas/util/globalUtils'
+import {PresentationContent, ScreenReaderContent} from '@instructure/ui-a11y-content'
+import {Flex} from '@instructure/ui-flex'
+import {Link} from '@instructure/ui-link'
+import {List} from '@instructure/ui-list'
+import {Pill} from '@instructure/ui-pill'
+import {Spinner} from '@instructure/ui-spinner'
+import {Text} from '@instructure/ui-text'
+import {View} from '@instructure/ui-view'
+import React from 'react'
 import type {HelpLink} from '../../../api.d'
+import helpLinksQuery from '../queries/helpLinksQuery'
+import FeaturedHelpLink from './FeaturedHelpLink'
+import {useQuery} from '@tanstack/react-query'
+import {sessionStoragePersister} from '@canvas/query'
 
-const I18n = useI18nScope('HelpLinks')
+const I18n = createI18nScope('HelpLinks')
 
 type Props = {
   onClick: (url: string) => void
@@ -42,17 +44,16 @@ export default function HelpLinks({onClick}: Props) {
   const {data, isLoading, isSuccess} = useQuery<HelpLink[]>({
     queryKey: ['helpLinks'],
     queryFn: helpLinksQuery,
-    meta: {
-      fetchAtLeastOnce: true,
-    },
+    persister: sessionStoragePersister,
+    // 1 hour
+    staleTime: 60 * 60 * 1000,
   })
 
   const links = data || []
 
   const featuredLink = links.find(link => link.is_featured)
-  const featuredLinksEnabled = window.ENV.FEATURES.featured_help_links
-  const nonFeaturedLinks = featuredLinksEnabled ? links.filter(link => !link.is_featured) : links
-  const showSeparator = featuredLink && !!nonFeaturedLinks.length && featuredLinksEnabled
+  const nonFeaturedLinks = links.filter(link => !link.is_featured)
+  const showSeparator = featuredLink && !!nonFeaturedLinks.length
 
   const handleClick = (link: HelpLink) => (event: React.MouseEvent<unknown, MouseEvent>) => {
     if (link.url === '#create_ticket' || link.url === '#teacher_feedback') {
@@ -61,7 +62,7 @@ export default function HelpLinks({onClick}: Props) {
     }
     if (link.no_new_window) {
       event.preventDefault()
-      window.location.replace(link.url)
+      replaceLocation(link.url)
     }
   }
 
@@ -80,7 +81,7 @@ export default function HelpLinks({onClick}: Props) {
         <List isUnstyled={true} margin="small 0" itemSpacing="small">
           {nonFeaturedLinks
             .map(link => {
-              const has_new_tag = link.is_new && featuredLinksEnabled
+              const has_new_tag = link.is_new
               return (
                 <List.Item key={`link-${link.id}`}>
                   <Flex justifyItems="space-between" alignItems="center">
@@ -130,7 +131,7 @@ export default function HelpLinks({onClick}: Props) {
                       </View>
                     </List.Item>,
                   ]
-                : []
+                : [],
             )
             .concat(
               // if the current user is an admin, show the settings link to
@@ -149,7 +150,7 @@ export default function HelpLinks({onClick}: Props) {
                       </Link>
                     </List.Item>,
                   ]
-                : []
+                : [],
             )
             .filter(Boolean)}
         </List>

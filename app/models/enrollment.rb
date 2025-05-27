@@ -53,7 +53,7 @@ class Enrollment < ActiveRecord::Base
   validates :limit_privileges_to_course_section, inclusion: { in: [true, false] }
   validates :associated_user_id, inclusion: { in: [nil],
                                               unless: ->(enrollment) { enrollment.type == "ObserverEnrollment" },
-                                              message: -> { t("only ObserverEnrollments may have an associated_user_id") } }
+                                              message: ->(_object, _data) { t("only ObserverEnrollments may have an associated_user_id") } }
   validate :cant_observe_self, if: ->(enrollment) { enrollment.type == "ObserverEnrollment" }
   validate :cant_observe_observer, if: ->(enrollment) { enrollment.type == "ObserverEnrollment" }
 
@@ -97,6 +97,8 @@ class Enrollment < ActiveRecord::Base
   scope :current_and_future, -> { joins(:course).where(QueryBuilder.new(:current_and_future).conditions).readonly(false) }
   scope :concluded, -> { joins(:course).where(QueryBuilder.new(:completed).conditions).readonly(false) }
   scope :current_and_concluded, -> { joins(:course).where(QueryBuilder.new(:current_and_concluded).conditions).readonly(false) }
+  scope :horizon, -> { joins(:course).where(courses: { horizon_course: true }) }
+  scope :not_horizon, -> { joins(:course).where(courses: { horizon_course: false }) }
 
   def ensure_role_id
     self.role_id ||= role.id
@@ -214,7 +216,7 @@ class Enrollment < ActiveRecord::Base
         record.course &&
         record.user.registered? &&
         !record.observer? &&
-        ((record.invited? && (record.just_created || record.saved_change_to_workflow_state?)) || @re_send_confirmation)
+        ((record.invited? && (record.previously_new_record? || record.saved_change_to_workflow_state?)) || @re_send_confirmation)
     end
 
     p.dispatch :enrollment_registration
@@ -223,7 +225,7 @@ class Enrollment < ActiveRecord::Base
       !record.self_enrolled &&
         record.course &&
         !record.user.registered? &&
-        ((record.invited? && (record.just_created || record.saved_change_to_workflow_state?)) || @re_send_confirmation)
+        ((record.invited? && (record.previously_new_record? || record.saved_change_to_workflow_state?)) || @re_send_confirmation)
     end
 
     p.dispatch :enrollment_notification
@@ -233,21 +235,32 @@ class Enrollment < ActiveRecord::Base
         record.course &&
         !record.course.created? &&
         !record.observer? &&
-        record.just_created && record.active?
+        record.previously_new_record? && record.active?
     end
 
     p.dispatch :enrollment_accepted
-    p.to { course.participating_admins.restrict_to_sections([course_section_id]) - [user] }
+    p.to do |record|
+      course_admins = record.course.participating_admins.restrict_to_sections([record.course_section_id]) - [user]
+      if record.root_account.feature_enabled?(:temporary_enrollments)
+        user_ids =
+          Enrollment.joins(:enrollment_state).where(user_id: course_admins, course_section_id: record.course_section_id)
+                    .where("enrollments.temporary_enrollment_source_user_id IS NULL AND enrollments.workflow_state = 'active' OR
+                           (enrollments.temporary_enrollment_source_user_id IS NOT NULL AND enrollment_states.state = 'active')")
+                    .distinct.pluck(:user_id)
+        course_admins = course_admins.select { |admin| Array(user_ids).include?(admin.id) }
+      end
+      course_admins
+    end
     p.whenever do |record|
       record.course &&
         !record.observer? &&
-        !record.just_created && (record.changed_state(:active, :invited) || record.changed_state(:active, :creation_pending))
+        !record.previously_new_record? && (record.changed_state(:active, :invited) || record.changed_state(:active, :creation_pending))
     end
   end
 
   def dispatch_invitations_later
     # if in an invited state but not frd "invited?" because of future date restrictions, send it later
-    if (just_created || saved_change_to_workflow_state? || @re_send_confirmation) && workflow_state == "invited" && inactive? && available_at &&
+    if (previously_new_record? || saved_change_to_workflow_state? || @re_send_confirmation) && workflow_state == "invited" && inactive? && available_at &&
        !self_enrolled && !(observer? && user.registered?)
       # this won't work if they invite them and then change the course/term/section dates _afterwards_ so hopefully people don't do that
       delay(run_at: available_at, singleton: "send_enrollment_invitations_#{global_id}").re_send_confirmation_if_invited!
@@ -370,14 +383,14 @@ class Enrollment < ActiveRecord::Base
   end
 
   def should_update_user_account_association?
-    id_before_last_save.nil? || saved_change_to_course_id? || saved_change_to_course_section_id? ||
+    new_record? || previously_new_record? || saved_change_to_course_id? || saved_change_to_course_section_id? ||
       saved_change_to_root_account_id? || being_restored?
   end
 
   def update_user_account_associations_if_necessary
     return if fake_student?
 
-    if id_before_last_save.nil? || being_restored?
+    if previously_new_record? || being_restored?
       return if %w[creation_pending deleted].include?(user.workflow_state)
 
       associations = User.calculate_account_associations_from_accounts([course.account_id, course_section.course.account_id, course_section.nonxlist_course.try(:account_id)].compact.uniq)
@@ -433,6 +446,16 @@ class Enrollment < ActiveRecord::Base
       # by leaving the section he/she is completely leaving the course so remove the
       # user from any group related to the course.
       membership = group.group_memberships.where(user_id:).first
+      membership&.destroy
+    end
+
+    user.differentiation_tags.preload(:group_category).where(
+      context_type: "Course", context_id: section.course_id
+    ).find_each do |tag|
+      # Only remove differentiation tag memberships if the enrollment is being deleted/rejected
+      next unless is_deleted
+
+      membership = tag.group_memberships.where(user_id:).first
       membership&.destroy
     end
   end
@@ -503,7 +526,7 @@ class Enrollment < ActiveRecord::Base
     if @update_cached_due_dates
       update_grades = being_restored?(to_state: "active") ||
                       being_restored?(to_state: "inactive") ||
-                      saved_change_to_id?
+                      previously_new_record?
       SubmissionLifecycleManager.recompute_users_for_course(user_id, course, nil, update_grades:)
     end
   end
@@ -549,7 +572,7 @@ class Enrollment < ActiveRecord::Base
 
   def conclude
     self.workflow_state = "completed"
-    self.completed_at = Time.now
+    self.completed_at = Time.zone.now
     save
   end
 
@@ -619,7 +642,7 @@ class Enrollment < ActiveRecord::Base
 
   def assert_section
     self.course_section = course.default_section if !course_section_id && course
-    self.root_account_id ||= course.root_account_id rescue nil
+    self.root_account_id ||= course&.root_account_id
   end
 
   def course_name(display_user = nil)
@@ -629,7 +652,7 @@ class Enrollment < ActiveRecord::Base
   def short_name(length = nil, display_user = nil)
     return @short_name if @short_name
 
-    @short_name = course_section.display_name if course_section && root_account && root_account.show_section_name_as_course_name
+    @short_name = course_section.display_name if course_section && root_account&.show_section_name_as_course_name
     @short_name ||= course_name(display_user)
     @short_name = @short_name[0..length] if length
     @short_name
@@ -931,7 +954,7 @@ class Enrollment < ActiveRecord::Base
     can_remove = [StudentEnrollment].include?(self.class) &&
                  context.grants_right?(user, session, :manage_students) &&
                  context.id == (context.is_a?(Course) ? course_id : course_section_id)
-    can_remove || context.grants_right?(user, session, manage_admin_users_perm)
+    can_remove || context.grants_right?(user, session, :allow_course_admin_actions)
   end
 
   # Determine if a user has permissions to delete this enrollment.
@@ -944,14 +967,8 @@ class Enrollment < ActiveRecord::Base
   def can_be_deleted_by(user, context, session)
     return context.grants_right?(user, session, :use_student_view) if fake_student?
 
-    if root_account.feature_enabled? :granular_permissions_manage_users
-      can_remove = can_delete_via_granular(user, session, context)
-      can_remove &&= user_id != user.id || context.account.grants_right?(user, session, :allow_course_admin_actions)
-    else
-      can_remove = context.grants_right?(user, session, :manage_admin_users) && !student?
-      can_remove ||= [StudentEnrollment, ObserverEnrollment].include?(self.class) && context.grants_right?(user, session, :manage_students)
-      can_remove &&= user_id != user.id || context.account.grants_right?(user, session, :manage_admin_users)
-    end
+    can_remove = can_delete_via_granular(user, session, context)
+    can_remove &&= user_id != user.id || context.account.grants_right?(user, session, :allow_course_admin_actions)
     can_remove && context.id == (context.is_a?(Course) ? course_id : course_section_id)
   end
 
@@ -959,9 +976,7 @@ class Enrollment < ActiveRecord::Base
     invited? || creation_pending?
   end
 
-  def email
-    user.email rescue t("#enrollment.default_email", "No Email")
-  end
+  delegate :email, to: :user
 
   def user_name
     has_attribute?("user_name") ? self["user_name"] : user.name
@@ -1298,7 +1313,7 @@ class Enrollment < ActiveRecord::Base
   end
 
   set_policy do
-    given { |user, session| course.grants_any_right?(user, session, :manage_students, manage_admin_users_perm, :read_roster) }
+    given { |user, session| course.grants_any_right?(user, session, :manage_students, :allow_course_admin_actions, :read_roster) }
     can :read
 
     given { |user| self.user == user }
@@ -1568,7 +1583,7 @@ class Enrollment < ActiveRecord::Base
   end
 
   def need_to_copy_scores?
-    return false unless saved_change_to_id? || being_restored?
+    return false unless previously_new_record? || being_restored?
 
     student_or_fake_student? && other_enrollment_of_same_type_with_score.present?
   end
@@ -1585,10 +1600,6 @@ class Enrollment < ActiveRecord::Base
       user_id: user,
       type: Array.wrap(types)
     ).where.not(id:).where.not(workflow_state: :deleted)
-  end
-
-  def manage_admin_users_perm
-    root_account.feature_enabled?(:granular_permissions_manage_users) ? :allow_course_admin_actions : :manage_admin_users
   end
 
   def can_delete_via_granular(user, session, context)

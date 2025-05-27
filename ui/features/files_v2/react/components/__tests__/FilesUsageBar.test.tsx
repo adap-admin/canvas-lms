@@ -21,36 +21,27 @@ import {render, screen, waitFor} from '@testing-library/react'
 
 import {QueryClient} from '@tanstack/react-query'
 import {MockedQueryClientProvider} from '@canvas/test-utils/query'
-import fetchMock from 'fetch-mock'
 import {showFlashError} from '@canvas/alerts/react/FlashAlert'
 import FilesUsageBar from '../FilesUsageBar'
-
-const FILES_USAGE_RESULT = {
-  quota_used: 500,
-  quota: 1000,
-}
+import {FileManagementProvider} from '../../contexts/FileManagementContext'
+import {createMockFileManagementContext} from '../../__tests__/createMockContext'
+import {useGetQuota} from '../../hooks/useGetQuota'
 
 jest.mock('@canvas/alerts/react/FlashAlert', () => ({
   showFlashError: jest.fn().mockReturnValue(jest.fn()),
 }))
 
+jest.mock('../../hooks/useGetQuota', () => ({
+  useGetQuota: jest.fn(),
+}))
+
 describe('FilesUsageBar', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    fetchMock.get(/.*\/files\/quota/, FILES_USAGE_RESULT)
   })
 
-  afterEach(() => {
-    fetchMock.restore()
-  })
-
-  const renderComponent = (props = {}) => {
+  const renderComponent = () => {
     const queryClient = new QueryClient({
-      logger: {
-        log: () => {},
-        warn: () => {},
-        error: () => {},
-      },
       defaultOptions: {
         queries: {
           retryDelay: 1,
@@ -58,29 +49,44 @@ describe('FilesUsageBar', () => {
         },
       },
     })
+
     return render(
       <MockedQueryClientProvider client={queryClient}>
-        <FilesUsageBar contextType="1" contextId="2" {...props} />
-      </MockedQueryClientProvider>
+        <FileManagementProvider value={createMockFileManagementContext()}>
+          <FilesUsageBar />
+        </FileManagementProvider>
+      </MockedQueryClientProvider>,
     )
   }
 
   it('renders progress bar with quota data when fetch is successful', async () => {
-    renderComponent()
-    const quota = '1 KB'
-    const percentageText = await screen.findByText(`50% of ${quota} used`)
-    expect(percentageText).toBeInTheDocument()
+    ;(useGetQuota as jest.Mock).mockImplementation(() => ({
+      data: {quota_used: 500_000, quota: 1_000_000},
+      error: null,
+      isLoading: false,
+    }))
 
-    const progressBar = screen.getByLabelText(/File Storage Quota Used/i)
+    renderComponent()
+    const usageText = await screen.findByText(`500 KB of 1 MB used`)
+    expect(usageText).toBeInTheDocument()
+
+    const progressBar = document.querySelector(
+      'progress[aria-valuetext="File Storage Quota Used 500 KB of 1 MB used"]',
+    )
     expect(progressBar).toBeInTheDocument()
   })
 
   it('displays error message if quota fetch fails', async () => {
-    fetchMock.get(/.*\/files\/quota/, 500, {overwriteRoutes: true})
+    ;(useGetQuota as jest.Mock).mockImplementation(() => ({
+      data: null,
+      error: new Error('Failed to fetch quota'),
+      isLoading: false,
+    }))
+
     renderComponent()
     await waitFor(() => {
       expect(showFlashError).toHaveBeenCalledWith(
-        'An error occurred while loading files usage data'
+        'An error occurred while loading files usage data.',
       )
     })
   })

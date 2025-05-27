@@ -248,7 +248,7 @@ class ContentMigration < ActiveRecord::Base
   def root_account
     return super if root_account_id
 
-    context.root_account rescue nil
+    context.root_account
   end
 
   def migration_type
@@ -428,7 +428,7 @@ class ContentMigration < ActiveRecord::Base
         # it's ready to be imported
         self.workflow_state = :importing
         save
-        delay(**queue_opts.merge(on_permanent_failure: :fail_with_error!)).import_content
+        delay(**queue_opts, on_permanent_failure: :fail_with_error!).import_content
       else
         # find worker and queue for conversion
         begin
@@ -595,7 +595,7 @@ class ContentMigration < ActiveRecord::Base
     capture_job_id
     save
 
-    Lti::Asset.opaque_identifier_for(context)
+    Lti::V1p1::Asset.opaque_identifier_for(context)
 
     all_files_path = nil
     begin
@@ -1005,8 +1005,28 @@ class ContentMigration < ActiveRecord::Base
     html_converter.convert(*, **keyword_args)
   end
 
+  def convert_single_link(single_link, link_type: false)
+    return html_converter.convert_single_link(single_link, link_type:) unless single_link.include?("/block_editor/templates/") || single_link.blank?
+
+    single_link
+  end
+
   def convert_text(text)
     format_message(text || "")[0]
+  end
+
+  def convert_block(block, context, migration_id)
+    if block["type"]["resolvedName"] == "MediaBlock" && (url = block["props"]["src"])
+      block["props"]["src"] = convert_single_link(url, link_type: :media_object)
+    elsif block["type"]["resolvedName"] == "ImageBlock" && (url = block["props"]["src"])
+      block["props"]["src"] = convert_single_link(url)
+    elsif block["type"]["resolvedName"] == "RCETextBlock" && (html = block["props"]["text"])
+      block["props"]["text"] = convert_html(html, context, migration_id, :block_editor_text)
+    end
+  end
+
+  def convert_block_editor_blocks(blocks_json, migration_id, context)
+    blocks_json.each_value { |block| convert_block(block, context, migration_id) }
   end
 
   delegate :resolve_content_links!, to: :html_converter
@@ -1175,7 +1195,7 @@ class ContentMigration < ActiveRecord::Base
   def handle_import_in_progress_notice
     return unless context.is_a?(Course) && is_set?(migration_settings[:import_in_progress_notice])
 
-    if (just_created || (saved_change_to_workflow_state? && %w[created queued].include?(workflow_state_before_last_save))) &&
+    if (previously_new_record? || (saved_change_to_workflow_state? && %w[created queued].include?(workflow_state_before_last_save))) &&
        %w[pre_processing pre_processed exporting importing].include?(workflow_state)
       context.add_content_notice(:import_in_progress, 4.hours)
     elsif saved_change_to_workflow_state? && %w[pre_process_error exported imported failed].include?(workflow_state)
@@ -1190,7 +1210,7 @@ class ContentMigration < ActiveRecord::Base
        (next_cm = context.content_migrations.where(workflow_state: "queued").order(:id).first) &&
        (job_id = next_cm.job_progress.try(:delayed_job_id)) &&
        (job = Delayed::Job.where(id: job_id, locked_at: nil).first)
-      job.run_at = Time.now # it's okay to try it again now
+      job.run_at = Time.zone.now # it's okay to try it again now
       job.save
     end
   end

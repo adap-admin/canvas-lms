@@ -15,11 +15,11 @@
  * You should have received a copy of the GNU Affero General Public License along
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-import create from 'zustand'
+import {create} from 'zustand'
 import {isSuccessful, type ApiResult} from '../../common/lib/apiResult/ApiResult'
-import type {LtiImsRegistrationId} from '../model/lti_ims_registration/LtiImsRegistrationId'
 import {ZUnifiedToolId, type UnifiedToolId} from '../model/UnifiedToolId'
 import type {InternalLtiConfiguration} from '../model/internal_lti_configuration/InternalLtiConfiguration'
+import type {LtiRegistrationId} from '../model/LtiRegistrationId'
 
 export type JsonFetchStatus =
   | {
@@ -62,11 +62,11 @@ export type RegistrationWizardModalState = {
    */
   manualAppName: string
   /**
-   * The ID of the LTI IMS Registration to edit. If this is set, the registration wizard will
-   * open to the Dynamic Registration review screen, once the registration has been loaded from the backend.
-   * If this is not set, the registration wizard will follow the typical flow.
+   * The ID of the existing registration to edit. If this is set, the registration wizard will
+   * open to the Manual Registration review screen, once the registration has been loaded from the backend.
+   * If this is not set, the registration wizard will continue as if it were a new registration.
    */
-  ltiImsRegistrationId?: LtiImsRegistrationId
+  existingRegistrationId?: LtiRegistrationId
   unifiedToolId?: UnifiedToolId
   /**
    * Contains the state of fetching the JSON for the
@@ -124,10 +124,15 @@ export const useRegistrationModalWizardState = create<
     // todo: if we've already returned from the tool,
     // we need to delete the registration we created
     set(prev => {
-      return {
-        open: !prev.exitOnCancel,
-        ltiImsRegistrationId: undefined,
-        registering: false,
+      if (prev.exitOnCancel) {
+        return {
+          open: false,
+        }
+      } else {
+        return {
+          ltiImsRegistrationId: undefined,
+          registering: false,
+        }
       }
     })
   },
@@ -138,11 +143,11 @@ export const useRegistrationModalWizardState = create<
       set({jsonFetch: status})
     }
   },
-  close: () => set({open: false, ltiImsRegistrationId: undefined, registering: false}),
+  close: () => set({open: false}),
 }))
 
 export const openRegistrationWizard = (
-  initialState: Partial<Omit<RegistrationWizardModalState, 'open'>>
+  initialState: Partial<Omit<RegistrationWizardModalState, 'open'>>,
 ) => {
   useRegistrationModalWizardState.setState(prev => {
     return {
@@ -153,8 +158,63 @@ export const openRegistrationWizard = (
       jsonUrlFetch: {_tag: 'initial'},
       lti_version: '1p3',
       method: 'dynamic_registration',
+      existingRegistrationId: undefined,
       ...initialState,
       open: true,
+    }
+  })
+}
+
+export const openJsonRegistrationWizard = (
+  jsonCode: string,
+  internalLtiConfig: InternalLtiConfiguration,
+  unifiedToolId?: UnifiedToolId,
+  onSuccessfulInstallation?: () => void,
+) => {
+  useRegistrationModalWizardState.setState(prev => {
+    return {
+      ...prev,
+      jsonCode,
+      method: 'json',
+      open: true,
+      jsonFetch: {
+        _tag: 'loaded',
+        result: {
+          _type: 'Success',
+          data: internalLtiConfig,
+        },
+      },
+      unifiedToolId,
+      exitOnCancel: true,
+      registering: true,
+      onSuccessfulInstallation,
+    }
+  })
+}
+
+export const openJsonUrlRegistrationWizard = (
+  jsonUrl: string,
+  internalLtiConfig: InternalLtiConfiguration,
+  unifiedToolId?: UnifiedToolId,
+  onSuccessfulInstallation?: () => void,
+) => {
+  useRegistrationModalWizardState.setState(prev => {
+    return {
+      ...prev,
+      jsonUrl,
+      method: 'json_url',
+      open: true,
+      jsonFetch: {
+        _tag: 'loaded',
+        result: {
+          _type: 'Success',
+          data: internalLtiConfig,
+        },
+      },
+      unifiedToolId,
+      registering: true,
+      exitOnCancel: true,
+      onSuccessfulInstallation,
     }
   })
 }
@@ -168,7 +228,7 @@ export const openRegistrationWizard = (
 export const openDynamicRegistrationWizard = (
   dynamicRegistrationUrl: string,
   unifiedToolId?: UnifiedToolId,
-  onSuccessfulInstallation?: () => void
+  onSuccessfulInstallation?: () => void,
 ) => {
   openRegistrationWizard({
     dynamicRegistrationUrl,
@@ -184,17 +244,30 @@ export const openDynamicRegistrationWizard = (
  * This will open the registration wizard to the review screen, once the registration has been loaded
  * from the backend.
  *
- * @param ltiImsRegistrationId The ID of the LTI IMS Registration to edit.
+ * @param existingRegistrationId The ID of the LTI IMS Registration to edit.
  * @param onSuccessfulInstallation A callback to run after the update is finished successfully.
  */
 export const openEditDynamicRegistrationWizard = (
-  ltiImsRegistrationId: LtiImsRegistrationId,
-  onSuccessfulInstallation?: () => void
+  existingRegistrationId: LtiRegistrationId,
+  onSuccessfulInstallation?: () => void,
 ) => {
   openRegistrationWizard({
-    ltiImsRegistrationId,
+    existingRegistrationId,
     registering: true,
     exitOnCancel: true,
     onSuccessfulInstallation,
+  })
+}
+
+export const openEditManualRegistrationWizard = (
+  existingRegistrationId: LtiRegistrationId,
+  onSuccessfulInstallation?: () => void,
+) => {
+  openRegistrationWizard({
+    existingRegistrationId,
+    registering: true,
+    exitOnCancel: true,
+    onSuccessfulInstallation,
+    method: 'manual',
   })
 }

@@ -17,14 +17,14 @@
  */
 
 import React from 'react'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {Button} from '@instructure/ui-buttons'
 import {Flex} from '@instructure/ui-flex'
 import {IconDragHandleLine, IconEditLine, IconOutcomesLine} from '@instructure/ui-icons'
 import {Text} from '@instructure/ui-text'
 import {View} from '@instructure/ui-view'
 
-const I18n = useI18nScope('rubrics-criteria-new-row')
+const I18n = createI18nScope('rubrics-criteria-new-row')
 
 type NewCriteriaRowProps = {
   rowIndex: number
@@ -48,6 +48,7 @@ export const NewCriteriaRow = ({rowIndex, onEditCriterion, onAddOutcome}: NewCri
         </Flex.Item>
         <Flex.Item margin="0 small" align="start" shouldGrow={true}>
           <Button
+            // @ts-expect-error
             renderIcon={IconEditLine}
             onClick={onEditCriterion}
             data-testid="add-criterion-button"
@@ -55,6 +56,8 @@ export const NewCriteriaRow = ({rowIndex, onEditCriterion, onAddOutcome}: NewCri
             {I18n.t('Draft New Criterion')}
           </Button>
           <Button
+            id="create-from-outcome"
+            // @ts-expect-error
             renderIcon={IconOutcomesLine}
             margin="0 0 0 small"
             onClick={onAddOutcome}

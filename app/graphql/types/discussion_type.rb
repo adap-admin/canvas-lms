@@ -65,6 +65,8 @@ module Types
     field :delayed_post_at, Types::DateTimeType, null: true
     field :discussion_type, DiscussionTopicDiscussionType, null: true
     field :edited_at, Types::DateTimeType, null: true
+    field :expanded, Boolean, null: true
+    field :expanded_locked, Boolean, null: true
     field :is_announcement, Boolean, null: false
     field :is_anonymous_author, Boolean, null: true
     field :is_section_specific, Boolean, null: true
@@ -79,6 +81,7 @@ module Types
     field :posted_at, Types::DateTimeType, null: true
     field :require_initial_post, Boolean, null: true
     field :sort_by_rating, Boolean, null: true
+    field :sort_order_locked, Boolean, null: true
     field :title, String, null: true
     field :todo_date, GraphQL::Types::ISO8601DateTime, null: true
     field :visible_to_everyone, Boolean, null: true
@@ -93,7 +96,18 @@ module Types
         return lock_explanation(locked_info, "topic", object.context, { only_path: true, include_js: false })
       end
 
-      object.message
+      Loaders::ApiContentAttachmentLoader.for(object.context).load(object.message).then do |preloaded_attachments|
+        GraphQLHelpers::UserContent.process(object.message,
+                                            request: context[:request],
+                                            context: object.context,
+                                            user: current_user,
+                                            in_app: context[:in_app],
+                                            preloaded_attachments:,
+                                            options: {
+                                              domain_root_account: context[:domain_root_account],
+                                            },
+                                            location: object.asset_string)
+      end
     end
 
     field :lock_information, String, null: true
@@ -129,8 +143,15 @@ module Types
       object.published?
     end
 
+    field :points_possible, Float, null: true
+    def points_possible
+      object.try(:assignment).try(:points_possible)
+    end
+
     field :reply_to_entry_required_count, Integer, null: false
-    delegate :reply_to_entry_required_count, to: :object
+    def reply_to_entry_required_count
+      object.root_topic ? object.root_topic.reply_to_entry_required_count : object.reply_to_entry_required_count
+    end
 
     field :assignment, Types::AssignmentType, null: true
     def assignment
@@ -151,11 +172,11 @@ module Types
       argument :filter, Types::DiscussionFilterType, required: false
       argument :root_entries, Boolean, required: false
       argument :search_term, String, required: false
-      argument :sort_order, Types::DiscussionSortOrderType, required: false
       argument :unread_before, String, required: false
       argument :user_search_id, String, required: false
     end
     def discussion_entries_connection(**args)
+      args.delete(:sort_order)
       get_entries(**args)
     end
 
@@ -206,8 +227,13 @@ module Types
     def author(course_id: nil, role_types: nil, built_in_only: false)
       # Conditionally set course_id based on whether it's provided or should be inferred from the object
       resolved_course_id = course_id.nil? ? object&.course&.id : course_id
-      # Set the graphql context so it can be used downstream
-      context[:course_id] = resolved_course_id
+
+      if object&.course.is_a?(Account) && !object&.group&.id.nil?
+        context[:group_id] = object&.group&.id
+      else
+        # Set the graphql context so it can be used downstream
+        context[:course_id] = resolved_course_id
+      end
 
       if object.anonymous? && resolved_course_id.nil?
         nil
@@ -384,38 +410,31 @@ module Types
       object.subscription_hold(current_user, session)
     end
 
-    def get_entries(search_term: nil, filter: nil, sort_order: nil, root_entries: false, user_search_id: nil, unread_before: nil)
+    def get_entries(search_term: nil, filter: nil, root_entries: false, user_search_id: nil, unread_before: nil)
       return [] if object.initial_post_required?(current_user, session) || !available_for_user
 
-      sort_order(sort: sort_order).then do |resolved_sort_order|
-        Loaders::DiscussionEntryLoader.for(
-          current_user:,
-          search_term:,
-          filter:,
-          sort_order: resolved_sort_order,
-          root_entries:,
-          user_search_id:,
-          unread_before:
-        ).load(object)
-      end
+      Loaders::DiscussionEntryLoader.for(
+        current_user:,
+        search_term:,
+        filter:,
+        sort_order: object.sort_order_for_user(current_user),
+        root_entries:,
+        user_search_id:,
+        unread_before:
+      ).load(object)
     end
 
     field :sort_order, Types::DiscussionSortOrderType, null: true do
       argument :sort, Types::DiscussionSortOrderType, required: false
     end
 
-    def sort_order(sort: nil)
-      return sort.to_sym unless sort.nil?
-
-      participant = object.participant(current_user:)
-      participant&.sort_order&.to_sym || DiscussionTopicParticipant::SortOrder::DESC.to_sym
+    def sort_order
+      object.sort_order.to_sym || DiscussionTopic::SortOrder::DESC.to_sym
     end
 
-    field :expanded, Boolean, null: true
-
-    def expanded
-      participant = object.participant(current_user:)
-      participant&.expanded || false
+    field :participant, Types::DiscussionParticipantType, null: true
+    def participant
+      object.participant(current_user) || object.update_or_create_participant(current_user:)
     end
   end
 end

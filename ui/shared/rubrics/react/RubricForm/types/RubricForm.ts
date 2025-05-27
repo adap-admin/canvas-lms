@@ -18,6 +18,13 @@
 
 import type {RubricCriterion} from '@canvas/rubrics/react/types/rubric'
 
+export type GenerateCriteriaFormProps = {
+  criteriaCount: number
+  ratingCount: number
+  pointsPerCriterion: string
+  useRange: boolean
+}
+
 export type RubricFormProps = {
   id?: string
   title: string

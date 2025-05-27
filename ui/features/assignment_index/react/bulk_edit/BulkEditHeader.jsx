@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import React from 'react'
 import {arrayOf, bool, func, number} from 'prop-types'
 import {Button} from '@instructure/ui-buttons'
@@ -29,7 +29,7 @@ import CanvasInlineAlert from '@canvas/alerts/react/InlineAlert'
 import {originalDateField} from './utils'
 import {AssignmentShape} from './BulkAssignmentShape'
 
-const I18n = useI18nScope('assignments_bulk_edit')
+const I18n = createI18nScope('assignments_bulk_edit')
 
 BulkEditHeader.propTypes = {
   assignments: arrayOf(AssignmentShape).isRequired,
@@ -56,20 +56,9 @@ export default function BulkEditHeader({
     return <Text>{I18n.t('%{percent}%', {percent: valueNow})}</Text>
   }
 
-  const anyAssignmentsEdited = (() => {
-    const overrides = assignments.flatMap(a => a.all_dates)
-    return overrides.some(override =>
-      [
-        originalDateField('due_at'),
-        originalDateField('unlock_at'),
-        originalDateField('lock_at'),
-      ].some(originalField => override.hasOwnProperty(originalField))
-    )
-  })()
-
   const validationErrorsExist = (() => {
     return assignments.some(assignment =>
-      assignment.all_dates.some(override => Object.keys(override.errors || {}).length > 0)
+      assignment.all_dates.some(override => Object.keys(override.errors || {}).length > 0),
     )
   })()
 
@@ -88,15 +77,14 @@ export default function BulkEditHeader({
             <Text>
               {I18n.t(
                 {one: '%{count} assignment selected', other: '%{count} assignments selected'},
-                {count: selectedAssignmentsCount}
+                {count: selectedAssignmentsCount},
               )}
             </Text>
           </Flex.Item>
           <Flex.Item>
             <Button
               margin="0 0 0 small"
-              onClick={onOpenBatchEdit}
-              interaction={selectedAssignmentsCount > 0 ? 'enabled' : 'disabled'}
+              onClick={() => onOpenBatchEdit(true)}
             >
               {I18n.t('Batch Edit')}
             </Button>
@@ -111,7 +99,7 @@ export default function BulkEditHeader({
               margin="0 0 0 small"
               color="primary"
               interaction={
-                startingSave || jobRunning || !anyAssignmentsEdited || validationErrorsExist
+                startingSave || jobRunning || validationErrorsExist
                   ? 'disabled'
                   : 'enabled'
               }
@@ -161,15 +149,14 @@ export default function BulkEditHeader({
           <Text>
             {I18n.t(
               {one: '%{count} assignment selected', other: '%{count} assignments selected'},
-              {count: selectedAssignmentsCount}
+              {count: selectedAssignmentsCount},
             )}
           </Text>
         </Flex.Item>
         <Flex.Item>
           <Button
             margin="0 0 0 small"
-            onClick={onOpenBatchEdit}
-            interaction={selectedAssignmentsCount > 0 ? 'enabled' : 'disabled'}
+            onClick={() => onOpenBatchEdit(true)}
           >
             {I18n.t('Batch Edit')}
           </Button>
@@ -184,7 +171,7 @@ export default function BulkEditHeader({
             margin="0 0 0 small"
             color="primary"
             interaction={
-              startingSave || jobRunning || !anyAssignmentsEdited || validationErrorsExist
+              startingSave || jobRunning || validationErrorsExist
                 ? 'disabled'
                 : 'enabled'
             }

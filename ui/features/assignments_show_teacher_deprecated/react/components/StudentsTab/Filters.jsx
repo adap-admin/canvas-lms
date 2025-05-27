@@ -17,7 +17,7 @@
  */
 
 import React from 'react'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {arrayOf, func, number} from 'prop-types'
 import {Select} from '@instructure/ui-select'
 
@@ -25,7 +25,7 @@ import {OverrideShape} from '../../assignmentData'
 
 import {Flex} from '@instructure/ui-flex'
 
-const I18n = useI18nScope('assignments_2')
+const I18n = createI18nScope('assignments_2')
 
 /*
  *  CAUTION: The InstUI Select component is greatly changed in v7.
@@ -98,7 +98,7 @@ export default class Filters extends React.Component {
       options.push(
         <Select.Option id={i} key={i} value={i.toString()}>
           {I18n.t('Attempt %{count}', {count: i})}
-        </Select.Option>
+        </Select.Option>,
       )
     }
     return options

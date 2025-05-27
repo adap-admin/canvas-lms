@@ -23,7 +23,7 @@ require_relative "../graphql_spec_helper"
 RSpec.describe Mutations::CreateConversation do
   before do
     allow(InstStatsd::Statsd).to receive(:count)
-    allow(InstStatsd::Statsd).to receive(:increment)
+    allow(InstStatsd::Statsd).to receive(:distributed_increment)
   end
 
   before(:once) do
@@ -134,11 +134,11 @@ RSpec.describe Mutations::CreateConversation do
     enrollment.save
     @student.media_objects.where(media_id: "m-whatever", media_type: "video/mp4").first_or_create!
     result = run_mutation(recipients: [new_user.id.to_s], body: "yo", context_code: @course.asset_string, media_comment_id: "m-whatever", media_comment_type: "video")
-    expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.conversation.created.react")
-    expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.message.sent.react")
-    expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.conversation.sent.react")
+    expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("inbox.conversation.created.react")
+    expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("inbox.message.sent.react")
+    expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("inbox.conversation.sent.react")
     expect(InstStatsd::Statsd).to have_received(:count).with("inbox.message.sent.recipients.react", 1)
-    expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.message.sent.media.react")
+    expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("inbox.message.sent.media.react")
     expect(result.dig("data", "createConversation", "errors")).to be_nil
     expect(
       result.dig("data", "createConversation", "conversations", 0, "conversation", "conversationMessagesConnection", "nodes", 0, "body")
@@ -186,11 +186,11 @@ RSpec.describe Mutations::CreateConversation do
       media_comment_type: "video",
       attachment_ids: [attachment.id]
     )
-    expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.conversation.created.react")
-    expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.conversation.sent.react")
+    expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("inbox.conversation.created.react")
+    expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("inbox.conversation.sent.react")
     expect(InstStatsd::Statsd).to have_received(:count).with("inbox.message.sent.recipients.react", 1)
-    expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.message.sent.media.react")
-    expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.message.sent.attachment.react")
+    expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("inbox.message.sent.media.react")
+    expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("inbox.message.sent.attachment.react")
     expect(result.dig("data", "createConversation", "errors")).to be_nil
     expect(
       result.dig("data", "createConversation", "conversations", 0, "conversation", "conversationMessagesConnection", "nodes", 0, "body")
@@ -428,6 +428,84 @@ RSpec.describe Mutations::CreateConversation do
     expect(c.tags.sort).to eql [@course1.asset_string, @course2.asset_string, @course3.asset_string, @group1.asset_string, @group3.asset_string].sort
   end
 
+  context "non_collaborative groups" do
+    before(:once) do
+      @course.account.enable_feature! :assign_to_differentiation_tags
+      @course.account.settings[:allow_assign_to_differentiation_tags] = { value: true }
+      @course.account.save!
+      @course.account.reload
+      ncc = @course.group_categories.create!(name: "non-collaborative category", non_collaborative: true)
+      @ncg = @course.groups.create!(name: "non-collaborative group", group_category: ncc)
+      @ncg.add_user(@student, "accepted")
+    end
+
+    context "when sending to all in a differentiation tag" do
+      context "allows sending to dif tags with options that will send as individual messages" do
+        it "sends individual conversation for non-collaborative group when group_conversation is false" do
+          result = run_mutation({ recipients: ["group_#{@ncg.id}"], body: "test", group_conversation: false, context_code: @course.asset_string }, @teacher)
+          expect(result.dig("data", "createConversation", "errors")).to be_nil
+          expect(result.dig("data", "createConversation", "conversations").count).to eq 1
+        end
+
+        it "sends individual conversation for differentiation tag when group_conversation is false" do
+          result = run_mutation({ recipients: ["differentiation_tag_#{@ncg.id}"], body: "test", group_conversation: false, context_code: @course.asset_string }, @teacher)
+          expect(result.dig("data", "createConversation", "errors")).to be_nil
+          expect(result.dig("data", "createConversation", "conversations").count).to eq 1
+        end
+
+        it "sends individual conversation for group when group_conversation is true and bulk_message is true" do
+          result = run_mutation({ recipients: ["group_#{@ncg.id}"], body: "test", group_conversation: true, bulk_message: true, context_code: @course.asset_string }, @teacher)
+          expect(result.dig("data", "createConversation", "errors")).to be_nil
+          expect(result.dig("data", "createConversation", "conversations").count).to eq 1
+        end
+
+        it "sends individual conversation for differentiation tag when group_conversation is true and bulk_message is true" do
+          result = run_mutation({ recipients: ["differentiation_tag_#{@ncg.id}"], body: "test", group_conversation: true, bulk_message: true, context_code: @course.asset_string }, @teacher)
+          expect(result.dig("data", "createConversation", "errors")).to be_nil
+          expect(result.dig("data", "createConversation", "conversations").count).to eq 1
+        end
+      end
+
+      context "does not allow sending options that will send as a group message" do
+        it "rejects differentiation tag conversation when group_conversation is true and bulk_message is false" do
+          result = run_mutation({ recipients: ["differentiation_tag_#{@ncg.id}"], body: "test", group_conversation: true, bulk_message: false, context_code: @course.asset_string }, @teacher)
+          expect(result.dig("data", "createConversation", "errors")).not_to be_nil
+        end
+
+        it "rejects group conversation when group_conversation is true and bulk_message is false" do
+          result = run_mutation({ recipients: ["group_#{@ncg.id}"], body: "test", group_conversation: true, bulk_message: false, context_code: @course.asset_string }, @teacher)
+          expect(result.dig("data", "createConversation", "errors")).not_to be_nil
+        end
+
+        it "returns validation error for non-collaborative group when group_conversation is true without bulk_message" do
+          result = run_mutation({ recipients: ["group_#{@ncg.id}"], body: "test", group_conversation: true, context_code: @course.asset_string }, @teacher)
+          expect(result.dig("data", "createConversation", "conversations")).to be_nil
+          expect(result.dig("data", "createConversation", "errors", 0, "message")).to eq "Group conversation for differentiation tags not allowed"
+        end
+      end
+    end
+
+    it "returns a validation error when sending to a non-collaborative group as someone without GRANULAR_MANAGE_TAGS permission" do
+      %i[manage_tags_add manage_tags_manage manage_tags_delete].each do |permission|
+        @course.account.role_overrides.create!(
+          permission:,
+          role: teacher_role,
+          enabled: false
+        )
+      end
+      result = run_mutation({ recipients: ["group_#{@ncg.id}"], body: "test", group_conversation: false, context_code: @course.asset_string }, @teacher)
+      expect(result.dig("data", "createConversation", "conversations")).to be_nil
+      expect(result.dig("data", "createConversation", "errors", 0, "message")).to eq "Insufficient permissions for differentiation tags"
+    end
+
+    it "runs successfully even when recipients include a discussion_topic" do
+      dt = @course.discussion_topics.create!(title: "discussion topic")
+      result = run_mutation({ recipients: ["discussion_topic_#{dt.id}", "group_#{@ncg.id}"], body: "test", group_conversation: false, context_code: @course.asset_string }, @teacher)
+      expect(result.dig("data", "createConversation", "errors")).to be_nil
+      expect(result.dig("data", "createConversation", "conversations").count).to eq 2
+    end
+  end
+
   context "group conversations" do
     before(:once) do
       @old_count = Conversation.count
@@ -457,15 +535,15 @@ RSpec.describe Mutations::CreateConversation do
       @student.media_objects.where(media_id: "m-whatever", media_type: "video/mp4").first_or_create!
 
       run_mutation(recipients: [@new_user1.id.to_s, @new_user2.id.to_s], subject: "yo 1", group_conversation: true, bulk_message: true, context_code: @course.asset_string, media_comment_id: "m-whatever", media_comment_type: "video")
-      expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.conversation.sent.individual_message_option.react")
-      expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.conversation.sent.react")
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("inbox.conversation.sent.individual_message_option.react")
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("inbox.conversation.sent.react")
       expect(InstStatsd::Statsd).to have_received(:count).with("inbox.message.sent.recipients.react", 2)
-      expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.message.sent.media.react")
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("inbox.message.sent.media.react")
       run_mutation(recipients: [@new_user1.id.to_s, @new_user2.id.to_s], subject: "yo 2", group_conversation: true, bulk_message: true, context_code: @course.asset_string, media_comment_id: "m-whatever", media_comment_type: "video")
       expect(InstStatsd::Statsd).to have_received(:count).with("inbox.conversation.created.react", 2).at_least(:twice)
-      expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.message.sent.react").at_least(:twice)
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("inbox.message.sent.react").at_least(:twice)
       expect(InstStatsd::Statsd).to have_received(:count).with("inbox.message.sent.recipients.react", 2).at_least(:twice)
-      expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.message.sent.media.react").at_least(:twice)
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("inbox.message.sent.media.react").at_least(:twice)
       expect(Conversation.count).to eql(@old_count + 4)
       result = user_type.resolve("conversationsConnection(scope: \"sent\") { nodes { conversation { subject } } }")
       expect(result).to match(["yo 2", "yo 2", "yo 1", "yo 1"])
@@ -522,7 +600,7 @@ RSpec.describe Mutations::CreateConversation do
       expect(
         result.dig("data", "createConversation", "conversations", 0, "conversation", "conversationMessagesConnection", "nodes", 0, "body")
       ).to eql "foo"
-      expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.conversation.sent.account_context.react")
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("inbox.conversation.sent.account_context.react")
     end
   end
 end

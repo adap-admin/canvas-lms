@@ -32,6 +32,12 @@
     "additional_considerations_f3801683": {
         "message": "Ulteriori considerazioni"
     },
+    "address_applied_64269b0b": {
+        "message": "Indirizzo applicato"
+    },
+    "address_removed_fcb496e0": {
+        "message": "Indirizzo rimosso"
+    },
     "adjacent_links_with_the_same_url_should_be_a_singl_7a1f7f6c": {
         "message": "I link adiacenti con lo stesso URL devono essere un singolo link."
     },
@@ -167,6 +173,9 @@
     "available_folders_694d0436": {
         "message": "Cartelle disponibili"
     },
+    "background_1bc88842": {
+        "message": "Sfondo"
+    },
     "backslash_b2d5442d": {
         "message": "Barra rovesciata"
     },
@@ -199,6 +208,15 @@
     },
     "blue_daf8fea9": {
         "message": "Blu"
+    },
+    "bold_applied_42d547b7": {
+        "message": "Grassetto applicato"
+    },
+    "bold_removed_da474a5c": {
+        "message": "Grassetto rimosso"
+    },
+    "border_5b08b06d": {
+        "message": "Bordo"
     },
     "bottom_15a2a9be": {
         "message": "In fondo"
@@ -341,11 +359,23 @@
     "collapse_to_hide_types_1ab46d2e": {
         "message": "Riduci per nascondere { types }"
     },
+    "color_a363e1b0": {
+        "message": "Colore"
+    },
+    "color_contrast_4c418add": {
+        "message": "Contrasto colore"
+    },
+    "color_contrast_ratio_687782f0": {
+        "message": "Rapporto contrasto colore"
+    },
     "color_picker_6b359edf": {
         "message": "Selettore colori"
     },
     "color_picker_colorname_selected_ad4cf400": {
         "message": "Selettore colori ({ colorName } selezionato/i)"
+    },
+    "color_popup_af39810f": {
+        "message": "Popup colore"
     },
     "column_e1ae5c64": {
         "message": "Colonna"
@@ -494,6 +524,9 @@
     "deep_purple_bb3e2907": {
         "message": "Viola scuro"
     },
+    "default_9db103d": {
+        "message": "Impostazione predefinita"
+    },
     "default_bulleted_unordered_list_47079da8": {
         "message": "elenco non ordinato puntato predefinito"
     },
@@ -574,6 +607,12 @@
     },
     "display_text_link_opens_in_a_new_tab_75e9afc9": {
         "message": "Visualizza collegamento testuale (Si apre in una nuova scheda)"
+    },
+    "div_applied_49ad83fc": {
+        "message": "Div applicata"
+    },
+    "div_removed_d13f8e17": {
+        "message": "Div rimossa"
     },
     "division_sign_72190870": {
         "message": "Segno della divisione"
@@ -779,6 +818,9 @@
     "f_function_fe422d65": {
         "message": "F (funzione)"
     },
+    "fail_544e5dde": {
+        "message": "ERRORE"
+    },
     "failed_getting_file_contents_e9ea19f4": {
         "message": "Impossibile ottenere contenuto file"
     },
@@ -896,6 +938,9 @@
     "grades_a61eba0a": {
         "message": "Voti"
     },
+    "graphics_text_bc9568bc": {
+        "message": "Testo immagine"
+    },
     "greater_than_e98af662": {
         "message": "Maggiore di"
     },
@@ -964,6 +1009,12 @@
     },
     "heading_4_b2e74be7": {
         "message": "Intestazione 4"
+    },
+    "heading_h_applied_eccd294d": {
+        "message": "Intestazione { h } applicata"
+    },
+    "heading_h_removed_745f24a6": {
+        "message": "Intestazione { h } rimossa"
     },
     "heading_levels_should_not_be_skipped_3947c0e0": {
         "message": "I livelli di intestazione non devono essere ignorati."
@@ -1121,6 +1172,18 @@
     "infinity_7a10f206": {
         "message": "Infinità"
     },
+    "input_field_for_alpha_678265fd": {
+        "message": "Campo di inserimento per testo"
+    },
+    "input_field_for_blue_561e020a": {
+        "message": "Campo di inserimento per blu"
+    },
+    "input_field_for_green_67f8b2b6": {
+        "message": "Campo di inserimento per verde"
+    },
+    "input_field_for_red_86a84615": {
+        "message": "Campo di inserimento per rosso"
+    },
     "insert_593145ef": {
         "message": "Inserisci"
     },
@@ -1135,6 +1198,9 @@
     },
     "intersection_cd4590e4": {
         "message": "Intersezione"
+    },
+    "invalid_description_991e23bb": {
+        "message": "Descrizione non valida"
     },
     "invalid_entry_f7d2a0f5": {
         "message": "Voce non valida."
@@ -1159,6 +1225,12 @@
     },
     "italian_bd3c792d": {
         "message": "Italiano"
+    },
+    "italic_applied_8f59a684": {
+        "message": "Corsivo applicato"
+    },
+    "italic_removed_17cbab6f": {
+        "message": "Corsivo rimosso"
     },
     "japanese_b5721ca7": {
         "message": "Giapponese"
@@ -1189,6 +1261,9 @@
     },
     "large_9c5e80e7": {
         "message": "Grande"
+    },
+    "large_text_e7ba08cd": {
+        "message": "Testo grande"
     },
     "latvian_2bbb6aab": {
         "message": "Lettone"
@@ -1442,12 +1517,6 @@
     "music_icon_4db5c972": {
         "message": "Icona Musica"
     },
-    "must_be_at_least_percentage_22e373b6": {
-        "message": "Deve essere almeno { percentage }%"
-    },
-    "must_be_at_least_width_x_height_px_41dc825e": {
-        "message": "Deve essere almeno { width } x { height }px"
-    },
     "my_files_2f621040": {
         "message": "I miei file"
     },
@@ -1562,6 +1631,9 @@
     "none_selected_b93d56d2": {
         "message": "Nessuna selezionata"
     },
+    "normal_text_7b03da48": {
+        "message": "Testo normale"
+    },
     "norwegian_53f391ec": {
         "message": "Norvegese"
     },
@@ -1640,8 +1712,8 @@
     "outline_size_a6059a21": {
         "message": "Dimensione struttura"
     },
-    "p_is_not_a_valid_protocol_which_must_be_ftp_http_h_adf13fc2": {
-        "message": "{ p } Non è un protocollo valido che deve essere ftp, http, https, mailto, skype, tel oppure può essere omesso"
+    "p_is_not_a_valid_protocol_b1c4efaa": {
+        "message": "{ p } non è un protocollo valido."
     },
     "page_50c4823d": {
         "message": "Pagina"
@@ -1652,6 +1724,12 @@
     "paragraph_5e5ad8eb": {
         "message": "Paragrafo"
     },
+    "paragraph_applied_959b3fe5": {
+        "message": "Paragrafo applicato"
+    },
+    "paragraph_removed_d09320e": {
+        "message": "Paragrafo rimosso"
+    },
     "paragraph_starting_with_start_a59923f8": {
         "message": "Paragrafo che inizia con { start }"
     },
@@ -1660,6 +1738,9 @@
     },
     "partial_derivative_4a9159df": {
         "message": "Parziale (derivato)"
+    },
+    "pass_1c19a2b3": {
+        "message": "SUPERATO"
     },
     "paste_5963d1c1": {
         "message": "Incolla"
@@ -1678,6 +1759,9 @@
     },
     "percentage_must_be_a_number_8033c341": {
         "message": "La percentuale dev’essere un numero"
+    },
+    "percentage_must_be_at_least_percentage_a98ca8fc": {
+        "message": "La percentuale deve essere almeno { percentage }%"
     },
     "performing_arts_icon_f3497486": {
         "message": "Icona Arti dello spettacolo"
@@ -1703,11 +1787,17 @@
     "pi_variant_10f5f520": {
         "message": "Pi (variante)"
     },
+    "pick_a_color_557abfb0": {
+        "message": "Scegli un colore"
+    },
     "pink_68ad45cb": {
         "message": "Rosa"
     },
     "pixels_52ece7d1": {
         "message": "Pixel"
+    },
+    "pixels_must_be_at_least_width_x_height_px_e965edd5": {
+        "message": "I pixel devono essere almeno { width } x { height } px"
     },
     "play_1a47eaa7": {
         "message": "Riproduci"
@@ -1721,8 +1811,17 @@
     "please_allow_canvas_to_access_your_microphone_and__dc2c3079": {
         "message": "Consenti a Canvas di accedere al tuo microfono e alla tua webcam."
     },
+    "please_choose_a_file_c2449cc": {
+        "message": "Scegliere un file"
+    },
     "please_decribe_what_you_would_like_to_compose_27a51be5": {
         "message": "Descrivi cosa vorresti scrivere."
+    },
+    "please_enter_a_file_name_f159edc1": {
+        "message": "Inserire un nome file"
+    },
+    "please_select_a_file_of_a_supported_type_1fc578f2": {
+        "message": "Selezionare un tipo di file supportato"
     },
     "plus_d43cd4ec": {
         "message": "Più"
@@ -1774,6 +1873,9 @@
     },
     "previous_findtext_8dfbfd30": {
         "message": "Precedente { findText }"
+    },
+    "previously_chosen_colors_f1338315": {
+        "message": "Colori scelti in precedenza"
     },
     "prime_917ea60e": {
         "message": "Primo"
@@ -2306,9 +2408,6 @@
     "the_first_heading_on_a_page_should_be_an_h2_859089f2": {
         "message": "La prima intestazione su una pagina deve essere H2."
     },
-    "the_following_content_is_partner_provided_ed1da756": {
-        "message": "I contenuti seguenti sono forniti dal partner"
-    },
     "the_material_is_in_the_public_domain_279c39a3": {
         "message": "Il materiale è nel dominio pubblico"
     },
@@ -2317,9 +2416,6 @@
     },
     "the_material_is_subject_to_an_exception_e_g_fair_u_a39c8ca2": {
         "message": "Il materiale è soggetto a eccezioni, per es. l’uso equo, il diritto di citare o altre in base alle leggi applicabili sul diritto d’autore"
-    },
-    "the_preceding_content_is_partner_provided_d753928c": {
-        "message": "I contenuti precedenti sono forniti dal partner"
     },
     "the_pretty_html_editor_is_not_keyboard_accessible__d6d5d2b": {
         "message": "L’editor html sicuro non è accessibile dalla tastiera. Premere Maiusc+O per aprire l’editor html non elaborato."
@@ -2416,6 +2512,12 @@
     },
     "unable_to_determine_resource_selection_url_7867e060": {
         "message": "Impossibile determinare l’URL di selezione risorsa"
+    },
+    "underline_applied_ae01ec97": {
+        "message": "Sottolineatura applicata"
+    },
+    "underline_removed_3693e17c": {
+        "message": "Sottolineatura rimossa"
     },
     "union_e6b57a53": {
         "message": "Unione"
@@ -2674,6 +2776,15 @@
     },
     "yiddish_f96986df": {
         "message": "Yiddish"
+    },
+    "you_are_on_a_color_palette_to_navigate_on_the_pale_227fc3a6": {
+        "message": "Hai visualizzato una palette di colori. Per navigare sulla palette in su, a sinistra, in giù o a destra, utilizzare rispettivamente i pulsanti “W”, “A”, “S” e “D”"
+    },
+    "you_are_on_a_color_slider_to_navigate_the_slider_l_e800f68a": {
+        "message": "Hai visualizzato un cursore di colori. Per navigare sul cursore a sinistra o a destra, utilizzare rispettivamente i pulsanti “A” e “D”"
+    },
+    "you_are_on_an_alpha_slider_to_navigate_the_slider__3a014dc5": {
+        "message": "Hai visualizzato un cursore testo. Per navigare sul cursore a sinistra o a destra, utilizzare rispettivamente i pulsanti “A” e “D”"
     },
     "you_can_replace_by_uploading_a_new_caption_file_6c88ce00": {
         "message": "Puoi sostituirli caricando un nuovo file dei sottotitoli."

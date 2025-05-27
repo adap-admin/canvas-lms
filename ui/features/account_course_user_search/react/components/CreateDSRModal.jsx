@@ -26,17 +26,19 @@ import {TextInput} from '@instructure/ui-text-input'
 import {RadioInputGroup, RadioInput} from '@instructure/ui-radio-input'
 import {View} from '@instructure/ui-view'
 import {Flex} from '@instructure/ui-flex'
+import {Tooltip} from '@instructure/ui-tooltip'
 
 import update from 'immutability-helper'
 import {get, isEmpty} from 'lodash'
 import axios from '@canvas/axios'
+import {datetimeString} from '@canvas/datetime/date-functions'
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import preventDefault from '@canvas/util/preventDefault'
 import unflatten from 'obj-unflatten'
 import Modal from '@canvas/instui-bindings/react/InstuiModal'
 
-const I18n = useI18nScope('account_course_user_search')
+const I18n = createI18nScope('account_course_user_search')
 
 const initialState = {
   open: false,
@@ -65,6 +67,8 @@ export default class CreateDSRModal extends React.Component {
 
   state = {...initialState}
 
+  requestRef = React.createRef()
+
   UNSAFE_componentWillMount() {
     this.setState(
       update(this.state, {
@@ -77,8 +81,28 @@ export default class CreateDSRModal extends React.Component {
             request_output: 'xlsx',
           },
         },
-      })
+      }),
     )
+  }
+
+  creationDisabled = () => {
+    const {expires_at, progress_status} = this.state.latestRequest || {}
+    return (
+      progress_status === 'running' ||
+      progress_status === 'queued' ||
+      expires_at > new Date().toISOString()
+    )
+  }
+
+  disabledText = () => {
+    const {expires_at, progress_status} = this.state.latestRequest || {}
+    if (progress_status === 'running' || progress_status === 'queued') {
+      return I18n.t('A request is already in progress')
+    } else {
+      return I18n.t('The previous request expires %{expires_at}', {
+        expires_at: datetimeString(expires_at),
+      })
+    }
   }
 
   componentDidUpdate(_prevProps, prevState) {
@@ -99,16 +123,19 @@ export default class CreateDSRModal extends React.Component {
       },
       () => {
         // do nothing
-      }
+      },
     )
   }
 
   onChange = (field, value) => {
     this.setState(prevState => {
-      const newState = update(prevState, {
+      let newState = update(prevState, {
         data: unflatten({[field]: {$set: value}}),
         errors: {$set: {}},
       })
+      if (value === "" || value === undefined) {
+        newState = update(newState, {errors: {[field]: {$set: [I18n.t('Request name is required')]}}})
+      }
       return newState
     })
   }
@@ -116,10 +143,13 @@ export default class CreateDSRModal extends React.Component {
   close = () => this.setState({open: false})
 
   onSubmit = () => {
-    if (!isEmpty(this.state.errors)) return
+    if (!isEmpty(this.state.errors)) {
+      this.requestRef.current.focus()
+      return
+    }
     const url = `/api/v1/accounts/${this.props.accountId}/users/${this.props.user.id}/dsr_request`
     const method = 'POST'
-    // eslint-disable-next-line promise/catch-or-return
+
     axios({url, method, data: this.state.data}).then(
       response => {
         const dsr_request = response.data
@@ -127,8 +157,8 @@ export default class CreateDSRModal extends React.Component {
         $.flashMessage(
           I18n.t(
             'DSR Request *%{request_name}* was created successfully! You will receive an email upon completion.',
-            {request_name}
-          )
+            {request_name},
+          ),
         )
 
         this.setState({...initialState})
@@ -138,10 +168,10 @@ export default class CreateDSRModal extends React.Component {
         $.flashError(I18n.t('Something went wrong creating the DSR request.'))
         this.setState({
           errors: {
-            request_name: ['Invalid request name'],
+            request_name: [I18n.t('Invalid request name')],
           },
         })
-      }
+      },
     )
   }
 
@@ -149,19 +179,15 @@ export default class CreateDSRModal extends React.Component {
     switch (this.state.latestRequest.progress_status) {
       case 'completed':
         return (
-          <a
-            href={this.state.latestRequest.download_url}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+          <a href={this.state.latestRequest.download_url} target="_blank" rel="noopener noreferrer">
             {this.state.latestRequest.request_name}{' '}
             <IconCloudDownloadLine title={I18n.t('Download')} />
           </a>
-        );
+        )
       case 'failed':
-        return <Text>{I18n.t('Failed')}</Text>;
+        return <Text>{I18n.t('Failed')}</Text>
       default:
-        return <Text>{I18n.t('In progress')}</Text>;
+        return <Text>{I18n.t('In progress')}</Text>
     }
   }
 
@@ -169,41 +195,34 @@ export default class CreateDSRModal extends React.Component {
     <span>
       <Modal
         as="form"
+        noValidate={true}
         onSubmit={preventDefault(this.onSubmit)}
         open={this.state.open}
         onDismiss={this.close}
         size="medium"
-        label={I18n.t('Create DSR Request')}
+        label={I18n.t('Create Data Subject Request (DSR)')}
       >
         <Modal.Body>
           <Flex direction="column">
             <Flex.Item padding="small medium">
               <TextInput
                 key="request_name"
-                renderLabel={
-                  <div style={{textAlign: "left"}}>
-                    {I18n.t('DSR Request Name')} <Text color="danger"> *</Text>
-                  </div>
-                }
+                ref={this.requestRef}
+                renderLabel={I18n.t('DSR Request Name')}
                 label={I18n.t('DSR Request Name')}
                 data-testid={I18n.t('DSR Request Name')}
                 value={get(this.state.data, 'request_name')?.toString() ?? ''}
                 onChange={e => this.onChange('request_name', e.target.value)}
                 isRequired={true}
-                layout="inline"
                 messages={(this.state.errors.request_name || [])
-                  .map(errMsg => ({type: 'error', text: errMsg}))
-                  .concat({
-                    type: 'hint',
-                    text: I18n.t('This is a a common tracking ID for DSR requests.'),
-                  })
+                  .map(errMsg => ({type: 'newError', text: errMsg}))
                   .filter(Boolean)}
               />
             </Flex.Item>
-            <Flex.Item as="div" padding="0 medium">
+            <Flex.Item as="div" padding="medium medium 0 medium">
               <RadioInputGroup
                 name="request_output"
-                description="Output Format"
+                description={I18n.t('Output Format')}
                 layout="columns"
                 value={get(this.state.data, 'request_output')?.toString() ?? ''}
                 onChange={e => this.onChange('request_output', e.target.value)}
@@ -224,19 +243,28 @@ export default class CreateDSRModal extends React.Component {
         </Modal.Body>
         <Modal.Footer>
           <Button onClick={this.close}>{I18n.t('Cancel')}</Button> &nbsp;
-          <Button type="submit" color="primary">
-            {I18n.t('Create')}
-          </Button>
+          <Tooltip
+            renderTip={this.disabledText()}
+            on={this.creationDisabled() ? ['hover', 'focus'] : []}
+          >
+            <Button
+              type="submit"
+              color="primary"
+              disabled={this.creationDisabled()}
+              data-testid="submit-button"
+            >
+              {I18n.t('Create')}
+            </Button>
+          </Tooltip>
         </Modal.Footer>
       </Modal>
       {React.Children.map(this.props.children, child =>
         // when you click whatever is the child element to this, open the modal
         React.cloneElement(child, {
-          onClick: (...args) => {
-            if (child.props.onClick) child.props.onClick(...args)
+          onClick: () => {
             this.setState({open: true})
           },
-        })
+        }),
       )}
     </span>
   )

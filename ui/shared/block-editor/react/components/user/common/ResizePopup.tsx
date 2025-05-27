@@ -26,11 +26,12 @@ import {ScreenReaderContent} from '@instructure/ui-a11y-content'
 import {View} from '@instructure/ui-view'
 import {IconResize} from '../../../assets/internal-icons'
 import {getAspectRatio} from '../../../utils'
-import {ImageSizeVariant} from '../blocks/ImageBlock/types'
+// @ts-expect-error
+import type {ImageSizeVariant} from '../blocks/ImageBlock/types'
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 
-const I18n = useI18nScope('block-editor/image-block')
+const I18n = createI18nScope('block-editor')
 
 type ResizePopupProps = {
   width: number
@@ -78,7 +79,7 @@ const ResizePopup = ({
         setHeightValue(h)
       }
     },
-    [aspectRatio, maintainAspectRatio]
+    [aspectRatio, maintainAspectRatio],
   )
 
   const handleChangeHeight = useCallback(
@@ -90,14 +91,14 @@ const ResizePopup = ({
         setWidthValue(w)
       }
     },
-    [aspectRatio, maintainAspectRatio]
+    [aspectRatio, maintainAspectRatio],
   )
 
   const handleSizeVariantChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>, value: string) => {
       setSizeVariantValue(value as ImageSizeVariant)
     },
-    []
+    [],
   )
 
   const setImageSize = useCallback(() => {
@@ -113,6 +114,7 @@ const ResizePopup = ({
           withBackground={false}
           withBorder={false}
           screenReaderLabel={I18n.t('Image Size')}
+          title={I18n.t('Image Size')}
         >
           <IconResize size="x-small" />
         </IconButton>

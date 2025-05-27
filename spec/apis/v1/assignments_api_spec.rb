@@ -184,7 +184,7 @@ describe AssignmentsApiController, type: :request do
 
     describe "checkpoints in-place" do
       before do
-        @course.root_account.enable_feature!(:discussion_checkpoints)
+        @course.account.enable_feature!(:discussion_checkpoints)
 
         assignment = @course.assignments.create!(title: "Assignment 1", has_sub_assignments: true)
         @c1 = assignment.sub_assignments.create!(context: assignment.context, sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC, points_possible: 5, due_at: 3.days.from_now)
@@ -1740,7 +1740,7 @@ describe AssignmentsApiController, type: :request do
     describe "checkpoints in-place" do
       before do
         course_with_teacher(active_all: true)
-        @course.root_account.enable_feature!(:discussion_checkpoints)
+        @course.account.enable_feature!(:discussion_checkpoints)
 
         assignment = @course.assignments.create!(title: "Assignment 1", has_sub_assignments: true)
         @c1 = assignment.sub_assignments.create!(context: assignment.context, sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC, points_possible: 5, due_at: 3.days.from_now)
@@ -2707,7 +2707,7 @@ describe AssignmentsApiController, type: :request do
       context "when no tool association exists" do
         let(:assignment) { assignment_model(course: @course) }
         let(:update_response) do
-          put "/api/v1/courses/#{@course.id}/assignments/#{assignment.id}", params: {
+          put "/api/v1/courses/#{assignment.course.id}/assignments/#{assignment.id}", params: {
             assignment: { name: "banana" }
           }
         end
@@ -2726,7 +2726,7 @@ describe AssignmentsApiController, type: :request do
           a
         end
         let(:update_response) do
-          put "/api/v1/courses/#{@course.id}/assignments/#{assignment.id}", params:
+          put "/api/v1/courses/#{assignment.course.id}/assignments/#{assignment.id}", params:
         end
         let(:lookups) { assignment.assignment_configuration_tool_lookups }
 
@@ -2774,6 +2774,16 @@ describe AssignmentsApiController, type: :request do
           it "does not attempt to clear tool associations" do
             expect(assignment).not_to receive(:clear_tool_settings_tools)
             update_response
+          end
+
+          it "does not delete asset processors" do
+            ap = assignment.lti_asset_processors.create!(
+              context_external_tool: external_tool_1_3_model
+            )
+            assignment.update! submission_types: "online_upload"
+
+            update_response
+            expect(ap.reload.workflow_state).to eq("active")
           end
         end
 
@@ -3316,7 +3326,7 @@ describe AssignmentsApiController, type: :request do
         @ta.register!
         @ta.communication_channels.create(path: "ta@instructure.com").confirm!
 
-        @override_due_at = Time.parse("2002 Jun 22 12:00:00")
+        @override_due_at = Time.zone.parse("2002 Jun 22 12:00:00")
 
         @user = @teacher
         json = api_call(:post,
@@ -4488,7 +4498,7 @@ describe AssignmentsApiController, type: :request do
                                                   position: 2,
                                                   peer_review_count: 2,
                                                   peer_reviews: true,
-                                                  peer_reviews_due_at: Time.now,
+                                                  peer_reviews_due_at: Time.zone.now,
                                                   grading_type: "percent",
                                                   due_at: nil)
         @assignment.assignment_group = @start_group
@@ -5994,7 +6004,7 @@ describe AssignmentsApiController, type: :request do
 
     describe "checkpoints in-place" do
       before do
-        @course.root_account.enable_feature!(:discussion_checkpoints)
+        @course.account.enable_feature!(:discussion_checkpoints)
 
         @assignment = @course.assignments.create!(title: "Assignment 1", has_sub_assignments: true)
         @c1 = @assignment.sub_assignments.create!(context: @assignment.context, sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC, points_possible: 5, due_at: 3.days.from_now)
@@ -7400,7 +7410,7 @@ describe AssignmentsApiController, type: :request do
       @new_dates = (7..9).map { |x| x.days.from_now }
     end
 
-    it "requires manage_assignments rights" do
+    it "requires manage_assignments_edit rights" do
       student_in_course(active_all: true)
       api_bulk_update(@course, [], expected_status: 403)
     end

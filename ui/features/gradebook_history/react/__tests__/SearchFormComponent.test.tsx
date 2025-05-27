@@ -21,7 +21,7 @@ import {shallow} from 'enzyme'
 import {render} from '@testing-library/react'
 import {SearchFormComponent} from '../SearchForm'
 import {Button} from '@instructure/ui-buttons'
-import CanvasDateInput from '@canvas/datetime/react/components/DateInput'
+import CanvasDateInput2 from '@canvas/datetime/react/components/DateInput2'
 import CanvasAsyncSelect from '@canvas/instui-bindings/react/AsyncSelect'
 import {FormFieldGroup} from '@instructure/ui-form-field'
 import Fixtures from './Fixtures'
@@ -55,7 +55,6 @@ liveRegion.setAttribute('role', 'alert')
 document.body.appendChild(liveRegion)
 
 const mountComponent = (props = {}) =>
-  // @ts-expect-error
   shallow(<SearchFormComponent {...defaultProps()} {...props} />)
 
 describe('SearchForm', () => {
@@ -87,9 +86,9 @@ describe('SearchForm', () => {
   })
 
   test('has date pickers for from date and to date', function () {
-    const inputs = wrapper.find(CanvasDateInput)
-    expect(inputs.length).toBe(2)
-    expect(inputs.every(CanvasDateInput)).toBeTruthy()
+    const inputs = wrapper.find(CanvasDateInput2)
+    expect(inputs).toHaveLength(2)
+    expect(inputs.every(CanvasDateInput2)).toBeTruthy()
   })
 
   test('has a Button for submitting', function () {
@@ -107,7 +106,7 @@ describe('SearchForm', () => {
       () => {
         const button = wrapper.find(Button)
         expect(button.props().disabled).toBeTruthy()
-      }
+      },
     )
   })
 
@@ -122,7 +121,7 @@ describe('SearchForm', () => {
       () => {
         const button = wrapper.find(Button)
         expect(button.props().disabled).toBeFalsy()
-      }
+      },
     )
   })
 
@@ -145,7 +144,7 @@ describe('SearchForm', () => {
       () => {
         const button = wrapper.find(Button)
         expect(button.props().disabled).toBeFalsy()
-      }
+      },
     )
   })
 
@@ -160,7 +159,7 @@ describe('SearchForm', () => {
       () => {
         const button = wrapper.find(Button)
         expect(button.props().disabled).toBeFalsy()
-      }
+      },
     )
   })
 
@@ -192,7 +191,7 @@ describe('SearchForm', () => {
         () => {
           wrapper.find(Button).simulate('click')
           expect(props.getGradebookHistory).toHaveBeenCalledWith(selected)
-        }
+        },
       )
     })
 
@@ -362,7 +361,7 @@ describe('SearchForm', () => {
         describe('when the OVERRIDE_GRADES_ENABLED environment variable is set to true', () => {
           const clickOverrideGradeCheckbox = (_wrapper: any) => {
             const overrides = _wrapper.container.querySelectorAll(
-              '#show_final_grade_overrides_only'
+              '#show_final_grade_overrides_only',
             )
             overrides[overrides.length - 1].click()
           }
@@ -395,7 +394,7 @@ describe('SearchForm', () => {
           test('is shown', () => {
             const _wrapper = fullMount()
             expect(
-              _wrapper.container.querySelector('#show_final_grade_overrides_only')
+              _wrapper.container.querySelector('#show_final_grade_overrides_only'),
             ).toBeTruthy()
           })
 

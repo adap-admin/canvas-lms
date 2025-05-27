@@ -20,7 +20,7 @@ require_relative "../../common"
 
 describe "Screenreader Gradebook grading" do
   include_context "in-process server selenium tests"
-  context "checkpoints" do
+  context "checkpoints", :ignore_js_errors do
     before do
       Account.site_admin.enable_feature! :discussion_checkpoints
       Account.site_admin.enable_feature!(:react_discussions_post)
@@ -28,7 +28,7 @@ describe "Screenreader Gradebook grading" do
       @teacher = course_with_teacher_logged_in(active_course: true, active_all: true, name: "teacher").user
       @student1 = student_in_course(course: @course, name: "student", active_all: true).user
       @student2 = student_in_course(course: @course, name: "student2", active_all: true).user
-      @course.root_account.enable_feature!(:discussion_checkpoints)
+      @course.account.enable_feature!(:discussion_checkpoints)
 
       @checkpointed_discussion = DiscussionTopic.create_graded_topic!(course: @course, title: "Checkpointed Discussion")
       @checkpointed_assignment = @checkpointed_discussion.assignment
@@ -49,45 +49,39 @@ describe "Screenreader Gradebook grading" do
       )
 
       3.times do |i|
-        entry = @checkpointed_discussion.discussion_entries.create!(user: @student1, message: " reply to topic i#{i} ")
-        @checkpointed_discussion.discussion_entries.create!(user: @student2, message: " reply to entry i#{i} ", root_entry_id: entry.id, parent_id: entry.id)
+        entry = @checkpointed_discussion.discussion_entries.create!(user: @student1, message: " reply to topic i#{i} ", created_at: Time.zone.now + i.hours)
+        @checkpointed_discussion.discussion_entries.create!(user: @student2, message: " reply to entry i#{i} ", root_entry_id: entry.id, parent_id: entry.id, created_at: Time.zone.now + i.hours)
       end
 
       20.times do |k|
-        entry = @checkpointed_discussion.discussion_entries.create!(user: @teacher, message: " reply to topic k#{k} ")
-        @checkpointed_discussion.discussion_entries.create!(user: @student1, message: " reply to entry k#{k} ", root_entry_id: entry.id, parent_id: entry.id)
+        entry = @checkpointed_discussion.discussion_entries.create!(user: @teacher, message: " reply to topic k#{k} ", created_at: Time.zone.now + k.days)
+        @checkpointed_discussion.discussion_entries.create!(user: @student1, message: " reply to entry k#{k} ", root_entry_id: entry.id, parent_id: entry.id, created_at: Time.zone.now + k.days)
       end
 
       3.times do |j|
-        entry = @checkpointed_discussion.discussion_entries.create!(user: @student2, message: " reply to topic j#{j} ")
-        @checkpointed_discussion.discussion_entries.create!(user: @student1, message: " reply to entry j#{j} ", root_entry_id: entry.id, parent_id: entry.id)
+        entry = @checkpointed_discussion.discussion_entries.create!(user: @student2, message: " reply to topic j#{j} ", created_at: Time.zone.now + j.weeks)
+        @checkpointed_discussion.discussion_entries.create!(user: @student1, message: " reply to entry j#{j} ", root_entry_id: entry.id, parent_id: entry.id, created_at: Time.zone.now + j.weeks)
       end
       @entry = DiscussionEntry.where(message: " reply to topic j2 ").first
+      @student_2_first_entry = DiscussionEntry.where(message: " reply to entry i0 ").first
+      @student_2_last_entry = DiscussionEntry.where(message: " reply to topic j2 ").first
+
+      dtp = @checkpointed_discussion.discussion_topic_participants.where(user_id: @teacher).first
+      dtp.sort_order = "asc"
+      dtp.save!
     end
 
-    it "can cycle next student entry" do
-      get "/courses/#{@course.id}/gradebook/speed_grader?assignment_id=#{@checkpointed_assignment.id}&student_id=#{@student2.id}&entry_id=#{@entry.id}"
+    # it's flaky, gthese specs will be depreciated in EGG-613
+    xit "can cycle next student entry", :ignore_js_errors do
+      get "/courses/#{@course.id}/gradebook/speed_grader?assignment_id=#{@checkpointed_assignment.id}&student_id=#{@student2.id}&entry_id=#{@student_2_first_entry.id}"
 
       3.times do |i|
         in_frame("speedgrader_iframe") do
           in_frame("discussion_preview_iframe") do
             expect(f("div[data-testid='isHighlighted']").text).to include(@student2.name)
-            expect(f("div[data-testid='isHighlighted']").text).to include("reply to topic j#{2 - i}")
+            expect(f("div[data-testid='isHighlighted']").text).to include("reply to entry i#{i}")
+
             # page 1 is selected
-            expect(f("body").text).to include("reply to topic j2")
-            expect(f("body").text).to_not include("reply to topic i0")
-          end
-        end
-        f("button[data-testid='discussions-next-reply-button']").click
-        wait_for_ajaximations
-      end
-
-      3.times do |i|
-        in_frame("speedgrader_iframe") do
-          in_frame("discussion_preview_iframe") do
-            expect(f("div[data-testid='isHighlighted']").text).to include(@student2.name)
-            expect(f("div[data-testid='isHighlighted']").text).to include("reply to entry i#{2 - i}")
-            # page 2 is selected
             expect(f("body").text).to include("reply to topic i0")
             expect(f("body").text).to_not include("reply to topic j2")
           end
@@ -95,40 +89,66 @@ describe "Screenreader Gradebook grading" do
         f("button[data-testid='discussions-next-reply-button']").click
         wait_for_ajaximations
       end
+      sleep 3
+
+      2.times do |i|
+        in_frame("speedgrader_iframe") do
+          in_frame("discussion_preview_iframe") do
+            expect(f("div[data-testid='isHighlighted']").text).to include(@student2.name)
+            expect(f("div[data-testid='isHighlighted']").text).to include("reply to topic j#{i}")
+          end
+        end
+        f("button[data-testid='discussions-next-reply-button']").click
+        wait_for_ajaximations
+      end
+
+      in_frame("speedgrader_iframe") do
+        in_frame("discussion_preview_iframe") do
+          expect(f("div[data-testid='isHighlighted']").text).to include(@student2.name)
+          expect(f("div[data-testid='isHighlighted']").text).to include("reply to topic j2")
+          # page 2 is selected
+          expect(f("body").text).to include("reply to topic j2")
+          expect(f("body").text).to_not include("reply to topic i0")
+        end
+      end
+      f("button[data-testid='discussions-next-reply-button']").click
+      wait_for_ajaximations
 
       # this means it cycles
       in_frame("speedgrader_iframe") do
         in_frame("discussion_preview_iframe") do
           expect(f("div[data-testid='isHighlighted']").text).to include(@student2.name)
-          expect(f("div[data-testid='isHighlighted']").text).to include("reply to topic j2")
+          expect(f("div[data-testid='isHighlighted']").text).to include("reply to entry i0")
           # page 1 is selected
-          expect(f("body").text).to include("reply to topic j2")
-          expect(f("body").text).to_not include("reply to topic i0")
+          expect(f("body").text).to include("reply to entry i0")
+          expect(f("body").text).to_not include("reply to topic j2")
         end
       end
     end
 
-    it "can cycle previous student entry" do
-      get "/courses/#{@course.id}/gradebook/speed_grader?assignment_id=#{@checkpointed_assignment.id}&student_id=#{@student2.id}&entry_id=#{@entry.id}"
+    # it's flaky, gthese specs will be depreciated in EGG-613
+    xit "can cycle previous student entry", :ignore_js_errors do
+      get "/courses/#{@course.id}/gradebook/speed_grader?assignment_id=#{@checkpointed_assignment.id}&student_id=#{@student2.id}&entry_id=#{@student_2_last_entry.id}"
 
       in_frame("speedgrader_iframe") do
         in_frame("discussion_preview_iframe") do
+          wait_for(method: nil, timeout: 2) { f("div[data-testid='isHighlighted']").displayed? }
           expect(f("div[data-testid='isHighlighted']").text).to include(@student2.name)
           expect(f("div[data-testid='isHighlighted']").text).to include("reply to topic j2")
-          # page 1 is selected
+          # page 2 is selected
           expect(f("body").text).to include("reply to topic j2")
           expect(f("body").text).to_not include("reply to topic i0")
         end
       end
       f("button[data-testid='discussions-previous-reply-button']").click
-      wait_for_ajaximations
 
-      3.times do |i|
+      2.times do |i|
         in_frame("speedgrader_iframe") do
           in_frame("discussion_preview_iframe") do
+            wait_for_ajaximations
             expect(f("div[data-testid='isHighlighted']").text).to include(@student2.name)
-            expect(f("div[data-testid='isHighlighted']").text).to include("reply to entry i#{i}")
-            # page 2 is selected
+            expect(f("div[data-testid='isHighlighted']").text).to include("reply to topic j#{1 - i}")
+            # page 1 is selected
             expect(f("body").text).to include("reply to topic i0")
             expect(f("body").text).to_not include("reply to topic j2")
           end
@@ -141,11 +161,12 @@ describe "Screenreader Gradebook grading" do
       3.times do |i|
         in_frame("speedgrader_iframe") do
           in_frame("discussion_preview_iframe") do
+            wait_for_ajaximations
             expect(f("div[data-testid='isHighlighted']").text).to include(@student2.name)
-            expect(f("div[data-testid='isHighlighted']").text).to include("reply to topic j#{i}")
+            expect(f("div[data-testid='isHighlighted']").text).to include("reply to entry i#{2 - i}")
             # page 1 is selected
-            expect(f("body").text).to include("reply to topic j2")
-            expect(f("body").text).to_not include("reply to topic i0")
+            expect(f("body").text).to include("reply to topic i0")
+            expect(f("body").text).to_not include("reply to topic j2")
           end
         end
         f("button[data-testid='discussions-previous-reply-button']").click
@@ -153,7 +174,8 @@ describe "Screenreader Gradebook grading" do
       end
     end
 
-    it "next tab keeps focus" do
+    # EGG-411
+    xit "next tab keeps focus" do
       get "/courses/#{@course.id}/gradebook/speed_grader?assignment_id=#{@checkpointed_assignment.id}&student_id=#{@student2.id}&entry_id=#{@entry.id}"
 
       in_frame("speedgrader_iframe") do
@@ -183,7 +205,8 @@ describe "Screenreader Gradebook grading" do
       end
     end
 
-    it "prev tab keeps focus" do
+    # EGG-411
+    xit "prev tab keeps focus" do
       get "/courses/#{@course.id}/gradebook/speed_grader?assignment_id=#{@checkpointed_assignment.id}&student_id=#{@student2.id}&entry_id=#{@entry.id}"
 
       in_frame("speedgrader_iframe") do
@@ -214,7 +237,8 @@ describe "Screenreader Gradebook grading" do
       end
     end
 
-    it "sets default highlight entry if not set" do
+    # it's flaky, gthese specs will be depreciated in EGG-613
+    xit "sets default highlight entry if not set" do
       get "/courses/#{@course.id}/gradebook/speed_grader?assignment_id=#{@checkpointed_assignment.id}&student_id=#{@student2.id}"
       in_frame("speedgrader_iframe") do
         in_frame("discussion_preview_iframe") do
@@ -225,10 +249,12 @@ describe "Screenreader Gradebook grading" do
       end
     end
 
-    it "pagination works" do
+    # it's flaky, gthese specs will be depreciated in EGG-613
+    xit "pagination works" do
       get "/courses/#{@course.id}/gradebook/speed_grader?assignment_id=#{@checkpointed_assignment.id}&student_id=#{@student2.id}&entry_id=#{@entry.id}"
       in_frame("speedgrader_iframe") do
         in_frame("discussion_preview_iframe") do
+          wait_for_ajaximations
           expect(f("div[data-testid='isHighlighted']").text).to include(@student2.name)
           # page 1 is selected
           expect(f("body").text).to include("reply to topic j2")

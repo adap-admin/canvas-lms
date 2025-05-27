@@ -16,23 +16,23 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import React, {useState} from 'react'
 
 import useBreakpoints from '@canvas/lti-apps/hooks/useBreakpoints'
 import {PreviousArrow, NextArrow} from './Arrows'
-import {settings, calculateArrowDisableIndex} from './utils'
+import {responsiveCarouselSettings, calculateArrowDisableIndex} from './utils'
 import Slider from 'react-slick'
 import 'slick-carousel/slick/slick.css'
 
 import ProductCard from '../../apps/ProductCard'
 import {Flex} from '@instructure/ui-flex'
-import {Text} from '@instructure/ui-text'
+import {Heading} from '@instructure/ui-heading'
 
 import type {Product} from '../../../models/Product'
 import type {Settings} from 'react-slick'
 
-const I18n = useI18nScope('lti_registrations')
+const I18n = createI18nScope('lti_registrations')
 
 type ProductCarouselProps = {
   products: Product[]
@@ -43,13 +43,13 @@ type ProductCarouselProps = {
 function ProductCarousel(props: ProductCarouselProps) {
   const {products, companyName} = props
   const slider = React.useRef<Slider>(null)
-  const updatedSettings = settings(products)
+  const updatedSettings = responsiveCarouselSettings(products)
   const {isDesktop, isTablet, isMobile} = useBreakpoints()
   const updatedArrowDisableIndex = calculateArrowDisableIndex(
     products,
     isDesktop,
     isTablet,
-    isMobile
+    isMobile,
   )
 
   const [currentSlideNumber, setCurrentSlideNumber] = useState(0)
@@ -64,19 +64,31 @@ function ProductCarousel(props: ProductCarouselProps) {
 
   return (
     <div>
-      <Flex margin="0 0 medium 0">
-        <Flex.Item shouldGrow={true} shouldShrink={true}>
-          <Text weight="bold" size="large">
-            {I18n.t('More Products by')} {companyName}
-          </Text>
+      <Flex margin="small 0 small 0">
+        <Flex.Item shouldGrow={true} shouldShrink={true} margin="0 0 small 0">
+          <Heading level="h2" themeOverride={{h2FontWeight: 700}}>
+            {I18n.t('More Tools by ')} {props.companyName}
+          </Heading>
         </Flex.Item>
         {(products?.length ?? 0) > 1 && (
           <Flex direction="row">
-            <PreviousArrow currentSlideNumber={currentSlideNumber} slider={slider} />
+            <div style={{marginRight: '0.8rem'}}>
+            <PreviousArrow
+              currentSlideNumber={currentSlideNumber}
+              slider={slider}
+              screenReaderLabel={I18n.t('More Tools by %{companyName} previous button', {
+                companyName: companyName,
+              })}
+              
+            />
+            </div>
             <NextArrow
               currentSlideNumber={currentSlideNumber}
               slider={slider}
               updatedArrowDisableIndex={updatedArrowDisableIndex.type}
+              screenReaderLabel={I18n.t('More Tools by %{companyName} next button', {
+                companyName: companyName,
+              })}
             />
           </Flex>
         )}

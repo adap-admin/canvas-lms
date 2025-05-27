@@ -28,8 +28,8 @@ describe "Account Reports API", type: :request do
     @report.account = @admin.account
     @report.user = @admin
     @report.progress = rand(100)
-    @report.start_at = DateTime.now
-    @report.end_at = (Time.now + rand(60 * 60 * 4)).to_datetime
+    @report.start_at = Time.zone.now
+    @report.end_at = Time.zone.now + rand(60 * 60 * 4)
     @report.report_type = "student_assignment_outcome_map_csv"
     @report.parameters = ActiveSupport::HashWithIndifferentAccess["param" => "test", "error" => "failed"]
 
@@ -54,6 +54,11 @@ describe "Account Reports API", type: :request do
           expect(parameter).to have_key("description")
         end
       end
+
+      report_csv = json.find { |r| r["report"] == @report.report_type }
+      expect(report_csv["last_run"]["id"]).to eq @report.id
+      expect(report_csv["last_run"]["status"]).to eq @report.workflow_state
+      expect(report_csv["last_run"]["progress"]).to eq @report.progress
     end
   end
 

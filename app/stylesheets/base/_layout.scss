@@ -102,18 +102,6 @@ div.content_notice {
   height: 100% !important;
 }
 
-.before_external_content_info_alert,
-.after_external_content_info_alert {
-  &:focus {
-    margin: 20px 0px;
-    outline: none;
-  }
-}
-
-iframe.info_alert_outline {
-  border: 2px solid #0374B5 !important;
-}
-
 body.ic-full-screen-lti-tool iframe.tool_launch {
   // gets the height of the parent element (div.tool_content_wrapper) which is calculated in
   // ui/features/external_tools_show/jquery/tool_inline.js
@@ -126,6 +114,10 @@ iframe.tool_launch {
   height: 100%;
   border: none;
   max-width: 100%;
+
+  &.tool_launch_top_navigation {
+    display: block;
+  }
 }
 
 @media screen and (min-height: 451px) and (max-height: 600px) {

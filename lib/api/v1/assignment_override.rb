@@ -44,7 +44,13 @@ module Api::V1::AssignmentOverride
         json[:students] = student_ids.map { |id| { id:, name: student_names[id] } } if student_names
       when "Group"
         json[:group_id] = override.set_id
-        json[:group_category_id] = override.assignment.group_category_id
+        json[:non_collaborative] = override.set.non_collaborative?
+        json[:group_category_id] = override.set[:group_category_id]
+
+        # Remove the title from the override if the group is non_collaborative AND the user does not have read permission
+        if override.set.non_collaborative? && !override.set.grants_right?(@current_user, session, :read)
+          json.delete(:title)
+        end
       when "CourseSection"
         json[:course_section_id] = override.set_id
       when "Course"
@@ -179,8 +185,8 @@ module Api::V1::AssignmentOverride
             s.global_id.to_s,
             ("sis_login_id:#{s.pseudonym.unique_id}" if s.pseudonym),
             ("hex:sis_login_id:#{s.pseudonym.unique_id.to_s.unpack("H*")}" if s.pseudonym),
-            ("sis_user_id:#{s.pseudonym.sis_user_id}" if s.pseudonym && s.pseudonym.sis_user_id),
-            ("hex:sis_user_id:#{s.pseudonym.sis_user_id.to_s.unpack("H*")}" if s.pseudonym && s.pseudonym.sis_user_id)
+            ("sis_user_id:#{s.pseudonym.sis_user_id}" if s.pseudonym&.sis_user_id),
+            ("hex:sis_user_id:#{s.pseudonym.sis_user_id.to_s.unpack("H*")}" if s.pseudonym&.sis_user_id)
           ]
         end.flatten.compact
         bad_ids = student_ids.map(&:to_s) - found_ids
@@ -191,18 +197,23 @@ module Api::V1::AssignmentOverride
 
     if !set_type && data.key?(:group_id) && data[:group_id].present?
       group_category_id = learning_object.effective_group_category_id
-      if group_category_id
-        set_type = "Group"
-        # look up the group
-        begin
-          group = find_group(learning_object, data[:group_id], group_category_id)
-        rescue ActiveRecord::RecordNotFound
-          errors << "unknown group id #{data[:group_id].inspect}"
+
+      begin
+        group = Group.find_by!(id: data[:group_id], context: learning_object.context)
+
+        # For now, differentiation tags are allowed to be assigned to Group Assignments. If the group is non_collaborative
+        # and the feature flag is enabled, the learning object can be assigned to the group.
+        # For collaborative groups, if the group category id is the same as the learning_object's group category id
+        # the learning object can be assigned to the group.
+        if (group.non_collaborative? && learning_object.context.account.allow_assign_to_differentiation_tags?) ||
+           (!group.non_collaborative? && group_category_id == group.group_category_id)
+          set_type = "Group"
+          override_data[:group] = group
+        else
+          errors << "group_id is not valid"
         end
-        override_data[:group] = group
-      else
-        # don't recognize group_id for non-group assignments
-        errors << "group_id is not valid for non-group assignments"
+      rescue
+        errors << "unknown group id #{data[:group_id].inspect}"
       end
     end
 

@@ -20,7 +20,6 @@ import React from 'react'
 import {render, screen} from '@testing-library/react'
 import ForbiddenWordsFileUpload, {createFolder} from '../ForbiddenWordsFileUpload'
 import userEvent from '@testing-library/user-event'
-import fetchMock from 'fetch-mock'
 import doFetchApi from '@canvas/do-fetch-api-effect'
 
 jest.mock('@canvas/do-fetch-api-effect')
@@ -41,12 +40,14 @@ describe('ForbiddenWordsFileUpload Component', () => {
 
   describe('Rendering', () => {
     it('renders the modal with the correct heading', () => {
+      // @ts-expect-error
       render(<ForbiddenWordsFileUpload {...defaultProps} />)
       expect(screen.getByText('Upload Forbidden Words/Terms List')).toBeInTheDocument()
       expect(screen.getByText('Upload File')).toBeInTheDocument()
     })
 
     it('displays the FileDrop component when no file is uploaded', () => {
+      // @ts-expect-error
       render(<ForbiddenWordsFileUpload {...defaultProps} />)
       expect(screen.getByText('Upload File')).toBeInTheDocument()
       expect(screen.getByText('Drag and drop, or upload from your computer')).toBeInTheDocument()
@@ -55,6 +56,7 @@ describe('ForbiddenWordsFileUpload Component', () => {
 
   describe('Modal Interactions', () => {
     it('resets state on cancel and does not call prop functions', async () => {
+      // @ts-expect-error
       render(<ForbiddenWordsFileUpload {...defaultProps} />)
       const cancelButton = screen.getByText('Cancel').closest('button')
       if (!cancelButton) {
@@ -73,6 +75,7 @@ describe('ForbiddenWordsFileUpload Component', () => {
         response: {status: 200},
         text: JSON.stringify({id: 123}),
       }
+      // @ts-expect-error
       doFetchApi.mockResolvedValue(mockResponse)
       const result = await createFolder()
       expect(result).toBe(123)
@@ -88,6 +91,7 @@ describe('ForbiddenWordsFileUpload Component', () => {
         response: {status: 500},
         text: 'Internal Server Error',
       }
+      // @ts-expect-error
       doFetchApi.mockResolvedValue(mockErrorResponse)
       const result = await createFolder()
       expect(result).toBeNull()
@@ -95,6 +99,7 @@ describe('ForbiddenWordsFileUpload Component', () => {
     })
 
     it('should return null if an error is thrown during execution', async () => {
+      // @ts-expect-error
       doFetchApi.mockImplementation(() => {
         throw new Error('Network Error')
       })

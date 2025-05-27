@@ -63,18 +63,19 @@ class Mutations::CreateDiscussionTopic < Mutations::DiscussionBase
       return validation_error(I18n.t("You are not able to create an anonymous discussion"))
     end
 
-    if anonymous_state && discussion_topic_context.is_a?(Group)
-      return validation_error(I18n.t("You are not able to create an anonymous discussion in a group"))
+    if anonymous_state && (discussion_topic_context.is_a?(Group) || input[:group_category_id].present?)
+      return validation_error(I18n.t("You are not able to create a group anonymous discussion"))
     end
 
-    # TODO: return an error when user tries to create a graded anonymous discussion
-
-    if input[:todo_date] && !discussion_topic_context.grants_any_right?(current_user, session, :manage_content, :manage_course_content_add)
+    if input[:todo_date] && !discussion_topic_context.grants_right?(current_user, session, :manage_course_content_add)
       return validation_error(I18n.t("You do not have permission to add this topic to the student to-do list."))
     end
 
     # validate course id for discussion topic and assignment match
     if input.key?(:assignment) && input[:assignment].present?
+      if anonymous_state
+        return validation_error(I18n.t("You are not able to create a graded anonymous discussion")) if input[:assignment].present?
+      end
       assignment_context_id = GraphQLHelpers.parse_relay_or_legacy_id(input[:assignment].to_h[:course_id], "Course")
       if assignment_context_id != discussion_topic_context.id.to_s
         return validation_error(I18n.t("Assignment context_id must match discussion topic context_id"))
@@ -90,8 +91,8 @@ class Mutations::CreateDiscussionTopic < Mutations::DiscussionBase
       err_message = validate_possible_points_with_checkpoints(input)
       return validation_error(err_message) unless err_message.nil?
 
-      # If discussion topic has checkpoints, it cannot also be assigned to a group category
-      return validation_error(I18n.t("Group discussions cannot have checkpoints.")) if input[:group_category_id].present?
+      # checkpointed group discussions can only be created if checkpoints_group_discussions feature flag is enabled
+      return validation_error(I18n.t("Group discussions cannot have checkpoints.")) if input[:group_category_id].present? && !discussion_topic_context.checkpoints_group_discussions_enabled?
     end
 
     # TODO: On update, we load here instead of creating a new one.
@@ -112,7 +113,7 @@ class Mutations::CreateDiscussionTopic < Mutations::DiscussionBase
       discussion_topic.anonymous_state = anonymous_state
     end
 
-    if (!input.key?(:ungraded_discussion_overrides) && !Account.site_admin.feature_enabled?(:selective_release_ui_api)) || is_announcement
+    if is_announcement
       # TODO: deprecate discussion_topic_section_visibilities for assignment_overrides LX-1498
       set_sections(input[:specific_sections], discussion_topic)
       invalid_sections = verify_specific_section_visibilities(discussion_topic) || []
@@ -120,6 +121,11 @@ class Mutations::CreateDiscussionTopic < Mutations::DiscussionBase
       unless invalid_sections.empty?
         return validation_error(I18n.t("You do not have permissions to modify discussion for section(s) %{section_ids}", section_ids: invalid_sections.join(", ")))
       end
+    end
+
+    # Validating default expand input data
+    if input.key?(:expanded) && input.key?(:expanded_locked) && !input[:expanded] && input[:expanded_locked]
+      return validation_error(I18n.t("Cannot set default thread state locked, when threads are collapsed"))
     end
 
     process_common_inputs(input, is_announcement, discussion_topic)
@@ -134,7 +140,11 @@ class Mutations::CreateDiscussionTopic < Mutations::DiscussionBase
       if working_assignment[:errors].present?
         return validation_error(working_assignment[:errors])
       elsif working_assignment.present?
-        discussion_topic.assignment = working_assignment&.[](:assignment)
+        created_assignment = working_assignment[:assignment]
+
+        discussion_topic.assignment = created_assignment
+        discussion_topic.lock_at = created_assignment.lock_at
+        discussion_topic.unlock_at = created_assignment.unlock_at
       end
 
       # Assignment must be present to set checkpoints

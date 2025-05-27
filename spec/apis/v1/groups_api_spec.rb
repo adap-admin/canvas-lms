@@ -1044,6 +1044,142 @@ describe "Groups API", type: :request do
         expected_status: 403
       )
     end
+
+    it "bulks add users to non collaborative groups" do
+      course_with_teacher(active_all: true)
+      @course.account.enable_feature! :assign_to_differentiation_tags
+      @course.account.settings[:allow_assign_to_differentiation_tags] = { value: true }
+      @course.account.save!
+      @course.account.reload
+      category = @course.group_categories.create(name: "category", non_collaborative: true)
+      @group = @course.groups.create!(name: "G1", group_category: category, non_collaborative: true)
+      user = student_in_course(active_all: true).user
+      user2 = student_in_course(active_all: true).user
+      user_session(@teacher)
+      post "/api/v1/groups/#{@group.id}/memberships", params: { group_id: @group.id, members: [user.id, user2.id] }
+
+      expect(response).to be_successful
+      expect(user.differentiation_tag_memberships.pluck(:group_id)).to include @group.id
+      expect(user2.differentiation_tag_memberships.pluck(:group_id)).to include @group.id
+    end
+
+    describe "POST /api/v1/groups/:group_id/memberships (Differentiation Tag Membership)" do
+      before do
+        course_with_teacher(active_all: true)
+        @course.account.enable_feature! :assign_to_differentiation_tags
+        @course.account.settings[:allow_assign_to_differentiation_tags] = { value: true }
+        @course.account.save!
+        @course.account.reload
+        category = @course.group_categories.create!(name: "Differentiation", non_collaborative: true)
+        @group = @course.groups.create!(name: "Diff Group", group_category: category, non_collaborative: true)
+        user_session(@teacher)
+      end
+
+      context "when the members param is blank" do
+        it "returns ok without processing any memberships" do
+          post "/api/v1/groups/#{@group.id}/memberships", params: { group_id: @group.id, members: [] }
+          expect(response).to have_http_status :ok
+        end
+      end
+
+      context "when the group context is an Account" do
+        it "returns ok and does not attempt to add memberships" do
+          @account_group = group_model(name: "Algebra Teachers", context: Account.default)
+          student = student_in_course(active_all: true).user
+          post "/api/v1/groups/#{@account_group.id}/memberships", params: { group_id: @account_group.id, members: [student.id] }
+          expect(response).to have_http_status :bad_request
+          # Ensure that no differentiation tag memberships were created
+          expect(student.differentiation_tag_memberships.pluck(:group_id)).not_to include(@account_group.id)
+        end
+      end
+
+      context "when the current user is not authorized" do
+        it "returns forbidden" do
+          # Stub the authorization check to simulate lack of permission.
+          student = student_in_course(active_all: true).user
+          user_session(student)
+          post "/api/v1/groups/#{@group.id}/memberships", params: { group_id: @group.id, members: [student.id] }
+          expect(response).not_to be_successful
+        end
+      end
+
+      context "when valid users are provided and processing succeeds" do
+        it "adds the memberships and returns ok" do
+          student = student_in_course(active_all: true).user
+          post "/api/v1/groups/#{@group.id}/memberships", params: { group_id: @group.id, members: [student.id] }
+          expect(response).to have_http_status :ok
+          expect(student.differentiation_tag_memberships.pluck(:group_id)).to include(@group.id)
+        end
+
+        it "processes all enrollments excluding specified users when using params[:all_in_group_course] and params[:exclude]" do
+          # Create three enrolled students.
+          student1 = student_in_course(active_all: true).user
+          student2 = student_in_course(active_all: true).user
+          student3 = student_in_course(active_all: true).user
+
+          user_session(@teacher)
+
+          post "/api/v1/groups/#{@group.id}/memberships", params: { group_id: @group.id, all_in_group_course: true, exclude_user_ids: [student2.id] }
+
+          expect(response).to have_http_status :ok
+
+          @group.reload
+          expect(@group.group_memberships.active.count).to eq @course.student_enrollments.active.count - 1
+          expect(@group.group_memberships.active.pluck(:user_id)).to include(student1.id, student3.id)
+          expect(@group.group_memberships.active.pluck(:user_id)).not_to include(student2.id)
+        end
+
+        it "does not include all enrollments excluding when using params[:all_in_group_course] with a string" do
+          student_in_course(active_all: true).user
+          student_in_course(active_all: true).user
+
+          user_session(@teacher)
+
+          post "/api/v1/groups/#{@group.id}/memberships", params: { group_id: @group.id, all_in_group_course: "false", members: [@student.id] }
+
+          expect(response).to have_http_status :ok
+
+          @group.reload
+          expect(@group.group_memberships.active.count).to eq 1
+        end
+      end
+
+      context "when some users are not actively enrolled" do
+        it "returns partial failure with invalid_user_ids" do
+          enrolled_student = student_in_course(active_all: true).user
+          not_enrolled_student = course_with_student(active_all: true).user
+
+          post "/api/v1/groups/#{@group.id}/memberships",
+               params: { group_id: @group.id, members: [enrolled_student.id, not_enrolled_student.id] }
+
+          expect(response).to have_http_status :ok
+          json = JSON.parse(response.body)
+          expect(json["message"]).to eq "Partial failure encountered"
+          expect(json["invalid_user_ids"]).to include(not_enrolled_student.id)
+          expect(enrolled_student.differentiation_tag_memberships.pluck(:group_id)).to include(@group.id)
+        end
+      end
+
+      context "when membership errors occur during bulk addition" do
+        it "returns partial failure with membership_errors" do
+          student = student_in_course(active_all: true).user
+
+          # Create a real GroupMembership instance and add an error to it.
+          error_membership = GroupMembership.new(group: @group, user: student)
+          error_membership.errors.add(:base, "Error adding membership")
+
+          # Stub bulk_add_users_to_differentiation_tag to return the real membership with errors.
+          allow_any_instance_of(Group).to receive(:bulk_add_users_to_differentiation_tag).and_return([error_membership])
+
+          post "/api/v1/groups/#{@group.id}/memberships", params: { group_id: @group.id, members: [student.id] }
+
+          expect(response).to have_http_status :ok
+          json = JSON.parse(response.body)
+          expect(json["message"]).to eq "Partial failure encountered"
+          expect(json["membership_errors"]).not_to be_empty
+        end
+      end
+    end
   end
 
   context "users" do
@@ -1198,18 +1334,25 @@ describe "Groups API", type: :request do
       user_session @teacher
     end
 
-    it "sanitizes html and process links" do
-      @user = @teacher
-      attachment_model(context: @group)
-      html = %(<p><a href="/files/#{@attachment.id}/download?verifier=huehuehuehue">Click!</a><script></script></p>)
-      json = api_call(:post,
-                      "/api/v1/groups/#{@group.id}/preview_html",
-                      { controller: "groups", action: "preview_html", group_id: @group.to_param, format: "json" },
-                      { html: })
+    context "with double testing verifiers with disable_adding_uuid_verifier_in_api ff" do
+      before do
+        attachment_model(context: @group)
+      end
 
-      returned_html = json["html"]
-      expect(returned_html).not_to include("<script>")
-      expect(returned_html).to include("/groups/#{@group.id}/files/#{@attachment.id}/download?verifier=#{@attachment.uuid}")
+      double_testing_with_disable_adding_uuid_verifier_in_api_ff do
+        it "sanitizes html and process links" do
+          @user = @teacher
+          html = %(<p><a href="/files/#{@attachment.id}/download?verifier=huehuehuehue">Click!</a><script></script></p>)
+          json = api_call(:post,
+                          "/api/v1/groups/#{@group.id}/preview_html",
+                          { controller: "groups", action: "preview_html", group_id: @group.to_param, format: "json" },
+                          { html: })
+
+          returned_html = json["html"]
+          expect(returned_html).not_to include("<script>")
+          expect(returned_html).to include("/groups/#{@group.id}/files/#{@attachment.id}/download#{"?verifier=#{@attachment.uuid}" unless disable_adding_uuid_verifier_in_api}")
+        end
+      end
     end
 
     it "requires permission to preview" do

@@ -44,7 +44,21 @@ describe('CreateEditAssignmentModal', () => {
     frozenFields: [],
   }
 
-  const defaultProps = (overrides: Object = {}): CreateEditAssignmentModalProps => ({
+  const notGradedAssignmentData: ModalAssignment = {
+    type: 'not_graded',
+    name: 'Test Not Graded Assignment',
+    dueAt: '2024-01-14T00:00:00Z',
+    unlockAt: '2024-01-12T00:00:00Z',
+    lockAt: '2024-01-20T00:00:00Z',
+    allDates: [],
+    points: 0,
+    isPublished: false,
+    multipleDueDates: false,
+    differentiatedAssignment: false,
+    frozenFields: [],
+  }
+
+  const defaultProps = (overrides: object = {}): CreateEditAssignmentModalProps => ({
     assignment: undefined,
     userIsAdmin: true,
     onCloseHandler: onCloseHandlerMock,
@@ -78,7 +92,7 @@ describe('CreateEditAssignmentModal', () => {
 
   it('calls onMoreOptionsHandler with form data when more options button is clicked', () => {
     const {getByTestId, getByPlaceholderText, getByText} = render(
-      <CreateEditAssignmentModal {...defaultProps({assgnment: assignmentData})} />
+      <CreateEditAssignmentModal {...defaultProps({assignment: assignmentData})} />,
     )
 
     fireEvent.change(getByTestId('assignment-name-input'), {target: {value: 'Test Assignment'}})
@@ -86,6 +100,7 @@ describe('CreateEditAssignmentModal', () => {
 
     fireEvent.click(getByPlaceholderText('Choose a date'))
     fireEvent.click(getByText('15'))
+    jest.runAllTimers() // DateTimeInput has a setTimeout before firing the change event
 
     fireEvent.click(getByTestId('more-options-button'))
 
@@ -93,11 +108,11 @@ describe('CreateEditAssignmentModal', () => {
       {
         type: 'none',
         name: 'Test Assignment',
-        dueAt: '2024-01-15T23:59:00.000Z',
+        dueAt: '2024-01-15T00:00:00.000Z',
         points: 100,
         syncToSIS: false,
       },
-      true
+      false,
     )
   })
 
@@ -117,7 +132,7 @@ describe('CreateEditAssignmentModal', () => {
       minNameLength: 3,
     }
     const {getByTestId, getByText} = render(
-      <CreateEditAssignmentModal {...defaultProps(overrides)} />
+      <CreateEditAssignmentModal {...defaultProps(overrides)} />,
     )
 
     fireEvent.change(getByTestId('assignment-name-input'), {target: {value: 'Test Assignment'}})
@@ -127,6 +142,20 @@ describe('CreateEditAssignmentModal', () => {
     fireEvent.change(getByTestId('assignment-name-input'), {target: {value: 'Hi'}})
     fireEvent.click(getByTestId('save-button'))
     expect(getByText('Name must be at least 3 characters.')).toBeInTheDocument()
+  })
+
+  it('renders proper error messages in "Points" field', () => {
+    const {getByTestId, getByText} = render(<CreateEditAssignmentModal {...defaultProps()} />)
+
+    fireEvent.change(getByTestId('assignment-name-input'), {target: {value: 'Test Assignment'}})
+    fireEvent.change(getByTestId('points-input'), {target: {value: '-1'}})
+    fireEvent.click(getByTestId('save-button'))
+    expect(getByText('Points must be zero or greater.')).toBeInTheDocument()
+    expect(getByTestId('points-input')).toHaveFocus()
+
+    fireEvent.change(getByTestId('points-input'), {target: {value: '1000000000'}})
+    fireEvent.click(getByTestId('save-button'))
+    expect(getByText('Points cannot exceed 999,999,999.')).toBeInTheDocument()
   })
 
   describe('create mode', () => {
@@ -158,7 +187,7 @@ describe('CreateEditAssignmentModal', () => {
 
     it('can select different assignment types', () => {
       const {getByTestId, getAllByTestId} = render(
-        <CreateEditAssignmentModal {...defaultProps()} />
+        <CreateEditAssignmentModal {...defaultProps()} />,
       )
 
       fireEvent.click(getByTestId('assignment-type-select'))
@@ -172,11 +201,39 @@ describe('CreateEditAssignmentModal', () => {
       expect(getByTestId('assignment-type-select')).toHaveValue('Quiz')
     })
 
+    it('hides points input when selecting not_graded assignment type and saves with 0 points', () => {
+      const {queryByTestId, getByTestId, getAllByTestId} = render(
+        <CreateEditAssignmentModal {...defaultProps()} />,
+      )
+
+      fireEvent.change(getByTestId('assignment-name-input'), {target: {value: 'Test Assignment'}})
+      fireEvent.change(getByTestId('points-input'), {target: {value: '100'}})
+      fireEvent.click(getByTestId('assignment-type-select'))
+      fireEvent.click(getAllByTestId('assignment-type-option')[4])
+
+      expect(getByTestId('assignment-type-select')).toHaveValue('Not Graded')
+
+      expect(queryByTestId('points-input')).not.toBeInTheDocument()
+      fireEvent.click(getByTestId('save-button'))
+
+      expect(onSaveHandlerMock).toHaveBeenCalledWith(
+        {
+          type: 'not_graded',
+          name: 'Test Assignment',
+          dueAt: '',
+          points: 0,
+          publish: false,
+          syncToSIS: false,
+        },
+        true,
+      )
+    })
+
     it('does not populate fields with assignment data in create mode', () => {
       const {getByTestId} = render(<CreateEditAssignmentModal {...defaultProps()} />)
 
       expect(getByTestId('assignment-name-input')).toHaveValue('')
-      expect(getByTestId('points-input')).toHaveValue('0')
+      expect(getByTestId('points-input')).toHaveValue(0)
     })
 
     it('prevents saving when required fields are empty', () => {
@@ -198,14 +255,17 @@ describe('CreateEditAssignmentModal', () => {
       fireEvent.change(getByTestId('points-input'), {target: {value: '100'}})
       fireEvent.click(getByTestId('save-button'))
 
-      expect(onSaveHandlerMock).toHaveBeenCalledWith({
-        type: 'none',
-        name: 'Test Assignment',
-        dueAt: '',
-        points: 100,
-        publish: false,
-        syncToSIS: false,
-      })
+      expect(onSaveHandlerMock).toHaveBeenCalledWith(
+        {
+          type: 'none',
+          name: 'Test Assignment',
+          dueAt: '',
+          points: 100,
+          publish: false,
+          syncToSIS: false,
+        },
+        true,
+      )
     })
 
     it('calls onSaveHandler with correct data when save and publish button is clicked', () => {
@@ -215,19 +275,22 @@ describe('CreateEditAssignmentModal', () => {
       fireEvent.change(getByTestId('points-input'), {target: {value: '100'}})
       fireEvent.click(getByTestId('save-and-publish-button'))
 
-      expect(onSaveHandlerMock).toHaveBeenCalledWith({
-        type: 'none',
-        name: 'Test Assignment',
-        dueAt: '',
-        points: 100,
-        publish: true,
-        syncToSIS: false,
-      })
+      expect(onSaveHandlerMock).toHaveBeenCalledWith(
+        {
+          type: 'none',
+          name: 'Test Assignment',
+          dueAt: '',
+          points: 100,
+          publish: true,
+          syncToSIS: false,
+        },
+        true,
+      )
     })
 
     it('sets time to 11:59 PM when date is selected (and no time is present)', () => {
       const {getByTestId, getByPlaceholderText, getByText} = render(
-        <CreateEditAssignmentModal {...defaultProps()} />
+        <CreateEditAssignmentModal {...defaultProps()} />,
       )
 
       fireEvent.change(getByTestId('assignment-name-input'), {target: {value: 'Test Assignment'}})
@@ -236,22 +299,25 @@ describe('CreateEditAssignmentModal', () => {
       // open the calendar picker (Select January 15th)
       fireEvent.click(getByPlaceholderText('Choose a date'))
       fireEvent.click(getByText('15'))
-
+      jest.runAllTimers() // DateTimeInput has a setTimeout before firing the change event
       fireEvent.click(getByTestId('save-button'))
 
-      expect(onSaveHandlerMock).toHaveBeenCalledWith({
-        type: 'none',
-        name: 'Test Assignment',
-        dueAt: '2024-01-15T23:59:00.000Z',
-        points: 100,
-        publish: false,
-        syncToSIS: false,
-      })
+      expect(onSaveHandlerMock).toHaveBeenCalledWith(
+        {
+          type: 'none',
+          name: 'Test Assignment',
+          dueAt: '2024-01-15T23:59:00.000Z',
+          points: 100,
+          publish: false,
+          syncToSIS: false,
+        },
+        true,
+      )
     })
 
     it('set time to DEFAULT_DUE_TIME if provided by props', () => {
       const {getByTestId, getByPlaceholderText, getByText} = render(
-        <CreateEditAssignmentModal {...defaultProps({defaultDueTime: '03:00'})} />
+        <CreateEditAssignmentModal {...defaultProps({defaultDueTime: '03:00'})} />,
       )
 
       fireEvent.change(getByTestId('assignment-name-input'), {target: {value: 'Test Assignment'}})
@@ -260,24 +326,75 @@ describe('CreateEditAssignmentModal', () => {
       // open the calendar picker (Select January 15th)
       fireEvent.click(getByPlaceholderText('Choose a date'))
       fireEvent.click(getByText('15'))
+      jest.runAllTimers() // DateTimeInput has a setTimeout before firing the change event
 
       fireEvent.click(getByTestId('save-button'))
 
-      expect(onSaveHandlerMock).toHaveBeenCalledWith({
-        type: 'none',
-        name: 'Test Assignment',
-        dueAt: '2024-01-15T03:00:00.000Z',
-        points: 100,
-        publish: false,
-        syncToSIS: false,
-      })
+      expect(onSaveHandlerMock).toHaveBeenCalledWith(
+        {
+          type: 'none',
+          name: 'Test Assignment',
+          dueAt: '2024-01-15T03:00:00.000Z',
+          points: 100,
+          publish: false,
+          syncToSIS: false,
+        },
+        true,
+      )
+    })
+
+    it('allows saving when point input contains decimal values', () => {
+      const {getByTestId} = render(<CreateEditAssignmentModal {...defaultProps()} />)
+
+      fireEvent.change(getByTestId('assignment-name-input'), {target: {value: 'Test Assignment'}})
+      fireEvent.change(getByTestId('points-input'), {target: {value: '35.35'}})
+      fireEvent.click(getByTestId('save-button'))
+
+      expect(onSaveHandlerMock).toHaveBeenCalledWith(
+        {
+          type: 'none',
+          name: 'Test Assignment',
+          dueAt: '',
+          points: 35.35,
+          publish: false,
+          syncToSIS: false,
+        },
+        true,
+      )
+    })
+
+    it('allows users to enter "0" for points input', () => {
+      const {getByTestId} = render(<CreateEditAssignmentModal {...defaultProps()} />)
+
+      fireEvent.change(getByTestId('assignment-name-input'), {target: {value: 'Test Assignment'}})
+      fireEvent.change(getByTestId('points-input'), {target: {value: '0'}})
+      fireEvent.click(getByTestId('save-button'))
+
+      expect(onSaveHandlerMock).toHaveBeenCalledWith(
+        {
+          type: 'none',
+          name: 'Test Assignment',
+          dueAt: '',
+          points: 0,
+          publish: false,
+          syncToSIS: false,
+        },
+        true,
+      )
+    })
+
+    it('does not display points input field when type is not_graded', () => {
+      const {queryByTestId} = render(
+        <CreateEditAssignmentModal {...defaultProps({assignment: notGradedAssignmentData})} />,
+      )
+      expect(queryByTestId('points-input')).not.toBeInTheDocument()
     })
   })
 
   describe('edit mode', () => {
     it('does not render assignment type field in edit mode', () => {
       const {queryByTestId} = render(
-        <CreateEditAssignmentModal {...defaultProps({assignment: assignmentData})} />
+        <CreateEditAssignmentModal {...defaultProps({assignment: assignmentData})} />,
       )
 
       expect(queryByTestId('assignment-type-select')).not.toBeInTheDocument()
@@ -285,19 +402,19 @@ describe('CreateEditAssignmentModal', () => {
 
     it('populates fields with assignment data in edit mode', () => {
       const {getByTestId, getAllByText} = render(
-        <CreateEditAssignmentModal {...defaultProps({assignment: assignmentData})} />
+        <CreateEditAssignmentModal {...defaultProps({assignment: assignmentData})} />,
       )
 
       expect(getByTestId('assignment-name-input')).toHaveValue('Test Assignment')
       expect(getAllByText('Sunday, January 14, 2024 12:00 AM')[0]).toBeInTheDocument()
-      expect(getByTestId('points-input')).toHaveValue('100')
+      expect(getByTestId('points-input')).toHaveValue(100)
     })
 
     it('save buttons are enabled when required fields are populated', () => {
       const {getByTestId} = render(
         <CreateEditAssignmentModal
           {...defaultProps({assignment: assignmentData, isEditMode: true})}
-        />
+        />,
       )
 
       const saveButton = getByTestId('save-button')
@@ -310,7 +427,7 @@ describe('CreateEditAssignmentModal', () => {
     it('does not render "Save and Publish" button when assignment is already published', () => {
       const assignment = {...assignmentData, isPublished: true}
       const {queryByTestId} = render(
-        <CreateEditAssignmentModal {...defaultProps({assignment, isEditMode: true})} />
+        <CreateEditAssignmentModal {...defaultProps({assignment, isEditMode: true})} />,
       )
 
       expect(queryByTestId('save-and-publish-button')).not.toBeInTheDocument()
@@ -318,41 +435,69 @@ describe('CreateEditAssignmentModal', () => {
 
     it('Does not change due date time when selecting new date if one was already present', () => {
       const {getByTestId, getByPlaceholderText, getByText} = render(
-        <CreateEditAssignmentModal {...defaultProps({assignment: assignmentData})} />
+        <CreateEditAssignmentModal {...defaultProps({assignment: assignmentData})} />,
       )
 
       // open the calendar picker (Select January 15th)
       fireEvent.click(getByPlaceholderText('Choose a date'))
       fireEvent.click(getByText('15'))
+      jest.runAllTimers() // DateTimeInput has a setTimeout before firing the change event
 
       fireEvent.click(getByTestId('save-button'))
 
-      expect(onSaveHandlerMock).toHaveBeenCalledWith({
-        type: 'none',
-        name: 'Test Assignment',
-        dueAt: '2024-01-15T00:00:00.000Z',
-        points: 100,
-        publish: false,
-        syncToSIS: false,
-      })
+      expect(onSaveHandlerMock).toHaveBeenCalledWith(
+        {
+          type: 'none',
+          name: 'Test Assignment',
+          dueAt: '2024-01-15T00:00:00.000Z',
+          points: 100,
+          publish: false,
+          syncToSIS: false,
+        },
+        false,
+      )
     })
 
     it('Default due time Does not overwrite due date time if time is already present', () => {
       const assignment = {...assignmentData, dueAt: '2024-01-14T23:00:00Z'}
       const {getByTestId} = render(
-        <CreateEditAssignmentModal {...defaultProps({assignment, defaultDueTime: '03:00'})} />
+        <CreateEditAssignmentModal {...defaultProps({assignment, defaultDueTime: '03:00'})} />,
       )
 
       fireEvent.click(getByTestId('save-button'))
 
-      expect(onSaveHandlerMock).toHaveBeenCalledWith({
-        type: 'none',
-        name: 'Test Assignment',
-        dueAt: '2024-01-14T23:00:00Z',
-        points: 100,
-        publish: false,
-        syncToSIS: false,
-      })
+      expect(onSaveHandlerMock).toHaveBeenCalledWith(
+        {
+          type: 'none',
+          name: 'Test Assignment',
+          dueAt: '2024-01-14T23:00:00Z',
+          points: 100,
+          publish: false,
+          syncToSIS: false,
+        },
+        false,
+      )
+    })
+
+    it('preserves submission type when editing an assignment', () => {
+      const assignment = {...assignmentData, type: 'online_upload'}
+      const {getByTestId} = render(
+        <CreateEditAssignmentModal {...defaultProps({assignment, isEditMode: true})} />,
+      )
+
+      fireEvent.click(getByTestId('save-button'))
+
+      expect(onSaveHandlerMock).toHaveBeenCalledWith(
+        {
+          type: 'online_upload',
+          name: 'Test Assignment',
+          dueAt: '2024-01-14T00:00:00Z',
+          points: 100,
+          publish: false,
+          syncToSIS: false,
+        },
+        false,
+      )
     })
 
     describe('Due Date Validation', () => {
@@ -368,13 +513,14 @@ describe('CreateEditAssignmentModal', () => {
 
       it('Renders error message when due date is past assignment lock date', () => {
         const {getByPlaceholderText, getByText, getAllByText, getByTestId} = render(
-          <CreateEditAssignmentModal {...defaultProps({assignment: assignmentData})} />
+          <CreateEditAssignmentModal {...defaultProps({assignment: assignmentData})} />,
         )
 
         // open calendar picker and select a date past the lock date
         const datePicker = getByPlaceholderText('Choose a date')
         fireEvent.click(datePicker)
         fireEvent.click(getByText('21'))
+        jest.runAllTimers() // DateTimeInput has a setTimeout before firing the change event
 
         // Try to save
         fireEvent.click(getByTestId('save-button'))
@@ -385,13 +531,14 @@ describe('CreateEditAssignmentModal', () => {
 
       it('Renders error message when due date is before assignment unlock date', () => {
         const {getByPlaceholderText, getByText, getAllByText, getByTestId} = render(
-          <CreateEditAssignmentModal {...defaultProps({assignment: assignmentData})} />
+          <CreateEditAssignmentModal {...defaultProps({assignment: assignmentData})} />,
         )
 
         // open calendar picker and select a date before the unlock date
         const datePicker = getByPlaceholderText('Choose a date')
         fireEvent.click(datePicker)
         fireEvent.click(getByText('11'))
+        jest.runAllTimers() // DateTimeInput has a setTimeout before firing the change event
 
         // Try to save
         fireEvent.click(getByTestId('save-button'))
@@ -404,13 +551,14 @@ describe('CreateEditAssignmentModal', () => {
         const {getByPlaceholderText, getByText, getAllByText, getByTestId} = render(
           <CreateEditAssignmentModal
             {...defaultProps({assignment: assignmentWithoutLocks, validDueAtRange: termDates})}
-          />
+          />,
         )
 
         // open calendar picker and select a date past the term end date
         const datePicker = getByPlaceholderText('Choose a date')
         fireEvent.click(datePicker)
         fireEvent.click(getByText('21'))
+        jest.runAllTimers() // DateTimeInput has a setTimeout before firing the change event
 
         // Try to save
         fireEvent.click(getByTestId('save-button'))
@@ -423,13 +571,14 @@ describe('CreateEditAssignmentModal', () => {
         const {getByPlaceholderText, getByText, getAllByText, getByTestId} = render(
           <CreateEditAssignmentModal
             {...defaultProps({assignment: assignmentWithoutLocks, validDueAtRange: termDates})}
-          />
+          />,
         )
 
         // open calendar picker and select a date past the term end date
         const datePicker = getByPlaceholderText('Choose a date')
         fireEvent.click(datePicker)
         fireEvent.click(getByText('11'))
+        jest.runAllTimers() // DateTimeInput has a setTimeout before firing the change event
 
         // Try to save
         fireEvent.click(getByTestId('save-button'))
@@ -464,7 +613,7 @@ describe('CreateEditAssignmentModal', () => {
       it('Disables fields when included in frozenFields', () => {
         const assignment = {...assignmentData, frozenFields: ['name', 'due_at', 'points']}
         const {getByTestId, getByLabelText} = render(
-          <CreateEditAssignmentModal {...defaultProps({assignment})} />
+          <CreateEditAssignmentModal {...defaultProps({assignment})} />,
         )
 
         expect(getByTestId('assignment-name-input')).toBeDisabled()

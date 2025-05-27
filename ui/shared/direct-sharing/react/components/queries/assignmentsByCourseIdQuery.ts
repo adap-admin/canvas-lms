@@ -18,7 +18,7 @@
 
 import {z} from 'zod'
 import {executeQuery} from '@canvas/query/graphql'
-import gql from 'graphql-tag'
+import {gql} from '@apollo/client'
 
 const QUERY = gql`
   query CourseAndModulePicker_AssignmentsByCourseIdQuery($courseId: ID!) {
@@ -54,7 +54,7 @@ function transform({course}: any): AssignmentItem[] {
       id: assignment.id,
       name: assignment.name,
       rubric_id: assignment.rubricAssociation?._id,
-    })
+    }),
   )
 }
 

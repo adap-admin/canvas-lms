@@ -57,32 +57,34 @@ module Types
         object.message = doc.to_html
       end
 
-      if object.message&.include?("instructure_inline_media_comment")
-        load_association(:discussion_topic).then do |topic|
-          Loaders::ApiContentAttachmentLoader.for(topic.context).load(object.message).then do |preloaded_attachments|
-            object.message = GraphQLHelpers::UserContent.process(
-              object.message,
-              context: topic.context,
-              in_app: true,
-              request:,
-              preloaded_attachments:,
-              user: current_user,
-              options: { rewrite_api_urls: true }
-            )
-          end
-        end
-      end
+      return object.message unless rich_content_attachment?
 
-      object.message
+      load_association(:discussion_topic).then do |topic|
+        Loaders::ApiContentAttachmentLoader.for(topic.context).load(object.message).then do |preloaded_attachments|
+          object.message = GraphQLHelpers::UserContent.process(
+            object.message,
+            context: topic.context,
+            in_app: true,
+            request:,
+            preloaded_attachments:,
+            user: current_user,
+            options: { rewrite_api_urls: true, domain_root_account: context[:domain_root_account] },
+            location: object.asset_string
+          )
+        end
+      end.then { object.message }
     end
 
     field :root_entry_page_number, Integer, null: true do
       argument :per_page, Integer, required: false
-      argument :sort_order, Types::DiscussionSortOrderType, required: false
     end
-    def root_entry_page_number(per_page: 20, sort_order: "desc")
+    def root_entry_page_number(per_page: 20)
       load_association(:discussion_topic).then do |topic|
         # we display deleted entries in discussions
+        sort_order = topic.discussion_topic_participants.where(user_id: current_user).first&.sort_order || DiscussionTopic::SortOrder::DEFAULT
+        if sort_order == DiscussionTopic::SortOrder::INHERIT
+          sort_order = topic.sort_order || DiscussionTopic::SortOrder::DEFAULT
+        end
         topic_root_entries_ids = topic.discussion_entries.where(parent_id: nil).reorder("created_at #{sort_order}").map(&:id)
         entry_root_id = object.root_entry_id || object.id
         # we can have erroneous entries, if so at least we don't break
@@ -113,8 +115,15 @@ module Types
     def author(course_id: nil, role_types: nil, built_in_only: false)
       load_association(:discussion_topic).then do |topic|
         course_id = topic&.course&.id if course_id.nil?
-        # Set the graphql context so it can be used downstream
-        context[:course_id] = course_id
+
+        if topic&.course.is_a?(Account) && !topic&.group&.id.nil?
+          # If the discussion entry is in an admin group there is no course
+          context[:group_id] = topic&.group&.id
+        else
+          # Set the graphql context so it can be used downstream
+          context[:course_id] = course_id
+        end
+
         if topic.anonymous? && object.is_anonymous_author
           nil
         else
@@ -289,5 +298,11 @@ module Types
 
     field :depth, Integer, null: true
     delegate :depth, to: :object
+
+    private
+
+    def rich_content_attachment?
+      !Api::Html::Content.collect_attachment_ids(object.message).empty?
+    end
   end
 end

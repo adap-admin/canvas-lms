@@ -50,6 +50,7 @@ export type RubricCriterion = {
   ratings: RubricRating[]
   learningOutcomeId?: string
   outcome?: RubricOutcome
+  isGenerated?: boolean // frontend only, for tracking LLM generated criteria
 }
 
 export type RubricRating = {
@@ -74,6 +75,7 @@ export type RubricAssessment = {
 export type RubricAssessmentData = {
   id: string
   points?: number
+  pointsPossible?: number
   criterionId: string
   learningOutcomeId?: string
   comments: string
@@ -82,6 +84,7 @@ export type RubricAssessmentData = {
   ignoreForScoring?: boolean
   rubricSavedComments?: string[]
   saveCommentsForLater?: boolean
+  updatedAt?: string
 }
 
 export type UpdateAssessmentData = {
@@ -116,4 +119,9 @@ export type RubricImport = {
   }[]
   progress: number
   workflowState: string
+}
+
+export type RubricSubmissionUser = {
+  name?: string
+  avatarUrl?: string
 }

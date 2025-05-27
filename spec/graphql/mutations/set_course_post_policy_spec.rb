@@ -162,8 +162,8 @@ describe Mutations::SetCoursePostPolicy do
       let(:context) { { current_user: teacher } }
 
       before do
-        Account.default.role_overrides.create!(role: Role.find_by(name: "TeacherEnrollment"), permission: "manage_content", enabled: false)
         Account.default.role_overrides.create!(role: Role.find_by(name: "TeacherEnrollment"), permission: "manage_course_content_edit", enabled: false)
+        Account.default.role_overrides.create!(role: Role.find_by(name: "TeacherEnrollment"), permission: "manage_grades", enabled: false)
       end
 
       it_behaves_like "user cannot interact with endpoint"

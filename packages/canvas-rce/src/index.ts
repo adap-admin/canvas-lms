@@ -23,21 +23,27 @@ import getTranslations from './getTranslations'
 import defaultTinymceConfig from './defaultTinymceConfig'
 import {setLocale} from './common/natcompare'
 import {Mathml} from './enhance-user-content/mathml'
+import type {EditorOptions} from './rce/RCEWrapperProps'
+import RCEWrapper from './rce/RCEWrapper'
+export type {Editor} from 'tinymce'
 
 export {
   getContrastStatus,
+  getDefaultColors,
   isTransparent,
 } from './rce/plugins/instructure_color/components/colorUtils'
 export {
   ColorPicker,
+  type ColorTab,
   type ColorSpec,
-  type TabSpec,
+  type TabsSpec,
+  type ColorsInUse,
 } from './rce/plugins/instructure_color/components/ColorPicker'
 
 export * from './enhance-user-content/index'
 
 export const defaultConfiguration = defaultTinymceConfig
-export {instuiPopupMountNode} from './util/fullscreenHelpers'
+export {instuiPopupMountNodeFn} from './util/fullscreenHelpers'
 export {Mathml}
 
 export {RCEVariantValues} from './rce/RCEVariants'
@@ -45,11 +51,14 @@ export {
   UploadFilePanelIds,
   handleSubmit,
   UploadFile,
-  type UploadFilePanelId,
   type UploadFileProps,
 } from './rce/plugins/shared/Upload'
 
-export function renderIntoDiv(editorEl: HTMLElement, props: any, cb?: (ref: any) => void) {
+export function renderIntoDiv(
+  editorEl: HTMLElement,
+  props: EditorOptions,
+  cb?: (ref: RCEWrapper) => void,
+) {
   const language = normalizeLocale(props.language)
   setLocale(language)
   if (process.env.BUILD_LOCALE || language === 'en') {
@@ -59,17 +68,15 @@ export function renderIntoDiv(editorEl: HTMLElement, props: any, cb?: (ref: any)
     // this will cause a new network round trip to get all the locale info the rce
     // and tinymce need.
     getTranslations(language)
-      .then(() => render(editorEl, props, cb))
       .catch(err => {
-        // eslint-disable-next-line no-console
         console.error(
           'Failed loading the language file for',
           language,
           'RCE is falling back to English.\n Cause:',
-          err
+          err,
         )
-        render(editorEl, props, cb)
       })
+      .finally(() => render(editorEl, props, cb))
   }
 }
 

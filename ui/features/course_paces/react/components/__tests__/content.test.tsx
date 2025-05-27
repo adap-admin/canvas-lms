@@ -1,4 +1,3 @@
-// @ts-nocheck
 /*
  * Copyright (C) 2022 - present Instructure, Inc.
  *
@@ -31,7 +30,7 @@ import {
 import PaceContent from '../content'
 import fetchMock from 'fetch-mock'
 import {actions as uiActions} from '../../actions/ui'
-import {APIPaceContextTypes, Pace, PaceContextsState} from '../../types'
+import type {APIPaceContextTypes, Pace, PaceContextsState} from '../../types'
 import * as tz from '@instructure/moment-utils'
 
 jest.mock('../../actions/ui', () => ({
@@ -58,13 +57,14 @@ const SEARCH_SECTION_CONTEXTS_API = `/api/v1/courses/${COURSE.id}/pace_contexts?
 const STUDENT_CONTEXTS_API_WITH_DESC_SORTING = `/api/v1/courses/${COURSE.id}/pace_contexts?type=student_enrollment&page=1&per_page=10&sort=name&order=desc`
 const INIT_PACE_PROGRESS_STATUS_POLL = `/api/v1/courses/${COURSE.id}/course_pacing/new?enrollment_id=${firstStudent.item_id}`
 const INIT_SECTION_PACE_PROGRESS_STATUS_POLL = `/api/v1/courses/${COURSE.id}/course_pacing/new?course_section_id=${secondSection.item_id}`
+const COURSE_REPORT_LAST_API = `/api/v1/courses/${COURSE.id}/reports/course_pace_docx`
 
 const MINUTE = 1000 * 60
 const HOUR = MINUTE * 60
 const DAY = HOUR * 24
 const WEEK = DAY * 7
 
-const generateModifiedPace = timeAgo => {
+const generateModifiedPace = (timeAgo: number) => {
   const lastModified = new Date(Date.now() - timeAgo)
   const appliedPace: Pace = {
     ...firstSection.applied_pace!,
@@ -85,6 +85,7 @@ describe('PaceContextsContent', () => {
     fetchMock.get(STUDENT_CONTEXTS_API, PACE_CONTEXTS_STUDENTS_RESPONSE)
     fetchMock.get(SEARCH_SECTION_CONTEXTS_API, PACE_CONTEXTS_SECTIONS_SEARCH_RESPONSE)
     fetchMock.get(SECTION_PACE_CREATION_API, {course_pace: {}, progress: null})
+    fetchMock.get(COURSE_REPORT_LAST_API, {})
     jest.clearAllMocks()
   })
 
@@ -95,10 +96,10 @@ describe('PaceContextsContent', () => {
   it('shows section contexts by default', async () => {
     const {findByText} = renderConnected(<PaceContent />)
     expect(
-      await findByText(PACE_CONTEXTS_SECTIONS_RESPONSE.pace_contexts[0].name)
+      await findByText(PACE_CONTEXTS_SECTIONS_RESPONSE.pace_contexts[0].name),
     ).toBeInTheDocument()
     expect(
-      await findByText(PACE_CONTEXTS_SECTIONS_RESPONSE.pace_contexts[1].name)
+      await findByText(PACE_CONTEXTS_SECTIONS_RESPONSE.pace_contexts[1].name),
     ).toBeInTheDocument()
   })
 
@@ -119,7 +120,7 @@ describe('PaceContextsContent', () => {
     await user.click(studentsTab)
     expect(await findByText(firstStudent.name)).toBeInTheDocument()
     expect(
-      await findByText(PACE_CONTEXTS_STUDENTS_RESPONSE.pace_contexts[1].name)
+      await findByText(PACE_CONTEXTS_STUDENTS_RESPONSE.pace_contexts[1].name),
     ).toBeInTheDocument()
   })
 
@@ -133,7 +134,7 @@ describe('PaceContextsContent', () => {
         expect(getAllByText(header)[0]).toBeInTheDocument()
       })
       expect(
-        getByText(`${sectionPaceContext.associated_student_count} Students`)
+        getByText(`${sectionPaceContext.associated_student_count} Students`),
       ).toBeInTheDocument()
       expect(getAllByText('Section')[0]).toBeInTheDocument()
     })
@@ -155,19 +156,17 @@ describe('PaceContextsContent', () => {
 
     it('filters results by search term', async () => {
       const {findByText, queryByText, getByRole, getByPlaceholderText, getByText} = renderConnected(
-        <PaceContent />
+        <PaceContent />,
       )
+      const user = userEvent.setup({delay: null})
       const searchInput = getByPlaceholderText('Search for sections')
+      await user.type(searchInput, 'A')
       const searchButton = getByRole('button', {name: 'Search'})
-      fireEvent.change(searchInput, {target: {value: 'A'}})
-      act(() => {
-        searchButton.click()
-      })
+      await user.click(searchButton)
+      await findByText('A-C')
 
-      expect(await findByText('A-C')).toBeInTheDocument()
       expect(queryByText('D-F')).not.toBeInTheDocument()
       expect(queryByText('G-K')).not.toBeInTheDocument()
-      expect(queryByText('No results found')).not.toBeInTheDocument()
       expect(getByText('Showing 1 result below')).toBeInTheDocument()
     })
 
@@ -175,7 +174,7 @@ describe('PaceContextsContent', () => {
       fetchMock.get(
         SEARCH_SECTION_CONTEXTS_API,
         {pace_contexts: [], total_entries: 0},
-        {overwriteRoutes: true}
+        {overwriteRoutes: true},
       )
       const {findAllByText, getByText, getByPlaceholderText} = renderConnected(<PaceContent />)
       const searchInput = getByPlaceholderText('Search for sections')
@@ -183,7 +182,7 @@ describe('PaceContextsContent', () => {
       fireEvent.change(searchInput, {target: {value: 'A'}})
       act(() => searchButton.click())
       const noResults = await findAllByText('No results found')
-      expect(noResults.length).toBe(2) // no results label, SR-only alert
+      expect(noResults).toHaveLength(2) // no results label, SR-only alert
       expect(getByText('Please try another search term')).toBeInTheDocument()
     })
 
@@ -200,7 +199,7 @@ describe('PaceContextsContent', () => {
         fetchMock.get(
           SECTION_CONTEXTS_API,
           {pace_contexts: [justModifiedPace]},
-          {overwriteRoutes: true}
+          {overwriteRoutes: true},
         )
 
         const {findByText} = renderConnected(<PaceContent />)
@@ -212,7 +211,7 @@ describe('PaceContextsContent', () => {
         fetchMock.get(
           SECTION_CONTEXTS_API,
           {pace_contexts: [modifiedPace]},
-          {overwriteRoutes: true}
+          {overwriteRoutes: true},
         )
 
         const {findByText} = renderConnected(<PaceContent />)
@@ -224,7 +223,7 @@ describe('PaceContextsContent', () => {
         fetchMock.get(
           SECTION_CONTEXTS_API,
           {pace_contexts: [modifiedPace]},
-          {overwriteRoutes: true}
+          {overwriteRoutes: true},
         )
 
         const {findByText} = renderConnected(<PaceContent />)
@@ -236,7 +235,7 @@ describe('PaceContextsContent', () => {
         fetchMock.get(
           SECTION_CONTEXTS_API,
           {pace_contexts: [modifiedPace]},
-          {overwriteRoutes: true}
+          {overwriteRoutes: true},
         )
 
         const {findByText} = renderConnected(<PaceContent />)
@@ -248,7 +247,7 @@ describe('PaceContextsContent', () => {
         fetchMock.get(
           SECTION_CONTEXTS_API,
           {pace_contexts: [modifiedPace]},
-          {overwriteRoutes: true}
+          {overwriteRoutes: true},
         )
 
         const {findByText} = renderConnected(<PaceContent />)
@@ -263,11 +262,11 @@ describe('PaceContextsContent', () => {
         fetchMock.get(
           SECTION_CONTEXTS_API,
           {pace_contexts: [modifiedPace]},
-          {overwriteRoutes: true}
+          {overwriteRoutes: true},
         )
 
         const {findByText} = renderConnected(<PaceContent />)
-        expect(await findByText(formattedDate)).toBeInTheDocument()
+        expect(await findByText(formattedDate!)).toBeInTheDocument()
       })
     })
 
@@ -332,10 +331,10 @@ describe('PaceContextsContent', () => {
         const state = {...DEFAULT_STORE_STATE, paceContexts: paceContextsState}
         const {findByTestId} = renderConnected(<PaceContent />, state)
         expect(
-          await findByTestId(`publishing-pace-${firstSection.item_id}-indicator`)
+          await findByTestId(`publishing-pace-${firstSection.item_id}-indicator`),
         ).toBeInTheDocument()
         expect(
-          await findByTestId(`publishing-pace-${secondSection.item_id}-indicator`)
+          await findByTestId(`publishing-pace-${secondSection.item_id}-indicator`),
         ).toBeInTheDocument()
       })
 
@@ -359,9 +358,112 @@ describe('PaceContextsContent', () => {
         const studentsTab = getByRole('tab', {name: 'Students'})
         await user.click(studentsTab)
         expect(
-          await findByTestId(`publishing-pace-${firstStudent.item_id}-indicator`)
+          await findByTestId(`publishing-pace-${firstStudent.item_id}-indicator`),
         ).toBeInTheDocument()
         expect(fetchMock.called(INIT_PACE_PROGRESS_STATUS_POLL, 'GET')).toBe(true)
+      })
+    })
+
+    describe('when course_pace_download_document feature is enabled', () => {
+      beforeAll(() => {
+        window.ENV.FEATURES ||= {}
+        window.ENV.FEATURES.course_pace_download_document = true
+      })
+
+      it('renders download button disabled', async () => {
+        const paceContextsState: PaceContextsState = {
+          ...DEFAULT_STORE_STATE.paceContexts,
+        }
+        const state = {...DEFAULT_STORE_STATE, paceContexts: paceContextsState}
+        const {findByTestId} = renderConnected(<PaceContent />, state)
+        const downloadButton = await findByTestId('download-selected-button')
+        expect(downloadButton).toBeInTheDocument()
+        expect(downloadButton).toBeDisabled()
+      })
+
+      it('renders download button enabled when selecting paces', async () => {
+        const paceContextsState: PaceContextsState = {
+          ...DEFAULT_STORE_STATE.paceContexts,
+        }
+        const state = {...DEFAULT_STORE_STATE, paceContexts: paceContextsState}
+        const {findByTestId} = renderConnected(<PaceContent />, state)
+
+        const selectAllPacesCheckbox = await findByTestId(`select-all-paces-checkbox`)
+        act(() => selectAllPacesCheckbox.click())
+
+        const downloadButton = await findByTestId('download-selected-button')
+        expect(downloadButton).toBeInTheDocument()
+        expect(downloadButton).not.toBeDisabled()
+      })
+    })
+
+    describe('when course_pace_download_document feature is disabled', () => {
+      beforeAll(() => {
+        window.ENV.FEATURES ||= {}
+        window.ENV.FEATURES.course_pace_download_document = false
+      })
+
+      it('does not render download button', async () => {
+        const paceContextsState: PaceContextsState = {
+          ...DEFAULT_STORE_STATE.paceContexts,
+        }
+        const state = {...DEFAULT_STORE_STATE, paceContexts: paceContextsState}
+        const {queryByTestId} = renderConnected(<PaceContent />, state)
+
+        expect(await queryByTestId(`download-selected-button`)).not.toBeInTheDocument()
+      })
+
+      it('does not render select all checkbox', async () => {
+        const paceContextsState: PaceContextsState = {
+          ...DEFAULT_STORE_STATE.paceContexts,
+        }
+        const state = {...DEFAULT_STORE_STATE, paceContexts: paceContextsState}
+        const {queryByTestId} = renderConnected(<PaceContent />, state)
+
+        expect(await queryByTestId(`select-all-paces-checkbox`)).not.toBeInTheDocument()
+      })
+    })
+
+    describe('when course_pace_download_document feature is disabled', () => {
+      beforeAll(() => {
+        window.ENV.FEATURES ||= {}
+        window.ENV.FEATURES.course_pace_download_document = false
+      })
+
+      it('does not render download button', async () => {
+        const paceContextsState: PaceContextsState = {
+          ...DEFAULT_STORE_STATE.paceContexts,
+        }
+        const state = {...DEFAULT_STORE_STATE, paceContexts: paceContextsState}
+        const {queryByTestId} = renderConnected(<PaceContent />, state)
+
+        expect(await queryByTestId(`download-selected-button`)).not.toBeInTheDocument()
+      })
+
+      it('does not render select all checkbox', async () => {
+        const paceContextsState: PaceContextsState = {
+          ...DEFAULT_STORE_STATE.paceContexts,
+        }
+        const state = {...DEFAULT_STORE_STATE, paceContexts: paceContextsState}
+        const {queryByTestId} = renderConnected(<PaceContent />, state)
+
+        expect(await queryByTestId(`select-all-paces-checkbox`)).not.toBeInTheDocument()
+      })
+    })
+    describe('when course_pace_allow_bulk_pace_assign feature is disabled', () => {
+      beforeAll(() => {
+        window.ENV.FEATURES ||= {}
+        window.ENV.FEATURES.course_pace_allow_bulk_pace_assign = false
+      })
+
+      it('does not render the bulk edit button button', async () => {
+        const paceContextsState: PaceContextsState = {
+          ...DEFAULT_STORE_STATE.paceContexts,
+        }
+        const state = {...DEFAULT_STORE_STATE, paceContexts: paceContextsState}
+        const {queryByTestId} = renderConnected(<PaceContent />, state)
+
+        expect(await queryByTestId(`bulk-edit-student-paces-button`)).not.toBeInTheDocument()
       })
     })
   })

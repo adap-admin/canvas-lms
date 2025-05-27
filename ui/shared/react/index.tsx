@@ -18,77 +18,43 @@
 
 import React from 'react'
 import {createRoot} from 'react-dom/client'
-import {
-  canvas as canvasBaseTheme,
-  canvasHighContrast as canvasHighContrastTheme,
-} from '@instructure/ui-themes'
+import ReactDOM from 'react-dom'
 import {InstUISettingsProvider} from '@instructure/emotion'
-import {memoize} from 'lodash'
-
-// Set up the default InstUI theme
-// Override the fontFamily to include "Lato Extended", which we prefer
-// to load over plain Lato (see LS-1559)
-const typography = {
-  fontFamily: 'LatoWeb, "Lato Extended", Lato, "Helvetica Neue", Helvetica, Arial, sans-serif',
-}
-
-const EMPTY_OBJ = {}
-
-type BrandVariables = Record<string, unknown>
+import {getTheme} from '@canvas/instui-bindings'
 
 type Options = {
   highContrast?: boolean
   brandVariables?: Record<string, unknown>
 }
 
-function getTheme(highContrast: boolean, brandVariables: BrandVariables) {
-  // Set CSS transitions to 0ms in Selenium and JS tests
-  let transitionOverride: {
-    transitions?: {
-      duration: string
-    }
-  } = {}
-  // @ts-expect-error
-  if (process.env.NODE_ENV === 'test' || window.INST.environment === 'test') {
-    transitionOverride = {
-      transitions: {
-        duration: '0ms',
-      },
-    }
-  }
-
-  return highContrast
-    ? {
-        ...canvasHighContrastTheme,
-        typography,
-      }
-    : {
-        ...transitionOverride,
-        ...canvasBaseTheme,
-        ...brandVariables,
-        typography,
-      }
-}
-const memoizedGetTheme = memoize(getTheme)
-
-export function render(
+export function legacyRender(
   element: React.ReactElement,
   container: Element | null,
-  options: Options = {}
+  options: Options = {},
 ) {
   if (!(container instanceof HTMLElement)) {
     throw new Error('Container must be an HTMLElement')
   }
-  const highContrast =
-    typeof options.highContrast === 'boolean'
-      ? options.highContrast
-      : // @ts-expect-error
-        Boolean(ENV.use_high_contrast)
 
-  // @ts-expect-error
-  const brandVariables = options.brandVariables || window.CANVAS_ACTIVE_BRAND_VARIABLES || EMPTY_OBJ
+  const theme = getTheme(options.highContrast, options.brandVariables)
 
-  const theme = memoizedGetTheme(highContrast, brandVariables)
+  // eslint-disable-next-line react/no-render-return-value
+  return ReactDOM.render(
+    <InstUISettingsProvider theme={theme}>{element}</InstUISettingsProvider>,
+    container,
+  )
+}
+
+export function render(
+  element: React.ReactElement,
+  container: Element | null,
+  options: Options = {},
+) {
+  if (!(container instanceof HTMLElement)) {
+    throw new Error('Container must be an HTMLElement')
+  }
+
+  const theme = getTheme(options.highContrast, options.brandVariables)
 
   const root = createRoot(container)
   root.render(<InstUISettingsProvider theme={theme}>{element}</InstUISettingsProvider>)

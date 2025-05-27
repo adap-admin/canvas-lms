@@ -19,7 +19,7 @@
 import React from 'react'
 import {fireEvent, render, screen, waitFor} from '@testing-library/react'
 import fetchMock from 'fetch-mock'
-import EditUserDetails, {EditUserDetailsProps, UserDetails} from '../EditUserDetails'
+import EditUserDetails, {type EditUserDetailsProps, type UserDetails} from '../EditUserDetails'
 import {computeShortAndSortableNamesFromName} from '@canvas/user-sortable-name/react'
 
 describe('EditUserDetails', () => {
@@ -92,7 +92,7 @@ describe('EditUserDetails', () => {
       fireEvent.click(submit)
 
       const errorAlerts = await screen.findAllByText(
-        'Updating user details failed, please try again.'
+        'Updating user details failed, please try again.',
       )
       expect(errorAlerts.length).toBeTruthy()
     })
@@ -117,7 +117,7 @@ describe('EditUserDetails', () => {
 
       await waitFor(() => {
         expect(
-          fetchMock.called(EDIT_USER_DETAILS_URI, {method: 'PATCH', body: {user: newUserDetails}})
+          fetchMock.called(EDIT_USER_DETAILS_URI, {method: 'PATCH', body: {user: newUserDetails}}),
         ).toBe(true)
         expect(props.onSubmit).toHaveBeenCalledWith(newUserDetails)
       })
@@ -140,18 +140,36 @@ describe('EditUserDetails', () => {
       expect(email).toBeInTheDocument()
     })
 
-    it('should show an error message if the email field is empty', async () => {
+    it('should still submit if the email field is blank', async () => {
+      const newUserDetails: Partial<UserDetails> = {
+        name: 'new name',
+        short_name: 'new short_name',
+        sortable_name: 'new sortable_name',
+        time_zone: timezones[0].name,
+      }
       const newProps: EditUserDetailsProps = {
         ...props,
         userDetails: {...props.userDetails, email: ''},
       }
+      fetchMock.patch(EDIT_USER_DETAILS_URI, newUserDetails, {overwriteRoutes: true})
       render(<EditUserDetails {...newProps} />)
+
+      const name = screen.getByLabelText('Full Name')
+      const shortName = screen.getByLabelText('Display Name')
+      const sortableName = screen.getByLabelText('Sortable Name')
       const submit = screen.getByLabelText('Update Details')
 
+      fireEvent.input(name, {target: {value: newUserDetails.name}})
+      fireEvent.input(shortName, {target: {value: newUserDetails.short_name}})
+      fireEvent.input(sortableName, {target: {value: newUserDetails.sortable_name}})
       fireEvent.click(submit)
 
-      const errorText = await screen.findByText('Email is required.')
-      expect(errorText).toBeInTheDocument()
+      await waitFor(() => {
+        expect(
+          fetchMock.called(EDIT_USER_DETAILS_URI, {method: 'PATCH', body: {user: newUserDetails}}),
+        ).toBe(true)
+        expect(props.onSubmit).toHaveBeenCalledWith(newUserDetails)
+      })
     })
 
     it('should show an error message if the email field is invalid', async () => {
@@ -196,7 +214,7 @@ describe('EditUserDetails', () => {
 
       await waitFor(() => {
         expect(
-          fetchMock.called(EDIT_USER_DETAILS_URI, {method: 'PATCH', body: {user: newUserDetails}})
+          fetchMock.called(EDIT_USER_DETAILS_URI, {method: 'PATCH', body: {user: newUserDetails}}),
         ).toBe(true)
         expect(props.onSubmit).toHaveBeenCalledWith(newUserDetails)
       })

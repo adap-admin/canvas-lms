@@ -91,8 +91,8 @@ export const getK5ThemeOverrides = () => {
       secondaryFontSize: '1rem',
     },
     [PlannerItem.componentId]: {
-      iconColor: colors.licorice,
-      secondaryColor: colors.licorice,
+      iconColor: colors.contrasts.grey125125,
+      secondaryColor: colors.contrasts.grey125125,
     },
     'Table.Cell': {
       padding: '1rem 0.75rem',
@@ -117,16 +117,16 @@ export const getPlannerTheme = () => {
 
   return {
     ToggleDetails: {
-      iconColor: colors.brand,
-      textColor: colors.textBrand,
+      iconColor: colors.contrasts.blue4570,
+      textColor: colors.contrasts.blue4570
     },
   }
 }
 
-export const useK5Theme = (
+export const registerK5Theme = (
   options: {
     fontOnly?: boolean
-  } = {}
+  } = {},
 ) => {
   const {baseTheme, base, baseFont} = getBaseThemeVars()
   const fontOnly = options?.fontOnly || false

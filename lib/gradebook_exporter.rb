@@ -93,7 +93,7 @@ class GradebookExporter
     student_section_names = {}
     student_enrollments.each do |enrollment|
       student_section_names[enrollment.user_id] ||= []
-      student_section_names[enrollment.user_id] << (enrollment.course_section.display_name rescue nil)
+      student_section_names[enrollment.user_id] << enrollment.course_section.display_name
     end
 
     # remove duplicate enrollments for students enrolled in multiple sections
@@ -112,7 +112,7 @@ class GradebookExporter
       @course,
       ignore_muted: false,
       grading_period:,
-      include_discussion_checkpoints: @course.root_account.feature_enabled?(:discussion_checkpoints)
+      include_discussion_checkpoints: @course.discussion_checkpoints_enabled?
     )
 
     submissions = {}
@@ -130,7 +130,7 @@ class GradebookExporter
     assignments = sort_assignments(assignments)
 
     # Insert the sub-assignments after the assignments are sorted
-    if @course.root_account.feature_enabled?(:discussion_checkpoints)
+    if @course.discussion_checkpoints_enabled?
       assignments_with_checkpoints = []
       assignments.each do |a|
         assignments_with_checkpoints << a
@@ -442,6 +442,7 @@ class GradebookExporter
   end
 
   STARTS_WITH_EQUAL = /^\s*=/
+  private_constant :STARTS_WITH_EQUAL
 
   # Returns the student name to use for the export.  If the name
   # starts with =, quote it so anyone pulling the data into Excel

@@ -47,8 +47,8 @@ describe Types::AssignmentType do
     expect(assignment_type.resolve("onlyVisibleToOverrides")).to eq assignment.only_visible_to_overrides
     expect(assignment_type.resolve("assignmentGroup { _id }")).to eq assignment.assignment_group.id.to_s
     expect(assignment_type.resolve("allowedExtensions")).to eq assignment.allowed_extensions
-    expect(assignment_type.resolve("createdAt").to_datetime).to eq assignment.created_at.to_s.to_datetime
-    expect(assignment_type.resolve("updatedAt").to_datetime).to eq assignment.updated_at.to_s.to_datetime
+    expect(Time.iso8601(assignment_type.resolve("createdAt")).to_i).to eq assignment.created_at.to_i
+    expect(Time.iso8601(assignment_type.resolve("updatedAt")).to_i).to eq assignment.updated_at.to_i
     expect(assignment_type.resolve("gradeGroupStudentsIndividually")).to eq assignment.grade_group_students_individually
     expect(assignment_type.resolve("originalityReportVisibility")).to eq assignment.turnitin_settings[:originality_report_visibility]
     expect(assignment_type.resolve("anonymousGrading")).to eq assignment.anonymous_grading
@@ -181,6 +181,30 @@ describe Types::AssignmentType do
     end
   end
 
+  describe "rubric self assessments" do
+    before do
+      rubric_for_course
+      rubric_association_model(context: course, rubric: @rubric, association_object: assignment, purpose: "grading")
+      course.enable_feature!(:enhanced_rubrics)
+      course.enable_feature!(:platform_service_speedgrader)
+      course.root_account.enable_feature!(:rubric_self_assessment)
+      assignment.update(rubric_self_assessment_enabled: true)
+    end
+
+    it "returns rubric self assessment enabled" do
+      expect(assignment_type.resolve("rubricSelfAssessmentEnabled")).to be true
+    end
+
+    it "returns can_update_rubric_self_assessment" do
+      expect(assignment_type.resolve("canUpdateRubricSelfAssessment")).to be true
+    end
+
+    it "returns can_update_rubric_self_assessment false if the due dates have passed" do
+      assignment.update(due_at: 1.day.ago)
+      expect(assignment_type.resolve("canUpdateRubricSelfAssessment")).to be false
+    end
+  end
+
   it "works with moderated grading" do
     assignment.moderated_grading = true
     assignment.grader_count = 1
@@ -200,7 +224,7 @@ describe Types::AssignmentType do
     assignment.save!
     expect(assignment_type.resolve("peerReviews { enabled }")).to eq assignment.peer_reviews
     expect(assignment_type.resolve("peerReviews { count }")).to eq assignment.peer_review_count
-    expect(assignment_type.resolve("peerReviews { dueAt }").to_datetime).to eq assignment.peer_reviews_due_at.to_s.to_datetime
+    expect(Time.iso8601(assignment_type.resolve("peerReviews { dueAt }")).to_i).to eq assignment.peer_reviews_due_at.to_i
     expect(assignment_type.resolve("peerReviews { intraReviews }")).to eq assignment.intra_group_peer_reviews
     expect(assignment_type.resolve("peerReviews { anonymousReviews }")).to eq assignment.anonymous_peer_reviews
     expect(assignment_type.resolve("peerReviews { automaticReviews }")).to eq assignment.automatic_peer_reviews
@@ -330,6 +354,16 @@ describe Types::AssignmentType do
       expect(
         assignment_type.resolve("description", request: ActionDispatch::TestRequest.create)
       ).to include "http://test.host/courses/#{course.id}/files/12/download"
+    end
+
+    it "tags attachments with location when file_association_access is enabled" do
+      assignment_type =  GraphQLTypeTester.new(assignment, current_user: student, domain_root_account: course.root_account)
+      course.root_account.enable_feature!(:file_association_access)
+      attachment = attachment_model(context: course)
+      assignment.update(description: "<img src='/courses/#{course.id}/files/#{attachment.id}/download'>")
+      expect(
+        assignment_type.resolve("description", request: ActionDispatch::TestRequest.create)
+      ).to include "http://test.host/courses/#{course.id}/files/#{attachment.id}/download?location=#{assignment.asset_string}"
     end
   end
 
@@ -776,7 +810,6 @@ describe Types::AssignmentType do
     end
 
     it "works for Course tags" do
-      Account.site_admin.enable_feature!(:selective_release_backend)
       assignment.assignment_overrides.create!(set: course)
 
       expect(
@@ -887,6 +920,7 @@ describe Types::AssignmentType do
   describe "checkpoints" do
     describe "when feature flag is disabled" do
       it "checkpoints is nil and hasSubAssignments is false" do
+        @course.account.disable_feature!(:discussion_checkpoints)
         expect(assignment_type.resolve("checkpoints {tag}")).to be_nil
         expect(assignment_type.resolve("hasSubAssignments")).to be_falsey
       end
@@ -894,7 +928,7 @@ describe Types::AssignmentType do
 
     describe "when feature flag is enabled" do
       before do
-        course.root_account.enable_feature!(:discussion_checkpoints)
+        course.account.enable_feature!(:discussion_checkpoints)
       end
 
       it "checkpoints is [] and hasSubAssignments is false" do
@@ -961,7 +995,7 @@ describe Types::AssignmentType do
   describe "mySubAssignmentSubmissionsConnection" do
     context "when feature flag is enabled" do
       before do
-        course.root_account.enable_feature!(:discussion_checkpoints)
+        course.account.enable_feature!(:discussion_checkpoints)
         @topic = DiscussionTopic.create_graded_topic!(course:, title: "Checkpointed Discussion")
         @topic.reply_to_entry_required_count = 2
         @topic.save!
@@ -1008,7 +1042,7 @@ describe Types::AssignmentType do
   describe "sub_assignment_submissions" do
     context "when feature flag is enabled" do
       before do
-        course.root_account.enable_feature!(:discussion_checkpoints)
+        course.account.enable_feature!(:discussion_checkpoints)
         @topic = DiscussionTopic.create_graded_topic!(course:, title: "Checkpointed Discussion")
         @topic.reply_to_entry_required_count = 2
         @topic.save!
@@ -1283,6 +1317,29 @@ describe Types::AssignmentType do
         expect(student_overridden_assignment_type.resolve(
                  "assignmentTargetConnection { edges { node { title } } }"
                )).to be_nil
+      end
+    end
+
+    context "anonymous_student_identities" do
+      context "when user does not have manage_grades permission" do
+        let(:context) { { current_user: student } }
+
+        it "returns null in place of the PostPolicy" do
+          resolver = GraphQLTypeTester.new(assignment, context)
+          expect(resolver.resolve("anonymousStudentIdentities {anonymousId}")).to be_nil
+        end
+      end
+
+      context "when user has manage_grades permission" do
+        let(:context) { { current_user: teacher } }
+        let(:resolver) { GraphQLTypeTester.new(assignment, context) }
+
+        it "returns the anonymous student identities for the assignment" do
+          assignment.anonymous_grading = true
+          assignment.save!
+          result = resolver.resolve("anonymousStudentIdentities {anonymousId}")
+          expect(result).to match_array(assignment.submissions.pluck(:anonymous_id))
+        end
       end
     end
   end

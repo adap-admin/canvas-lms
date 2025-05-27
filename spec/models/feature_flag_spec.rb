@@ -44,7 +44,7 @@ describe FeatureFlag do
     it "validates the feature exists" do
       flag = t_root_account.feature_flags.build(feature: "xyzzy")
       expect(flag).not_to be_valid
-      expect(flag.errors.to_h).to eq({ feature: "does not exist" })
+      expect(flag.errors[:feature].first).to eq("does not exist")
     end
 
     it "allows 'allowed' state only in accounts" do
@@ -61,7 +61,7 @@ describe FeatureFlag do
 
       flag = t_sub_account.feature_flags.build(feature: "root_account_feature")
       expect(flag).not_to be_valid
-      expect(flag.errors.to_h).to eq({ feature: "does not apply to context" })
+      expect(flag.errors[:feature].first).to eq("does not apply to context")
     end
   end
 
@@ -97,6 +97,7 @@ describe FeatureFlag do
     end
 
     it "is false on a root account feature flag with site admin flag set" do
+      allow_any_instance_of(Account).to receive(:feature_enabled?).with(:instructure_identity_global_flag)
       Account.site_admin.allow_feature! :hidden_feature
       t_root_account.enable_feature! :hidden_feature
       expect(t_root_account.lookup_feature_flag(:hidden_feature)).not_to be_unhides_feature

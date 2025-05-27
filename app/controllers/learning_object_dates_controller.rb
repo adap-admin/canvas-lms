@@ -97,7 +97,6 @@
 #       }
 #     }
 class LearningObjectDatesController < ApplicationController
-  before_action :require_feature_flag # remove when selective_release_ui_api flag is removed
   before_action :require_user
   before_action :require_context
   before_action :check_authorized_action
@@ -106,6 +105,7 @@ class LearningObjectDatesController < ApplicationController
   include Api::V1::Assignment
   include Api::V1::AssignmentOverride
   include SubmittableHelper
+  include DifferentiationTag
 
   OBJECTS_WITH_ASSIGNMENTS = %w[DiscussionTopic WikiPage].freeze
 
@@ -125,8 +125,8 @@ class LearningObjectDatesController < ApplicationController
                                  section_visibilities = overridable.discussion_topic_section_visibilities.active.where.not(course_section_id: section_overrides)
                                  Api.paginate(section_visibilities, self, route)
                                end
-
-    include_child_override_due_dates = Account.site_admin.feature_enabled?(:discussion_checkpoints)
+    # @context here is always a course, which was requested by the API client
+    include_child_override_due_dates = @context.discussion_checkpoints_enabled?
     all_overrides = assignment_overrides_json(overrides, @current_user, include_names: true, include_child_override_due_dates:)
     all_overrides += section_visibility_to_override_json(section_visibilities, overridable) if visibilities_to_override
 
@@ -192,6 +192,7 @@ class LearningObjectDatesController < ApplicationController
     when "Quizzes::Quiz"
       update_quiz(asset, object_update_params.except(:reply_to_topic_due_at, :required_replies_due_at))
     when "DiscussionTopic"
+      asset.overrides_changed = true
       if asset == overridable
         update_ungraded_object(asset, object_update_params)
       else
@@ -203,10 +204,11 @@ class LearningObjectDatesController < ApplicationController
         prefer_assignment_availability_dates(asset, overridable)
       end
     when "WikiPage"
-      if wiki_page_needs_assignment?
-        apply_assignment_parameters(object_update_params.merge(set_assignment: true), asset)
-      elsif asset == overridable
+      if Account.site_admin.feature_enabled?(:create_wiki_page_mastery_path_overrides) || (asset == overridable && !wiki_page_needs_assignment?)
+
         update_ungraded_object(asset, object_update_params)
+      elsif wiki_page_needs_assignment?
+        apply_assignment_parameters(object_update_params.merge(set_assignment: true), asset)
       else
         update_assignment(overridable, object_update_params)
       end
@@ -215,11 +217,27 @@ class LearningObjectDatesController < ApplicationController
     end
   end
 
-  private
+  def convert_tag_overrides_to_adhoc_overrides
+    # Graded discussions have an assignment for due dates so use that
+    learning_object = if asset.is_a?(DiscussionTopic) && asset.assignment
+                        asset.assignment
+                      else
+                        asset
+                      end
 
-  def require_feature_flag
-    not_found unless Account.site_admin.feature_enabled? :selective_release_ui_api
+    errors = OverrideConverterService.convert_tags_to_adhoc_overrides_for(
+      learning_object:,
+      course: @context
+    )
+
+    if errors
+      return render json: { errors: }, status: :bad_request
+    end
+
+    head :no_content
   end
+
+  private
 
   def check_authorized_action
     return render json: { error: "This API does not support files." }, status: :bad_request if asset.is_a?(Attachment) && !Account.site_admin.feature_enabled?(:differentiated_files)
@@ -265,8 +283,10 @@ class LearningObjectDatesController < ApplicationController
     checkpoint_service.call(
       discussion_topic: discussion,
       checkpoint_label: CheckpointLabels::REPLY_TO_TOPIC,
-      dates: checkpoint_dates[:reply_to_topic][:dates]
+      dates: checkpoint_dates[:reply_to_topic][:dates],
+      saved_by: :transaction
     )
+
     checkpoint_service.call(
       discussion_topic: discussion,
       checkpoint_label: CheckpointLabels::REPLY_TO_ENTRY,
@@ -282,8 +302,8 @@ class LearningObjectDatesController < ApplicationController
     params[:assignment_overrides]&.each do |override|
       base_override = { type: "override" }
 
-      [:unlock_at, :lock_at].each do |date_field|
-        base_override[date_field] = override[date_field] if override.key?(date_field)
+      %i[unlock_at lock_at unassign_item].each do |override_field|
+        base_override[override_field] = override[override_field] if override.key?(override_field)
       end
 
       # If student_ids, course_section_id, or group_id is provided, then we want to provide the correct set_type and set ids
@@ -296,6 +316,8 @@ class LearningObjectDatesController < ApplicationController
       elsif override[:group_id]
         base_override[:set_type] = "Group"
         base_override[:set_id] = override[:group_id]
+      elsif override[:course_id]
+        base_override[:set_type] = "Course"
       end
 
       # each checkpoint has the same base_override attributes
@@ -342,6 +364,11 @@ class LearningObjectDatesController < ApplicationController
     }
   end
 
+  def remove_differentiation_tag_overrides(overrides_to_delete)
+    tag_overrides = overrides_to_delete.select { |o| o.set_type == "Group" && o.set.non_collaborative? }
+    tag_overrides.each(&:destroy!)
+  end
+
   def update_quiz(quiz, params)
     return render json: quiz.errors, status: :forbidden unless grading_periods_allow_submittable_update?(quiz, params)
 
@@ -355,6 +382,13 @@ class LearningObjectDatesController < ApplicationController
 
     Assignment.suspend_due_date_caching do
       quiz.transaction do
+        # remove differentiation tag overrides if they are being deleted
+        # and account setting is disabled. The quiz will fail validation
+        # if these overrides exist and the account setting is disabled
+        if !@context.account.allow_assign_to_differentiation_tags? && batch.present?
+          remove_differentiation_tag_overrides(batch[:overrides_to_delete])
+        end
+
         quiz.update!(params)
         perform_batch_update_assignment_overrides(quiz, batch) if overrides
       end

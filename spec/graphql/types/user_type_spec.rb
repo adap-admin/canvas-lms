@@ -78,6 +78,13 @@ describe Types::UserType do
     end
   end
 
+  context "name" do
+    it "encodes html entities" do
+      @student.update! name: "<script>alert(1)</script>"
+      expect(user_type.resolve("name")).to eq "&lt;script&gt;alert(1)&lt;/script&gt;"
+    end
+  end
+
   context "shortName" do
     before(:once) do
       @student.update! short_name: "new display name"
@@ -90,6 +97,18 @@ describe Types::UserType do
     it "returns full name if shortname is not set" do
       @student.update! short_name: nil
       expect(user_type.resolve("shortName")).to eq @student.name
+    end
+
+    it "encodes html entities" do
+      @student.update! short_name: "<script>alert(1)</script>"
+      expect(user_type.resolve("shortName")).to eq "&lt;script&gt;alert(1)&lt;/script&gt;"
+    end
+  end
+
+  context "sortableName" do
+    it "encodes html entities" do
+      @student.update! sortable_name: "<script>alert(1)</script>"
+      expect(user_type.resolve("sortableName")).to eq "&lt;script&gt;alert(1)&lt;/script&gt;"
     end
   end
 
@@ -299,6 +318,184 @@ describe Types::UserType do
                                current_user: @student).map(&:to_i)).to eq [@course2.id, @course1.id]
     end
 
+    it "throws when orderBy is SQL injection" do
+      error = assert_raises GraphQLTypeTester::Error do
+        user_type.resolve('enrollments(orderBy: ["pg_sleep(3)::text"]) {
+          _id
+          course {
+            _id
+          }
+        }')
+      end
+
+      separator = (RUBY_VERSION >= "3.4.0") ? " => " : "=>"
+      expect(error.message).to eq(%([{"message"#{separator}"orderBy is not included in the list", "locations"#{separator}[{"line"#{separator}4, "column"#{separator}7}], "path"#{separator}["node", "enrollments"]}]))
+    end
+
+    context "sort" do
+      before(:once) do
+        @course1 = course_factory
+        course_with_teacher(course: @course1)
+        @section1 = @course1.course_sections.create!(name: "Section A")
+        @section2 = @course1.course_sections.create!(name: "Section B")
+        @section3 = @course1.course_sections.create!(name: "Section C")
+
+        @student1 = user_factory
+        @enrollment1 = @course.enroll_student(@student1, section: @section1, enrollment_state: "active", allow_multiple_enrollments: true)
+        @enrollment2 = @course.enroll_student(@student1, section: @section2, enrollment_state: "active", allow_multiple_enrollments: true)
+        @enrollment3 = @course.enroll_student(@student1, section: @section3, enrollment_state: "active", allow_multiple_enrollments: true)
+      end
+
+      let(:one_day_ago) { 1.day.ago }
+      let(:two_days_ago) { 2.days.ago }
+      let(:three_days_ago) { 3.days.ago }
+
+      let(:user_type1) do
+        GraphQLTypeTester.new(
+          @student1,
+          current_user: @teacher,
+          domain_root_account: @course1.account.root_account,
+          request: ActionDispatch::TestRequest.create
+        )
+      end
+
+      def format_date(date)
+        Time.zone.parse(date.to_s)
+      end
+
+      def resolve_last_activity_at(order = "asc")
+        user_type1.resolve("enrollments(
+          courseId: \"#{@course1.id}\",
+          sort: {
+            field: last_activity_at,
+            direction: #{order}
+          }
+          ) {
+              lastActivityAt
+            }").map { |date_str| format_date(date_str) }
+      end
+
+      def resolve_last_activity_at_with_section_name(order = "asc")
+        user_type1.resolve("enrollments(
+          courseId: \"#{@course1.id}\",
+          sort: {
+            field: last_activity_at,
+            direction: #{order}
+          }
+          ) {
+              section {
+                name
+              }
+            }")
+      end
+
+      def resolve_section_name(order = "asc")
+        user_type1.resolve("enrollments(
+          courseId: \"#{@course1.id}\",
+          sort: {
+            field: section_name,
+            direction: #{order}
+          }
+        ) {
+            section {
+              name
+            }
+          }")
+      end
+
+      def resolve_role(order = "asc")
+        user_type1.resolve("enrollments(
+          courseId: \"#{@course1.id}\",
+          sort: {
+            field: role,
+            direction: #{order}
+          }
+        ) {
+            type
+          }")
+      end
+
+      def resolve_role_with_section_name(order = "asc")
+        user_type1.resolve("enrollments(
+          courseId: \"#{@course1.id}\",
+          sort: {
+            field: role,
+            direction: #{order}
+          }
+        ) {
+            section {
+              name
+            }
+          }")
+      end
+
+      context "last_activity_at" do
+        before(:once) do
+          @enrollment1.update!(last_activity_at: one_day_ago)
+          @enrollment2.update!(last_activity_at: two_days_ago)
+          @enrollment3.update!(last_activity_at: three_days_ago)
+        end
+
+        it "sorts by last_activity_at ascending" do
+          expect(resolve_last_activity_at).to match [format_date(@enrollment1.last_activity_at), format_date(@enrollment2.last_activity_at), format_date(@enrollment3.last_activity_at)]
+        end
+
+        it "sorts by last_activity_at descending" do
+          expect(resolve_last_activity_at("desc")).to match [format_date(@enrollment3.last_activity_at), format_date(@enrollment2.last_activity_at), format_date(@enrollment1.last_activity_at)]
+        end
+
+        it "performs secondary sort by section name ascending" do
+          @enrollment1.update!(last_activity_at: one_day_ago)
+          @enrollment3.update!(last_activity_at: one_day_ago)
+          # enrollment1 - one_day_ago, Section A
+          # enrollment3 - one_day_ago, Section C
+          # enrollment2 - two_days_ago, Section B
+          expect(resolve_last_activity_at_with_section_name).to match ["Section A", "Section C", "Section B"]
+          # enrollment2 - two_days_ago, Section B
+          # enrollment1 - one_day_ago, Section A
+          # enrollment3 - one_day_ago, Section C
+          expect(resolve_last_activity_at_with_section_name("desc")).to match ["Section B", "Section A", "Section C"]
+        end
+      end
+
+      context "section_name" do
+        it "sorts by section_name ascending" do
+          expect(resolve_section_name).to match [@section1.name, @section2.name, @section3.name]
+        end
+
+        it "sorts by section_name descending" do
+          expect(resolve_section_name("desc")).to match [@section3.name, @section2.name, @section1.name]
+        end
+      end
+
+      context "role" do
+        before(:once) do
+          @enrollment2.update!(type: "TeacherEnrollment")
+          @enrollment3.update!(type: "TaEnrollment")
+        end
+
+        it "sorts by role ascending" do
+          expect(resolve_role).to match %w[TeacherEnrollment TaEnrollment StudentEnrollment]
+        end
+
+        it "sorts by role descending" do
+          expect(resolve_role("desc")).to match %w[StudentEnrollment TaEnrollment TeacherEnrollment]
+        end
+
+        it "performs secondary sort by section name ascending" do
+          @enrollment3.update!(type: "StudentEnrollment")
+          # enrollment2 - teacher, Section B
+          # enrollment1 - student, Section A
+          # enrollment3 - student, Section C
+          expect(resolve_role_with_section_name).to match ["Section B", "Section A", "Section C"]
+          # enrollment1 - student, Section A
+          # enrollment3 - student, Section C
+          # enrollment2 - teacher, Section B
+          expect(resolve_role_with_section_name("desc")).to match ["Section A", "Section C", "Section B"]
+        end
+      end
+    end
+
     it "doesn't return enrollments for courses the user doesn't have permission for" do
       expect(
         user_type.resolve(%|enrollments(courseId: "#{@course2.id}") { _id }|)
@@ -337,6 +534,23 @@ describe Types::UserType do
       expect(@student.enrollments.where(course_id: @course1)[0].enrollment_state.state).to eq "pending_active"
 
       expect(user_type.resolve("enrollments { _id }", current_user: @student)).to eq [@student.enrollments.where(course_id: @course2).first.to_param]
+    end
+
+    context "Horizon courses" do
+      before :once do
+        @course3 = course_factory
+        @course3.update!(horizon_course: true)
+      end
+
+      it "return only horizon courses if included" do
+        @course3.enroll_student(@student, enrollment_state: "active")
+        expect(user_type.resolve("enrollments(horizonCourses: true) { _id }", current_user: @student).length).to eq 1
+      end
+
+      it "returns only non-horizon courses if false" do
+        @course3.enroll_student(@student, enrollment_state: "active")
+        expect(user_type.resolve("enrollments(horizonCourses: false) { _id }", current_user: @student).length).to eq @student.enrollments.length - 1
+      end
     end
   end
 
@@ -470,6 +684,42 @@ describe Types::UserType do
       expect(
         type.resolve("conversationsConnection { nodes { conversation { conversationMessagesConnection { nodes { body } } } } }")[0][0]
       ).to eq c.conversation.conversation_messages.first.body
+    end
+
+    context "with horizon courses" do
+      before do
+        # Create a horizon course and conversation
+        @course.update!(horizon_course: true)
+        @course.account.enable_feature!(:horizon_course_setting)
+        @course.enroll_student(@student, enrollment_state: "active")
+        @course.save!
+        # Pass the actual course object as context
+        @horizon_convo = conversation(@student, @teacher, body: "Horizon")
+      end
+
+      after do
+        @course.update!(horizon_course: false)
+        @course.account.disable_feature!(:horizon_course_setting)
+        @horizon_convo.destroy
+      end
+
+      it "excludes horizon conversations by default" do
+        type = GraphQLTypeTester.new(@student, current_user: @student, domain_root_account: @student.account, request: ActionDispatch::TestRequest.create)
+        result = type.resolve("conversationsConnection { nodes { conversation { conversationMessagesConnection { nodes { body } } } } }")
+        expect(result.flatten).not_to include(@horizon_convo.conversation.conversation_messages.first.body)
+      end
+
+      it "excludes horizon conversations if showHorizonConversations is false" do
+        type = GraphQLTypeTester.new(@student, current_user: @student, domain_root_account: @student.account, request: ActionDispatch::TestRequest.create)
+        result = type.resolve("conversationsConnection(showHorizonConversations: false) { nodes { conversation { conversationMessagesConnection { nodes { body } } } } }")
+        expect(result.flatten).not_to include(@horizon_convo.conversation.conversation_messages.first.body)
+      end
+
+      it "includes horizon conversations when explicitly requested" do
+        type = GraphQLTypeTester.new(@student, current_user: @student, domain_root_account: @student.account, request: ActionDispatch::TestRequest.create)
+        result = type.resolve("conversationsConnection(showHorizonConversations: true) { nodes { conversation { conversationMessagesConnection { nodes { body } } } } }")
+        expect(result.flatten).to include(@horizon_convo.conversation.conversation_messages.first.body)
+      end
     end
 
     context "recipient user deleted" do
@@ -624,8 +874,23 @@ describe Types::UserType do
       expect(result[0][0]).to eq "Hey Im using SimpleTags tagged_scope_handler."
     end
 
+    it "returns the conversations without conversation participants" do
+      conversation(@student, @teacher, { body: "Hello, Mr White" })
+      conversation_participant = conversation(@student, @teacher, { body: "Hello??" })
+
+      # Delete the conversation but leave the conversation_participants orphaned
+      conversation_participant.conversation.conversation_messages.destroy_all
+      conversation_participant.conversation.delete
+
+      type = GraphQLTypeTester.new(@student, current_user: @student, domain_root_account: @student.account, request: ActionDispatch::TestRequest.create)
+      result = type.resolve(
+        "conversationsConnection { nodes { conversation { conversationMessagesConnection { nodes { body } } } } }"
+      )
+      expect(result.count).to eq 1
+    end
+
     it "scopes the conversations" do
-      allow(InstStatsd::Statsd).to receive(:increment)
+      allow(InstStatsd::Statsd).to receive(:distributed_increment)
       conversation(@student, @teacher, { body: "You get that thing I sent ya?" })
       conversation(@teacher, @student, { body: "oh yea =)" })
       conversation(@student, @random_person, { body: "Whats up?", starred: true })
@@ -638,21 +903,21 @@ describe Types::UserType do
       )
       expect(result.flatten.count).to eq 3
       expect(result.flatten).to match_array ["You get that thing I sent ya?", "oh yea =)", "Whats up?"]
-      expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.visit.scope.inbox.pages_loaded.react")
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("inbox.visit.scope.inbox.pages_loaded.react")
 
       result = type.resolve(
         "conversationsConnection(scope: \"starred\") { nodes { conversation { conversationMessagesConnection { nodes { body } } } } }"
       )
       expect(result.count).to eq 1
       expect(result[0][0]).to eq "Whats up?"
-      expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.visit.scope.starred.pages_loaded.react")
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("inbox.visit.scope.starred.pages_loaded.react")
 
       type = GraphQLTypeTester.new(@student, current_user: @student, domain_root_account: @student.account, request: ActionDispatch::TestRequest.create)
       result = type.resolve(
         "conversationsConnection(scope: \"unread\") { nodes { conversation { conversationMessagesConnection { nodes { body } } } } }"
       )
       expect(result.flatten.count).to eq 2
-      expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.visit.scope.unread.pages_loaded.react")
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("inbox.visit.scope.unread.pages_loaded.react")
 
       type = GraphQLTypeTester.new(
         @random_person,
@@ -662,7 +927,7 @@ describe Types::UserType do
       )
       result = type.resolve("conversationsConnection(scope: \"sent\") { nodes { conversation { conversationMessagesConnection { nodes { body } } } } }")
       expect(result[0][0]).to eq "Help! Please make me non-random!"
-      expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.visit.scope.sent.pages_loaded.react")
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("inbox.visit.scope.sent.pages_loaded.react")
 
       @conversation.update!(workflow_state: "archived")
       type = GraphQLTypeTester.new(
@@ -673,7 +938,7 @@ describe Types::UserType do
       )
       result = type.resolve("conversationsConnection(scope: \"archived\") { nodes { conversation { conversationMessagesConnection { nodes { body } } } } }")
       expect(result[0][0]).to eq "Help! Please make me non-random!"
-      expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.visit.scope.archived.pages_loaded.react")
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("inbox.visit.scope.archived.pages_loaded.react")
       @conversation.update!(workflow_state: "read")
     end
   end
@@ -683,6 +948,24 @@ describe Types::UserType do
       GraphQLTypeTester.new(
         @student,
         current_user: @student,
+        domain_root_account: @course.account.root_account,
+        request: ActionDispatch::TestRequest.create
+      )
+    end
+
+    let(:teacher_type) do
+      GraphQLTypeTester.new(
+        @teacher,
+        current_user: @teacher,
+        domain_root_account: @course.account.root_account,
+        request: ActionDispatch::TestRequest.create
+      )
+    end
+
+    let(:ta_type) do
+      GraphQLTypeTester.new(
+        @ta,
+        current_user: @ta,
         domain_root_account: @course.account.root_account,
         request: ActionDispatch::TestRequest.create
       )
@@ -744,6 +1027,98 @@ describe Types::UserType do
       known_users = @student.address_book.search_users(context: "course_#{@course.id}_students").paginate(per_page: 3)
       result = type.resolve("recipients(context: \"course_#{@course.id}_students\") { usersConnection { nodes { _id } } }")
       expect(result).to match_array(known_users.pluck(:id).map(&:to_s))
+    end
+
+    context "differentiation tags" do
+      before do
+        Account.default.enable_feature! :assign_to_differentiation_tags
+        Account.default.settings[:allow_assign_to_differentiation_tags] = { value: true }
+        Account.default.save!
+        Account.default.reload
+        @collaborative_category = @course.group_categories.create!(name: "Collaborative Category", non_collaborative: false)
+        @collaborative_group = @course.groups.create!(name: "Collaborative group", group_category: @collaborative_category)
+        @collaborative_group.add_user(@student)
+
+        @non_collaborative_category = @course.group_categories.create!(name: "Non-Collaborative Category", non_collaborative: true)
+        @non_collaborative_group = @course.groups.create!(name: "non Collaborative group", group_category: @non_collaborative_category)
+        @non_collaborative_group.add_user(@student)
+      end
+
+      describe "teacher type" do
+        it "returns differentiation tags" do
+          result = teacher_type.resolve("recipients(context: \"course_#{@course.id}\") { contextsConnection { nodes { name } } }")
+          expect(result).to include("Differentiation Tags")
+        end
+
+        it "returns differentiation tag details" do
+          result = teacher_type.resolve("recipients(context: \"course_#{@course.id}_differentiation_tags\") { contextsConnection { nodes { name } } }")
+          expect(result).to eq(["non Collaborative group"])
+        end
+
+        it "returns differentiation tag users" do
+          result = teacher_type.resolve("recipients(context: \"differentiation_tag_#{@non_collaborative_group.id}\") { usersConnection { nodes { name } } }")
+          expect(result).to eq([@student.name])
+        end
+
+        it "returns group tag users" do
+          result = teacher_type.resolve("recipients(context: \"group_#{@collaborative_group.id}\") { usersConnection { nodes { name } } }")
+          expect(result).to eq([@student.name])
+        end
+
+        it "does not return differentiation tags when flag is off" do
+          Account.default.disable_feature! :assign_to_differentiation_tags
+          Account.default.settings[:allow_assign_to_differentiation_tags] = { value: false }
+          Account.default.save!
+          Account.default.reload
+
+          result = teacher_type.resolve("recipients(context: \"course_#{@course.id}\") { contextsConnection { nodes { name } } }")
+          expect(result).not_to include("Differentiation Tags")
+        end
+      end
+
+      describe "student type" do
+        it "does not return differentiation tags" do
+          result = type.resolve("recipients(context: \"course_#{@course.id}\") { contextsConnection { nodes { name } } }")
+          expect(result).not_to include("Differentiation Tags")
+        end
+
+        it "does not return differentiation tag details" do
+          result = type.resolve("recipients(context: \"course_#{@course.id}_differentiation_tags\") { contextsConnection { nodes { name } } }")
+          expect(result).to eq([])
+        end
+
+        it "does not return differentiation tag users" do
+          result = type.resolve("recipients(context: \"differentiation_tag_#{@non_collaborative_group.id}\") { usersConnection { nodes { name } } }")
+          expect(result).to eq([])
+        end
+
+        it "does not allow circumventing permissions by calling group" do
+          result = type.resolve("recipients(context: \"group_#{@non_collaborative_group.id}\") { usersConnection { nodes { name } } }")
+          expect(result).to eq([])
+        end
+      end
+
+      describe "ta type" do
+        it "does not return differentiation tags" do
+          result = ta_type.resolve("recipients(context: \"course_#{@course.id}\") { contextsConnection { nodes { name } } }")
+          expect(result).not_to include("Differentiation Tags")
+        end
+
+        it "does not return differentiation tag details" do
+          result = ta_type.resolve("recipients(context: \"course_#{@course.id}_differentiation_tags\") { contextsConnection { nodes { name } } }")
+          expect(result).to eq([])
+        end
+
+        it "does not return differentiation tag users" do
+          result = ta_type.resolve("recipients(context: \"differentiation_tag_#{@non_collaborative_group.id}\") { usersConnection { nodes { name } } }")
+          expect(result).to eq([])
+        end
+
+        it "does not allow circumventing permissions by calling group" do
+          result = ta_type.resolve("recipients(context: \"group_#{@non_collaborative_group.id}\") { usersConnection { nodes { name } } }")
+          expect(result).to eq([])
+        end
+      end
     end
   end
 
@@ -1029,6 +1404,57 @@ describe Types::UserType do
       @student.favorites.create!(context: @group)
       result = type.resolve("favoriteGroupsConnection { nodes { _id } }")
       expect(result).to match_array([@group.id.to_s])
+    end
+
+    it "includes non_collaborative group when asked for by someone with permissions" do
+      Account.default.settings[:allow_assign_to_differentiation_tags] = { value: true }
+      Account.default.save!
+      Account.default.reload
+      allow_any_instance_of(Course).to receive(:grants_any_right?).with(@student, anything, *RoleOverride::GRANULAR_MANAGE_TAGS_PERMISSIONS).and_return(true)
+
+      @non_collaborative_category = @course.group_categories.create!(name: "Non-Collaborative Groups", non_collaborative: true)
+      group_with_user(user: @student, active_all: true)
+      favorite_group = @group
+      @student.favorites.create!(context: favorite_group)
+
+      hidden_group_membership = group_with_user(user: @student, active_all: true, group_category: @non_collaborative_category, context: @course)
+      hidden_group = hidden_group_membership.group
+      @student.favorites.create!(context: hidden_group)
+      allow(hidden_group).to receive(:grants_any_right?).and_return(true)
+
+      result = type.resolve("favoriteGroupsConnection(includeNonCollaborative: true) { nodes { _id } }")
+      expect(result).to match_array([favorite_group.id.to_s, hidden_group.id.to_s])
+    end
+
+    it "excludes non_collaborative groups when asked for by someone without permissions" do
+      Account.default.settings[:allow_assign_to_differentiation_tags] = { value: true }
+      Account.default.save!
+      Account.default.reload
+      @non_collaborative_category = @course.group_categories.create!(name: "Non-Collaborative Groups", non_collaborative: true)
+      group_with_user(user: @student, active_all: true)
+      favorite_group = @group
+      @student.favorites.create!(context: favorite_group)
+
+      hidden_group_membership = group_with_user(user: @student, active_all: true, group_category: @non_collaborative_category, context: @course)
+      hidden_group = hidden_group_membership.group
+      @student.favorites.create!(context: hidden_group)
+
+      result = type.resolve("favoriteGroupsConnection { nodes { _id } }")
+      expect(result).to match_array([favorite_group.id.to_s])
+    end
+
+    it "excludes non_collaborative groups when asked for by someone without permissions and no favorite groups" do
+      Account.default.settings[:allow_assign_to_differentiation_tags] = { value: true }
+      Account.default.save!
+      Account.default.reload
+      @non_collaborative_category = @course.group_categories.create!(name: "Non-Collaborative Groups", non_collaborative: true)
+
+      hidden_group_membership = group_with_user(user: @student, active_all: true, group_category: @non_collaborative_category, context: @course)
+      hidden_group = hidden_group_membership.group
+      @student.favorites.create!(context: hidden_group)
+
+      result = type.resolve("favoriteGroupsConnection { nodes { _id } }")
+      expect(result).to be_empty
     end
   end
 
@@ -1354,16 +1780,16 @@ describe Types::UserType do
       end
 
       it "can retrieve submission comments" do
-        allow(InstStatsd::Statsd).to receive(:increment)
+        allow(InstStatsd::Statsd).to receive(:distributed_increment)
         query_result = teacher_type.resolve("viewableSubmissionsConnection { nodes { commentsConnection { nodes { comment }} }  }")
         expect(query_result[0].count).to eq 3
         expect(query_result[0]).to match_array ["First comment", "Second comment", "Third comment"]
-        expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.visit.scope.submission_comments.pages_loaded.react")
+        expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("inbox.visit.scope.submission_comments.pages_loaded.react")
       end
 
       it "can get createdAt" do
         query_result = teacher_type.resolve("viewableSubmissionsConnection { nodes { commentsConnection { nodes { createdAt }} }  }")
-        retrieved_values = query_result[0].map { |string_date| Time.parse(string_date) }
+        retrieved_values = query_result[0].map { |string_date| Time.zone.parse(string_date) }
         expect(retrieved_values).to all(be_within(1.minute).of(@sc1.created_at))
       end
 

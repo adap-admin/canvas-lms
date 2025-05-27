@@ -94,7 +94,7 @@ describe SubAssignment do
 
   describe "discussion checkpoints" do
     before do
-      @parent_assignment.root_account.enable_feature!(:discussion_checkpoints)
+      @parent_assignment.course.account.enable_feature!(:discussion_checkpoints)
       @parent_assignment.update!(title: "graded topic", submission_types: "discussion_topic")
       @topic = @parent_assignment.discussion_topic
       @topic.create_checkpoints(reply_to_topic_points: 3, reply_to_entry_points: 7)
@@ -114,7 +114,7 @@ describe SubAssignment do
     end
 
     it "does not update the parent assignment when the checkpoints flag is disabled" do
-      @topic.root_account.disable_feature!(:discussion_checkpoints)
+      @topic.course.account.disable_feature!(:discussion_checkpoints)
       expect { @checkpoint.update!(points_possible: 4) }.not_to change {
         @topic.assignment.reload.points_possible
       }
@@ -128,7 +128,7 @@ describe SubAssignment do
   describe "scope: visible_to_students_in_course_with_da" do
     before do
       course_with_student(active_all: true)
-      @course.root_account.enable_feature!(:discussion_checkpoints)
+      @course.account.enable_feature!(:discussion_checkpoints)
       @reply_to_topic, @reply_to_entry = graded_discussion_topic_with_checkpoints(context: @course)
     end
 
@@ -142,21 +142,6 @@ describe SubAssignment do
       course2 = course_factory(course_name: "other course", active_course: true)
       result = SubAssignment.visible_to_students_in_course_with_da([@student.id], [course2.id])
       expect(result).to be_empty
-    end
-
-    it "works with selective release backend FF disabled" do
-      Account.site_admin.disable_feature!(:selective_release_backend)
-      result = SubAssignment.visible_to_students_in_course_with_da([@student.id], [@course.id])
-      expect(result.size).to eq 2
-      expect(result.pluck(:id)).to match_array([@reply_to_topic.id, @reply_to_entry.id])
-    end
-
-    it "works with selective release backend FF enabled" do
-      Account.site_admin.enable_feature!(:selective_release_backend)
-      result = SubAssignment.visible_to_students_in_course_with_da([@student.id], [@course.id])
-      expect(result).not_to be_empty
-      expect(result.size).to eq 2
-      expect(result.pluck(:id)).to match_array([@reply_to_topic.id, @reply_to_entry.id])
     end
   end
 
@@ -197,6 +182,12 @@ describe SubAssignment do
 
       expect(@sub_assignment).not_to receive(:sync_with_parent)
       @sub_assignment.reload.run_callbacks(:commit)
+    end
+
+    it "does not trigger a sync when updated by a transaction" do
+      @sub_assignment.saved_by = :transaction
+      expect(@parent_assignment).not_to receive(:update_from_sub_assignment)
+      @sub_assignment.update!(unlock_at: 1.day.from_now)
     end
   end
 
@@ -340,10 +331,42 @@ describe SubAssignment do
     end
   end
 
+  describe "callbacks: sync_parent_has_sub_flag" do
+    let(:course)            { course_factory(active_course: true) }
+    let(:parent)            { course.assignments.create!(title: "Parent", has_sub_assignments: false) }
+    let(:attrs) do
+      {
+        context: course,
+        sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC,
+        title: "A Sub"
+      }
+    end
+
+    it "marks parent.has_sub_assignments = true on create" do
+      expect(parent.has_sub_assignments).to be_falsey
+
+      sub = parent.sub_assignments.create!(attrs)
+      sub.send(:sync_parent_has_sub_flag)
+
+      expect(parent.reload.has_sub_assignments).to be_truthy
+    end
+
+    it "marks parent.has_sub_assignments = false on destroy" do
+      sub = parent.sub_assignments.create!(attrs)
+      sub.send(:sync_parent_has_sub_flag)
+      expect(parent.reload.has_sub_assignments).to be_truthy
+
+      expect do
+        sub.destroy!
+        sub.send(:sync_parent_has_sub_flag)
+      end.to change { parent.reload.has_sub_assignments }.from(true).to(false)
+    end
+  end
+
   describe "title_with_id" do
     before(:once) do
       @course = course_factory(active_course: true)
-      @course.root_account.enable_feature!(:discussion_checkpoints)
+      @course.account.enable_feature!(:discussion_checkpoints)
       @reply_to_topic, @reply_to_entry = graded_discussion_topic_with_checkpoints(context: @course)
     end
 
@@ -368,6 +391,55 @@ describe SubAssignment do
     it "handles extracting the title and id of checkpoints properly" do
       expect(SubAssignment.title_and_id("Reply To Topic Reply To Topic (1)")).to eq(["Reply To Topic", "1"])
       expect(SubAssignment.title_and_id("Required Replies Required Replies (1)")).to eq(["Required Replies", "1"])
+    end
+  end
+
+  describe "to_atom" do
+    before :once do
+      course_model
+      @course.account.enable_feature!(:discussion_checkpoints)
+      @required_replies = 2
+      @reply_to_topic, @reply_to_entry = graded_discussion_topic_with_checkpoints(
+        context: @course,
+        reply_to_entry_required_count: @required_replies
+      )
+    end
+
+    it "generates correct feed titles for discussion checkpoints" do
+      expect(@reply_to_topic.to_atom[:title]).to eq "Assignment: #{@topic.title} Reply to Topic"
+      expect(@reply_to_entry.to_atom[:title]).to eq "Assignment: #{@topic.title} Required Replies (#{@required_replies})"
+    end
+
+    it "generates correct feed links for discussion checkpoints" do
+      expect(@reply_to_topic.to_atom[:link]).to include @reply_to_topic.direct_link.to_s
+      expect(@reply_to_entry.to_atom[:link]).to include @reply_to_entry.direct_link.to_s
+    end
+  end
+
+  describe "title_with_required_replies" do
+    before :once do
+      course_model
+      @course.account.enable_feature!(:discussion_checkpoints)
+      @required_replies = 2
+      @reply_to_topic, @reply_to_entry = graded_discussion_topic_with_checkpoints(
+        context: @course,
+        reply_to_entry_required_count: @required_replies
+      )
+    end
+
+    it "generates correct title for reply to topic checkpoint" do
+      expect(@reply_to_topic.title_with_required_replies).to eq "#{@reply_to_topic.title} Reply to Topic"
+    end
+
+    it "generates correct title for reply to entry checkpoint" do
+      expect(@reply_to_entry.title_with_required_replies).to eq "#{@reply_to_entry.title} Required Replies (#{@required_replies})"
+      @reply_to_entry.sub_assignment_tag = "invalid"
+      expect(@reply_to_entry.title_with_required_replies).to eq @reply_to_entry.title.to_s
+    end
+
+    it "generates correct title for sub_assignment with invalid sub_assignment_tag" do
+      @reply_to_topic.sub_assignment_tag = "invalid"
+      expect(@reply_to_topic.title_with_required_replies).to eq @reply_to_topic.title.to_s
     end
   end
 end

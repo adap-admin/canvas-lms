@@ -64,7 +64,7 @@ describe('CourseHomeDialog', () => {
     ok(isWikiDisabled(noWiki), 'wiki radio should be disabled')
 
     const hasWiki = shallow(
-      <CourseHomeDialog {...getDefaultProps()} wikiFrontPageTitle="Welcome" />
+      <CourseHomeDialog {...getDefaultProps()} wikiFrontPageTitle="Welcome" />,
     )
     ok(!isWikiDisabled(hasWiki), 'wiki radio should be enabled')
   })
@@ -79,20 +79,25 @@ describe('CourseHomeDialog', () => {
     store.setState({selectedDefaultView: 'assignments'})
     submitButton(dialog).simulate('click')
 
-    window.setTimeout(() => {
+    setTimeout(() => {
       equal(xhrs.length, 1)
-      xhrs[0].respond([200, {}, {}])
-    })
-    window.setTimeout(() => {
-      ok(onSubmit.called)
-      done()
-    })
+      xhrs[0].respond(
+        200,
+        { 'Content-Type': 'application/json' },
+        JSON.stringify({ default_view: 'assignments' })
+      )
+
+      setTimeout(() => {
+        ok(onSubmit.called, 'onSubmit should be called after saving')
+        done()
+      }, 50)
+    }, 0)
   })
 
   test('calls onRequestClose when cancel is clicked', () => {
     const onRequestClose = sinon.spy()
     const dialog = shallow(
-      <CourseHomeDialog {...getDefaultProps()} onRequestClose={onRequestClose} />
+      <CourseHomeDialog {...getDefaultProps()} onRequestClose={onRequestClose} />,
     )
     const cancelBtn = dialog.find('Button').at(0)
     equal(cancelBtn.props().children, 'Cancel')
@@ -102,7 +107,7 @@ describe('CourseHomeDialog', () => {
 
   test('save button disabled when publishing if modules selected', () => {
     store.setState({selectedDefaultView: 'modules'})
-    let dialog = shallow(<CourseHomeDialog {...getDefaultProps()} isPublishing />)
+    let dialog = shallow(<CourseHomeDialog {...getDefaultProps()} isPublishing={true} />)
     ok(submitButton(dialog).props().disabled, 'submit disabled when modules selected')
 
     store.setState({selectedDefaultView: 'feed'})

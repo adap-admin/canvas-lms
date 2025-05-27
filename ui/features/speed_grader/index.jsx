@@ -37,23 +37,25 @@ import {updateCommentBankItem} from './mutations/comment_bank/updateCommentBankI
 import {updateCommentSuggestionsEnabled} from './mutations/comment_bank/updateCommentSuggestionsEnabled'
 import {saveRubricAssessment} from './mutations/saveRubricAssessmentMutation'
 import {updateSubmissionSecondsLate} from './mutations/updateSubmissionSecondsLateMutation'
-import { reassignAssignment } from './mutations/reassignAssignmentMutation'
+import {reassignAssignment} from './mutations/reassignAssignmentMutation'
+import {deleteAttachment} from './mutations/deleteAttachmentMutation'
+import iframeAllowances from '@canvas/external-apps/iframeAllowances'
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import GenericErrorPage from '@canvas/generic-error-page'
 import errorShipUrl from '@canvas/images/ErrorShip.svg'
 import {executeQuery} from '@canvas/query/graphql'
 import speedGrader from './jquery/speed_grader'
 import SGUploader from './sg_uploader'
 
-const I18n = useI18nScope('speed_grader')
+const I18n = createI18nScope('speed_grader')
 
 ready(() => {
   const classicContainer = document.querySelector('#classic_speedgrader_container')
 
   if (classicContainer instanceof HTMLElement) {
     // touch punch simulates mouse events for touch devices
-    // eslint-disable-next-line import/extensions
+
     require('./touch_punch.js')
 
     const mountPoint = document.getElementById('speed_grader_loading')
@@ -73,11 +75,13 @@ ready(() => {
       >
         <Spinner renderTitle={I18n.t('Loading')} margin="large auto 0 auto" />
       </div>,
-      mountPoint
+      mountPoint,
     )
     speedGrader.setup()
     return
   }
+
+  speedGrader.setupForSG2()
 
   const mountPoint = document.querySelector('#react-router-portals')
 
@@ -96,7 +100,7 @@ ready(() => {
         errorSubject={I18n.t('SpeedGrader loading error')}
         errorCategory={I18n.t('SpeedGrader Error Page')}
       />,
-      mountPoint
+      mountPoint,
     )
     return
   }
@@ -121,6 +125,7 @@ ready(() => {
           updateSubmissionGrade,
           createSubmissionComment,
           deleteSubmissionComment,
+          deleteAttachment,
           hideAssignmentGradesForSections,
           postAssignmentGradesForSections,
           postDraftSubmissionComment,
@@ -153,21 +158,31 @@ ready(() => {
           useHighContrast: window.ENV.use_high_contrast ?? false,
           commentLibrarySuggestionsEnabled: window.ENV.comment_library_suggestions_enabled ?? false,
           lateSubmissionInterval: window.ENV.late_policy?.late_submission_interval || 'day',
+          ltiIframeAllowances: iframeAllowances(),
+          permissions: { canViewAuditTrail: window.ENV.can_view_audit_trail ?? false },
+          gradebookGroupFilterId: window.ENV.gradebook_group_filter_id ?? null,
         },
         features: {
+          a2StudentEnabled: window.ENV.A2_STUDENT_ENABLED ?? false,
           extendedSubmissionState: window.ENV.FEATURES.extended_submission_state ?? false,
           emojisEnabled: !!window.ENV.EMOJIS_ENABLED,
           enhancedRubricsEnabled: window.ENV.ENHANCED_RUBRICS_ENABLED ?? false,
           commentLibraryEnabled: window.ENV.COMMENT_LIBRARY_FEATURE_ENABLED ?? false,
+          consolidatedMediaPlayerEnabled: window.ENV.FEATURES.consolidated_media_player ?? false,
           restrictQuantitativeDataEnabled: window.ENV.RESTRICT_QUANTITATIVE_DATA_ENABLED ?? false,
           gradeByStudentEnabled: window.ENV.GRADE_BY_STUDENT_ENABLED ?? false,
+          discussionCheckpointsEnabled: window.ENV.FEATURES.discussion_checkpoints ?? false,
+          stickersEnabled: window.ENV.STICKERS_ENABLED_FOR_ASSIGNMENT ?? false,
+          filterSpeedGraderByStudentGroupEnabled:
+            window.ENV.FILTER_SPEEDGRADER_BY_STUDENT_GROUP_ENABLED ?? false,
+          projectLhotseEnabled: window.ENV.PROJECT_LHOTSE_ENABLED ?? false,
         },
       })
     })
     .catch(error => {
-      // eslint-disable-next-line no-console
       console.error('Failed to load SpeedGrader', error)
       captureException(error)
+
       ReactDOM.render(
         <GenericErrorPage
           imageUrl={errorShipUrl}
@@ -175,7 +190,7 @@ ready(() => {
           errorSubject={I18n.t('SpeedGrader loading error')}
           errorCategory={I18n.t('SpeedGrader Error Page')}
         />,
-        mountPoint
+        mountPoint,
       )
     })
 })

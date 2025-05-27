@@ -20,7 +20,7 @@ import React from 'react'
 import {render, fireEvent} from '@testing-library/react'
 import TeacherView from '../../TeacherView'
 import {TeacherViewContextDefaults} from '../../TeacherViewContext'
-import {MockedProvider} from '@apollo/react-testing'
+import {MockedProvider} from '@apollo/client/testing'
 import {
   closest,
   mockAssignment,
@@ -69,7 +69,7 @@ function mocks() {
         ],
       },
       {},
-      undefined
+      undefined,
     ),
   ]
 }
@@ -83,7 +83,7 @@ describe('TeacherView', () => {
     const {getAllByText, getByText, getByTestId, getByDisplayValue, findByTestId} = render(
       <MockedProvider mocks={mocks()} addTypename={false}>
         <TeacherView assignment={assignment} />
-      </MockedProvider>
+      </MockedProvider>,
     )
 
     // open the override detail

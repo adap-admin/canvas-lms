@@ -16,7 +16,7 @@
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 
 // mediaComment.js
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import * as pubsub from 'jquery-tinypubsub'
 import mejs from '@canvas/mediaelement'
 import MediaElementKeyActionHandler from './MediaElementKeyActionHandler'
@@ -26,10 +26,11 @@ import htmlEscape from '@instructure/html-escape'
 import sanitizeUrl from '@canvas/util/sanitizeUrl'
 import {contentMapping} from '@instructure/canvas-rce/src/common/mimeClass'
 import React from 'react'
-import ReactDOM from 'react-dom'
+import {createRoot} from 'react-dom/client'
+import CanvasStudioPlayer from '@canvas/canvas-studio-player'
 import {MediaPlayer} from '@instructure/ui-media-player'
 
-const I18n = useI18nScope('jquery_media_comments')
+const I18n = createI18nScope('jquery_media_comments')
 
 // #
 // a module for some of the transformation functions pulled out of the middle
@@ -85,7 +86,7 @@ mejs.MepDefaults.success = function (mediaElement, _domObject) {
       kalturaAnalytics(this.mediaCommentId, mediaElement, INST.kalturaSettings)
     })
     .catch(error => {
-      console.log('Error importing kalturaAnalytics:', error) // eslint-disable-line no-console
+      console.log('Error importing kalturaAnalytics:', error)
     })
   return mediaElement.play()
 }
@@ -98,8 +99,13 @@ mejs.MepDefaults.features.splice(positionAfterSubtitleSelector, 0, 'sourcechoose
 // enable the playback speed selector
 mejs.MepDefaults.features.splice(positionAfterSubtitleSelector, 0, 'speed')
 
+export function isNewPlayerEnabled() {
+  const mediaPlayerEnabled = ENV.studio_media_capture_enabled
+  const studioPlayerEnabled = ENV.FEATURES?.consolidated_media_player
+  return studioPlayerEnabled || mediaPlayerEnabled
+}
+
 export function getSourcesAndTracks(id, attachmentId) {
-  const studioMediaEnabled = ENV.studio_media_capture_enabled
   const dfd = new $.Deferred()
   const api = attachmentId ? 'media_attachments' : 'media_objects'
   $.getJSON(`/${api}/${attachmentId || id}/info`, data => {
@@ -111,25 +117,27 @@ export function getSourcesAndTracks(id, attachmentId) {
       // resolution. sort so we play the lowest res. by default
       .sort((a, b) => parseInt(a.bitrate, 10) - parseInt(b.bitrate, 10))
       .map(source => {
-        if (studioMediaEnabled) {
+        if (isNewPlayerEnabled()) {
           return {
             src: source.url,
             label: `${htmlEscape(source.width)}x${htmlEscape(source.height)} ${htmlEscape(
-              Math.floor(source.bitrate / 1024)
+              Math.floor(source.bitrate / 1024),
             )} kbps`,
+            height: parseInt(source.height),
+            width: parseInt(source.width),
           }
         }
         // xsslint safeString.function sanitizeUrl
         return `<source type='${htmlEscape(source.content_type)}' src='${sanitizeUrl(
-          htmlEscape(source.url)
+          htmlEscape(source.url),
         )}' title='${htmlEscape(source.width)}x${htmlEscape(source.height)} ${htmlEscape(
-          Math.floor(source.bitrate / 1024)
+          Math.floor(source.bitrate / 1024),
         )} kbps' />`
       })
 
     const tracks = map(data.media_tracks, track => {
       const languageName = mejs.language.codes[track.locale] || track.locale
-      if (studioMediaEnabled) {
+      if (isNewPlayerEnabled()) {
         return {
           id: attachmentId || id,
           type: track.kind,
@@ -139,9 +147,9 @@ export function getSourcesAndTracks(id, attachmentId) {
         }
       }
       return `<track kind='${htmlEscape(track.kind)}' label='${htmlEscape(
-        languageName
+        languageName,
       )}' src='${htmlEscape(track.url)}' srclang='${htmlEscape(
-        track.locale
+        track.locale,
       )}' data-inherited-track='${htmlEscape(track.inherited)}' />`
     })
 
@@ -164,7 +172,7 @@ function createMediaTag({sourcesAndTracks, mediaType, height, width, mediaPlayer
       {mode: 'auto'},
       mejs.MediaElementDefaults,
       mejs.MepDefaults,
-      mediaPlayerOptions
+      mediaPlayerOptions,
     )
     const element = MediaCommentUtils.getElement('audio', st_tags)
     const playback = mejs.HtmlMediaElementShim.determinePlayback(
@@ -172,7 +180,7 @@ function createMediaTag({sourcesAndTracks, mediaType, height, width, mediaPlayer
       opts,
       mejs.MediaFeatures.supportsMediaTag,
       !!'isMediaTag',
-      null
+      null,
     )
     return playback.method !== 'native'
   }
@@ -213,7 +221,7 @@ const mediaCommentActions = {
     mediaType = 'video',
     downloadUrl,
     attachmentId = null,
-    lockedMediaAttachment = false
+    lockedMediaAttachment = false,
   ) {
     // todo: replace .andSelf with .addBack when JQuery is upgraded.
     const $holder = $(this).closest('.instructure_file_link_holder').andSelf().first()
@@ -224,6 +232,20 @@ const mediaCommentActions = {
       const height = Math.round((width / 336) * 240)
       return getSourcesAndTracks(mediaCommentId, attachmentId).done(sourcesAndTracks => {
         if (sourcesAndTracks.sources.length) {
+          if (ENV.FEATURES?.consolidated_media_player) {
+            const root = createRoot(holder[0])
+            root.render(
+              <CanvasStudioPlayer
+                media_id={id}
+                explicitSize={{width: width, height: height}}
+                hideUploadCaptions={!sourcesAndTracks.can_add_captions}
+                type={mediaType === 'audio' ? 'audio' : 'video'}
+              />,
+            )
+            holder.data('reactRoot', root)
+            return
+          }
+
           const mediaPlayerOptions = {
             can_add_captions: sourcesAndTracks.can_add_captions,
             mediaCommentId,
@@ -237,7 +259,7 @@ const mediaCommentActions = {
             keyActions: [
               {
                 keys: values(MediaElementKeyActionHandler.keyCodes),
-                action(player, media, keyCode, event) {
+                action(player, media, _, event) {
                   if (player.isVideo) {
                     player.showControls()
                     player.startControlsTimer()
@@ -266,8 +288,8 @@ const mediaCommentActions = {
           holder.text(
             I18n.t(
               'media_still_converting',
-              'Media is currently being converted, please try again in a little bit.'
-            )
+              'Media is currently being converted, please try again in a little bit.',
+            ),
           )
         }
       })
@@ -277,7 +299,7 @@ const mediaCommentActions = {
       const detailsUrl = downloadUrl.replace(/\/download.*/, '')
       const onError = () =>
         $holder.text(
-          I18n.t('Media has been queued for conversion, please try again in a little bit.')
+          I18n.t('Media has been queued for conversion, please try again in a little bit.'),
         )
       const onSuccess = function (data) {
         if (data.attachment && data.attachment.media_entry_id !== 'maybe') {
@@ -316,7 +338,24 @@ const mediaCommentActions = {
       }
 
       const $dialog = $('<div style="overflow: hidden; padding: 0;" />')
-      if (mediaType === 'audio') $dialog.css('padding-top', '120px')
+      if (mediaType === 'audio') {
+        if (ENV.FEATURES?.consolidated_media_player) {
+          $dialog.css('padding-top', '0')
+          height = 280
+        } else if (ENV.FEATURES?.speedgrader_studio_media_capture) {
+          $dialog.css({
+            'padding-top': '105px',
+            'background-color': 'black',
+          })
+          height = 330
+          width = 450
+        } else {
+          $dialog.css({
+            'padding-top': '150px',
+            'background-color': 'black',
+          })
+        }
+      }
 
       $dialog.dialog({
         dialogClass: 'play_media_comment',
@@ -331,6 +370,17 @@ const mediaCommentActions = {
 
           if (openingElement) {
             openingElement.focus()
+          }
+          if (isNewPlayerEnabled()) {
+            const root = $dialog.data('reactRoot')
+            if (root) {
+              root.unmount()
+            }
+            $dialog.empty()
+            $this.data({
+              media_comment_dialog: null,
+              reactRoot: null,
+            })
           }
         },
         open: event => {
@@ -352,14 +402,6 @@ const mediaCommentActions = {
               mediaCommentId: id,
             }
 
-            const mediaPlayer = (
-              <MediaPlayer
-                tracks={sourcesAndTracks.tracks}
-                sources={sourcesAndTracks.sources}
-                captionPosition="bottom"
-              />
-            )
-
             const $mediaTag = createMediaTag({
               sourcesAndTracks,
               mediaPlayerOptions,
@@ -368,9 +410,32 @@ const mediaCommentActions = {
               width,
             })
 
-            const studioMediaEnabled = ENV.studio_media_capture_enabled
-            if (studioMediaEnabled) {
-              ReactDOM.render(mediaPlayer, $dialog[0])
+            if (isNewPlayerEnabled()) {
+              const mediaPlayer = ENV.FEATURES?.consolidated_media_player ? (
+                <CanvasStudioPlayer
+                  media_id={id}
+                  explicitSize={{width: width, height: height}}
+                  hideUploadCaptions={!sourcesAndTracks.can_add_captions}
+                  type={mediaType === 'audio' ? 'audio' : 'video'}
+                />
+              ) : (
+                <div
+                  style={{
+                    maxHeight: height,
+                    maxWidth: width,
+                  }}
+                >
+                  <MediaPlayer
+                    tracks={sourcesAndTracks.tracks}
+                    sources={sourcesAndTracks.sources}
+                    captionPosition="bottom"
+                  />
+                </div>
+              )
+
+              const root = createRoot($dialog[0])
+              root.render(mediaPlayer)
+              $dialog.data('reactRoot', root)
             } else {
               $mediaTag.appendTo($dialog.html(''))
             }
@@ -383,11 +448,11 @@ const mediaCommentActions = {
             $dialog.text(
               I18n.t(
                 'media_still_converting',
-                'Media is currently being converted, please try again in a little bit.'
-              )
+                'Media is currently being converted, please try again in a little bit.',
+              ),
             )
           }
-        })
+        }),
       )
     }
   },
@@ -395,7 +460,7 @@ const mediaCommentActions = {
 
 $.fn.mediaComment = function (command, ...restArgs) {
   if (!INST.kalturaSettings) {
-    return console.log('Kaltura has not been enabled for this account') // eslint-disable-line no-console
+    return console.log('Kaltura has not been enabled for this account')
   } else {
     mediaCommentActions[command].apply(this, restArgs)
   }

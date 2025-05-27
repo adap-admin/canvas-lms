@@ -16,40 +16,42 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React, {useEffect, useRef, useState} from 'react'
+import {showFlashError} from '@canvas/alerts/react/FlashAlert'
+import {useScope as createI18nScope} from '@canvas/i18n'
+import {assignLocation, windowPathname} from '@canvas/util/globalUtils'
 import {Button} from '@instructure/ui-buttons'
 import {Flex} from '@instructure/ui-flex'
 import {Heading} from '@instructure/ui-heading'
-import {OtpForm, RememberMeCheckbox, SignInLinks, SSOButtons} from '../shared'
 import {TextInput} from '@instructure/ui-text-input'
-import {View} from '@instructure/ui-view'
+import React, {useEffect, useRef, useState} from 'react'
+import {useNewLogin, useNewLoginData} from '../context'
+import {ROUTES} from '../routes/routes'
 import {performSignIn} from '../services'
-import {showFlashAlert} from '@canvas/alerts/react/FlashAlert'
-import {useNewLogin} from '../context/NewLoginContext'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {ActionPrompt, ForgotPasswordLink, RememberMeCheckbox, SSOButtons} from '../shared'
+import LoginAlert from '../shared/LoginAlert'
+import {createErrorMessage} from '../shared/helpers'
+import {SelfRegistrationType} from '../types'
+import OtpForm from './OtpForm'
 
-const I18n = useI18nScope('new_login')
+const I18n = createI18nScope('new_login')
 
 const SignIn = () => {
-  const {
-    rememberMe,
-    isUiActionPending,
-    setIsUiActionPending,
-    otpRequired,
-    setOtpRequired,
-    loginHandleName,
-    authProviders,
-    isPreviewMode,
-  } = useNewLogin()
+  const {isUiActionPending, setIsUiActionPending, otpRequired, setOtpRequired, rememberMe} =
+    useNewLogin()
+  const {authProviders, invalidLoginFaqUrl, isPreviewMode, selfRegistrationType, loginHandleName} =
+    useNewLoginData()
 
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [usernameError, setUsernameError] = useState('')
   const [passwordError, setPasswordError] = useState('')
-  const isRedirectingRef = useRef(false)
+  const [loginFailed, setLoginFailed] = useState(false)
 
-  const usernameInputRef = useRef<HTMLInputElement | undefined>(undefined)
-  const passwordInputRef = useRef<HTMLInputElement | undefined>(undefined)
+  const isRedirectingRef = useRef(false)
+  const usernameInputRef = useRef<HTMLInputElement | null>(null)
+  const passwordInputRef = useRef<HTMLInputElement | null>(null)
+
+  const isDisabled = isPreviewMode || isUiActionPending
 
   useEffect(() => {
     setUsername('')
@@ -58,55 +60,59 @@ const SignIn = () => {
     setPasswordError('')
   }, [otpRequired])
 
-  useEffect(() => {
-    if (usernameError) {
-      usernameInputRef.current?.focus()
-    } else if (passwordError) {
-      passwordInputRef.current?.focus()
-    }
-  }, [usernameError, passwordError])
-
   const validateForm = (): boolean => {
+    let hasValidationError = false
+    let focusTarget: HTMLInputElement | null = null
+
     setUsernameError('')
     setPasswordError('')
 
-    let formIsValid = true
     if (username.trim() === '') {
-      setUsernameError(I18n.t('Please enter your %{loginHandleName}', {loginHandleName}))
-      formIsValid = false
+      setUsernameError(
+        I18n.t('Please enter your %{loginHandleName}.', {
+          loginHandleName: loginHandleName?.toLowerCase(),
+        }),
+      )
+      focusTarget = usernameInputRef.current
+      hasValidationError = true
     }
-    if (password.trim() === '' && formIsValid) {
-      setPasswordError(I18n.t('Please enter your password'))
-      formIsValid = false
+
+    if (password.trim() === '') {
+      setPasswordError(I18n.t('Please enter your password.'))
+      if (!focusTarget) focusTarget = passwordInputRef.current
+      hasValidationError = true
     }
-    return formIsValid
+
+    if (focusTarget) focusTarget.focus()
+
+    return !hasValidationError
   }
 
   const handleFailedLogin = () => {
-    setUsernameError(
-      I18n.t('Please verify your %{loginHandleName} and password and try again', {loginHandleName})
-    )
     setPassword('')
+    setLoginFailed(true)
   }
 
   const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (isPreviewMode || isUiActionPending) return
+    if (isDisabled) return
 
     if (!validateForm()) return
 
     setIsUiActionPending(true)
 
     try {
-      const response = await performSignIn(username, password, rememberMe)
+      const loginApiEndpoint = windowPathname().startsWith(ROUTES.LDAP)
+        ? ROUTES.LDAP
+        : ROUTES.SIGN_IN
+      const response = await performSignIn(username, password, rememberMe, loginApiEndpoint)
 
       if (response.status === 200) {
         if (response.data?.otp_required) {
           setOtpRequired(true)
         } else if (response.data?.pseudonym) {
           isRedirectingRef.current = true
-          window.location.replace(response.data.location || '/dashboard')
-          return
+          assignLocation(response.data.location || '/dashboard')
         } else {
           handleFailedLogin()
         }
@@ -115,10 +121,7 @@ const SignIn = () => {
       if (error.response?.status === 400) {
         handleFailedLogin()
       } else {
-        showFlashAlert({
-          message: I18n.t('There was an error logging in. Please try again.'),
-          type: 'error',
-        })
+        showFlashError(I18n.t('Something went wrong. Please try again later.'))(error)
       }
     } finally {
       if (!isRedirectingRef.current) setIsUiActionPending(false)
@@ -127,12 +130,10 @@ const SignIn = () => {
 
   const handleUsernameChange = (_event: React.ChangeEvent<HTMLInputElement>, value: string) => {
     setUsername(value.trim())
-    if (usernameError) setUsernameError('')
   }
 
   const handlePasswordChange = (_event: React.ChangeEvent<HTMLInputElement>, value: string) => {
     setPassword(value.trim())
-    if (passwordError) setPasswordError('')
   }
 
   if (otpRequired && !isPreviewMode) {
@@ -141,45 +142,60 @@ const SignIn = () => {
 
   return (
     <Flex direction="column" gap="large">
-      <Heading as="h1" level="h2">
-        {I18n.t('Welcome to Canvas')}
-      </Heading>
+      <Flex direction="column" gap="small">
+        <Heading as="h1" level="h2">
+          {I18n.t('Welcome to Canvas')}
+        </Heading>
 
-      {authProviders && authProviders.length > 0 && (
-        <Flex direction="column" gap="large">
-          <SSOButtons />
-          <View as="hr" borderWidth="small none none none" margin="small none" />
-        </Flex>
+        {selfRegistrationType && (
+          <Flex.Item data-testid="self-registration-prompt" overflowX="visible" overflowY="visible">
+            <ActionPrompt
+              variant={
+                selfRegistrationType === SelfRegistrationType.ALL
+                  ? 'createAccount'
+                  : 'createParentAccount'
+              }
+            />
+          </Flex.Item>
+        )}
+      </Flex>
+
+      {loginFailed && (
+        <LoginAlert
+          invalidLoginFaqUrl={invalidLoginFaqUrl ?? null}
+          loginHandleName={loginHandleName || ''}
+        />
       )}
 
       <form onSubmit={handleLogin} noValidate={true}>
         <Flex direction="column" gap="large">
           <Flex direction="column" gap="mediumSmall">
             <TextInput
+              autoComplete="username"
+              autoCapitalize="none"
+              disabled={isUiActionPending}
               id="username"
-              inputRef={inputElement => {
-                usernameInputRef.current = inputElement as HTMLInputElement | undefined
-              }}
+              inputRef={inputElement => (usernameInputRef.current = inputElement)}
+              messages={createErrorMessage(usernameError)}
+              onChange={handleUsernameChange}
               renderLabel={loginHandleName}
               value={username}
-              onChange={handleUsernameChange}
-              autoComplete="username"
-              disabled={isUiActionPending}
-              messages={usernameError ? [{type: 'error', text: usernameError}] : []}
+              isRequired={true}
+              data-testid="username-input"
             />
 
             <TextInput
+              autoComplete="current-password"
+              disabled={isUiActionPending}
               id="password"
-              inputRef={inputElement => {
-                passwordInputRef.current = inputElement as HTMLInputElement | undefined
-              }}
+              inputRef={inputElement => (passwordInputRef.current = inputElement)}
+              messages={createErrorMessage(passwordError)}
+              onChange={handlePasswordChange}
               renderLabel={I18n.t('Password')}
               type="password"
               value={password}
-              onChange={handlePasswordChange}
-              autoComplete="current-password"
-              disabled={isUiActionPending}
-              messages={passwordError ? [{type: 'error', text: passwordError}] : []}
+              isRequired={true}
+              data-testid="password-input"
             />
 
             <Flex.Item overflowY="visible" overflowX="visible">
@@ -187,17 +203,29 @@ const SignIn = () => {
             </Flex.Item>
           </Flex>
 
-          <Flex direction="column" gap="mediumSmall">
-            <Button type="submit" color="primary" display="block" disabled={isUiActionPending}>
+          <Flex direction="column" gap="small">
+            <Button
+              type="submit"
+              color="primary"
+              display="block"
+              disabled={isUiActionPending}
+              data-testid="login-button"
+            >
               {I18n.t('Log In')}
             </Button>
 
-            <Flex.Item align="center">
-              <SignInLinks />
+            <Flex.Item align="center" overflowX="visible" overflowY="visible">
+              <ForgotPasswordLink />
             </Flex.Item>
           </Flex>
         </Flex>
       </form>
+
+      {authProviders && authProviders.length > 0 && (
+        <Flex direction="column" gap="large">
+          <SSOButtons />
+        </Flex>
+      )}
     </Flex>
   )
 }

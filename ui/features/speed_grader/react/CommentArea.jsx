@@ -22,12 +22,12 @@ import PropTypes from 'prop-types'
 import {TextArea} from '@instructure/ui-text-area'
 import {ScreenReaderContent} from '@instructure/ui-a11y-content'
 import CommentLibrary from './CommentLibrary'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {EmojiPicker, EmojiQuickPicker} from '@canvas/emoji'
 import ReactDOM from 'react-dom'
 import {stripHtmlTags} from '@canvas/outcomes/stripHtmlTags'
 
-const I18n = useI18nScope('speed_grader')
+const I18n = createI18nScope('speed_grader')
 
 function Portal({node, children}) {
   return ReactDOM.createPortal(children, node)
@@ -40,7 +40,15 @@ const textAreaProps = {
   placeholder: I18n.t('Add a Comment'),
 }
 
-export default function CommentArea({getTextAreaRef, courseId, userId, useRCELite, handleCommentChange, currentText, readOnly}) {
+export default function CommentArea({
+  getTextAreaRef,
+  courseId,
+  userId,
+  useRCELite,
+  handleCommentChange,
+  currentText,
+  readOnly,
+}) {
   const [comment, setComment] = useState('')
   const textAreaRef = useRef()
   const [suggestionsRef, setSuggestionsRef] = useState(null)
@@ -67,11 +75,18 @@ export default function CommentArea({getTextAreaRef, courseId, userId, useRCELit
   }
 
   const insertEmoji = emoji => {
-    setComment(comment + emoji.native)
+    if (useRCELite) {
+      textAreaRef.current?.editor?.insertContent(emoji.native)
+      // handleCommentChange will be called onContentChange
+    } else {
+      const value = comment + emoji.native
+      setComment(value)
+      handleCommentChange(value, false)
+    }
+
     if (textAreaRef.current) {
       textAreaRef.current.focus()
     }
-    handleCommentChange(comment + emoji.native, useRCELite)
   }
 
   return (
@@ -79,7 +94,7 @@ export default function CommentArea({getTextAreaRef, courseId, userId, useRCELit
       {showCommentLibrary && (
         <CommentLibrary
           setFocusToTextArea={setFocusToTextArea}
-          setComment={(content) => handleContentChange(content, useRCELite)}
+          setComment={content => handleContentChange(content, useRCELite)}
           courseId={courseId}
           userId={userId}
           commentAreaText={stripHtmlTags(comment)}
@@ -95,7 +110,7 @@ export default function CommentArea({getTextAreaRef, courseId, userId, useRCELit
             height={300}
             textareaId="comment_rce_textarea"
             variant="lite"
-            onContentChange={(content) => handleContentChange(content, false)}
+            onContentChange={content => handleContentChange(content, false)}
             readOnly={readOnly}
           />
         ) : (

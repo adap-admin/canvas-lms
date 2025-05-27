@@ -297,7 +297,6 @@ describe AccountsController do
           manage_lti_add: false,
           manage_lti_edit: false,
           manage_lti_delete: false,
-          lti_add_edit: false,
         }
       end
 
@@ -317,24 +316,6 @@ describe AccountsController do
                                  } }
         @account.reload
         expect(@account.settings[:app_center_access_token]).to be_nil
-      end
-
-      context "with flag disabled" do
-        before do
-          @account.disable_feature!(:require_permission_for_app_center_token)
-        end
-
-        it "updates 'app_center_access_token'" do
-          access_token = SecureRandom.uuid
-          post "update", params: { id: @account.id,
-                                   account: {
-                                     settings: {
-                                       app_center_access_token: access_token
-                                     }
-                                   } }
-          @account.reload
-          expect(@account.settings[:app_center_access_token]).to eq access_token
-        end
       end
     end
 
@@ -415,6 +396,72 @@ describe AccountsController do
       )
       @account.reload
       expect(@account.settings[:show_sections_in_course_tray]).to be true
+    end
+
+    describe "allow_assign_to_differentiation_tags" do
+      it "allows for setting to be updated on an account" do
+        account_with_admin_logged_in
+        post(
+          :update,
+          params: {
+            id: @account.id,
+            account: {
+              settings: {
+                allow_assign_to_differentiation_tags: { value: false, locked: false }
+              }
+            }
+          }
+        )
+        @account.reload
+        expect(@account.settings[:allow_assign_to_differentiation_tags][:value]).to be_falsey
+        expect(@account.settings[:allow_assign_to_differentiation_tags][:locked]).to be_falsey
+
+        post(
+          :update,
+          params: {
+            id: @account.id,
+            account: {
+              settings: {
+                allow_assign_to_differentiation_tags: { value: true, locked: true }
+              }
+            }
+          }
+        )
+        @account.reload
+        expect(@account.settings[:allow_assign_to_differentiation_tags][:value]).to be_truthy
+        expect(@account.settings[:allow_assign_to_differentiation_tags][:locked]).to be_truthy
+      end
+
+      it "allows updating setting in child account after updating from inheritable value" do
+        account_with_admin_logged_in
+        root_account = @account.sub_accounts.create!
+        subaccount = root_account.sub_accounts.create!
+
+        post "update", params: { id: subaccount.id, account: { allow_assign_to_differentiation_tags: {} } }
+        expect(subaccount.reload.settings[:allow_assign_to_differentiation_tags]).to be_nil
+        expect(subaccount.allow_assign_to_differentiation_tags[:value]).to be false
+
+        post "update", params: { id: root_account.id,
+                                 account: { settings: {
+                                   allow_assign_to_differentiation_tags: { value: true }
+                                 } } }
+        expect(subaccount.reload.settings[:allow_assign_to_differentiation_tags]).to be_nil
+        expect(subaccount.allow_assign_to_differentiation_tags[:value]).to be true
+
+        post "update", params: { id: subaccount.id,
+                                 account: { settings: {
+                                   allow_assign_to_differentiation_tags: { value: false }
+                                 } } }
+        expect(subaccount.reload.settings[:allow_assign_to_differentiation_tags][:value]).to be false
+        expect(subaccount.allow_assign_to_differentiation_tags[:value]).to be false
+
+        post "update", params: { id: subaccount.id,
+                                 account: { settings: {
+                                   allow_assign_to_differentiation_tags: { value: true }
+                                 } } }
+        expect(subaccount.reload.settings[:allow_assign_to_differentiation_tags]).to be_nil
+        expect(subaccount.allow_assign_to_differentiation_tags[:value]).to be true
+      end
     end
 
     it "allows admins to set the sis_source_id on sub accounts" do
@@ -776,6 +823,32 @@ describe AccountsController do
       end
     end
 
+    describe "horizon account setting" do
+      before do
+        account_with_admin_logged_in
+      end
+
+      it "can enable the horizon account setting" do
+        post "update", params: { id: @account.id, account: { settings: { horizon_account: { value: true } } } }
+        expect(@account.reload.settings[:horizon_account][:value]).to be true
+      end
+
+      it "can disable the horizon account setting" do
+        @account.settings[:horizon_account] = { value: true }
+        @account.save!
+        post "update", params: { id: @account.id, account: { settings: { horizon_account: { value: false } } } }
+        expect(@account.reload.settings[:horizon_account][:value]).to be false
+      end
+
+      it "includes the setting in the account settings hash" do
+        @account.settings[:horizon_account] = { value: true }
+        @account.save!
+        get "settings", params: { account_id: @account.id }
+        expect(response).to be_successful
+        expect(assigns[:account][:settings][:horizon_account][:value]).to be true
+      end
+    end
+
     describe "quotas" do
       before :once do
         @account = Account.create!
@@ -1048,16 +1121,22 @@ describe AccountsController do
       @controller.instance_variable_set(:@domain_root_account, @account)
     end
 
-    it "returns a successful HTML response" do
+    it "returns a successful HTML response and disables custom CSS/JS and headers" do
       get "acceptable_use_policy", format: :html
       expect(response).to be_successful
       expect(response.content_type).to eq "text/html; charset=utf-8"
+      expect(assigns(:exclude_account_css)).to be(true)
+      expect(assigns(:exclude_account_js)).to be(true)
+      expect(assigns(:headers)).to be(false)
     end
 
-    it "returns a successful JSON response" do
+    it "returns a successful JSON response and does not set custom CSS/JS variables or headers" do
       get "acceptable_use_policy", format: :json
       expect(response).to be_successful
       expect(response.content_type).to eq "application/json; charset=utf-8"
+      expect(assigns(:exclude_account_css)).to be_nil
+      expect(assigns(:exclude_account_js)).to be_nil
+      expect(assigns(:headers)).to be_nil
     end
   end
 
@@ -1957,6 +2036,56 @@ describe AccountsController do
         expect(res.detect { |r| r["id"] == @c2.global_id }["total_students"]).to eq(1)
       end
     end
+
+    context "copied assets" do
+      it "is able to filter courses by a copied page" do
+        @c1 = course_factory(account: @account, course_name: "source course")
+        asset = @c1.wiki_pages.create!(title: "My Asset")
+        @c2 = course_factory(account: @account, course_name: "copied course")
+        migration_id = CC::CCHelper.create_key(asset, global: true)
+        @c2.wiki_pages.create!(title: "My Page", migration_id:)
+        admin_logged_in(@account)
+
+        get "courses_api", params: { account_id: @account.id, copied_asset: "page_#{asset.id}" }
+        expect(response.body).to match(/"name":"copied course"/)
+      end
+
+      it "is able to filter courses by a copied assignment" do
+        @c1 = course_factory(account: @account, course_name: "source course")
+        asset = @c1.assignments.create!(title: "My Asset")
+        @c2 = course_factory(account: @account, course_name: "copied course")
+        migration_id = CC::CCHelper.create_key(asset, global: true)
+        @c2.assignments.create!(title: "My Page", migration_id:)
+        admin_logged_in(@account)
+
+        get "courses_api", params: { account_id: @account.id, copied_asset: "assignment_#{asset.id}" }
+        expect(response.body).to match(/"name":"copied course"/)
+      end
+
+      it "is able to filter courses by a copied external tool" do
+        @c1 = course_factory(account: @account, course_name: "source course")
+        asset = @c1.context_external_tools.create!(name: "a", url: "http://www.google.com", consumer_key: "12345", shared_secret: "secret")
+        @c2 = course_factory(account: @account, course_name: "copied course")
+        migration_id = CC::CCHelper.create_key(asset, global: true)
+        @c2.context_external_tools.create!(name: "a", url: "http://www.google.com", consumer_key: "12345", shared_secret: "secret", migration_id:)
+        admin_logged_in(@account)
+
+        get "courses_api", params: { account_id: @account.id, copied_asset: "external_tool_#{asset.id}" }
+        expect(response.body).to match(/"name":"copied course"/)
+      end
+
+      it "is able to filter courses by a copied attachment" do
+        @c1 = course_factory(account: @account, course_name: "source course")
+        asset = @c1.attachments.create!(filename: "coolpdf.pdf", uploaded_data: StringIO.new("test"))
+        @c2 = course_factory(account: @account, course_name: "copied course")
+        migration_id = CC::CCHelper.create_key(asset, global: true)
+        @c2.attachments.create!(filename: "coolpdf.pdf", uploaded_data: StringIO.new("test"), migration_id:)
+        admin_logged_in(@account)
+
+        get "courses_api", params: { account_id: @account.id, copied_asset: "file_#{asset.id}" }
+        expect(response.body).to match(/"name":"copied course"/)
+      end
+    end
   end
 
   describe "#eportfolio_moderation" do
@@ -2175,6 +2304,37 @@ describe AccountsController do
         expect(response).to be_successful
         expect(json_parse(response.body).pluck("name")).to match_array(["Default Account", "Manually-Created Courses"])
       end
+
+      context "enhanced_course_creation_account_fetching enabled" do
+        before :once do
+          @user = user_factory(active_all: true)
+          Account.site_admin.enable_feature!(:enhanced_course_creation_account_fetching)
+        end
+
+        it "adminable flag is returned for accounts where the user has manage_courses_admin permission" do
+          # sub account admin with creation rights
+          Account.create!(name: "Sub Account", parent_account: Account.default).account_users.create!(user: @user)
+
+          Account.create!(name: "Teacher Creator #2").update(settings: { teachers_can_create_courses: true, students_can_create_courses: true })
+          course_with_teacher(user: @user, active_all: true, account: Account.last)
+
+          Account.create!(name: "Teacher Creator #3").update(settings: { teachers_can_create_courses: true, students_can_create_courses: true })
+          course_with_teacher(user: @user, active_all: true, account: Account.last)
+
+          user_session @user
+          get "course_creation_accounts"
+          expect(response).to be_successful
+          accounts = json_parse(response.body)
+
+          adminable_account = accounts.find { |a| a["name"] == "Sub Account" }
+          expect(adminable_account["adminable"]).to be true
+
+          not_adminable_account = accounts.filter { |a| a["name"] != "Sub Account" }
+          not_adminable_account.each do |account|
+            expect(account["adminable"]).to be false
+          end
+        end
+      end
     end
   end
 
@@ -2211,12 +2371,12 @@ describe AccountsController do
     end
 
     it "emits account_calendars.settings.visit to statsd" do
-      allow(InstStatsd::Statsd).to receive(:increment)
+      allow(InstStatsd::Statsd).to receive(:distributed_increment)
       account_admin_user(account: @account)
       user_session(@user)
       get "account_calendar_settings", params: { account_id: @account.id }
 
-      expect(InstStatsd::Statsd).to have_received(:increment).once.with("account_calendars.settings.visit")
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).once.with("account_calendars.settings.visit")
     end
   end
 end

@@ -18,7 +18,7 @@
 
 import {AnonymousAvatar} from '@canvas/discussions/react/components/AnonymousAvatar/AnonymousAvatar'
 import {AnonymousUser} from '../../../graphql/AnonymousUser'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import PropTypes from 'prop-types'
 import React, {useContext, useMemo} from 'react'
 import {
@@ -47,7 +47,7 @@ import WithBreakpoints, {breakpointsShape} from '@canvas/with-breakpoints'
 import {parse} from '@instructure/moment-utils'
 import DateHelper from '@canvas/datetime/dateHelper'
 
-const I18n = useI18nScope('discussion_posts')
+const I18n = createI18nScope('discussion_posts')
 
 const AuthorInfoBase = ({breakpoints, ...props}) => {
   const {searchTerm} = useContext(SearchContext)
@@ -64,9 +64,9 @@ const AuthorInfoBase = ({breakpoints, ...props}) => {
   // author is not a role found in courseroles,
   // so we can always assume that if there is 1 course role,
   // the author in this component will have to roles (author, and the course role)
-  const timestampTextSize = breakpoints.desktopNavOpen ? 'small' : 'x-small'
-  const authorNameTextSize = breakpoints.desktopNavOpen ? 'small' : 'medium'
-  const authorInfoPadding = breakpoints.mobileOnly ? '0 0 0 x-small' : '0 0 0 small'
+  const timestampTextSize = 'small'
+  const authorNameTextSize = 'medium'
+  const authorInfoPadding = '0 0 0 small'
   let avatarSize = 'small'
 
   if (breakpoints.desktopNavOpen) {
@@ -153,13 +153,12 @@ const AuthorInfoBase = ({breakpoints, ...props}) => {
                   )}
                 </Text>
                 <Flex.Item
-                  overflowX="hidden"
                   padding={breakpoints.mobileOnly ? '0 0 0 xx-small' : '0'}
                 >
                   <RolePillContainer
                     discussionRoles={resolveAuthorRoles(
                       props.isTopicAuthor,
-                      props.author?.courseRoles
+                      props.author?.courseRoles,
                     )}
                     data-testid="pill-container"
                   />
@@ -263,7 +262,10 @@ AuthorInfoBase.propTypes = {
 }
 
 const Timestamps = props => {
-  const isTeacher = ENV?.current_user_roles && ENV?.current_user_roles.includes('teacher')
+  const isTeacher =
+    ENV?.current_user_roles &&
+    ENV?.current_user_roles.includes('teacher') &&
+    !ENV?.current_user_is_student
   const editText = useMemo(() => {
     if (!props.editedTimingDisplay) {
       return null
@@ -292,7 +294,7 @@ const Timestamps = props => {
               editorName: userNameToShow(
                 props.editor.displayName || props.editor.shortName,
                 props.author._id,
-                props.editor.courseRoles
+                props.editor.courseRoles,
               ),
               editedTimingDisplay: props.editedTimingDisplay,
             })
@@ -334,7 +336,9 @@ const Timestamps = props => {
         return null
       }
 
-      return I18n.t('Posted %{delayedPostAt}', {delayedPostAt: DateHelper.formatDatetimeForDiscussions(props.delayedPostAt)})
+      return I18n.t('Posted %{delayedPostAt}', {
+        delayedPostAt: DateHelper.formatDatetimeForDiscussions(props.delayedPostAt),
+      })
     }
   }, [
     isTeacher,
@@ -402,7 +406,6 @@ const NameLink = props => {
     classnames = 'student_context_card_trigger'
   if (props.mobileOnly) classnames += ' author_post'
 
-  const fontWeight = {fontWeight: props.mobileOnly ? 700 : 400}
   return (
     <div
       className={classnames}
@@ -420,7 +423,7 @@ const NameLink = props => {
       data-student_id={props.user?._id}
       data-course_id={ENV.course_id}
     >
-      <Link href={props.user?.htmlUrl} isWithinText={false} themeOverride={fontWeight}>
+      <Link href={props.user?.htmlUrl} isWithinText={false} themeOverride={{fontWeight: 700}}>
         {props.userType === 'author' ? (
           <>
             <SearchSpan

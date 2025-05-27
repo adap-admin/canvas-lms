@@ -92,7 +92,7 @@ module BlockEditorPage
   end
 
   def template_quick_look_header_selector
-    'h3:contains("Template: Quick Look")'
+    'h3:contains(": Quick Look")'
   end
 
   def template_quick_look_header
@@ -125,8 +125,16 @@ module BlockEditorPage
   end
 
   def open_block_toolbox_to_tab(tab_name)
-    block_toolbox_toggle.click
+    begin
+      expect(f("#tab-#{tab_name}")).to be_displayed
+    rescue Selenium::WebDriver::Error::NoSuchElementError # rubocop:disable Specs/NoNoSuchElementError
+      block_toolbox_toggle.click
+    end
     f("#tab-#{tab_name}").click
+  end
+
+  def edit_block_toolbox_sections_list
+    f('[data-testid="list-o-sections"]')
   end
 
   def block_toolbox_box_by_block_name(block_name)
@@ -158,6 +166,14 @@ module BlockEditorPage
     f(block_resize_handle_selector(direction))
   end
 
+  def use_the_rce_button
+    f(".new_rce_page")
+  end
+
+  def rce_container
+    f(".ic-RichContentEditor")
+  end
+
   def block_toolbar
     f(".block-toolbar")
   end
@@ -172,6 +188,10 @@ module BlockEditorPage
 
   def block_toolbar_delete_button_selector
     ".block-toolbar button:contains('Delete')"
+  end
+
+  def block_toolbar_button
+    fj("#{group_block_inner_selector}:contains('Click me')")
   end
 
   def block_toolbar_delete_button
@@ -207,8 +227,12 @@ module BlockEditorPage
     f(group_block_inner_selector)
   end
 
+  def drop_new_block(block_name, where)
+    drag_and_drop_element(block_toolbox_box_by_block_name(block_name), where)
+  end
+
   def text_block
-    f(".text-block")
+    f(".rce-text-block")
   end
 
   # Sections
@@ -267,12 +291,32 @@ module BlockEditorPage
     f(".page-block")
   end
 
+  def block_tag_selector
+    ".block-tag"
+  end
+
+  def block_tag
+    f(block_tag_selector)
+  end
+
+  def button_block
+    f(".button-block")
+  end
+
+  def group_block_child
+    f(".group-block .group-block .group-block")
+  end
+
   def group_block
     f(".group-block")
   end
 
   def group_blocks
     ff(".group-block")
+  end
+
+  def container_block
+    ff(".container-block")
   end
 
   def icon_block
@@ -307,28 +351,113 @@ module BlockEditorPage
     driver.action.key_down(:control).send_keys(:f9).key_up(:control).perform
   end
 
+  def block_toolbar_menus
+    {
+      icon: ["Go up", "Icon", "Size", "Color", "Select Icon", "Drag to move", "Delete"],
+      column: ["Go up", "Column", "Color", "Rouned corners", "Alignment Options", "Drag to move"],
+      columns: ["Columns", "Go down", "Color", "Section Columns", "Columns 1-4", "Drag to move"],
+    }
+  end
+
+  def block_toolbar_menus_global_privileges
+    {
+      icon: block_toolbar_menus[:icon],
+      column: block_toolbar_menus[:column] + ["Save as template"],
+      columns: ["Go up"] + block_toolbar_menus[:columns] + ["Save as template"],
+      page: ["Page", "Go down", "Save as template"]
+    }
+  end
+
+  def block_toolbar_menus_editor_privileges
+    {
+      icon: block_toolbar_menus[:icon],
+      column: block_toolbar_menus_global_privileges[:column],
+      columns: block_toolbar_menus[:columns] + ["Save as template"]
+    }
+  end
+
   def block_toolbar_action(action)
-    selector = "[data-testid='block-toolbar-icon-button-#{action}']"
-    element_visible?(selector) ? f(selector) : selector
+    selector = block_toolbar_selector(action)
+    wait_for_block_editor_toolbar(selector)
+  end
+
+  def block_toolbar_selector(action)
+    "[data-testid='block-toolbar-icon-button-#{action}']"
   end
 
   def block_toolbar_menu_string(menu_items)
-    separators = {
-      "Color" => "\n\n\n\n\n\n\n\n\n",
-      "Drag to move" => "\n\n\n",
-      "Rouned corners" => "\n  \n"
-    }
-
-    menu_items.map { |item| "#{separators[item] || ""}#{item}" }.join
+    menu_items.join
   end
 
   def expect_block_toolbar_menu(menu_items)
-    expect(block_toolbar.attribute("textContent")).to eq(block_toolbar_menu_string(menu_items))
+    expect(block_toolbar.attribute("textContent").gsub(/\s+/, "")).to eq(block_toolbar_menu_string(menu_items).gsub(/\s+/, ""))
   end
 
   def element_visible?(selector)
     driver.find_element(:css, selector).displayed?
   rescue Selenium::WebDriver::Error::NoSuchElementError
     false
+  end
+
+  def text_block_popup
+    f("#rce-text-block-popup")
+  end
+
+  def editor_area
+    f("#editor-area")
+  end
+
+  def top_bar_action(action)
+    f("[data-testid='topbar-button-#{action}']")
+  end
+
+  def preview_modal_background_image
+    f(".block-editor-previewview")
+  end
+
+  def preview_modal_close_button
+    f("[data-testid='preview-modal-close-button']")
+  end
+
+  # Toolbox
+  def toolbox_template_block_action(action)
+    expect(block_toolbar).to be_displayed
+    selector = "[data-testid='edit-template-icon-button-#{action}']"
+    expect(f(selector)).to be_displayed
+    element_visible?(selector) ? f(selector) : selector
+  end
+
+  def blocks_panel_view_item_template_block
+    f('[data-testid="blocks-panel-view-item-template-block"]')
+  end
+
+  # Edit Template popup
+  def edit_template_modal_text_input_template_name
+    f('[data-testid="edit-template-modal-text-input-template-name"]')
+  end
+
+  def edit_template_modal_text_area_template_description
+    f('[data-testid="edit-template-modal-text-area-template-description"]')
+  end
+
+  def edit_template_modal_checkbox_published
+    driver.find_element(:xpath, "//label[@for='edit-template-modal-checkbox-published']")
+  end
+
+  def edit_template_modal_checkbox_global_template
+    driver.find_element(:xpath, "//label[@for='edit-template-modal-checkbox-global-template']")
+  end
+
+  def edit_template_modal_button_cancel
+    f('[data-testid="edit-template-modal-button-cancel"]')
+  end
+
+  def edit_template_modal_button_save
+    f('[data-testid="edit-template-modal-button-save"]')
+  end
+
+  def navigate_to_downloads
+    download_directory = "file:///home/seluser/Downloads"
+    driver.get(download_directory)
   end
 end

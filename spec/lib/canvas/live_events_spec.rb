@@ -898,7 +898,7 @@ describe Canvas::LiveEvents do
 
     it "provides a different context if a different context is provided" do
       attachment_model
-      context = instance_double("Course", global_id: "1", account: nil)
+      context = instance_double(Course, global_id: "1", account: nil)
 
       expect_event("asset_accessed",
                    {
@@ -1766,7 +1766,7 @@ describe Canvas::LiveEvents do
       context_module = course.context_modules.create!
       context_module_progression = context_module.context_module_progressions.create!(user_id: user.id)
       context_module_progression.workflow_state = "completed"
-      context_module_progression.completed_at = Time.now
+      context_module_progression.completed_at = Time.zone.now
       context_module_progression.requirements_met = ["all of them"]
 
       allow(Rails.env).to receive(:production?).and_return(true)
@@ -1778,7 +1778,7 @@ describe Canvas::LiveEvents do
       singleton = "course_progress_course_#{cmp_id}_user_#{context_module_progression.global_user_id}"
       job = Delayed::Job.find_by(singleton:)
       expect(job).not_to be_nil
-      expect(job.run_at).to be > Time.now
+      expect(job.run_at).to be > Time.zone.now
       expect(job.max_concurrent).to eq 1
       expect(job.tag).to eq "CourseProgress.dispatch_live_event"
     end
@@ -2737,6 +2737,121 @@ describe Canvas::LiveEvents do
 
       expect(Canvas::LiveEvents).not_to receive(:post_event_stringified)
       Canvas::LiveEvents.grade_override(score, old_score, @enrollment, @course)
+    end
+  end
+
+  describe "final_grade_custom_status" do
+    let(:custom_grade_status) { CustomGradeStatus.create!(name: "custom", color: "#000000", root_account_id: @course.root_account_id, created_by: @teacher) }
+
+    it "sends event when final grade custom status changes" do
+      course_model
+      enrollment_model
+
+      score = Score.new(override_score: 100.0, course_score: true, custom_grade_status:)
+
+      event_body = {
+        score_id: score.id,
+        enrollment_id: @enrollment.id,
+        user_id: @enrollment.user_id,
+        course_id: @enrollment.course_id,
+        grading_period_id: score.grading_period_id,
+        override_status: score.custom_grade_status&.name,
+        override_status_id: score.custom_grade_status_id,
+        old_override_status: "",
+        old_override_status_id: "",
+        updated_at: score.updated_at,
+      }
+
+      expect(Canvas::LiveEvents).to receive(:post_event_stringified).with(
+        "final_grade_custom_status",
+        event_body,
+        Canvas::LiveEvents.amended_context(@course)
+      )
+      Canvas::LiveEvents.final_grade_custom_status(score, nil, @enrollment, @course)
+    end
+
+    it "sends event when final grade custom status changes and previous status" do
+      course_model
+      enrollment_model
+
+      score = Score.new(override_score: 100.0, course_score: true, custom_grade_status: nil)
+
+      event_body = {
+        score_id: score.id,
+        enrollment_id: @enrollment.id,
+        user_id: @enrollment.user_id,
+        course_id: @enrollment.course_id,
+        grading_period_id: score.grading_period_id,
+        override_status: "",
+        override_status_id: "",
+        old_override_status: custom_grade_status&.name,
+        old_override_status_id: custom_grade_status&.id,
+        updated_at: score.updated_at,
+      }
+
+      expect(Canvas::LiveEvents).to receive(:post_event_stringified).with(
+        "final_grade_custom_status",
+        event_body,
+        Canvas::LiveEvents.amended_context(@course)
+      )
+      Canvas::LiveEvents.final_grade_custom_status(score, custom_grade_status, @enrollment, @course)
+    end
+  end
+
+  describe "submission_custom_grade_status" do
+    before do
+      course_with_student
+      assignment_model
+    end
+
+    let(:custom_grade_status) { CustomGradeStatus.create!(name: "custom", color: "#000000", root_account_id: @course.root_account_id, created_by: @teacher) }
+
+    it "sends event when submission custom status changes" do
+      submission = @assignment.find_or_create_submission(@student)
+      submission.update!(custom_grade_status:)
+
+      event_body = {
+        assignment_id: submission.assignment_id,
+        submission_id: submission.id,
+        user_id: submission.user_id,
+        course_id: submission.course_id,
+        old_submission_status_id: "",
+        old_submission_status: "",
+        submission_status: submission.custom_grade_status&.name,
+        submission_status_id: submission.custom_grade_status_id,
+        updated_at: submission.updated_at,
+      }
+
+      expect(Canvas::LiveEvents).to receive(:post_event_stringified).with(
+        "submission_custom_grade_status",
+        event_body,
+        Canvas::LiveEvents.amended_context(@course)
+      )
+      Canvas::LiveEvents.submission_custom_grade_status(submission, nil)
+    end
+
+    it "sends event when submission custom status changes and previous status" do
+      submission = @assignment.find_or_create_submission(@student)
+      submission.update!(custom_grade_status: nil)
+
+      event_body = {
+        assignment_id: submission.assignment_id,
+        submission_id: submission.id,
+        user_id: submission.user_id,
+        course_id: submission.course_id,
+        old_submission_status_id: custom_grade_status.id,
+        old_submission_status: custom_grade_status.name,
+        submission_status: "",
+        submission_status_id: "",
+        updated_at: submission.updated_at,
+      }
+
+      expect(Canvas::LiveEvents).to receive(:post_event_stringified).with(
+        "submission_custom_grade_status",
+        event_body,
+        Canvas::LiveEvents.amended_context(@course)
+      )
+      Canvas::LiveEvents.submission_custom_grade_status(submission, custom_grade_status.id)
     end
   end
 

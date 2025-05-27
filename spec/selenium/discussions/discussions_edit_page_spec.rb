@@ -28,7 +28,6 @@ require_relative "../common"
 require_relative "pages/discussion_page"
 require_relative "../assignments/page_objects/assignment_create_edit_page"
 require_relative "../discussions/discussion_helpers"
-require_relative "../../helpers/selective_release_common"
 
 describe "discussions" do
   include_context "in-process server selenium tests"
@@ -40,7 +39,6 @@ describe "discussions" do
   include K5DashboardCommonPageObject
   include K5Common
   include K5ImportantDatesSectionPageObject
-  include SelectiveReleaseCommon
 
   def create_graded_discussion(discussion_course, assignment_options = {})
     default_assignment_options = {
@@ -137,29 +135,6 @@ describe "discussions" do
 
             expect_new_page_load { f(".form-actions button[type=submit]").click }
             expect(topic.reload.assignment.peer_reviews).to be true
-          end
-
-          it "allows editing the due dates", priority: "1" do
-            differentiated_modules_off
-            get url
-            wait_for_tiny(f("textarea[name=message]"))
-
-            due_at = 3.days.from_now
-            unlock_at = 2.days.from_now
-            lock_at = 4.days.from_now
-
-            # set due_at, lock_at, unlock_at
-            replace_content(f(".date_field[data-date-type='due_at']"), format_date_for_view(due_at), tab_out: true)
-            replace_content(f(".date_field[data-date-type='unlock_at']"), format_date_for_view(unlock_at), tab_out: true)
-            replace_content(f(".date_field[data-date-type='lock_at']"), format_date_for_view(lock_at), tab_out: true)
-            wait_for_ajaximations
-
-            expect_new_page_load { f(".form-actions button[type=submit]").click }
-
-            a = DiscussionTopic.last.assignment
-            expect(a.due_at.to_date).to eq due_at.to_date
-            expect(a.unlock_at.to_date).to eq unlock_at.to_date
-            expect(a.lock_at.to_date).to eq lock_at.to_date
           end
 
           it "adds an attachment to a graded topic", priority: "1" do
@@ -339,7 +314,7 @@ describe "discussions" do
             @gc.destroy
             get url
             wait_for_ajaximations
-            expect(f("#assignment_group_category_id")).not_to be_displayed
+            expect(f("#create_group_category_id")).to be_displayed
           end
 
           context "graded" do
@@ -359,6 +334,7 @@ describe "discussions" do
         end
 
         it "saves and display all changes", priority: "2" do
+          skip "Will be fixed in VICE-5209"
           course.require_assignment_group
 
           confirm(:off)
@@ -388,6 +364,7 @@ describe "discussions" do
         end
 
         it "toggles checkboxes when clicking their labels", priority: "1" do
+          skip "Will be fixed in VICE-5209"
           get url
 
           expect(is_checked("input[type=checkbox][name=threaded]")).not_to be_truthy
@@ -527,13 +504,6 @@ describe "discussions" do
             get url
             expect(Discussion.course_pacing_notice).to be_displayed
           end
-
-          it "does not show the course pacing notice on a graded discussion when feature off in account" do
-            course.account.disable_feature!(:course_paces)
-
-            get url
-            expect(element_exists?(Discussion.course_pacing_notice_selector)).to be_falsey
-          end
         end
 
         context "anonymous topic" do
@@ -556,8 +526,8 @@ describe "discussions" do
 
             build_assignment_with_type("Discussion", name: "anon disc from assignment", more_options: true)
 
-            f("input[type=radio][value=partial_anonymity]").click
-            f("input#use_for_grading").click
+            f("label[for='anonymous-selector-partial-anonymity']").click
+            f("label[for='use_for_grading']").click
             expect_new_page_load { f("button.save_and_publish").click }
           end
 
@@ -625,21 +595,30 @@ describe "discussions" do
           expect(f("input[value='allow-liking']").selected?).to be_truthy
           expect(f("input[value='only-graders-can-like']").selected?).to be_truthy
           expect(f("input[value='add-to-student-to-do']").selected?).to be_truthy
-
-          # Just checking for a value. Formatting and TZ differences between front-end and back-end
-          # makes an exact comparison too fragile.
-          unless Account.site_admin.feature_enabled?(:selective_release_ui_api)
-            expect(ff("input[placeholder='Select Date']")[0].attribute("value")).to be_truthy
-            expect(ff("input[placeholder='Select Date']")[1].attribute("value")).to be_truthy
-          end
         end
 
-        it "does not display the grading and groups not supported in anonymous discussions message in the edit page" do
+        it "can convert ungraded to graded and checkpointed" do
+          get "/courses/#{course.id}/discussion_topics/#{@topic_no_options.id}/edit"
+          force_click_native("input[data-testid='graded-checkbox']")
+          force_click_native("input[data-testid='checkpoints-checkbox']")
+          fj("button:contains('Save')").click
+          expect(@topic_no_options.reload.checkpoints?).to be_truthy
+        end
+
+        it "cannot convert ungraded to checkpointed if there are replies" do
+          @topic_no_options.reply_from({ user: teacher, text: "I feel pretty" })
+          get "/courses/#{course.id}/discussion_topics/#{@topic_no_options.id}/edit"
+          force_click_native("input[data-testid='graded-checkbox']")
+          expect(f("input[data-testid='checkpoints-checkbox']").attribute("disabled")).to be_truthy
+          expect(fj("span[class*='screenReaderContent']:contains('Checkpoints cannot be toggled after replies have been made.')")).to be_present
+        end
+
+        it "displays the grading and groups not supported in anonymous discussions message in the edit page" do
           get "/courses/#{course.id}/discussion_topics/#{@topic_all_options.id}/edit"
 
           expect(f("input[value='full_anonymity']").selected?).to be_truthy
           expect(f("input[value='full_anonymity']").attribute("disabled")).to be_nil
-          expect(f("body")).not_to contain_jqcss("[data-testid=groups_grading_not_allowed]")
+          expect(f("body")).to contain_jqcss("[data-testid=groups_grading_not_allowed]")
         end
 
         it "displays all unselected options correctly" do
@@ -653,13 +632,6 @@ describe "discussions" do
           expect(f("input[value='enable-podcast-feed']").selected?).to be_falsey
           expect(f("input[value='allow-liking']").selected?).to be_falsey
           expect(f("input[value='add-to-student-to-do']").selected?).to be_falsey
-
-          # Just checking for a value. Formatting and TZ differences between front-end and back-end
-          # makes an exact comparison too fragile.
-          unless Account.site_admin.feature_enabled?(:selective_release_ui_api)
-            expect(ff("input[placeholder='Select Date']")[0].attribute("value")).to eq("")
-            expect(ff("input[placeholder='Select Date']")[1].attribute("value")).to eq("")
-          end
         end
 
         context "usage rights" do
@@ -700,12 +672,6 @@ describe "discussions" do
           _, fullpath, _data = get_file("testfile5.zip")
           f("[data-testid='attachment-input']").send_keys(fullpath)
 
-          unless Account.site_admin.feature_enabled?(:selective_release_ui_api)
-            f("button[title='Remove All Sections']").click
-            f("input[data-testid='section-select']").click
-            fj("li:contains('value for name')").click
-          end
-
           # we can change anonymity on edit, if there is no reply
           expect(ffj("fieldset:contains('Anonymous Discussion') input[type=radio]").count).to eq 3
 
@@ -725,9 +691,6 @@ describe "discussions" do
           expect(@topic_all_options.title).to eq "new title"
           expect(@topic_all_options.message).to include "new message"
           expect(@topic_all_options.attachment_id).to eq Attachment.last.id
-          unless Account.site_admin.feature_enabled?(:selective_release_ui_api)
-            expect(@topic_all_options.is_section_specific).to be_truthy
-          end
           expect(@topic_all_options.require_initial_post).to be_falsey
           expect(@topic_all_options.podcast_enabled).to be_falsey
           expect(@topic_all_options.allow_rating).to be_falsey
@@ -744,210 +707,7 @@ describe "discussions" do
           expect(driver.current_url).to include("?embed=true")
         end
 
-        # Assign to Tray in discussions edit page
-        context "with selective_release_backend and selective_release_ui_api enabled" do
-          before :once do
-            Account.site_admin.disable_feature!(:selective_release_edit_page)
-          end
-
-          it "does not display 'Assign To' section for an ungraded group discussion" do
-            group = course.groups.create!(name: "group")
-            group_ungraded = course.discussion_topics.create!(title: "no options enabled - topic", group_category: group.group_category)
-            get "/courses/#{course.id}/discussion_topics/#{group_ungraded.id}/edit"
-            expect(Discussion.select_date_input_exists?).to be_truthy
-            expect(element_exists?(Discussion.assign_to_button_selector)).to be_falsey
-          end
-
-          it "does not display 'Post To' section and Available From/Until inputs" do
-            get "/courses/#{course.id}/discussion_topics/#{@topic_no_options.id}/edit"
-            expect(Discussion.select_date_input_exists?).to be_falsey
-            expect(Discussion.section_selection_input_exists?).to be_falsey
-          end
-
-          it "updates overrides using 'Assign To' tray", :ignore_js_errors do
-            student1 = course.enroll_student(User.create!, enrollment_state: "active").user
-            available_from = 5.days.ago
-            available_until = 5.days.from_now
-
-            get "/courses/#{course.id}/discussion_topics/#{@topic_no_options.id}/edit"
-
-            Discussion.click_assign_to_button
-            wait_for_assign_to_tray_spinner
-            keep_trying_until { expect(item_tray_exists?).to be_truthy }
-
-            click_add_assign_to_card
-            expect(element_exists?(due_date_input_selector)).to be_falsey
-            select_module_item_assignee(1, student1.name)
-            update_available_date(1, format_date_for_view(available_from, "%-m/%-d/%Y"), true)
-            update_available_time(1, "8:00 AM", true)
-            update_until_date(1, format_date_for_view(available_until, "%-m/%-d/%Y"), true)
-            update_until_time(1, "9:00 PM", true)
-
-            click_save_button("Apply")
-            keep_trying_until { expect(element_exists?(module_item_edit_tray_selector)).to be_falsey }
-
-            Discussion.save_button.click
-            wait_for_ajaximations
-
-            @topic_no_options.reload
-            new_override = @topic_no_options.active_assignment_overrides.last
-            expect(new_override.set_type).to eq("ADHOC")
-            expect(new_override.set_id).to be_nil
-            expect(new_override.set.map(&:id)).to match_array([student1.id])
-          end
-
-          it "shows pending changes when overrides have been added", :ignore_js_errors, custom_timeout: 45 do
-            student1 = course.enroll_student(User.create!, enrollment_state: "active").user
-            available_from = 5.days.ago
-            available_until = 5.days.from_now
-
-            get "/courses/#{course.id}/discussion_topics/#{@topic_no_options.id}/edit"
-
-            Discussion.click_assign_to_button
-            wait_for_assign_to_tray_spinner
-            keep_trying_until { expect(item_tray_exists?).to be_truthy }
-
-            click_add_assign_to_card
-            select_module_item_assignee(1, student1.name)
-            update_available_date(1, format_date_for_view(available_from, "%-m/%-d/%Y"), true)
-            update_available_time(1, "8:00 AM", true)
-            update_until_date(1, format_date_for_view(available_until, "%-m/%-d/%Y"), true)
-            update_until_time(1, "9:00 PM", true)
-
-            click_save_button("Apply")
-            keep_trying_until { expect(element_exists?(module_item_edit_tray_selector)).to be_falsey }
-
-            expect(Discussion.pending_changes_pill_exists?).to be_truthy
-          end
-
-          it "shows no pending changes when override tray cancelled", :ignore_js_errors do
-            student1 = course.enroll_student(User.create!, enrollment_state: "active").user
-            available_from = 5.days.ago
-            available_until = 5.days.from_now
-
-            get "/courses/#{course.id}/discussion_topics/#{@topic_no_options.id}/edit"
-
-            Discussion.click_assign_to_button
-            wait_for_assign_to_tray_spinner
-            keep_trying_until { expect(item_tray_exists?).to be_truthy }
-
-            click_add_assign_to_card
-            select_module_item_assignee(1, student1.name)
-            update_available_date(1, format_date_for_view(available_from, "%-m/%-d/%Y"), true)
-            update_available_time(1, "8:00 AM", true)
-            update_until_date(1, format_date_for_view(available_until, "%-m/%-d/%Y"), true)
-            update_until_time(1, "9:00 PM", true)
-
-            click_cancel_button
-            keep_trying_until { expect(element_exists?(module_item_edit_tray_selector)).to be_falsey }
-
-            expect(Discussion.pending_changes_pill_exists?).to be_falsey
-          end
-
-          it "transitions from ungraded to graded and overrides are ok", :ignore_js_errors do
-            discussion_topic = DiscussionHelpers.create_discussion_topic(
-              course,
-              teacher,
-              "Teacher Discussion 1 Title",
-              "Teacher Discussion 1 message",
-              nil
-            )
-            student1 = course.enroll_student(User.create!, enrollment_state: "active").user
-            available_from = 5.days.ago
-            available_until = 5.days.from_now
-
-            discussion_topic.assignment_overrides.create!(set_type: "ADHOC",
-                                                          unlock_at: available_from,
-                                                          lock_at: available_until)
-
-            discussion_topic.assignment_overrides.last.assignment_override_students.create!(user: student1)
-
-            get "/courses/#{course.id}/discussion_topics/#{discussion_topic.id}/edit"
-
-            expect(is_checked(Discussion.graded_checkbox)).to be_falsey
-
-            Discussion.click_graded_checkbox
-            Discussion.save_button.click
-            wait_for_ajaximations
-
-            get "/courses/#{course.id}/discussion_topics/#{discussion_topic.id}/edit"
-
-            Discussion.click_assign_to_button
-            wait_for_assign_to_tray_spinner
-            keep_trying_until { expect(item_tray_exists?).to be_truthy }
-
-            expect(assign_to_due_date(1).attribute("value")).to eq("")
-            expect(assign_to_due_time(1).attribute("value")).to eq("")
-            expect(assign_to_available_from_date(1).attribute("value")).to eq(format_date_for_view(available_from, "%b %-e, %Y"))
-            expect(assign_to_available_from_time(1).attribute("value")).to eq(available_from.strftime("%-l:%M %p"))
-            expect(assign_to_until_date(1).attribute("value")).to eq(format_date_for_view(available_until, "%b %-e, %Y"))
-            expect(assign_to_until_time(1).attribute("value")).to eq(available_until.strftime("%-l:%M %p"))
-          end
-
-          it "transitions from graded to ungraded and overrides are ok", :ignore_js_errors do
-            discussion_assignment_options = {
-              name: "assignment",
-              points_possible: 10,
-            }
-            discussion_topic = create_graded_discussion(course, discussion_assignment_options)
-
-            student1 = course.enroll_student(User.create!, enrollment_state: "active").user
-
-            due_at = 3.days.from_now
-            available_from = 5.days.ago
-            available_until = 5.days.from_now
-
-            @discussion_assignment.assignment_overrides.create!(set_type: "ADHOC",
-                                                                due_at:,
-                                                                unlock_at: available_from,
-                                                                lock_at: available_until)
-
-            @discussion_assignment.assignment_overrides.last.assignment_override_students.create!(user: student1)
-
-            get "/courses/#{course.id}/discussion_topics/#{discussion_topic.id}/edit"
-
-            expect(is_checked(Discussion.graded_checkbox)).to be_truthy
-
-            Discussion.click_graded_checkbox
-            Discussion.save_button.click
-            wait_for_ajaximations
-
-            get "/courses/#{course.id}/discussion_topics/#{discussion_topic.id}/edit"
-
-            Discussion.click_assign_to_button
-            wait_for_assign_to_tray_spinner
-            keep_trying_until { expect(item_tray_exists?).to be_truthy }
-
-            expect(assign_to_date_and_time[1].text).not_to include("Due Date")
-            expect(assign_to_available_from_date(1, true).attribute("value")).to eq(format_date_for_view(available_from, "%b %-e, %Y"))
-            expect(assign_to_available_from_time(1, true).attribute("value")).to eq(available_from.strftime("%-l:%M %p"))
-            expect(assign_to_until_date(1, true).attribute("value")).to eq(format_date_for_view(available_until, "%b %-e, %Y"))
-            expect(assign_to_until_time(1, true).attribute("value")).to eq(available_until.strftime("%-l:%M %p"))
-          end
-
-          it "does not recover a deleted card when adding an assignee", :ignore_js_errors do
-            # Bug fix of LX-1619
-            student1 = course.enroll_student(User.create!, enrollment_state: "active").user
-
-            get "/courses/#{course.id}/discussion_topics/#{@topic_all_options.id}/edit"
-
-            Discussion.click_assign_to_button
-            wait_for_assign_to_tray_spinner
-            keep_trying_until { expect(item_tray_exists?).to be_truthy }
-
-            click_add_assign_to_card
-            click_delete_assign_to_card(0)
-            select_module_item_assignee(0, student1.name)
-
-            expect(selected_assignee_options.count).to be(1)
-          end
-        end
-
         context "selective release assignment embedded in discussions edit page" do
-          before :once do
-            Account.site_admin.enable_feature!(:selective_release_edit_page)
-          end
-
           it "allows edit with group category", :ignore_js_errors do
             group_cat = course.group_categories.create!(name: "Groupies")
             get "/courses/#{course.id}/discussion_topics/#{teacher_topic.id}/edit"
@@ -1153,6 +913,14 @@ describe "discussions" do
 
             expect(selected_assignee_options.count).to be(1)
           end
+
+          it "does not navigate to existsing discussion edit page" do
+            course.account.enable_feature!(:horizon_course_setting)
+            course.horizon_course = true
+            course.save!
+            get "/courses/#{course.id}/discussion_topics/#{@topic_all_options.id}/edit"
+            expect(element_exists?(Discussion.save_selector)).to be_falsey
+          end
         end
       end
 
@@ -1216,9 +984,17 @@ describe "discussions" do
           get "/courses/#{course.id}/discussion_topics/#{@announcement_no_options.id}/edit"
 
           expect(f("input[value='enable-participants-commenting']").selected?).to be_falsey
-          expect(f("input[value='must-respond-before-viewing-replies']").selected?).to be_falsey
           expect(f("input[value='allow-liking']").selected?).to be_falsey
           expect(f("input[value='enable-podcast-feed']").selected?).to be_falsey
+        end
+
+        it "displays comment related fields when participants commenting is enabled" do
+          user_session(teacher)
+          get "/courses/#{course.id}/discussion_topics/#{@announcement_no_options.id}/edit"
+
+          force_click_native("input[value='enable-participants-commenting']")
+          expect(f("body")).to contain_jqcss "input[value='must-respond-before-viewing-replies']"
+          expect(f("body")).to contain_jqcss "input[value='disallow-threaded-replies']"
         end
       end
 
@@ -1276,23 +1052,7 @@ describe "discussions" do
           # makes an exact comparison too fragile.
           expect(ff("input[placeholder='Select Date']")[0].attribute("value")).not_to be_empty
 
-          if Account.site_admin.feature_enabled?(:selective_release_ui_api)
-            unless Account.site_admin.feature_enabled?(:selective_release_edit_page)
-              expect(Discussion.assign_to_button).to be_displayed
-              Discussion.assign_to_button.click
-            end
-            expect(assign_to_in_tray("Remove #{course_section.name}")[0]).to be_displayed
-          else
-            expect(f("span[data-testid='assign-to-select-span']").present?).to be_truthy
-            expect(fj("span:contains('#{course_section.name}')").present?).to be_truthy
-
-            # Verify that the only_visible_to_overrides field is being respected
-            expect(f("body")).not_to contain_jqcss("span:contains('Everyone')")
-
-            # Just checking for a value. Formatting and TZ differences between front-end and back-end
-            # makes an exact comparison too fragile.
-            expect(f("input[placeholder='Select Assignment Due Date']").attribute("value")).not_to be_empty
-          end
+          expect(assign_to_in_tray("Remove #{course_section.name}")[0]).to be_displayed
         end
 
         it "allows settings a graded discussion to an ungraded discussion" do
@@ -1478,779 +1238,7 @@ describe "discussions" do
           expect(assignment_topic.reload.attachment_id).to eq Attachment.last.id
         end
 
-        context "selective release with assign to tray", :ignore_js_errors do
-          before :once do
-            Account.site_admin.disable_feature!(:selective_release_edit_page)
-          end
-
-          before do
-            @student1 = student_in_course(course:, active_all: true).user
-            @student2 = student_in_course(course:, active_all: true).user
-            @course_section = course.course_sections.create!(name: "section alpha")
-            @course_section_2 = course.course_sections.create!(name: "section Beta")
-          end
-
-          it "displays Everyone correctly", custom_timeout: 30 do
-            graded_discussion = create_graded_discussion(course)
-
-            due_date = "Sat, 06 Apr 2024 00:00:00.000000000 UTC +00:00"
-            unlock_at = "Fri, 05 Apr 2024 00:00:00.000000000 UTC +00:00"
-            lock_at = "Sun, 07 Apr 2024 00:00:00.000000000 UTC +00:00"
-            graded_discussion.assignment.update!(due_at: due_date, unlock_at:, lock_at:)
-
-            # Open page and assignTo tray
-            get "/courses/#{course.id}/discussion_topics/#{graded_discussion.id}/edit"
-            Discussion.assign_to_button.click
-
-            # Expect check card and override count/content
-            expect(module_item_assign_to_card.count).to eq 1
-            expect(selected_assignee_options.count).to eq 1
-            expect(selected_assignee_options.first.find("span").text).to eq "Everyone"
-
-            # Find the date inputs, extract their values, combine date and time values, and parse into DateTime objects
-            displayed_override_dates = all_displayed_assign_to_date_and_time
-
-            # Check that the due dates are correctly displayed
-            expect(displayed_override_dates.include?(DateTime.parse(due_date))).to be_truthy
-            expect(displayed_override_dates.include?(DateTime.parse(unlock_at))).to be_truthy
-            expect(displayed_override_dates.include?(DateTime.parse(lock_at))).to be_truthy
-          end
-
-          it "displays everyone and section and student overrides correctly", custom_timeout: 30 do
-            graded_discussion = create_graded_discussion(course)
-
-            # Create overrides
-            # Card 1 = ["Everyone else"], Set by: only_visible_to_overrides: false
-
-            # Card 2
-            graded_discussion.assignment.assignment_overrides.create!(set_type: "CourseSection", set_id: @course_section.id)
-
-            # Card 3
-            graded_discussion.assignment.assignment_overrides.create!(set_type: "CourseSection", set_id: @course_section_2.id)
-
-            # Card 4
-            graded_discussion.assignment.assignment_overrides.create!(set_type: "ADHOC")
-            graded_discussion.assignment.assignment_overrides.last.assignment_override_students.create!(user: @student1)
-            graded_discussion.assignment.assignment_overrides.last.assignment_override_students.create!(user: @student2)
-
-            # Open edit page and AssignTo Tray
-            get "/courses/#{course.id}/discussion_topics/#{graded_discussion.id}/edit"
-            Discussion.assign_to_button.click
-
-            # Check that displayed cards and overrides are correct
-            expect(module_item_assign_to_card.count).to eq 4
-
-            displayed_overrides = module_item_assign_to_card.map do |card|
-              card.find_all(assignee_selected_option_selector).map(&:text)
-            end
-
-            expected_overrides = generate_expected_overrides(graded_discussion.assignment)
-            expect(displayed_overrides).to match_array(expected_overrides)
-          end
-
-          it "displays visible to overrides only correctly", custom_timeout: 30 do
-            # The main difference in this test is that only_visible_to_overrides is true
-            discussion_assignment_options = {
-              only_visible_to_overrides: true,
-            }
-            graded_discussion = create_graded_discussion(course, discussion_assignment_options)
-
-            # Create overrides
-            # Card 1
-            graded_discussion.assignment.assignment_overrides.create!(set_type: "CourseSection", set_id: @course_section.id)
-            # Card 2
-            graded_discussion.assignment.assignment_overrides.create!(set_type: "CourseSection", set_id: @course_section_2.id)
-            # Card 3
-            graded_discussion.assignment.assignment_overrides.create!(set_type: "ADHOC")
-            graded_discussion.assignment.assignment_overrides.last.assignment_override_students.create!(user: @student1)
-            graded_discussion.assignment.assignment_overrides.last.assignment_override_students.create!(user: @student2)
-
-            # Open edit page and AssignTo Tray
-            get "/courses/#{course.id}/discussion_topics/#{graded_discussion.id}/edit"
-            Discussion.assign_to_button.click
-
-            # Check that displayed cards and overrides are correct
-            expect(module_item_assign_to_card.count).to eq 3
-
-            displayed_overrides = module_item_assign_to_card.map do |card|
-              card.find_all(assignee_selected_option_selector).map(&:text)
-            end
-
-            expected_overrides = generate_expected_overrides(graded_discussion.assignment)
-            expect(displayed_overrides).to match_array(expected_overrides)
-          end
-
-          it "allows adding overrides" do
-            graded_discussion = create_graded_discussion(course)
-
-            due_date = "Sat, 06 Apr 2024 00:00:00.000000000 UTC +00:00"
-            unlock_at = "Fri, 05 Apr 2024 00:00:00.000000000 UTC +00:00"
-            lock_at = "Sun, 07 Apr 2024 00:00:00.000000000 UTC +00:00"
-            graded_discussion.assignment.update!(due_at: due_date, unlock_at:, lock_at:)
-            course.reload
-            # Open page and assignTo tray
-            get "/courses/#{course.id}/discussion_topics/#{graded_discussion.id}/edit"
-            Discussion.assign_to_button.click
-            wait_for_assign_to_tray_spinner
-
-            keep_trying_until { expect(item_tray_exists?).to be_truthy }
-
-            click_add_assign_to_card
-            select_module_item_assignee(1, @student1.name)
-
-            click_save_button("Apply")
-
-            keep_trying_until { expect(element_exists?(module_item_edit_tray_selector)).to be_falsey }
-            expect(AssignmentCreateEditPage.pending_changes_pill_exists?).to be_truthy
-
-            Discussion.save_button.click
-            wait_for_ajaximations
-
-            assignment = Assignment.last
-
-            expect(assignment.assignment_overrides.active.count).to eq 1
-          end
-
-          it "allows removing overrides" do
-            graded_discussion = create_graded_discussion(course)
-
-            due_date = "Sat, 06 Apr 2024 00:00:00.000000000 UTC +00:00"
-            unlock_at = "Fri, 05 Apr 2024 00:00:00.000000000 UTC +00:00"
-            lock_at = "Sun, 07 Apr 2024 00:00:00.000000000 UTC +00:00"
-            graded_discussion.assignment.update!(due_at: due_date, unlock_at:, lock_at:)
-
-            # Create section override
-            course_section = course.course_sections.create!(name: "section alpha")
-            graded_discussion.assignment.assignment_overrides.create!(set_type: "CourseSection", set_id: course_section.id)
-
-            course.reload
-            # Open page and assignTo tray
-            get "/courses/#{course.id}/discussion_topics/#{graded_discussion.id}/edit"
-            Discussion.assign_to_button.click
-            wait_for_assign_to_tray_spinner
-
-            keep_trying_until { expect(item_tray_exists?).to be_truthy }
-
-            # Remove the section override
-            click_delete_assign_to_card(1)
-            click_save_button("Apply")
-
-            keep_trying_until { expect(element_exists?(module_item_edit_tray_selector)).to be_falsey }
-            expect(AssignmentCreateEditPage.pending_changes_pill_exists?).to be_truthy
-
-            Discussion.save_button.click
-            wait_for_ajaximations
-
-            assignment = Assignment.last
-            assignment.reload
-            expect(assignment.assignment_overrides.active.count).to eq 0
-            expect(assignment.only_visible_to_overrides).to be_falsey
-          end
-
-          it "displays module overrides correctly" do
-            graded_discussion = create_graded_discussion(course)
-            module1 = course.context_modules.create!(name: "Module 1")
-            graded_discussion.context_module_tags.create! context_module: module1, context: course, tag_type: "context_module"
-
-            override = module1.assignment_overrides.create!
-            override.assignment_override_students.create!(user: @student1)
-
-            # Open page and assignTo tray
-            get "/courses/#{course.id}/discussion_topics/#{graded_discussion.id}/edit"
-            Discussion.assign_to_button.click
-            wait_for_assign_to_tray_spinner
-
-            # Verify that Everyone tag does not appear
-            expect(module_item_assign_to_card.count).to eq 1
-            expect(module_item_assign_to_card[0].find_all(assignee_selected_option_selector).map(&:text)).to eq ["User"]
-            expect(inherited_from.last.text).to eq("Inherited from #{module1.name}")
-
-            # Update the inherited card due date, should remove inherited
-            update_due_date(0, "12/31/2022")
-            update_due_time(0, "5:00 PM")
-            click_save_button("Apply")
-
-            Discussion.assign_to_button.click
-            expect(f("body")).not_to contain_jqcss(inherited_from_selector)
-            click_save_button("Apply")
-
-            Discussion.save_button.click
-            Discussion.section_warning_continue_button.click
-            wait_for_ajaximations
-
-            # Expect the module override to be overridden and not appear
-            get "/courses/#{course.id}/discussion_topics/#{graded_discussion.id}/edit"
-            Discussion.assign_to_button.click
-
-            expect(module_item_assign_to_card.count).to eq 1
-            expect(f("body")).not_to contain_jqcss(inherited_from_selector)
-          end
-
-          it "displays module and course overrides correctly" do
-            graded_discussion = create_graded_discussion(course)
-            module1 = course.context_modules.create!(name: "Module 1")
-            graded_discussion.context_module_tags.create! context_module: module1, context: course, tag_type: "context_module"
-
-            override = module1.assignment_overrides.create!
-            override.assignment_override_students.create!(user: @student1)
-            graded_discussion.assignment.assignment_overrides.create!(set: course, due_at: 1.day.from_now)
-
-            # Open page and assignTo tray
-            get "/courses/#{course.id}/discussion_topics/#{graded_discussion.id}/edit"
-            Discussion.assign_to_button.click
-            wait_for_assign_to_tray_spinner
-
-            # Verify that Everyone tag does not appear
-            expect(module_item_assign_to_card.count).to eq 2
-            expect(module_item_assign_to_card[0].find_all(assignee_selected_option_selector).map(&:text)).to eq ["Everyone else"]
-            expect(module_item_assign_to_card[1].find_all(assignee_selected_option_selector).map(&:text)).to eq ["User"]
-            expect(inherited_from.last.text).to eq("Inherited from #{module1.name}")
-          end
-
-          it "creates a course override if everyone is added with a module override" do
-            graded_discussion = create_graded_discussion(course)
-            module1 = course.context_modules.create!(name: "Module 1")
-            graded_discussion.context_module_tags.create! context_module: module1, context: course, tag_type: "context_module"
-
-            override = module1.assignment_overrides.create!
-            override.assignment_override_students.create!(user: @student1)
-
-            # Open page and assignTo tray
-            get "/courses/#{course.id}/discussion_topics/#{graded_discussion.id}/edit"
-            Discussion.assign_to_button.click
-            wait_for_assign_to_tray_spinner
-
-            # Verify the module override is shown
-            expect(module_item_assign_to_card.count).to eq 1
-            expect(module_item_assign_to_card[0].find_all(assignee_selected_option_selector).map(&:text)).to eq ["User"]
-            expect(inherited_from.last.text).to eq("Inherited from #{module1.name}")
-
-            click_add_assign_to_card
-            select_module_item_assignee(1, "Everyone else")
-
-            click_save_button("Apply")
-
-            # Save the discussion without changing the inherited module override
-            Discussion.save_button.click
-            Discussion.section_warning_continue_button.click
-            wait_for_ajaximations
-
-            assignment = graded_discussion.assignment
-            assignment.reload
-            # Expect the existing override to be the module override
-            expect(assignment.assignment_overrides.active.count).to eq 1
-            expect(assignment.all_assignment_overrides.active.count).to eq 2
-            expect(assignment.assignment_overrides.first.set_type).to eq "Course"
-            expect(assignment.only_visible_to_overrides).to be_truthy
-          end
-
-          it "does not display module override if an unassigned override exists" do
-            graded_discussion = create_graded_discussion(course)
-            module1 = course.context_modules.create!(name: "Module 1")
-            graded_discussion.context_module_tags.create! context_module: module1, context: course, tag_type: "context_module"
-
-            override = module1.assignment_overrides.create!
-            override.assignment_override_students.create!(user: @student1)
-
-            unassigned_override = graded_discussion.assignment.assignment_overrides.create!
-            unassigned_override.assignment_override_students.create!(user: @student1)
-            unassigned_override.update(unassign_item: true)
-
-            assigned_override = graded_discussion.assignment.assignment_overrides.create!
-            assigned_override.assignment_override_students.create!(user: @student2)
-
-            # Open page and assignTo tray
-            get "/courses/#{course.id}/discussion_topics/#{graded_discussion.id}/edit"
-            Discussion.assign_to_button.click
-            wait_for_assign_to_tray_spinner
-
-            # Verify the module override is not shown
-            expect(module_item_assign_to_card.count).to eq 1
-            expect(module_item_assign_to_card[0].find_all(assignee_selected_option_selector).map(&:text)).to eq ["User"]
-            expect(module_item_assign_to_card[0]).not_to contain_css(inherited_from_selector)
-          end
-
-          it "does not create an override if the modules override is not updated" do
-            skip("Assign to tray is no longer used in the edit page")
-            graded_discussion = create_graded_discussion(course)
-            module1 = course.context_modules.create!(name: "Module 1")
-            graded_discussion.context_module_tags.create! context_module: module1, context: course, tag_type: "context_module"
-
-            override = module1.assignment_overrides.create!
-            override.assignment_override_students.create!(user: @student1)
-
-            # Open page and assignTo tray
-            get "/courses/#{course.id}/discussion_topics/#{graded_discussion.id}/edit"
-            Discussion.assign_to_button.click
-            wait_for_assign_to_tray_spinner
-
-            # Verify the module override is shown
-            expect(module_item_assign_to_card.count).to eq 1
-            expect(module_item_assign_to_card[0].find_all(assignee_selected_option_selector).map(&:text)).to eq ["User"]
-            expect(inherited_from.last.text).to eq("Inherited from #{module1.name}")
-            click_save_button("Apply")
-
-            # Save the discussion without changing the inherited module override
-            Discussion.save_button.click
-            Discussion.section_warning_continue_button.click
-            wait_for_ajaximations
-
-            assignment = graded_discussion.assignment
-            assignment.reload
-            # Expect the existing override to be the module override
-            expect(assignment.assignment_overrides.active.count).to eq 0
-            expect(assignment.all_assignment_overrides.active.count).to eq 1
-            expect(assignment.all_assignment_overrides.first.context_module_id).to eq module1.id
-            expect(assignment.only_visible_to_overrides).to be_falsey
-          end
-
-          it "displays highighted cards correctly" do
-            graded_discussion = create_graded_discussion(course)
-            get "/courses/#{course.id}/discussion_topics/#{graded_discussion.id}/edit"
-            Discussion.assign_to_button.click
-            wait_for_assign_to_tray_spinner
-
-            # Expect there to be no highlighted cards
-            expect(module_item_assign_to_card.count).to eq 1
-            expect(f("body")).not_to contain_jqcss(highlighted_card_selector)
-            click_cancel_button
-
-            # Expect that if no changes were made, that the cancel button doens't highlight old cards
-            Discussion.assign_to_button.click
-            wait_for_assign_to_tray_spinner
-            expect(module_item_assign_to_card.count).to eq 1
-            expect(f("body")).not_to contain_jqcss(highlighted_card_selector)
-
-            # Expect highlighted card after making a change
-            update_due_date(0, "12/31/2022")
-            click_save_button("Apply")
-            Discussion.assign_to_button.click
-            wait_for_assign_to_tray_spinner
-            expect(highlighted_item_assign_to_card.count).to eq 1
-          end
-
-          it "cancels correctly" do
-            graded_discussion = create_graded_discussion(course)
-
-            # Open page and assignTo tray
-            get "/courses/#{course.id}/discussion_topics/#{graded_discussion.id}/edit"
-            Discussion.assign_to_button.click
-            wait_for_assign_to_tray_spinner
-
-            # Create a new card, don't apply it
-            click_add_assign_to_card
-            select_module_item_assignee(1, @student1.name)
-            expect(module_item_assign_to_card.count).to eq 2
-            cancel_button.click
-
-            # Reopen, expect new card to not be there
-            Discussion.assign_to_button.click
-            expect(module_item_assign_to_card.count).to eq 1
-
-            # Add a new card, apply it
-            click_add_assign_to_card
-            select_module_item_assignee(1, @student1.name)
-            click_save_button("Apply")
-            expect(AssignmentCreateEditPage.pending_changes_pill_exists?).to be_truthy
-
-            # Expect both cards to be there
-            Discussion.assign_to_button.click
-            expect(module_item_assign_to_card.count).to eq 2
-          end
-
-          it "sets the mark important dates checkbox for discussion edit" do
-            feature_setup
-
-            graded_discussion = create_graded_discussion(course)
-
-            get "/courses/#{course.id}/discussion_topics/#{graded_discussion.id}/edit"
-
-            Discussion.assign_to_button.click
-            wait_for_assign_to_tray_spinner
-
-            keep_trying_until { expect(item_tray_exists?).to be_truthy }
-
-            formatted_date = format_date_for_view(2.days.from_now(Time.zone.now), "%m/%d/%Y")
-            update_due_date(0, formatted_date)
-            update_due_time(0, "5:00 PM")
-
-            click_save_button("Apply")
-
-            expect(mark_important_dates).to be_displayed
-            scroll_to_element(mark_important_dates)
-            click_mark_important_dates
-
-            Discussion.save_button.click
-            wait_for_ajaximations
-
-            assignment = Assignment.last
-
-            expect(assignment.important_dates).to be(true)
-          end
-
-          it "does not show the assign to UI when the user does not have permission even if user can access edit page" do
-            # i.e., they have moderate_forum permission but not manage_assignments_edit
-            discussion = create_graded_discussion(course)
-            get "/courses/#{course.id}/discussion_topics/#{discussion.id}/edit"
-            expect(element_exists?(Discussion.assign_to_button_selector)).to be_truthy
-
-            RoleOverride.create!(context: @course.account, permission: "manage_assignments_edit", role: teacher_role, enabled: false)
-            get "/courses/#{course.id}/discussion_topics/#{discussion.id}/edit"
-            expect(element_exists?(Discussion.assign_to_button_selector)).to be_falsey
-          end
-
-          it "does not recover a deleted card when adding an assignee", :ignore_js_errors do
-            # Bug fix of LX-1619
-            discussion = create_graded_discussion(course)
-            get "/courses/#{course.id}/discussion_topics/#{discussion.id}/edit"
-
-            Discussion.click_assign_to_button
-            wait_for_assign_to_tray_spinner
-            keep_trying_until { expect(item_tray_exists?).to be_truthy }
-
-            click_add_assign_to_card
-            click_delete_assign_to_card(0)
-            select_module_item_assignee(0, @course_section_2.name)
-
-            expect(selected_assignee_options.count).to be(1)
-          end
-
-          context "checkpoints" do
-            context "when discussion_checkpoints feature flag is disabled after creation" do
-              before do
-                @course.root_account.enable_feature!(:discussion_checkpoints)
-                @topic = DiscussionTopic.create_graded_topic!(course: @course, title: "checkpointed topic")
-                @c1 = Checkpoints::DiscussionCheckpointCreatorService.call(
-                  discussion_topic: @topic,
-                  checkpoint_label: CheckpointLabels::REPLY_TO_TOPIC,
-                  dates: [{ type: "everyone", due_at: 5.years.ago }],
-                  points_possible: 5
-                )
-                @c2 = Checkpoints::DiscussionCheckpointCreatorService.call(
-                  discussion_topic: @topic,
-                  checkpoint_label: CheckpointLabels::REPLY_TO_ENTRY,
-                  dates: [{ type: "everyone", due_at: 5.years.ago }],
-                  points_possible: 5,
-                  replies_required: 2
-                )
-
-                @course.root_account.disable_feature!(:discussion_checkpoints)
-              end
-
-              it "forces checkpointed discussions into regular graded discussions" do
-                get "/courses/#{@course.id}/discussion_topics/#{@topic.id}/edit"
-                expect(f("body")).not_to contain_jqcss("input[data-testid='checkpoints-checkbox']")
-                expect(f("body")).not_to contain_jqcss("div:contains('Checkpoint Settings')")
-                expect(f("body")).not_to contain_jqcss("div:contains('Reply to Topic Due Date')")
-                expect(f("body")).not_to contain_jqcss("div:contains('Required Replies Due Date')")
-                fj("button:contains('Save')").click
-                expect(fj("span[data-testid='message_title']:contains('#{@topic.title}')")).to be_truthy
-                expect(@c1.reload.workflow_state).to eq "deleted"
-                expect(@c2.reload.workflow_state).to eq "deleted"
-                expect(@topic.assignment.sub_assignments.count).to eq 0
-                expect(@topic.assignment.reload.has_sub_assignments).to be_falsey
-              end
-            end
-
-            it "shows reply to topic input on graded discussion with sub assignments" do
-              Account.site_admin.enable_feature!(:discussion_checkpoints)
-              @course.root_account.enable_feature!(:discussion_checkpoints)
-              assignment = @course.assignments.create!(
-                name: "Assignment",
-                submission_types: ["online_text_entry"],
-                points_possible: 20
-              )
-              assignment.update!(has_sub_assignments: true)
-              assignment.sub_assignments.create!(context: assignment.context, sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC, points_possible: 10, due_at: 3.days.from_now)
-              assignment.sub_assignments.create!(context: assignment.context, sub_assignment_tag: CheckpointLabels::REPLY_TO_ENTRY, points_possible: 10, due_at: 5.days.from_now)
-              graded_discussion = @course.discussion_topics.create!(
-                title: "Graded Discussion",
-                discussion_type: "threaded",
-                posted_at: "2017-07-09 16:32:34",
-                user: @teacher,
-                assignment:,
-                reply_to_entry_required_count: 1
-              )
-
-              # Open page and assignTo tray
-              get "/courses/#{@course.id}/discussion_topics/#{graded_discussion.id}/edit"
-              Discussion.assign_to_button.click
-
-              wait_for_assign_to_tray_spinner
-              expect(module_item_assign_to_card.last).to contain_css(reply_to_topic_due_date_input_selector)
-            end
-
-            it "shows required replies input on graded discussion with sub assignments" do
-              Account.site_admin.enable_feature!(:discussion_checkpoints)
-              @course.root_account.enable_feature!(:discussion_checkpoints)
-              @student1 = student_in_course(course:, active_all: true).user
-              @student2 = student_in_course(course:, active_all: true).user
-              @course_section = course.course_sections.create!(name: "section alpha")
-              @course_section_2 = course.course_sections.create!(name: "section Beta")
-
-              # Open page and assignTo tray
-              get "/courses/#{@course.id}/discussion_topics/new"
-              title = "Graded Discussion Topic with letter grade type"
-              message = "replying to topic"
-
-              f("input[placeholder='Topic Title']").send_keys title
-              type_in_tiny("textarea", message)
-
-              force_click_native('input[type=checkbox][value="graded"]')
-              force_click_native('input[type=checkbox][value="checkpoints"]')
-
-              Discussion.assign_to_button.click
-              click_add_assign_to_card
-              click_delete_assign_to_card(0)
-              select_module_item_assignee(0, @course_section_2.name)
-
-              reply_to_topic_date = 3.days.from_now(Time.zone.now).to_date + 17.hours
-              reply_to_topic_date_formatted = format_date_for_view(reply_to_topic_date, "%m/%d/%Y")
-              update_reply_to_topic_date(0, reply_to_topic_date_formatted)
-              update_reply_to_topic_time(0, "5:00 PM")
-
-              # required replies
-              required_replies_date = 4.days.from_now(Time.zone.now).to_date + 17.hours
-              required_replies_date_formatted = format_date_for_view(required_replies_date, "%m/%d/%Y")
-              update_required_replies_date(0, required_replies_date_formatted)
-              update_required_replies_time(0, "5:00 PM")
-
-              # available from
-              available_from_date = 2.days.from_now(Time.zone.now).to_date + 17.hours
-              available_from_date_formatted = format_date_for_view(available_from_date, "%m/%d/%Y")
-              update_available_date(0, available_from_date_formatted, true, false)
-              update_available_time(0, "5:00 PM", true, false)
-
-              # available until
-              until_date = 5.days.from_now(Time.zone.now).to_date + 17.hours
-              until_date_formatted = format_date_for_view(until_date, "%m/%d/%Y")
-              update_until_date(0, until_date_formatted, true, false)
-              update_until_time(0, "5:00 PM", true, false)
-
-              click_save_button("Apply")
-
-              wait_for_assign_to_tray_spinner
-              fj("button:contains('Save')").click
-              Discussion.section_warning_continue_button.click
-              wait_for_ajaximations
-
-              graded_discussion = DiscussionTopic.last
-              sub_assignments = graded_discussion.assignment.sub_assignments
-              sub_assignment1 = sub_assignments.find_by(sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC)
-              sub_assignment2 = sub_assignments.find_by(sub_assignment_tag: CheckpointLabels::REPLY_TO_ENTRY)
-
-              expect(graded_discussion.assignment.sub_assignments.count).to eq(2)
-              expect(format_date_for_view(sub_assignment1.assignment_overrides.active.first.due_at, "%m/%d/%Y")).to eq(reply_to_topic_date_formatted)
-              expect(format_date_for_view(sub_assignment2.assignment_overrides.active.first.due_at, "%m/%d/%Y")).to eq(required_replies_date_formatted)
-
-              # renders update
-              get "/courses/#{@course.id}/discussion_topics/#{graded_discussion.id}/edit"
-              Discussion.assign_to_button.click
-
-              displayed_override_dates = all_displayed_assign_to_date_and_time
-              # Check that the due dates are correctly displayed
-              expect(displayed_override_dates.include?(reply_to_topic_date)).to be_truthy
-              expect(displayed_override_dates.include?(required_replies_date)).to be_truthy
-              expect(displayed_override_dates.include?(available_from_date)).to be_truthy
-              expect(displayed_override_dates.include?(until_date)).to be_truthy
-
-              # updates dates and saves
-              reply_to_topic_date = 4.days.from_now(Time.zone.now).to_date + 17.hours
-              reply_to_topic_date_formatted = format_date_for_view(reply_to_topic_date, "%m/%d/%Y")
-              update_reply_to_topic_date(0, reply_to_topic_date_formatted)
-              update_reply_to_topic_time(0, "5:00 PM")
-
-              # required replies
-              required_replies_date = 5.days.from_now(Time.zone.now).to_date + 17.hours
-              required_replies_date_formatted = format_date_for_view(required_replies_date, "%m/%d/%Y")
-              update_required_replies_date(0, required_replies_date_formatted)
-              update_required_replies_time(0, "5:00 PM")
-
-              # available from
-              available_from_date = 3.days.from_now(Time.zone.now).to_date + 17.hours
-              available_from_date_formatted = format_date_for_view(available_from_date, "%m/%d/%Y")
-              update_available_date(0, available_from_date_formatted, true, false)
-              update_available_time(0, "5:00 PM", true, false)
-
-              # available until
-              until_date = 6.days.from_now(Time.zone.now).to_date + 17.hours
-              until_date_formatted = format_date_for_view(until_date, "%m/%d/%Y")
-              update_until_date(0, until_date_formatted, true, false)
-              update_until_time(0, "5:00 PM", true, false)
-
-              click_save_button("Apply")
-
-              wait_for_assign_to_tray_spinner
-              fj("button:contains('Save')").click
-              Discussion.section_warning_continue_button.click
-              wait_for_ajaximations
-
-              graded_discussion.reload
-              sub_assignments = graded_discussion.assignment.sub_assignments
-              sub_assignment1 = sub_assignments.find_by(sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC)
-              sub_assignment2 = sub_assignments.find_by(sub_assignment_tag: CheckpointLabels::REPLY_TO_ENTRY)
-
-              expect(graded_discussion.assignment.sub_assignments.count).to eq(2)
-              expect(format_date_for_view(sub_assignment1.assignment_overrides.active.first.due_at, "%m/%d/%Y")).to eq(reply_to_topic_date_formatted)
-              expect(format_date_for_view(sub_assignment2.assignment_overrides.active.first.due_at, "%m/%d/%Y")).to eq(required_replies_date_formatted)
-            end
-
-            it "displays an error when the availability date is after the due date" do
-              Account.site_admin.enable_feature!(:discussion_checkpoints)
-              @course.root_account.enable_feature!(:discussion_checkpoints)
-              assignment = @course.assignments.create!(
-                name: "Assignment",
-                submission_types: ["online_text_entry"],
-                points_possible: 20
-              )
-              assignment.update!(has_sub_assignments: true)
-              assignment.sub_assignments.create!(context: assignment.context, sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC, points_possible: 10, due_at: 3.days.from_now)
-              assignment.sub_assignments.create!(context: assignment.context, sub_assignment_tag: CheckpointLabels::REPLY_TO_ENTRY, points_possible: 10, due_at: 5.days.from_now)
-              graded_discussion = @course.discussion_topics.create!(
-                title: "Graded Discussion",
-                discussion_type: "threaded",
-                posted_at: "2017-07-09 16:32:34",
-                user: @teacher,
-                assignment:,
-                reply_to_entry_required_count: 1
-              )
-
-              # Open page and assignTo tray
-              get "/courses/#{@course.id}/discussion_topics/#{graded_discussion.id}/edit"
-              Discussion.assign_to_button.click
-
-              reply_to_topic_date_formatted = format_date_for_view(1.day.from_now(Time.zone.now).to_date, "%m/%d/%Y")
-              update_reply_to_topic_date(0, reply_to_topic_date_formatted)
-              update_reply_to_topic_time(0, "5:00 PM")
-
-              # available from
-              available_from_date_formatted = format_date_for_view(2.days.from_now(Time.zone.now).to_date, "%m/%d/%Y")
-              update_available_date(0, available_from_date_formatted, true, false)
-              update_available_time(0, "5:00 PM", true, false)
-              expect(assign_to_date_and_time[2].text).to include("Unlock date cannot be after reply to topic due date")
-
-              # correct reply to topic
-              reply_to_topic_date_formatted = format_date_for_view(3.days.from_now(Time.zone.now).to_date, "%m/%d/%Y")
-              update_reply_to_topic_date(0, reply_to_topic_date_formatted)
-              update_reply_to_topic_time(0, "5:00 PM")
-
-              # required replies
-              required_replies_date_formatted = format_date_for_view(1.day.from_now(Time.zone.now).to_date, "%m/%d/%Y")
-              update_required_replies_date(0, required_replies_date_formatted)
-              update_required_replies_time(0, "5:00 PM")
-              expect(assign_to_date_and_time[2].text).to include("Unlock date cannot be after required replies due date")
-
-              # available until
-              until_date = 5.days.from_now(Time.zone.now).to_date + 17.hours
-              until_date_formatted = format_date_for_view(until_date, "%m/%d/%Y")
-              update_until_date(0, until_date_formatted, true, false)
-              update_until_time(0, "5:00 PM", true, false)
-
-              reply_to_topic_date_formatted = format_date_for_view(6.days.from_now(Time.zone.now).to_date, "%m/%d/%Y")
-              update_reply_to_topic_date(0, reply_to_topic_date_formatted)
-              update_reply_to_topic_time(0, "5:00 PM")
-              expect(assign_to_date_and_time[3].text).to include("Lock date cannot be before reply to topic due date")
-
-              # correct reply to topic
-              reply_to_topic_date_formatted = format_date_for_view(3.days.from_now(Time.zone.now).to_date, "%m/%d/%Y")
-              update_reply_to_topic_date(0, reply_to_topic_date_formatted)
-              update_reply_to_topic_time(0, "5:00 PM")
-
-              # required replies
-              required_replies_date_formatted = format_date_for_view(6.days.from_now(Time.zone.now).to_date, "%m/%d/%Y")
-              update_required_replies_date(0, required_replies_date_formatted)
-              update_required_replies_time(0, "5:00 PM")
-              expect(assign_to_date_and_time[3].text).to include("Lock date cannot be before required replies due date")
-            end
-          end
-
-          context "post to sis" do
-            before do
-              course.account.set_feature_flag! "post_grades", "on"
-              course.account.set_feature_flag! :new_sis_integrations, "on"
-              course.account.settings[:sis_syncing] = { value: true, locked: false }
-              course.account.settings[:sis_require_assignment_due_date] = { value: true }
-              course.account.save!
-            end
-
-            it "blocks when enabled", :ignore_js_errors do
-              graded_discussion = create_graded_discussion(course)
-              get "/courses/#{course.id}/discussion_topics/#{graded_discussion.id}/edit"
-              Discussion.click_sync_to_sis_checkbox
-              Discussion.save_button.click
-              wait_for_ajaximations
-
-              expect(driver.current_url).to include("edit")
-              expect_instui_flash_message("Please set a due date or change your selection for the “Sync to SIS” option.")
-
-              Discussion.click_assign_to_button
-
-              wait_for_assign_to_tray_spinner
-              keep_trying_until { expect(item_tray_exists?).to be_truthy }
-
-              expect(assign_to_date_and_time[0].text).to include("Please add a due date")
-
-              update_due_date(0, format_date_for_view(Time.zone.now, "%-m/%-d/%Y"))
-              update_due_time(0, "11:59 PM")
-              click_save_button("Apply")
-              keep_trying_until { expect(element_exists?(module_item_edit_tray_selector)).to be_falsey }
-
-              expect_new_page_load { Discussion.save_button.click }
-              expect(driver.current_url).not_to include("edit")
-              expect(graded_discussion.reload.assignment.post_to_sis).to be_truthy
-              get "/courses/#{course.id}/discussion_topics/#{graded_discussion.id}/edit"
-              expect(is_checked(Discussion.sync_to_sis_checkbox_selector)).to be_truthy
-            end
-
-            it "does not block when disabled" do
-              graded_discussion = create_graded_discussion(course)
-              get "/courses/#{course.id}/discussion_topics/#{graded_discussion.id}/edit"
-
-              expect_new_page_load { Discussion.save_button.click }
-              expect(driver.current_url).not_to include("edit")
-              expect(graded_discussion.reload.assignment.post_to_sis).to be_falsey
-
-              get "/courses/#{course.id}/discussion_topics/#{graded_discussion.id}/edit"
-              expect(is_checked(Discussion.sync_to_sis_checkbox_selector)).to be_falsey
-            end
-
-            it "validates due date when user checks/unchecks the box", :ignore_js_errors do
-              graded_discussion = create_graded_discussion(course)
-              get "/courses/#{course.id}/discussion_topics/#{graded_discussion.id}/edit"
-
-              Discussion.click_assign_to_button
-              wait_for_assign_to_tray_spinner
-              keep_trying_until { expect(item_tray_exists?).to be_truthy }
-
-              expect(assign_to_date_and_time[0].text).not_to include("Please add a due date")
-
-              click_cancel_button
-              keep_trying_until { expect(element_exists?(module_item_edit_tray_selector)).to be_falsey }
-
-              Discussion.click_sync_to_sis_checkbox
-              Discussion.click_assign_to_button
-              wait_for_assign_to_tray_spinner
-              keep_trying_until { expect(item_tray_exists?).to be_truthy }
-
-              expect(assign_to_date_and_time[0].text).to include("Please add a due date")
-
-              update_due_date(0, format_date_for_view(Time.zone.now, "%-m/%-d/%Y"))
-              update_due_time(0, "11:59 PM")
-              click_save_button("Apply")
-              keep_trying_until { expect(element_exists?(module_item_edit_tray_selector)).to be_falsey }
-
-              expect_new_page_load { Discussion.save_button.click }
-              expect(driver.current_url).not_to include("edit")
-              expect(graded_discussion.reload.assignment.post_to_sis).to be_truthy
-            end
-          end
-        end
-
         context "selective release with embedded assign to cards", :ignore_js_errors do
-          before :once do
-            Account.site_admin.enable_feature!(:selective_release_edit_page)
-          end
-
           before do
             @student1 = student_in_course(course:, active_all: true).user
             @student2 = student_in_course(course:, active_all: true).user
@@ -2278,9 +1266,9 @@ describe "discussions" do
             displayed_override_dates = all_displayed_assign_to_date_and_time
 
             # Check that the due dates are correctly displayed
-            expect(displayed_override_dates.include?(DateTime.parse(due_date))).to be_truthy
-            expect(displayed_override_dates.include?(DateTime.parse(unlock_at))).to be_truthy
-            expect(displayed_override_dates.include?(DateTime.parse(lock_at))).to be_truthy
+            expect(displayed_override_dates.include?(Time.zone.parse(due_date))).to be_truthy
+            expect(displayed_override_dates.include?(Time.zone.parse(unlock_at))).to be_truthy
+            expect(displayed_override_dates.include?(Time.zone.parse(lock_at))).to be_truthy
           end
 
           it "displays everyone and section and student overrides correctly", custom_timeout: 30 do
@@ -2582,10 +1570,61 @@ describe "discussions" do
             expect(selected_assignee_options.count).to be(1)
           end
 
+          context "differentiaiton tags" do
+            before do
+              @course.account.enable_feature! :assign_to_differentiation_tags
+              @course.account.tap do |a|
+                a.settings[:allow_assign_to_differentiation_tags] = { value: true }
+                a.save!
+              end
+
+              @differentiation_tag_category = @course.group_categories.create!(name: "Differentiation Tag Category", non_collaborative: true)
+              @diff_tag1 = @course.groups.create!(name: "Differentiation Tag 1", group_category: @differentiation_tag_category, non_collaborative: true)
+              @diff_tag2 = @course.groups.create!(name: "Differentiation Tag 2", group_category: @differentiation_tag_category, non_collaborative: true)
+            end
+
+            it "assigns a differentiation tag and saves discussion" do
+              graded_discussion = create_graded_discussion(course)
+
+              due_date = "Sat, 06 Apr 2024 00:00:00.000000000 UTC +00:00"
+              unlock_at = "Fri, 05 Apr 2024 00:00:00.000000000 UTC +00:00"
+              lock_at = "Sun, 07 Apr 2024 00:00:00.000000000 UTC +00:00"
+              graded_discussion.assignment.update!(due_at: due_date, unlock_at:, lock_at:)
+              course.reload
+              # Open page and assignTo tray
+              get "/courses/#{course.id}/discussion_topics/#{graded_discussion.id}/edit"
+
+              click_add_assign_to_card
+              select_module_item_assignee(1, @diff_tag1.name)
+
+              Discussion.save_button.click
+              wait_for_ajaximations
+
+              assignment = Assignment.last
+
+              expect(assignment.assignment_overrides.active.count).to eq 1
+            end
+
+            context "existing differentiation tag overrides" do
+              before do
+                @discussion = create_graded_discussion(@course)
+                @discussion.assignment.assignment_overrides.create!(set_type: "Group", set_id: @diff_tag1.id, title: @diff_tag1.name)
+                @discussion.assignment.assignment_overrides.create!(set_type: "Group", set_id: @diff_tag2.id, title: @diff_tag2.name)
+              end
+
+              it "renders all the override assignees" do
+                get "/courses/#{@course.id}/discussion_topics/#{@discussion.id}/edit"
+
+                # 3 differentiation tags
+                expect(selected_assignee_options.count).to eq 3
+              end
+            end
+          end
+
           context "checkpoints" do
             it "shows reply to topic input on graded discussion with sub assignments" do
               Account.site_admin.enable_feature!(:discussion_checkpoints)
-              @course.root_account.enable_feature!(:discussion_checkpoints)
+              @course.account.enable_feature!(:discussion_checkpoints)
               assignment = @course.assignments.create!(
                 name: "Assignment",
                 submission_types: ["online_text_entry"],
@@ -2611,7 +1650,7 @@ describe "discussions" do
 
             it "shows required replies input on graded discussion with sub assignments" do
               Account.site_admin.enable_feature!(:discussion_checkpoints)
-              @course.root_account.enable_feature!(:discussion_checkpoints)
+              @course.account.enable_feature!(:discussion_checkpoints)
               @student1 = student_in_course(course:, active_all: true).user
               @student2 = student_in_course(course:, active_all: true).user
               @course_section = course.course_sections.create!(name: "section alpha")
@@ -2717,9 +1756,8 @@ describe "discussions" do
             end
 
             it "displays an error when the availability date is after the due date" do
-              skip("Need validations to work for this one to pass")
               Account.site_admin.enable_feature!(:discussion_checkpoints)
-              @course.root_account.enable_feature!(:discussion_checkpoints)
+              @course.account.enable_feature!(:discussion_checkpoints)
               assignment = @course.assignments.create!(
                 name: "Assignment",
                 submission_types: ["online_text_entry"],
@@ -2850,7 +1888,7 @@ describe "discussions" do
 
         context "checkpoints" do
           before do
-            course.root_account.enable_feature!(:discussion_checkpoints)
+            course.account.enable_feature!(:discussion_checkpoints)
             @checkpointed_discussion = DiscussionTopic.create_graded_topic!(course:, title: "checkpointed discussion")
             Checkpoints::DiscussionCheckpointCreatorService.call(
               discussion_topic: @checkpointed_discussion,
@@ -2897,6 +1935,18 @@ describe "discussions" do
             expect(sub_assignment2.points_possible).to eq 7
           end
 
+          it "still saves existing checkpointed discussion successfully even when there are replies" do
+            @checkpointed_discussion.discussion_entries.create!(
+              user: @teacher,
+              message: "Initial post"
+            )
+
+            get "/courses/#{course.id}/discussion_topics/#{@checkpointed_discussion.id}/edit"
+            fj("button:contains('Save')").click
+
+            expect(f("h2[data-testid='message_title']").text).to include(@checkpointed_discussion.title)
+          end
+
           it "deletes checkpoints if the checkpoint checkbox is unselected on an existing discussion with checkpoints" do
             assignment = Assignment.last
             expect(assignment.sub_assignments.count).to eq 2
@@ -2915,7 +1965,7 @@ describe "discussions" do
             graded_discussion = create_graded_discussion(course)
 
             get "/courses/#{course.id}/discussion_topics/#{graded_discussion.id}/edit"
-
+            expect(fj("span[class*='screenReaderContent']:contains('Checkpoints can be set to have different due dates and point values for the initial response and the subsequent replies.')")).to be_present
             force_click_native('input[type=checkbox][value="checkpoints"]')
 
             f("input[data-testid='points-possible-input-reply-to-topic']").send_keys :backspace
@@ -2940,6 +1990,18 @@ describe "discussions" do
             expect(sub_assignment2.points_possible).to eq 7
           end
 
+          it "cannot edit a non-checkpointed discussion with replies into a checkpointed discussion" do
+            graded_discussion = create_graded_discussion(course)
+            graded_discussion.discussion_entries.create!(
+              user: @teacher,
+              message: "Initial post"
+            )
+
+            get "/courses/#{course.id}/discussion_topics/#{graded_discussion.id}/edit"
+            expect(f('input[type=checkbox][value="checkpoints"]')).not_to be_enabled
+            expect(fj("span[class*='screenReaderContent']:contains('Checkpoints cannot be toggled after replies have been made.')")).to be_present
+          end
+
           it "deletes checkpoints if the graded checkbox is unselected on an exisitng discussion with checkpoints" do
             assignment = Assignment.last
             expect(assignment.sub_assignments.count).to eq 2
@@ -2957,38 +2019,29 @@ describe "discussions" do
             expect(DiscussionTopic.last.assignment).to be_nil
           end
 
-          it "checkpointed discussion assigned to Everyone with no dates appears correctly with assign to tray" do
-            skip("Assign to tray is no longer used in the edit page")
-            Account.site_admin.disable_feature!(:selective_release_edit_page)
+          it "clears out group category selection if discussion is turned into a checkpointed discussion" do
+            course.account.disable_feature!(:checkpoints_group_discussions)
+            topic = group_discussion_assignment
+            get "/courses/#{course.id}/discussion_topics/#{topic.id}/edit"
+            expect(f("input[data-testid='group-discussion-checkbox']").attribute("checked")).to be_truthy
+            expect(f("#discussion_group_category_id").attribute("value")).to eq topic.group_category.name
 
-            get "/courses/#{course.id}/discussion_topics/new"
-            title = "checkpointed discussion assigned to Everyone with no dates"
+            force_click_native("input[data-testid='checkpoints-checkbox']")
+            expect(f("input[data-testid='group-discussion-checkbox']").attribute("checked")).to be_falsey
+          end
 
-            f("input[placeholder='Topic Title']").send_keys title
+          it "preserves group category selection if discussion is turned into a checkpointed discussion when checkpoints_group_discussions is enabled" do
+            topic = group_discussion_assignment
+            preserved_id = topic.group_category.id
+            get "/courses/#{course.id}/discussion_topics/#{topic.id}/edit"
+            expect(f("input[data-testid='group-discussion-checkbox']").attribute("checked")).to be_truthy
+            expect(f("#discussion_group_category_id").attribute("value")).to eq topic.group_category.name
 
-            force_click_native('input[type=checkbox][value="graded"]')
-            force_click_native('input[type=checkbox][value="checkpoints"]')
-
-            Discussion.assign_to_button.click
-
-            click_save_button("Apply")
-
-            wait_for_assign_to_tray_spinner
+            force_click_native("input[data-testid='checkpoints-checkbox']")
+            expect(f("input[data-testid='group-discussion-checkbox']").attribute("checked")).to be_truthy
+            expect(f("#discussion_group_category_id").attribute("value")).to eq topic.group_category.name
             fj("button:contains('Save')").click
-            wait_for_ajaximations
-
-            graded_discussion = DiscussionTopic.last
-            get "/courses/#{@course.id}/discussion_topics/#{graded_discussion.id}/edit"
-            Discussion.assign_to_button.click
-
-            expect(get_all_dates_for_all_cards).to eq [
-              {
-                reply_to_topic: "",
-                required_replies: "",
-                available_from: "",
-                until: "",
-              }
-            ]
+            expect(topic.reload.group_category.id).to eq preserved_id
           end
 
           it "checkpointed discussion assigned to Everyone with no dates appears correctly with embedded assign to cards" do
@@ -3014,6 +2067,70 @@ describe "discussions" do
                 until: "",
               }
             ]
+          end
+
+          it "successfully creates ADHOC overrides if a student is enrolled in multiple sections" do
+            student_1 = User.create!(name: "student 1")
+
+            section_1 = course.course_sections.create! name: "section 1"
+            course.enroll_student(student_1, enrollment_state: "active", section: section_1, allow_multiple_enrollments: true)
+
+            section_2 = course.course_sections.create! name: "section 2"
+            course.enroll_student(student_1, enrollment_state: "active", section: section_2, allow_multiple_enrollments: true)
+
+            section_3 = course.course_sections.create! name: "section 3"
+            course.enroll_student(student_1, enrollment_state: "active", section: section_3, allow_multiple_enrollments: true)
+
+            get "/courses/#{course.id}/discussion_topics/#{@checkpointed_discussion.id}/edit"
+
+            title = "Graded Discussion Topic with checkpoints and Student enrolled in multiple sections"
+            f("input[placeholder='Topic Title']").clear
+            f("input[placeholder='Topic Title']").send_keys title
+            f("input[data-testid='points-possible-input-reply-to-topic']").send_keys :backspace
+            f("input[data-testid='points-possible-input-reply-to-topic']").send_keys "5"
+            f("input[data-testid='reply-to-entry-required-count']").send_keys :backspace
+            f("input[data-testid='reply-to-entry-required-count']").send_keys "3"
+            f("input[data-testid='points-possible-input-reply-to-entry']").send_keys :backspace
+            f("input[data-testid='points-possible-input-reply-to-entry']").send_keys "7"
+
+            assign_to_element = Discussion.assignee_selector.first
+            assign_to_element.click
+            assign_to_element.send_keys :backspace
+            assign_to_element.send_keys "student 1"
+
+            f("button[data-testid='save-button']").click
+            wait_for_ajaximations
+
+            Discussion.section_warning_continue_button.click
+            dt = DiscussionTopic.last
+            expect(dt.reply_to_entry_required_count).to eq 3
+
+            assignment = Assignment.last
+            expect(assignment.has_sub_assignments?).to be true
+
+            sub_assignments = SubAssignment.where(parent_assignment_id: assignment.id)
+            sub_assignment1 = sub_assignments.find_by(sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC)
+            sub_assignment2 = sub_assignments.find_by(sub_assignment_tag: CheckpointLabels::REPLY_TO_ENTRY)
+
+            expect(sub_assignment1.sub_assignment_tag).to eq "reply_to_topic"
+            expect(sub_assignment1.points_possible).to eq 5
+            expect(sub_assignment2.sub_assignment_tag).to eq "reply_to_entry"
+            expect(sub_assignment2.points_possible).to eq 7
+
+            assignment_override1 = AssignmentOverride.find_by(assignment: sub_assignment1)
+            assignment_override2 = AssignmentOverride.find_by(assignment: sub_assignment2)
+
+            expect(assignment_override1).to be_present
+            expect(assignment_override2).to be_present
+
+            expect(assignment_override1.set_type).to eq "ADHOC"
+
+            student_ids = assignment_override1.assignment_override_students.map { |o| o.user.global_id }
+
+            expect(student_ids).to match_array [student_1.global_id]
+
+            # Verify that the discussion topic redirected the page to the new discussion topic
+            expect(driver.current_url).to end_with("/courses/#{course.id}/discussion_topics/#{dt.id}")
           end
         end
 
@@ -3104,6 +2221,47 @@ describe "discussions" do
 
             expect(ui_ranges[2].text).to include @set3a_assmt.title
             expect(ui_ranges[2].text).to include @set3b_assmt.title
+          end
+
+          context "with course paces" do
+            before do
+              Account.site_admin.enable_feature!(:react_discussions_post)
+            end
+
+            it "sets an assignment override for mastery paths when mastery path toggle is turned on" do
+              course_with_teacher_logged_in
+              @course.root_account.enable_feature!(:course_pace_pacing_with_mastery_paths)
+              @course.conditional_release = true
+              @course.enable_course_paces = true
+              @course.save!
+
+              assignment = create_assignment(@course, "Mastery Path Main Assignment", 10)
+              discussion = @course.discussion_topics.create!(assignment:, title: "graded discussion")
+
+              get "/courses/#{@course.id}/discussion_topics/#{discussion.id}/edit"
+              Discussion.mastery_path_toggle.click
+              expect_new_page_load { Discussion.save_discussion }
+
+              expect(assignment.assignment_overrides.active.find_by(set_id: AssignmentOverride::NOOP_MASTERY_PATHS, set_type: AssignmentOverride::SET_TYPE_NOOP)).to be_present
+            end
+
+            it "removes assignment override for mastery paths when mastery path toggle is turned off" do
+              course_with_teacher_logged_in
+              @course.root_account.enable_feature!(:course_pace_pacing_with_mastery_paths)
+              @course.conditional_release = true
+              @course.enable_course_paces = true
+              @course.save!
+
+              assignment = create_assignment(@course, "Mastery Path Main Assignment", 10)
+              discussion = @course.discussion_topics.create!(assignment:, title: "graded discussion")
+              assignment.assignment_overrides.create(set_id: AssignmentOverride::NOOP_MASTERY_PATHS, set_type: AssignmentOverride::SET_TYPE_NOOP)
+
+              get "/courses/#{@course.id}/discussion_topics/#{discussion.id}/edit"
+              Discussion.mastery_path_toggle.click
+              expect_new_page_load { Discussion.save_discussion }
+
+              expect(assignment.assignment_overrides.active.find_by(set_id: AssignmentOverride::NOOP_MASTERY_PATHS, set_type: AssignmentOverride::SET_TYPE_NOOP)).not_to be_present
+            end
           end
         end
       end

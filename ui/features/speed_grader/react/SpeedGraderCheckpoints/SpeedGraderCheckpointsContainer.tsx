@@ -17,22 +17,27 @@
  */
 
 import React, {useContext, useEffect, useState, useCallback} from 'react'
-import {useQuery} from '@canvas/query'
 import doFetchApi from '@canvas/do-fetch-api-effect'
 import {Spinner} from '@instructure/ui-spinner'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {SpeedGraderCheckpoint, EXCUSED} from './SpeedGraderCheckpoint'
 import type {GradeStatusUnderscore} from '@canvas/grading/accountGradingStatus'
 import AssessmentGradeInput from './AssessmentGradeInput'
 import {Flex} from '@instructure/ui-flex'
-import {useMutation, useQueryClient} from '@tanstack/react-query'
+import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query'
 import {AlertManagerContext} from '@canvas/alerts/react/AlertManager'
 import OutlierScoreHelper from '@canvas/grading/OutlierScoreHelper'
 import {showFlashWarning} from '@canvas/alerts/react/FlashAlert'
 
-const I18n = useI18nScope('SpeedGraderCheckpoints')
+const I18n = createI18nScope('SpeedGraderCheckpoints')
+
+type SpeedGrader = {
+  setOrUpdateSubmission: (submission: any) => any
+  updateSelectMenuStatus: (student: any) => any
+}
 
 type Props = {
+  EG: SpeedGrader
   courseId: string
   assignmentId: string
   studentId: string
@@ -57,6 +62,8 @@ export type SubAssignmentSubmission = {
   sub_assignment_tag: 'reply_to_topic' | 'reply_to_entry' | null
   score: number
   excused: boolean
+  missing: boolean
+  late: boolean
   late_policy_status: string
   seconds_late: number
   custom_grade_status_id: null | string
@@ -73,7 +80,7 @@ export type Submission = SubAssignmentSubmission & {
 
 const fetchAssignment = async (
   courseId: string,
-  assignmentId: string
+  assignmentId: string,
 ): Promise<Assignment | null> => {
   const path = `/api/v1/courses/${courseId}/assignments/${assignmentId}?include=checkpoints`
 
@@ -82,13 +89,14 @@ const fetchAssignment = async (
     path,
   })
 
+  // @ts-expect-error
   return json || null
 }
 
 const fetchSubmission = async (
   courseId: string,
   assignmentId: string,
-  studentId: string
+  studentId: string,
 ): Promise<Submission | null> => {
   const path = `/api/v1/courses/${courseId}/assignments/${assignmentId}/submissions/${studentId}?include=sub_assignment_submissions`
 
@@ -97,6 +105,7 @@ const fetchSubmission = async (
     path,
   })
 
+  // @ts-expect-error
   return json || null
 }
 
@@ -202,13 +211,14 @@ export const SpeedGraderCheckpointsContainer = (props: Props) => {
 
   const [shouldAnnounceCurrentGradeChange, setShouldAnnounceCurrentGradeChange] = useState(false)
   const {setOnSuccess} = useContext(AlertManagerContext)
+  // @ts-expect-error
   const [lastSubmission, setLastSubmission] = useState<SubAssignmentSubmission>(null)
 
   const {data: assignment, isLoading: isLoadingAssignment} = useQuery({
     queryKey: ['speedGraderCheckpointsAssignment', props.courseId, props.assignmentId],
     queryFn: fetchAssignmentFunction,
     enabled: true,
-    cacheTime: 0,
+    gcTime: 0,
     staleTime: 0,
   })
 
@@ -225,7 +235,7 @@ export const SpeedGraderCheckpointsContainer = (props: Props) => {
     ],
     queryFn: fetchSubmissionFunction,
     enabled: true,
-    cacheTime: 0,
+    gcTime: 0,
     staleTime: 0,
   })
 
@@ -234,8 +244,9 @@ export const SpeedGraderCheckpointsContainer = (props: Props) => {
 
     const score = Number(lastSubmission.grade)
     const {points_possible: pointsPossible} = getAssignmentWithPropsFromCheckpoints(
+      // @ts-expect-error
       assignment,
-      lastSubmission
+      lastSubmission,
     )
     const outlierScoreHelper = new OutlierScoreHelper(score, pointsPossible)
 
@@ -270,27 +281,41 @@ export const SpeedGraderCheckpointsContainer = (props: Props) => {
   ])
 
   const invalidateSubmission = () => {
-    queryClient.invalidateQueries([
-      'speedGraderCheckpointsSubmission',
-      props.courseId,
-      props.assignmentId,
-      props.studentId,
-    ])
+    queryClient.invalidateQueries({
+      queryKey: [
+        'speedGraderCheckpointsSubmission',
+        props.courseId,
+        props.assignmentId,
+        props.studentId,
+      ],
+    })
+  }
+
+  const updateSubmissionUI = (data: object) => {
+    if (props.EG) {
+      // all_submissions[0] has submission_history vs data?.json which is a submission, but does not.
+      /* @ts-expect-error */
+      const submissionData = data?.json?.all_submissions[0]
+      if (submissionData) {
+        const student = props.EG.setOrUpdateSubmission(submissionData)
+        props.EG.updateSelectMenuStatus(student)
+      }
+      invalidateSubmission()
+      setShouldAnnounceCurrentGradeChange(true)
+    }
   }
 
   const {mutate: updateSubmissionGrade} = useMutation({
     mutationFn: putSubmissionGrade,
-    onSuccess: () => {
-      invalidateSubmission()
-      setShouldAnnounceCurrentGradeChange(true)
+    onSuccess: data => {
+      updateSubmissionUI(data)
     },
   })
 
   const {mutate: updateSubmissionStatus} = useMutation({
     mutationFn: putSubmissionStatus,
-    onSuccess: () => {
-      invalidateSubmission()
-      setShouldAnnounceCurrentGradeChange(true)
+    onSuccess: data => {
+      updateSubmissionUI(data)
     },
   })
 
@@ -307,10 +332,9 @@ export const SpeedGraderCheckpointsContainer = (props: Props) => {
   }
 
   const getAssignmentWithPropsFromCheckpoints = (
-    // eslint-disable-next-line @typescript-eslint/no-shadow
     assignment: Assignment,
-    // eslint-disable-next-line @typescript-eslint/no-shadow
-    submission: SubAssignmentSubmission
+
+    submission: SubAssignmentSubmission,
   ) => {
     return {
       ...assignment,
@@ -339,6 +363,7 @@ export const SpeedGraderCheckpointsContainer = (props: Props) => {
       })}
       <Flex margin="none none small" gap="small" alignItems="start">
         <Flex.Item>
+          {/* @ts-expect-error */}
           <AssessmentGradeInput
             assignment={assignment}
             showAlert={() => {}}

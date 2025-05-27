@@ -138,13 +138,13 @@ describe('AddImageModal', () => {
     return render(
       <RCSPropsContext.Provider value={mockTrayProps}>
         <AddImageModal {...defaultProps} {...props} />
-      </RCSPropsContext.Provider>
+      </RCSPropsContext.Provider>,
     )
   }
 
   it('renders with 4 tabs', () => {
-    const {getByText} = renderComponent()
-    expect(getByText('Upload Image')).toBeInTheDocument()
+    const {getByRole, getByText} = renderComponent()
+    expect(getByRole('heading', { name: 'Upload Image' })).toBeInTheDocument()
     expect(getByText('Computer')).toBeInTheDocument()
     expect(getByText('URL')).toBeInTheDocument()
     expect(getByText('Course Images')).toBeInTheDocument()
@@ -167,8 +167,9 @@ describe('AddImageModal', () => {
     })
     await user.type(
       screen.getByRole('textbox', {name: /file url/i}),
-      'http://example.com/image.jpg'
+      'http://example.com/image.jpg',
     )
+    // @ts-expect-error
     await user.click(screen.getByText('Submit').closest('button'))
     await waitFor(() => {
       expect(mockOnSubmit).toHaveBeenCalledWith('http://example.com/image.jpg', '')
@@ -183,14 +184,15 @@ describe('AddImageModal', () => {
     })
     await user.type(
       screen.getByRole('textbox', {name: /file url/i}),
-      'http://example.com/image.jpg'
+      'http://example.com/image.jpg',
     )
 
     fireEvent.change(
       (await screen.getByPlaceholderText('(Describe the image)')) as unknown as HTMLInputElement,
-      {target: {value: 'Some alt text'}}
+      {target: {value: 'Some alt text'}},
     )
 
+    // @ts-expect-error
     await user.click(screen.getByText('Submit').closest('button'))
     await waitFor(() => {
       expect(mockOnSubmit).toHaveBeenCalledWith('http://example.com/image.jpg', 'Some alt text')
@@ -209,7 +211,7 @@ describe('AddImageModal', () => {
     await waitFor(() => {
       expect(mockOnSubmit).toHaveBeenCalledWith(
         'http://canvas.docker/courses/21/files/722?wrap=1',
-        ''
+        '',
       )
     })
   })
@@ -227,7 +229,7 @@ describe('AddImageModal', () => {
     await waitFor(() => {
       expect(mockOnSubmit).toHaveBeenCalledWith(
         'http://canvas.docker/courses/21/files/722?wrap=1',
-        ''
+        '',
       )
     })
   })

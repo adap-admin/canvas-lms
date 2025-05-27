@@ -18,13 +18,13 @@
 
 import React from 'react'
 // I18n and tz needed to replicate what FriendlyDatetime does in formatting
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import * as tz from '@instructure/moment-utils'
 import {render} from '@testing-library/react'
 import {mockOverride} from '../../../test-utils'
 import OverrideSummary from '../OverrideSummary'
 
-const I18n = useI18nScope('assignments_2')
+const I18n = createI18nScope('assignments_2')
 
 describe('OverrideSummary', () => {
   it('renders with unlock and lock dates', () => {
@@ -48,7 +48,7 @@ describe('OverrideSummary', () => {
 
     const dates = `${tz.format(unlockAt, I18n.t('#date.formats.short'))} to ${tz.format(
       lockAt,
-      I18n.t('#date.formats.short')
+      I18n.t('#date.formats.short'),
     )}`
     expect(getAllByText(dates)[0]).toBeInTheDocument()
 

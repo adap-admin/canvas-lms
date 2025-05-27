@@ -1,4 +1,3 @@
-// @ts-nocheck
 /*
  * Copyright (C) 2019 - present Instructure, Inc.
  *
@@ -18,7 +17,6 @@
  */
 
 import React from 'react'
-import {ReactNodeLike} from 'prop-types'
 import {Heading} from '@instructure/ui-heading'
 import {CloseButton} from '@instructure/ui-buttons'
 import {View} from '@instructure/ui-view'
@@ -30,8 +28,8 @@ export function ExternalToolDialogModal(
   props: Pick<ModalProps, 'label' | 'open' | 'onOpen' | 'onClose' | 'mountNode'> & {
     onCloseButton: () => void
     name: string
-    children: ReactNodeLike
-  }
+    children: React.ReactNode
+  },
 ) {
   return (
     <Modal

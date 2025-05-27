@@ -43,11 +43,11 @@ export const sharedMatchingAssessmentCheckboxTests = (InputComponent: React.Comp
         {...props}
         isSubmitting={true}
         fileUploadProgress={10}
-      />
+      />,
     )
 
     expect(
-      getByRole('checkbox', {name: /Overwrite assessment content with matching IDs/})
+      getByRole('checkbox', {name: /Overwrite assessment content with matching IDs/}),
     ).toBeDisabled()
   })
 }
@@ -100,7 +100,7 @@ export const sharedAdjustDateTests = (InputComponent: React.ComponentType<any>) 
     render(<InputComponent onSubmit={onSubmit} onCancel={onCancel} {...overrideProps} />)
 
   it('disable "Adjust events and due dates" inputs while uploading', async () => {
-    const {getByRole, rerender, getByLabelText} = renderComponent()
+    const {getByRole, rerender, getByTestId, getByText} = renderComponent()
 
     await userEvent.click(getByRole('checkbox', {name: 'Adjust events and due dates'}))
 
@@ -110,17 +110,19 @@ export const sharedAdjustDateTests = (InputComponent: React.ComponentType<any>) 
         onCancel={onCancel}
         isSubmitting={true}
         fileUploadProgress={10}
-      />
+      />,
     )
 
     await waitFor(() => {
       expect(getByRole('radio', {name: 'Shift dates'})).toBeInTheDocument()
       expect(getByRole('radio', {name: 'Shift dates'})).toBeDisabled()
       expect(getByRole('radio', {name: 'Remove dates'})).toBeDisabled()
-      expect(getByLabelText('Select original beginning date')).toBeDisabled()
-      expect(getByLabelText('Select new beginning date')).toBeDisabled()
-      expect(getByLabelText('Select original end date')).toBeDisabled()
-      expect(getByLabelText('Select new end date')).toBeDisabled()
+      expect(getByText('Beginning date:')).toBeInTheDocument()
+      expect(getByTestId('old_start_date')).toBeDisabled()
+      expect(getByTestId('new_start_date')).toBeDisabled()
+      expect(getByText('Ending date:')).toBeInTheDocument()
+      expect(getByTestId('old_end_date')).toBeDisabled()
+      expect(getByTestId('new_end_date')).toBeDisabled()
       expect(getByRole('button', {name: 'Add substitution'})).toBeDisabled()
     })
   })
@@ -163,7 +165,7 @@ export const sharedFormTests = (InputComponent: React.ComponentType<any>) => {
           size: 16,
         },
       }),
-      expect.any(Object)
+      expect.any(Object),
     )
   })
 
@@ -172,11 +174,11 @@ export const sharedFormTests = (InputComponent: React.ComponentType<any>) => {
     expect(screen.getByText('Uploading File')).toBeInTheDocument()
   })
 
-  it('disable Add and Cancel buttons while uploading', async () => {
+  it('disable Add and Clear buttons while uploading', async () => {
     renderComponent({isSubmitting: true})
     await waitFor(() => {
       expect(screen.getByTestId('migrationFileUpload')).toBeDisabled()
-      expect(screen.getByRole('button', {name: 'Cancel'})).toBeDisabled()
+      expect(screen.getByRole('button', {name: 'Clear'})).toBeDisabled()
       expect(screen.getByRole('button', {name: /Adding.../})).toBeDisabled()
     })
   })
@@ -190,6 +192,12 @@ export const sharedFormTests = (InputComponent: React.ComponentType<any>) => {
         await userEvent.click(screen.getByRole('button', {name: 'Add to Import Queue'}))
         expect(screen.getByText(expectedFileMissingError)).toBeInTheDocument()
       })
+
+      it('focuses on input after file error', async () => {
+        renderComponent()
+        await userEvent.click(screen.getByRole('button', {name: 'Add to Import Queue'}))
+        expect(screen.getByTestId('migrationFileUpload')).toHaveFocus()
+      })
     })
   })
 }
@@ -201,8 +209,8 @@ export const sharedDateParsingTests = (InputComponent: React.ComponentType<any>)
   const renderComponent = (overrideProps?: any) =>
     render(<InputComponent onSubmit={onSubmit} onCancel={onCancel} {...overrideProps} />)
 
-  const expectDateField = (label: string, value: string) => {
-    expect(screen.getByLabelText(label).closest('input')?.value).toBe(value)
+  const expectDateField = (dataCid: string, value: string) => {
+    expect((screen.getByTestId(dataCid) as HTMLInputElement).value).toBe(value)
   }
 
   describe('target course adjust date field prefills', () => {
@@ -212,7 +220,7 @@ export const sharedDateParsingTests = (InputComponent: React.ComponentType<any>)
 
       await userEvent.click(getByRole('checkbox', {name: 'Adjust events and due dates'}))
 
-      expectDateField('Select new end date', 'Oct 15 at 8pm')
+      expectDateField('new_end_date', 'Oct 15 at 8pm')
     })
 
     it('parse the date from ENV.OLD_START_DATE', async () => {
@@ -221,7 +229,7 @@ export const sharedDateParsingTests = (InputComponent: React.ComponentType<any>)
 
       await userEvent.click(getByRole('checkbox', {name: 'Adjust events and due dates'}))
 
-      expectDateField('Select new beginning date', 'Oct 15 at 8pm')
+      expectDateField('new_start_date', 'Oct 15 at 8pm')
     })
   })
 }

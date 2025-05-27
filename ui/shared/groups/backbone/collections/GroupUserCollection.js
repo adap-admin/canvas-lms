@@ -16,17 +16,15 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* eslint-disable no-void */
-
 import {extend} from '@canvas/backbone/utils'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
 import PaginatedCollection from '@canvas/pagination/backbone/collections/PaginatedCollection'
 import GroupUser from '../models/GroupUser'
 import h from '@instructure/html-escape'
 import {encodeQueryString} from '@instructure/query-string-encoding'
 
-const I18n = useI18nScope('GroupUserCollection')
+const I18n = createI18nScope('GroupUserCollection')
 
 extend(GroupUserCollection, PaginatedCollection)
 
@@ -127,7 +125,7 @@ GroupUserCollection.prototype.addUser = function (user) {
           _this.increment(-1)
           return _this.flashAlreadyInGroupError(user)
         }
-      })(this)
+      })(this),
     )
     return this.increment(1)
   }
@@ -138,7 +136,7 @@ GroupUserCollection.prototype.flashAlreadyInGroupError = function (user) {
     I18n.t('flash.userAlreadyInGroup', 'WARNING: %{user} is already a member of %{group}', {
       user: h(user.get('name')),
       group: h(this.group.get('name')),
-    })
+    }),
   )
 }
 

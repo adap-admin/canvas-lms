@@ -145,15 +145,15 @@ describe AccountNotification do
   it "caches queries for root accounts" do
     enable_cache do
       Timecop.freeze do
-        expect(MultiCache.fetch(AccountNotification.cache_key_for_root_account(@account.id, Time.now))).to be_nil
-        expect(MultiCache.fetch(AccountNotification.cache_key_for_root_account(Account.site_admin.id, Time.now))).to be_nil
+        expect(MultiCache.fetch(AccountNotification.cache_key_for_root_account(@account.id, Time.zone.now))).to be_nil
+        expect(MultiCache.fetch(AccountNotification.cache_key_for_root_account(Account.site_admin.id, Time.zone.now))).to be_nil
         # once for @account, once for site admin
         allow(AccountNotification).to receive(:where).twice.and_call_original
 
         expect(AccountNotification.for_user_and_account(@user, @account)).to eq [@announcement]
 
-        expect(MultiCache.fetch(AccountNotification.cache_key_for_root_account(@account.id, Time.now))).to_not be_nil
-        expect(MultiCache.fetch(AccountNotification.cache_key_for_root_account(Account.site_admin.id, Time.now))).to_not be_nil
+        expect(MultiCache.fetch(AccountNotification.cache_key_for_root_account(@account.id, Time.zone.now))).to_not be_nil
+        expect(MultiCache.fetch(AccountNotification.cache_key_for_root_account(Account.site_admin.id, Time.zone.now))).to_not be_nil
 
         # no more calls to `where`; this _must_ be returned from cache
         expect(AccountNotification.for_user_and_account(@user, @account)).to eq [@announcement]
@@ -547,7 +547,7 @@ describe AccountNotification do
       end
     end
 
-    context "queue_message_broadcast" do
+    context "queue_message_broadcast hook" do
       it "does not let site admin account notifications even try" do
         an = account_notification(account: Account.site_admin)
         an.send_message = true
@@ -565,11 +565,29 @@ describe AccountNotification do
         expect(job.run_at.to_i).to eq an.start_at.to_i
       end
 
+      it "cannot send_message when workflow is deleted" do
+        an = account_notification(account: Account.default,
+                                  send_message: true,
+                                  start_at: 1.day.ago,
+
+                                  end_at: 2.days.from_now)
+        expect(an.should_send_message?).to be true
+        an.workflow_state = "deleted"
+        expect(an.should_send_message?).to be false
+      end
+
       it "does not queue a job when saving an announcement that already had messages sent" do
         an = account_notification(account: Account.default)
         an.messages_sent_at = 1.day.ago
         an.send_message = true
         expect { an.save! }.not_to change(Delayed::Job, :count)
+      end
+
+      it "does not call queue_message_broadcast when soft deleting an account notification" do
+        an = account_notification(account: Account.default, send_message: true)
+        allow(an).to receive(:queue_message_broadcast).and_call_original
+        an.destroy
+        expect(an).not_to have_received(:queue_message_broadcast)
       end
     end
 
@@ -626,6 +644,36 @@ describe AccountNotification do
         expect(BroadcastPolicy.notifier).to receive(:send_notification).ordered.with(*send_notification_args(user_ids)).and_call_original
         an.broadcast_messages
         expect(Message.count).to eq initial_message_count
+      end
+    end
+
+    describe "create_alert hook" do
+      context "when saving a new account notification" do
+        let(:account) { Account.create! }
+        let(:unsaved_notification) do
+          account.announcements.build(
+            subject: "my subject",
+            message: "my message",
+            start_at: 5.minutes.ago.utc,
+            end_at: 1.day.from_now.utc,
+            user: User.create!
+          )
+        end
+
+        it "calls create_alert" do
+          expect(unsaved_notification).to receive(:create_alert)
+          unsaved_notification.save!
+        end
+      end
+
+      context "when soft deleting an account notification" do
+        let!(:notification) { account_notification(account: Account.default, send_message: true) }
+
+        it "does not call create_alert" do
+          allow(notification).to receive(:create_alert).and_call_original
+          notification.destroy
+          expect(notification).not_to have_received(:create_alert)
+        end
       end
     end
   end
@@ -765,15 +813,15 @@ describe AccountNotification do
           account_notification(account: @account)
           user_factory
 
-          expect(MultiCache.fetch(AccountNotification.cache_key_for_root_account(@account.id, Time.now))).to be_nil
-          expect(MultiCache.fetch(AccountNotification.cache_key_for_root_account(Account.site_admin.id, Time.now))).to be_nil
+          expect(MultiCache.fetch(AccountNotification.cache_key_for_root_account(@account.id, Time.zone.now))).to be_nil
+          expect(MultiCache.fetch(AccountNotification.cache_key_for_root_account(Account.site_admin.id, Time.zone.now))).to be_nil
           # once for @account, once for site admin
           allow(AccountNotification).to receive(:where).twice.and_call_original
 
           expect(AccountNotification.for_user_and_account(@user, @account)).to eq [@announcement]
 
-          expect(MultiCache.fetch(AccountNotification.cache_key_for_root_account(@account.id, Time.now))).to_not be_nil
-          expect(MultiCache.fetch(AccountNotification.cache_key_for_root_account(Account.site_admin.id, Time.now))).to_not be_nil
+          expect(MultiCache.fetch(AccountNotification.cache_key_for_root_account(@account.id, Time.zone.now))).to_not be_nil
+          expect(MultiCache.fetch(AccountNotification.cache_key_for_root_account(Account.site_admin.id, Time.zone.now))).to_not be_nil
 
           # no more calls to `where`; this _must_ be returned from cache
           expect(AccountNotification.for_user_and_account(@user, @account)).to eq [@announcement]

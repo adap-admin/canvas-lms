@@ -22,10 +22,11 @@ shared_context "advantage access token context" do
     Account.default
   end
   let_once(:developer_key) do
-    dk = dev_key_model_1_3(account: root_account)
+    dk = lti_developer_key_model(account: root_account)
     dk.developer_key_account_bindings.first.update! workflow_state: "on"
     dk
   end
+  let_once(:tool_configuration) { lti_tool_configuration_model(developer_key:) }
   let(:access_token_scopes) do
     %w[
       https://purl.imsglobal.org/spec/lti-ags/scope/lineitem
@@ -47,6 +48,9 @@ shared_context "advantage access token context" do
       https://canvas.instructure.com/lti/account_external_tools/scope/show
       https://canvas.instructure.com/lti/account_external_tools/scope/destroy
       https://purl.imsglobal.org/spec/lti/scope/noticehandlers
+      https://purl.imsglobal.org/spec/lti/scope/asset.readonly
+      https://purl.imsglobal.org/spec/lti/scope/report
+      https://purl.imsglobal.org/spec/lti/scope/eula
     ].join(" ")
   end
   let(:access_token_signing_key) { Canvas::Security.encryption_key }

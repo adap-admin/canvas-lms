@@ -16,20 +16,20 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React, {SyntheticEvent, useState} from 'react'
+import React, {type SyntheticEvent, useState} from 'react'
 import {View} from '@instructure/ui-view'
 import {Select} from '@instructure/ui-select'
 import {Spinner} from '@instructure/ui-spinner'
 import {Avatar} from '@instructure/ui-avatar'
 import {Flex, FlexItem} from '@instructure/ui-flex'
 import {Text} from '@instructure/ui-text'
-import {useQuery} from '@canvas/query'
+import {useQuery} from '@tanstack/react-query'
 import useDebouncedSearchTerm from '@canvas/search-item-selector/react/hooks/useDebouncedSearchTerm'
-import {useScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 
-import {ResponseSection, fetchSections} from './api'
+import {type ResponseSection, fetchSections} from './api'
 
-const I18n = useScope('roster_section_input')
+const I18n = createI18nScope('roster_section_input')
 
 type SectionInputProps = {
   onSelect: (section: ResponseSection) => void

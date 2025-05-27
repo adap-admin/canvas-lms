@@ -43,6 +43,7 @@ class Lti::ToolConfigurationsApiController < ApplicationController
 
   before_action :require_context, only: [:create, :show]
   before_action :require_user
+  before_action :require_settings_or_url, only: :create
   before_action :require_manage_developer_keys, except: :show
   before_action :require_key_in_context, only: :show
   before_action :require_manage_lti, only: :show
@@ -72,9 +73,9 @@ class Lti::ToolConfigurationsApiController < ApplicationController
   # @argument developer_key [Object]
   #   JSON representation of the developer key fields
   #   to use when creating the developer key for the
-  #   tool configuraiton. Valid fields are: "name",
+  #   tool configuration. Valid fields are: "name",
   #   "email", "notes", "test_cluster_only",
-  #   "client_credentials_audience", "scopes".
+  #   "client_credentials_audience", and "scopes".
   #
   # @argument disabled_placements [Array]
   #   An array of strings indicating which Canvas
@@ -82,15 +83,32 @@ class Lti::ToolConfigurationsApiController < ApplicationController
   #   tool configuration.
   #
   # @argument custom_fields [String]
-  #   A new line seperated string of key/value pairs
+  #   A new line separated string of key/value pairs
   #   to be used as custom fields in the LTI launch.
   #   Example: foo=bar\ncourse=$Canvas.course.id
   #
   # @returns ToolConfiguration
   def create
-    developer_key_redirect_uris
-    tool_config = Lti::ToolConfiguration.create_tool_config_and_key!(account, tool_configuration_params, tool_configuration_redirect_uris)
-    update_developer_key!(tool_config, developer_key_redirect_uris)
+    configuration_params = {
+      redirect_uris: tool_configuration_redirect_uris.presence || [@settings[:target_link_uri]],
+      privacy_level: tool_configuration_params[:privacy_level],
+      **Schemas::InternalLtiConfiguration.from_lti_configuration(@settings)
+    }.compact
+
+    create_params = {
+      account: @context,
+      created_by: @current_user,
+      registration_params: {
+        name: tool_configuration_params[:name] || "Unnamed tool",
+        admin_nickname: developer_key_params[:name],
+      },
+      overlay_params: {
+        disabled_placements: tool_configuration_params[:disabled_placements]
+      },
+      configuration_params:,
+      developer_key_params:
+    }
+    tool_config = Lti::CreateRegistrationService.call(**create_params).manual_configuration
     render json: Lti::ToolConfigurationSerializer.new(tool_config, include_warnings: true)
   end
 
@@ -99,9 +117,6 @@ class Lti::ToolConfigurationsApiController < ApplicationController
   #
   # Settings may be provided directly as JSON through the "settings"
   # parameter. The settings_url is not used for updates.
-  #
-  # If both the "settings" and "settings_url" parameters are set,
-  # the "settings" parameter will be ignored.
   #
   #
   # @argument settings [Object]
@@ -127,17 +142,28 @@ class Lti::ToolConfigurationsApiController < ApplicationController
   #
   # @returns ToolConfiguration
   def update
-    tool_config = developer_key.tool_configuration
-    update_params = {
-      settings: tool_configuration_params[:settings]&.to_unsafe_hash&.deep_merge(manual_custom_fields),
+    settings = tool_configuration_params[:settings]&.to_unsafe_hash&.deep_merge(manual_custom_fields)
+    configuration_params = {
       disabled_placements: tool_configuration_params[:disabled_placements],
       redirect_uris: tool_configuration_redirect_uris,
-    }
-    update_params[:privacy_level] = tool_configuration_params[:privacy_level] unless tool_configuration_params[:privacy_level].nil?
-    tool_config.update!(update_params)
-    update_developer_key!(tool_config, params.dig(:developer_key, :redirect_uris))
+      privacy_level: tool_configuration_params[:privacy_level],
+      **Schemas::InternalLtiConfiguration.from_lti_configuration(settings)
+    }.compact
 
-    render json: Lti::ToolConfigurationSerializer.new(tool_config, include_warnings: true)
+    update_params = {
+      id: developer_key.lti_registration_id,
+      registration_params: {
+        name: tool_configuration_params[:name] || "Unnamed tool",
+        admin_nickname: developer_key_params[:name],
+      },
+      updated_by: @current_user,
+      developer_key_params:,
+      configuration_params:,
+      account:,
+    }
+    registration = Lti::UpdateRegistrationService.call(**update_params)
+
+    render json: Lti::ToolConfigurationSerializer.new(registration.manual_configuration, include_warnings: true)
   end
 
   # @API Show Tool configuration
@@ -170,7 +196,7 @@ class Lti::ToolConfigurationsApiController < ApplicationController
   end
 
   def require_manage_lti
-    head :unauthorized unless @context.grants_any_right?(@current_user, :lti_add_edit, *RoleOverride::GRANULAR_MANAGE_LTI_PERMISSIONS)
+    head :unauthorized unless @context.grants_any_right?(@current_user, *RoleOverride::GRANULAR_MANAGE_LTI_PERMISSIONS)
   end
 
   def manual_custom_fields
@@ -182,9 +208,9 @@ class Lti::ToolConfigurationsApiController < ApplicationController
   def update_developer_key!(tool_config, redirect_uris)
     developer_key = tool_config.developer_key
     developer_key.redirect_uris = redirect_uris unless redirect_uris.nil?
-    developer_key.public_jwk = tool_config.settings["public_jwk"]
-    developer_key.public_jwk_url = tool_config.settings["public_jwk_url"]
-    developer_key.oidc_initiation_url = tool_config.settings["oidc_initiation_url"]
+    developer_key.public_jwk = tool_config.public_jwk
+    developer_key.public_jwk_url = tool_config.public_jwk_url
+    developer_key.oidc_initiation_url = tool_config.oidc_initiation_url
     developer_key.is_lti_key = true
     developer_key.current_user = @current_user
     developer_key.update!(developer_key_params)
@@ -206,6 +232,18 @@ class Lti::ToolConfigurationsApiController < ApplicationController
     authorized_action(account, @current_user, :manage_developer_keys)
   end
 
+  def require_settings_or_url
+    @settings = if tool_configuration_params[:settings_url].present? && tool_configuration_params[:settings].blank?
+                  Lti::ToolConfiguration.retrieve_and_extract_configuration(tool_configuration_params[:settings_url])
+                elsif tool_configuration_params[:settings].present?
+                  tool_configuration_params[:settings]&.try(:to_unsafe_hash) || tool_configuration_params[:settings]
+                end&.deep_merge(manual_custom_fields)
+
+    if @settings.blank?
+      render json: { message: "Configuration must be present" }, status: :bad_request
+    end
+  end
+
   def developer_key
     @_developer_key = DeveloperKey.nondeleted.find(params[:developer_key_id])
   end
@@ -220,16 +258,6 @@ class Lti::ToolConfigurationsApiController < ApplicationController
     return {} if params[:developer_key].blank?
 
     params.require(:developer_key).permit(:name, :email, :notes, :test_cluster_only, :client_credentials_audience, scopes: [])
-  end
-
-  def developer_key_redirect_uris
-    # When settings_url is set, the redirect_uris parameter is not required.
-    # We can infer the redirect_uris from the tool configuration (target_link_uri).
-    if tool_configuration_params[:settings_url].present?
-      params.dig(:developer_key, :redirect_uris).presence
-    else
-      params.require(:developer_key).require(:redirect_uris)
-    end
   end
 
   def tool_configuration_redirect_uris

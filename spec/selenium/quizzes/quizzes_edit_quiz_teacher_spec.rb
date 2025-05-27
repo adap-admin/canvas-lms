@@ -239,26 +239,6 @@ describe "editing a quiz" do
         expect(f(quiz_edit_form)).not_to contain_css(due_date_container)
         expect(f(quiz_edit_form)).to contain_css(course_pacing_notice)
       end
-
-      it "does not display the course pacing notice when feature is off in the account" do
-        @course.account.disable_feature!(:course_paces)
-        @quiz = create_quiz_with_due_date
-        item = add_quiz_to_module
-
-        get "/courses/#{@course.id}/quizzes/#{item.content_id}/edit"
-
-        if Account.site_admin.feature_enabled?(:selective_release_ui_api)
-          if Account.site_admin.feature_enabled?(:selective_release_edit_page)
-            expect(assign_to_card).to be_displayed
-          else
-            expect(manage_assign_to_button).to be_displayed
-          end
-        else
-          expect(f(quiz_edit_form)).to contain_css(due_date_container)
-        end
-
-        expect(f(quiz_edit_form)).not_to contain_css(course_pacing_notice)
-      end
     end
   end
 end

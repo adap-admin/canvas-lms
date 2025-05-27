@@ -41,7 +41,7 @@ describe "courses" do
 
       def validate_action_button(validation_text)
         f("#course_publish_button button").click
-        action_button = f("ul[role='menu'][aria-label='course_publish_menu'] button:not([aria-disabled])")
+        action_button = f("div[role='menu'][aria-label='course_publish_menu'] button:not([aria-disabled])")
         expect(action_button.text).to eq validation_text
         # Close menu
         f("#course_publish_button button").click
@@ -57,7 +57,7 @@ describe "courses" do
         validate_action_button("Publish")
         expect_new_page_load do
           f("#course_publish_button button").click
-          f("ul[role='menu'][aria-label='course_publish_menu'] button:not([aria-disabled])").click
+          f("div[role='menu'][aria-label='course_publish_menu'] button:not([aria-disabled])").click
         end
         validate_action_button("Unpublish")
 
@@ -82,7 +82,7 @@ describe "courses" do
         validate_action_button("Unpublish")
         expect_new_page_load do
           f("#course_publish_button button").click
-          f("ul[role='menu'][aria-label='course_publish_menu'] button:not([aria-disabled])").click
+          f("div[role='menu'][aria-label='course_publish_menu'] button:not([aria-disabled])").click
         end
         validate_action_button("Publish")
       end
@@ -95,7 +95,7 @@ describe "courses" do
         validate_action_button("Publish")
         expect_new_page_load do
           f("#course_publish_button button").click
-          f("ul[role='menu'][aria-label='course_publish_menu'] button:not([aria-disabled])").click
+          f("div[role='menu'][aria-label='course_publish_menu'] button:not([aria-disabled])").click
         end
         @course.reload
         expect(@course).to be_available
@@ -124,12 +124,12 @@ describe "courses" do
         get "/courses/#{@course.id}"
         expect_new_page_load do
           f("#course_publish_button button").click
-          f("ul[role='menu'][aria-label='course_publish_menu'] button:not([aria-disabled])").click
+          f("div[role='menu'][aria-label='course_publish_menu'] button:not([aria-disabled])").click
         end
         validate_action_button("Publish")
         expect_new_page_load do
           f("#course_publish_button button").click
-          f("ul[role='menu'][aria-label='course_publish_menu'] button:not([aria-disabled])").click
+          f("div[role='menu'][aria-label='course_publish_menu'] button:not([aria-disabled])").click
         end
         validate_action_button("Unpublish")
       end
@@ -151,7 +151,6 @@ describe "courses" do
 
       # first try setting the quota explicitly
       get "/courses/#{@course.id}/settings"
-      f("#ui-id-1").click
       form = f("#course_form")
       expect(form).to be_displayed
       quota_input = form.find_element(:css, "input#course_storage_quota_mb")
@@ -211,7 +210,9 @@ describe "courses" do
       # Test that only users in the approved section are displayed.
       get "/courses/#{@course.id}/users"
       wait_for_ajaximations
-      expect(ff(".roster .rosterUser").length).to eq 2
+      wait_for(method: nil, timeout: 5) do
+        expect(ff(".roster .rosterUser").length).to eq 2
+      end
     end
 
     it "displays users section name" do

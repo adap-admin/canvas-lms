@@ -41,6 +41,7 @@ class Lti::IMS::Registration < ApplicationRecord
   LAUNCH_WIDTH_EXTENSION = "#{CANVAS_EXTENSION_PREFIX}/launch_width".freeze
   LAUNCH_HEIGHT_EXTENSION = "#{CANVAS_EXTENSION_PREFIX}/launch_height".freeze
   TOOL_ID_EXTENSION = "#{CANVAS_EXTENSION_PREFIX}/tool_id".freeze
+  VENDOR_EXTENSION = "#{CANVAS_EXTENSION_PREFIX}/vendor".freeze
 
   validates :redirect_uris,
             :initiate_login_uri,
@@ -100,8 +101,6 @@ class Lti::IMS::Registration < ApplicationRecord
       }]
     }.with_indifferent_access
   end
-  alias_method :settings, :canvas_configuration
-  alias_method :configuration, :canvas_configuration
 
   def self.to_internal_lti_configuration(registration)
     config = registration.lti_tool_configuration
@@ -122,7 +121,7 @@ class Lti::IMS::Registration < ApplicationRecord
       launch_settings: {
         icon_url: registration.logo_uri,
         text: registration.client_name,
-      }
+      }.compact
     }.compact.with_indifferent_access
   end
 
@@ -256,6 +255,10 @@ class Lti::IMS::Registration < ApplicationRecord
     lti_tool_configuration[TOOL_ID_EXTENSION]
   end
 
+  def vendor
+    lti_tool_configuration[VENDOR_EXTENSION]
+  end
+
   private
 
   def redirect_uris_contains_uris
@@ -272,24 +275,10 @@ class Lti::IMS::Registration < ApplicationRecord
   end
 
   def lti_tool_configuration_is_valid
-    if Account.site_admin.feature_enabled?(:lti_report_multiple_schema_validation_errors)
-      Schemas::Lti::IMS::LtiToolConfiguration.simple_validation_errors(
-        lti_tool_configuration,
-        error_format: :hash
-      )&.each { |error| errors.add(:lti_tool_configuration, error.to_json) }
-    else
-      config_errors = Schemas::Lti::IMS::LtiToolConfiguration.simple_validation_first_error(
-        lti_tool_configuration,
-        error_format: :hash
-      )
-      return if config_errors.blank?
-
-      errors.add(
-        :lti_tool_configuration,
-        # Convert errors represented as a Hash to JSON
-        config_errors.is_a?(Hash) ? config_errors.to_json : config_errors
-      )
-    end
+    Schemas::Lti::IMS::LtiToolConfiguration.simple_validation_errors(
+      lti_tool_configuration,
+      error_format: :hash
+    )&.each { |error| errors.add(:lti_tool_configuration, error.to_json) }
   end
 
   def validate_overlay

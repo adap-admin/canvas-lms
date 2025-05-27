@@ -20,13 +20,15 @@ import {isSuccessful, formatApiResultError} from '../../common/lib/apiResult/Api
 import type {AccountId} from '../model/AccountId'
 import type {LtiRegistrationId} from '../model/LtiRegistrationId'
 import type {InternalLtiConfiguration} from '../model/internal_lti_configuration/InternalLtiConfiguration'
+import type {LtiConfigurationOverlay} from '../model/internal_lti_configuration/LtiConfigurationOverlay'
 import {
-  convertToLtiConfigurationOverlay,
   createLti1p3RegistrationOverlayStore,
   type Lti1p3RegistrationOverlayStore,
-} from './Lti1p3RegistrationOverlayState'
+} from '../registration_overlay/Lti1p3RegistrationOverlayStore'
+import {convertToLtiConfigurationOverlay} from '../registration_overlay/Lti1p3RegistrationOverlayStateHelpers'
+
 import type {Lti1p3RegistrationWizardService} from './Lti1p3RegistrationWizardService'
-import create from 'zustand'
+import {create} from 'zustand'
 
 export type Lti1p3RegistrationWizardState = {
   overlayStore: Lti1p3RegistrationOverlayStore
@@ -42,13 +44,13 @@ export interface Lti1p3RegistrationWizardActions {
   install: (
     onSuccessfulInstallation: () => void,
     accountId: AccountId,
-    unifiedToolId?: string
+    unifiedToolId?: string,
   ) => Promise<void>
   update: (
     onSuccessfulUpdate: () => void,
     accountId: AccountId,
     registrationId: LtiRegistrationId,
-    unifiedToolId?: string
+    unifiedToolId?: string,
   ) => Promise<void>
 }
 
@@ -63,7 +65,6 @@ export type Lti1p3RegistrationWizardStep =
   | 'Review'
   | 'Installing'
   | 'Updating'
-  | 'Success'
   | 'Error'
 
 export type Lti1p3RegistrationWizardStore = {
@@ -72,18 +73,26 @@ export type Lti1p3RegistrationWizardStore = {
 
 type CreateStoreProps = {
   internalConfig: InternalLtiConfiguration
+  adminNickname?: string
+  existingOverlay?: LtiConfigurationOverlay
   service: Lti1p3RegistrationWizardService
   reviewing?: boolean
 }
 
 export const createLti1p3RegistrationWizardState = ({
+  adminNickname,
+  existingOverlay,
   internalConfig,
   service,
   reviewing = false,
 }: CreateStoreProps) =>
   create<Lti1p3RegistrationWizardStore>((set, get) => ({
     state: {
-      overlayStore: createLti1p3RegistrationOverlayStore(internalConfig),
+      overlayStore: createLti1p3RegistrationOverlayStore(
+        internalConfig,
+        adminNickname,
+        existingOverlay,
+      ),
       _step: 'LaunchSettings',
       service,
       reviewing,
@@ -95,63 +104,48 @@ export const createLti1p3RegistrationWizardState = ({
     install: async (onSuccessfulInstallation, accountId, unifiedToolId) => {
       set(state => ({state: {...state.state, _step: 'Installing'}}))
 
-      const overlay = convertToLtiConfigurationOverlay(
+      const {overlay, config} = convertToLtiConfigurationOverlay(
         get().state.overlayStore.getState().state,
-        internalConfig
+        internalConfig,
       )
 
       const result = await service.createLtiRegistration(
         accountId,
-        internalConfig,
+        config,
         overlay,
-        unifiedToolId
+        unifiedToolId,
+        get().state.overlayStore.getState().state.naming.nickname,
       )
 
       if (isSuccessful(result)) {
-        set(state => ({
-          ...state,
-          state: {
-            ...state.state,
-            _step: 'Success',
-          },
-        }))
         onSuccessfulInstallation()
       } else {
         set(state => ({
           state: {
             ...state.state,
-            state: {
-              ...state.state,
-              _step: 'Error',
-              errorMessage: formatApiResultError(result),
-            },
+            _step: 'Error',
+            errorMessage: formatApiResultError(result),
           },
         }))
       }
     },
-    update: async (onSuccessfulUpdate, accountId, registrationId, unifiedToolId) => {
+    update: async (onSuccessfulUpdate, accountId, registrationId) => {
       set(state => ({state: {...state.state, _step: 'Updating'}}))
 
-      const overlay = convertToLtiConfigurationOverlay(
+      const {overlay, config} = convertToLtiConfigurationOverlay(
         get().state.overlayStore.getState().state,
-        internalConfig
+        internalConfig,
       )
 
-      const result = await service.updateLtiRegistration(
+      const result = await service.updateLtiRegistration({
         accountId,
         registrationId,
-        internalConfig,
+        internalConfig: config,
         overlay,
-        unifiedToolId
-      )
+        adminNickname: get().state.overlayStore.getState().state.naming.nickname,
+      })
 
       if (isSuccessful(result)) {
-        set(state => ({
-          state: {
-            ...state.state,
-            _step: 'Success',
-          },
-        }))
         onSuccessfulUpdate()
       } else {
         set(state => ({

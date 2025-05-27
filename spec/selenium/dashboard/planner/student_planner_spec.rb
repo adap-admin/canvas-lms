@@ -46,7 +46,7 @@ describe "student planner" do
     switch_to_dashcard_view
 
     expect(dashboard_card_container).to contain_css("[aria-label='#{@course.name}']")
-    expect(dashboard_card_header_content).to contain_css("h3[title='#{@course.name}']")
+    expect(dashboard_card_header_content).to contain_css("h2[title='#{@course.name}']")
   end
 
   it "shows and navigates to announcements page from student planner", priority: "1" do
@@ -103,7 +103,7 @@ describe "student planner" do
 
   context "wiki_pages" do
     before :once do
-      @wiki_page = @course.wiki_pages.create!(title: "Page1", todo_date: DateTime.current.change({ min: 5 }) + 2.days)
+      @wiki_page = @course.wiki_pages.create!(title: "Page1", todo_date: Time.zone.now.change({ min: 5 }) + 2.days)
     end
 
     it "shows the date in the index page" do
@@ -586,24 +586,6 @@ describe "student planner" do
     end
 
     it "allows account admins with content management rights to add todo dates" do
-      @course.root_account.disable_feature!(:granular_permissions_manage_course_content)
-      @wiki = @course.wiki_pages.create!(title: "Default Time Wiki Page")
-      admin = account_admin_user
-      user_session(admin)
-
-      expect(@course.grants_right?(admin, :manage_content)).to be true
-
-      get("/courses/#{@course.id}/pages/#{@wiki.id}/edit")
-      f("#student_planner_checkbox").click
-      wait_for_ajaximations
-      replace_content(f('input[name="student_todo_at"]'), format_date_for_view(Time.zone.now).to_s, tab_out: true)
-      scroll_into_view(fj('button:contains("Save")'))
-      expect_new_page_load { hover_and_click('button:contains("Save")') }
-      expect(@wiki.reload.todo_date).to be_present
-    end
-
-    it "allows account admins with content management rights to add todo dates (granular permissions)" do
-      @course.root_account.enable_feature!(:granular_permissions_manage_course_content)
       @wiki = @course.wiki_pages.create!(title: "Default Time Wiki Page")
       admin = account_admin_user
       user_session(admin)
@@ -621,7 +603,7 @@ describe "student planner" do
       Timecop.freeze(Time.zone.today) do
         @discussion = @course.discussion_topics.create!(title: "Default Time Discussion", message: "here is a message", user: @teacher)
         get("/courses/#{@course.id}/discussion_topics/#{@discussion.id}/edit")
-        f("#allow_todo_date").click
+        f("label[for='allow_todo_date']").click
         wait_for_ajaximations
         replace_content(f('input[name="todo_date"]'), format_date_for_view(Time.zone.now).to_s, tab_out: true)
         expect_new_page_load { submit_form(".form-actions") }

@@ -83,12 +83,10 @@ module Types
     class CourseUsersFilterInputType < Types::BaseInputObject
       graphql_name "CourseUsersFilter"
 
-      argument :user_ids,
+      argument :enrollment_role_ids,
                [ID],
-               "only include users with the given ids",
-               prepare: GraphQLHelpers.relay_or_legacy_ids_prepare_func("User"),
+               "Only return users with the specified enrollment role ids",
                required: false
-
       argument :enrollment_states,
                [CourseFilterableEnrollmentWorkflowState],
                <<~MD,
@@ -100,6 +98,32 @@ module Types
                [CourseFilterableEnrollmentType],
                "Only return users with the specified enrollment types",
                required: false
+      argument :exclude_test_students,
+               Boolean,
+               "Exclude test students from results",
+               required: false
+      argument :search_term,
+               String,
+               <<~MD,
+                 Only return users that match the given search term. The search
+                 term is matched against the user's name and depending on current
+                 user permissions against the user's login id, email and sisid
+               MD
+               required: false,
+               prepare: :prepare_search_term
+      argument :user_ids,
+               [ID],
+               "only include users with the given ids",
+               prepare: GraphQLHelpers.relay_or_legacy_ids_prepare_func("User"),
+               required: false
+
+      def prepare_search_term(term)
+        if term.presence && term.length < SearchTermHelper::MIN_SEARCH_TERM_LENGTH
+          raise GraphQL::ExecutionError, "search term must be at least #{SearchTermHelper::MIN_SEARCH_TERM_LENGTH} characters"
+        end
+
+        term
+      end
     end
 
     class CourseSectionsFilterInputType < Types::BaseInputObject
@@ -119,6 +143,7 @@ module Types
     global_id_field :id
 
     field :course_code, String, "course short name", null: true
+    field :horizon_course, Boolean, null: true
     field :name, String, null: false
     field :state, CourseWorkflowState, method: :workflow_state, null: false
     field :syllabus_body, String, null: true
@@ -149,6 +174,26 @@ module Types
 
     implements Interfaces::AssignmentsConnectionInterface
     def assignments_connection(filter: {})
+      super(filter:, course:)
+    end
+
+    implements Interfaces::QuizzesConnectionInterface
+    def quizzes_connection(filter: {})
+      super(filter:, course:)
+    end
+
+    implements Interfaces::FilesConnectionInterface
+    def files_connection(filter: {})
+      super(filter:, course:)
+    end
+
+    implements Interfaces::PagesConnectionInterface
+    def pages_connection(filter: {})
+      super(filter:, course:)
+    end
+
+    implements Interfaces::DiscussionsConnectionInterface
+    def discussions_connection(filter: {})
       super(filter:, course:)
     end
 
@@ -208,7 +253,12 @@ module Types
 
     field :rubrics_connection, RubricType.connection_type, null: true
     def rubrics_connection
-      rubric_associations = course.rubric_associations.bookmarked.include_rubric.to_a
+      rubric_associations = course.rubric_associations
+                                  .bookmarked
+                                  .include_rubric
+                                  .joins(:rubric)
+                                  .where.not(rubrics: { workflow_state: "deleted" })
+                                  .to_a
       rubric_associations = Canvas::ICU.collate_by(rubric_associations.select(&:rubric_id).uniq(&:rubric_id)) { |r| r.rubric.title }
       rubric_associations.map(&:rubric)
     end
@@ -225,8 +275,9 @@ module Types
                required: false
 
       argument :filter, CourseUsersFilterInputType, required: false
+      argument :sort, CourseUsersSortInputType, required: false
     end
-    def users_connection(user_ids: nil, filter: {})
+    def users_connection(user_ids: nil, filter: {}, sort: {})
       return nil unless course.grants_any_right?(
         current_user,
         session,
@@ -236,18 +287,49 @@ module Types
       )
 
       context.scoped_merge!(course:)
-      scope = UserSearch.scope_for(course,
-                                   current_user,
-                                   include_inactive_enrollments: true,
-                                   enrollment_state: filter[:enrollment_states],
-                                   enrollment_type: filter[:enrollment_types])
+
+      options = {
+        enrollment_state: filter[:enrollment_states],
+        enrollment_type: filter[:enrollment_types],
+        enrollment_role_id: filter[:enrollment_role_ids],
+        include_inactive_enrollments: true,
+        sort: sort[:field],
+        order: sort[:direction]
+      }
+
+      search_term = filter[:search_term].presence
+
+      scope = if search_term
+                UserSearch.for_user_in_context(search_term, course, current_user, session, options)
+              else
+                UserSearch.scope_for(course, current_user, options)
+              end
 
       user_ids = filter[:user_ids] || user_ids
       if user_ids.present?
         scope = scope.where(users: { id: user_ids })
       end
 
+      scope = scope.not_fake_student if filter[:exclude_test_students]
+
       scope
+    end
+
+    field :users_connection_count, Integer, null: true do
+      argument :filter, CourseUsersFilterInputType, required: false
+      argument :sort, CourseUsersSortInputType, required: false
+      argument :user_ids,
+               [ID],
+               <<~MD,
+                 Only include users with the given ids.
+
+                 **This field is deprecated, use `filter: {userIds}` instead.**
+               MD
+               prepare: GraphQLHelpers.relay_or_legacy_ids_prepare_func("User"),
+               required: false
+    end
+    def users_connection_count(user_ids: nil, filter: {}, sort: {})
+      users_connection(user_ids:, filter:, sort:).size
     end
 
     field :course_nickname, String, null: true
@@ -339,6 +421,9 @@ module Types
       if filter[:updated_since]
         submissions = submissions.where("submissions.updated_at > ?", filter[:updated_since])
       end
+      if (due_between = filter[:due_between])
+        submissions = submissions.where(cached_due_date: (due_between[:start])..(due_between[:end]))
+      end
 
       (order_by || []).each do |order|
         direction = (order[:direction] == "descending") ? "DESC NULLS LAST" : "ASC"
@@ -348,13 +433,18 @@ module Types
       submissions
     end
 
-    field :groups_connection, GroupType.connection_type, null: true
-    def groups_connection
+    field :groups_connection, GroupType.connection_type, null: true do
+      argument :include_non_collaborative, Boolean, required: false, default_value: false
+    end
+    def groups_connection(include_non_collaborative: false)
+      show_non_collaborative = include_non_collaborative && course&.grants_any_right?(current_user, *RoleOverride::GRANULAR_MANAGE_TAGS_PERMISSIONS)
+      groups_scope = show_non_collaborative ? course.combined_groups_and_differentiation_tags.active : course.active_groups
+
       # TODO: share this with accounts when groups are added there
       if course.grants_right?(current_user, session, :read_roster)
-        course.groups.active
-              .order(GroupCategory::Bookmarker.order_by, Group::Bookmarker.order_by)
-              .eager_load(:group_category)
+        groups_scope
+          .order(GroupCategory::Bookmarker.order_by, Group::Bookmarker.order_by)
+          .eager_load(:group_category)
       else
         nil
       end
@@ -404,11 +494,20 @@ module Types
       get_group_sets(course, include_non_collaborative:)
     end
 
+    field :folders_connection, FolderType.connection_type, null: true do
+      description "Folders for this course."
+    end
+    def folders_connection
+      return nil unless course.grants_right?(current_user, :read)
+
+      course.active_folders
+    end
+
     field :external_tools_connection, ExternalToolType.connection_type, null: true do
       argument :filter, ExternalToolFilterInputType, required: false, default_value: {}
     end
     def external_tools_connection(filter:)
-      scope = Lti::ContextToolFinder.all_tools_for(course, { placements: filter.placement })
+      scope = Lti::ContextToolFinder.all_tools_for(course, placements: filter.placement)
       filter.state.nil? ? scope : scope.where(workflow_state: filter.state)
     end
 
@@ -471,6 +570,13 @@ module Types
       return nil unless course.grants_any_right?(current_user, :read_sis, :manage_sis)
 
       course.sis_course_id
+    end
+
+    field :submission_statistics, SubmissionStatisticsType, "Returns submission-related statistics for the current user", null: true
+    def submission_statistics
+      return nil unless course.grants_right?(current_user, :read)
+
+      course
     end
 
     field :allow_final_grade_override, Boolean, null: true

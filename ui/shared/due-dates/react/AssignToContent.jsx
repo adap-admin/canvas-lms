@@ -18,7 +18,7 @@
 
 import React, {useState, useRef, useEffect, useMemo, useCallback} from 'react'
 import {Checkbox} from '@instructure/ui-checkbox'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import ItemAssignToManager from '@canvas/context-modules/differentiated-modules/react/Item/ItemAssignToManager'
 import {getEveryoneOption} from '@canvas/context-modules/differentiated-modules/react/Item/ItemAssignToTray'
 import _ from 'underscore'
@@ -34,14 +34,14 @@ import {
   cloneObject,
   getParsedOverrides,
   removeOverriddenAssignees,
-  processModuleOverridesV2,
+  processModuleOverrides,
 } from '../util/differentiatedModulesUtil'
 import {uid} from '@instructure/uid'
 import DateValidator from '@canvas/grading/DateValidator'
 import GradingPeriodsAPI from '@canvas/grading/jquery/gradingPeriodsApi'
 import {View} from '@instructure/ui-view'
 
-const I18n = useI18nScope('DueDateOverrideView')
+const I18n = createI18nScope('DueDateOverrideView')
 
 const AssignToContent = ({
   onSync,
@@ -77,7 +77,7 @@ const AssignToContent = ({
         userIsAdmin: ENV.current_user_is_admin,
         postToSIS,
       }),
-    [postToSIS]
+    [postToSIS],
   )
 
   const stagedCardsRef = useRef(stagedCards)
@@ -96,8 +96,15 @@ const AssignToContent = ({
 
   const shouldRenderImportantDates = useMemo(
     () => type === 'assignment' || type === 'discussion' || type === 'quiz',
-    [type]
+    [type],
   )
+
+  useEffect(() => {
+    const newGroupCategoryId = getGroupCategoryId?.()
+    if (newGroupCategoryId !== undefined && newGroupCategoryId !== groupCategoryId) {
+      setGroupCategoryId(newGroupCategoryId)
+    }
+  }, [getGroupCategoryId, groupCategoryId])
 
   useEffect(() => {
     if (getGroupCategoryId === undefined) return
@@ -134,7 +141,7 @@ const AssignToContent = ({
       stagedOverridesRef.current,
       stagedCards,
       groupCategoryId,
-      defaultSectionId
+      defaultSectionId,
     )
     const uniqueOverrides = removeOverriddenAssignees(overrides, parsedOverrides)
     setStagedCards(uniqueOverrides)
@@ -146,7 +153,7 @@ const AssignToContent = ({
       let moduleOverrides = []
       for (const card in state) {
         moduleOverrides = moduleOverrides.concat(
-          state[card].overrides.filter(o => o.context_module_id)
+          state[card].overrides.filter(o => o.context_module_id),
         )
       }
       setInitialModuleOverrides(moduleOverrides)
@@ -160,6 +167,9 @@ const AssignToContent = ({
           }
           if (moduleOverride.student_ids) {
             return moduleOverride.student_ids.map(id => `student-${id}`)
+          }
+          if (moduleOverride.group_id && moduleOverride.non_collaborative === true) {
+            return `tag-${moduleOverride.group_id}`
           }
           return []
         })
@@ -176,11 +186,11 @@ const AssignToContent = ({
         card.student_ids ||
         card.noop_id ||
         card.course_id ||
-        card.group_id
+        card.group_id,
     )
 
     const deletedModuleAssignees = moduleAssignees.filter(
-      assignee => !disabledOptionIds.includes(assignee)
+      assignee => !disabledOptionIds.includes(assignee),
     )
 
     if (deletedModuleAssignees.length > 0) {
@@ -206,7 +216,7 @@ const AssignToContent = ({
       })
     }
 
-    const withoutModuleOverrides = processModuleOverridesV2(newOverrides, initialModuleOverrides)
+    const withoutModuleOverrides = processModuleOverrides(newOverrides, initialModuleOverrides)
     resetOverrides(newOverrides, withoutModuleOverrides)
 
     const noModuleOverrides = newOverrides.filter(o => !o.context_module_id)
@@ -219,6 +229,7 @@ const AssignToContent = ({
     const everyoneOptionKey = getEveryoneOption(stagedCards?.length > 1).id
     const mappedCards = map(sortedRowKeys(stagedCards), cardId => {
       const defaultOptions = []
+      const initialAssigneeOptions = []
       const card = stagedCards[cardId]
       const cardOverrides = card.overrides || []
       const dates = card.dates || {}
@@ -234,13 +245,27 @@ const AssignToContent = ({
           selectedOptionIds.push(...defaultOptions)
         } else {
           const studentOverrides =
-            override?.student_ids?.map(studentId => `student-${studentId}`) ?? []
-          defaultOptions.push(...studentOverrides)
+            override?.students?.map(student => ({
+              id: `student-${student.id}`,
+              value: student.name,
+              group: 'Students',
+            })) ?? []
+          defaultOptions.push(...studentOverrides.map(student => student.id))
+          initialAssigneeOptions.push(...studentOverrides)
           if (override?.course_section_id) {
             defaultOptions.push(`section-${override?.course_section_id}`)
+            initialAssigneeOptions.push({
+              id: `section-${override?.course_section_id}`,
+              value: override?.title,
+            })
           }
-          if (override?.group_id) {
+          if (override?.group_id && override?.non_collaborative === false) {
             defaultOptions.push(`group-${override?.group_id}`)
+            initialAssigneeOptions.push({id: `group-${override?.group_id}`, value: override?.title})
+          }
+          if (override?.group_id && override?.non_collaborative === true) {
+            defaultOptions.push(`tag-${override?.group_id}`)
+            initialAssigneeOptions.push({id: `tag-${override?.group_id}`, value: override?.title})
           }
           selectedOptionIds.push(...defaultOptions)
         }
@@ -267,6 +292,7 @@ const AssignToContent = ({
         required_replies_due_at: dates.required_replies_due_at,
         lock_at: dates.lock_at,
         selectedAssigneeIds: uniqueIds,
+        initialAssigneeOptions,
         defaultOptions: uniqueIds,
         overrideId: card.id,
         index: card.index,
@@ -284,6 +310,7 @@ const AssignToContent = ({
   const generateCard = cardId => {
     const newCard = CardActions.handleAssigneeAdd({}, [], cardId, {})[0]
     delete newCard.student_ids
+    delete newCard.students
     newCard.draft = true
     newCard.index = cardId
     const oldOverrides = getAllOverridesFromCards(stagedCardsRef.current).filter(
@@ -292,7 +319,7 @@ const AssignToContent = ({
         card.student_ids ||
         card.noop_id ||
         card.course_id ||
-        card.group_id
+        card.group_id,
     )
     const newStageOverrides = [...oldOverrides, newCard]
     setStagedOverrides(newStageOverrides)
@@ -304,7 +331,7 @@ const AssignToContent = ({
     setStagedCards(newStagedCards)
 
     const newStagedOverrides = stagedOverridesRef.current.filter(
-      override => override.rowKey.toString() !== cardId
+      override => override.rowKey.toString() !== cardId,
     )
     setStagedOverrides(newStagedOverrides)
   }
@@ -349,7 +376,7 @@ const AssignToContent = ({
     tmp[dateType] = date
     const newDates = _.extend(oldDates, tmp)
     const hasDates = !Object.values(newDates).every(
-      value => value === null || value === undefined || value === ''
+      value => value === null || value === undefined || value === '',
     )
 
     const newOverrides = oldOverrides.map(override => {
@@ -372,7 +399,7 @@ const AssignToContent = ({
       newAssignee,
       targetedItemCard?.overrides ?? {},
       cardId,
-      targetedItemCard.dates
+      targetedItemCard.dates,
     )
     // The last override is the new one
     let newOverride = {...newOverridesForCard[newOverridesForCard.length - 1]}
@@ -388,7 +415,7 @@ const AssignToContent = ({
 
     // Check if stagedOverrides contains an object with the same stagedOverrideId
     const existingOverrideIndex = updatedOverrides.findIndex(
-      override => override.stagedOverrideId === newOverride.stagedOverrideId
+      override => override.stagedOverrideId === newOverride.stagedOverrideId,
     )
 
     if (existingOverrideIndex !== -1) {
@@ -406,14 +433,14 @@ const AssignToContent = ({
     const targetedItemCard = stagedCardsRef.current[cardId]
     // These are unique overrides that are not associated with the card currently being edited
     const nonTargetedOverrides = getAllOverridesFromCards(stagedCardsRef.current).filter(
-      override => override.rowKey !== cardId
+      override => override.rowKey !== cardId,
     )
 
     const targetedItemCardOverrides = targetedItemCard?.overrides ?? {}
     // Remote the override
     let remainingCardOverrides = CardActions.handleAssigneeRemove(
       tokenToRemove,
-      targetedItemCardOverrides
+      targetedItemCardOverrides,
     )
 
     if (remainingCardOverrides.length === 0) {
@@ -436,7 +463,7 @@ const AssignToContent = ({
       [...remainingCardOverrides, ...nonTargetedOverrides].reduce((uniqueMap, override) => {
         uniqueMap[override.stagedOverrideId] = override
         return uniqueMap
-      }, {})
+      }, {}),
     )
 
     setStagedOverrides(uniqueOverrides)
@@ -448,13 +475,13 @@ const AssignToContent = ({
       onSync(undefined, newImportantDatesValue)
       setStagedImportantDates(newImportantDatesValue)
     },
-    [onSync]
+    [onSync],
   )
 
   const importantDatesCheckbox = useCallback(() => {
     if (supportDueDates && (ENV.K5_SUBJECT_COURSE || ENV.K5_HOMEROOM_COURSE)) {
       const disabled = !Object.values(stagedCardsRef?.current)?.some(
-        override => override?.dates?.due_at
+        override => override?.dates?.due_at,
       )
       const checked = !disabled && stagedImportantDates
       return (
@@ -478,7 +505,7 @@ const AssignToContent = ({
     handleImportantDatesChange,
     supportDueDates,
     stagedImportantDates,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
     stagedCardsRef?.current,
   ])
 

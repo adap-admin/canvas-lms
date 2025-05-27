@@ -22,12 +22,12 @@ import {
   passFailStatusOptions,
   disableGrading,
   assignmentHasCheckpoints,
-} from '../../../utils/gradebookUtils'
+} from '../../../utils/gradeInputUtils'
 import {ScreenReaderContent} from '@instructure/ui-a11y-content'
 import {View} from '@instructure/ui-view'
 import {TextInput} from '@instructure/ui-text-input'
 import {SimpleSelect} from '@instructure/ui-simple-select'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {
   ApiCallStatus,
   type AssignmentConnection,
@@ -36,7 +36,7 @@ import {
 import type {Spacing} from '@instructure/emotion'
 import {Text} from '@instructure/ui-text'
 
-const I18n = useI18nScope('enhanced_individual_gradebook')
+const I18n = createI18nScope('enhanced_individual_gradebook')
 
 const {Option: SimpleSelectOption} = SimpleSelect as any
 
@@ -54,7 +54,7 @@ type Props = {
   handleSubmitGrade?: () => void
   handleChangePassFailStatus: (
     e: React.SyntheticEvent<Element, Event>,
-    data: {value?: string | number}
+    data: {value?: string | number},
   ) => void
   header?: string
   shouldShowOutOfText?: boolean

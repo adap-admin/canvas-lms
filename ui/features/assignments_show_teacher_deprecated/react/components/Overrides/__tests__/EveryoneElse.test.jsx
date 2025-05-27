@@ -17,13 +17,13 @@
  */
 
 import React from 'react'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import * as tz from '@instructure/moment-utils'
 import {render} from '@testing-library/react'
 import {mockAssignment, mockOverride} from '../../../test-utils'
 import EveryoneElse from '../EveryoneElse'
 
-const I18n = useI18nScope('assignments_2')
+const I18n = createI18nScope('assignments_2')
 
 const aDueAt = '2018-11-27T13:00-0500'
 const aUnlockAt = '2018-11-26T13:00-0500'
@@ -49,7 +49,7 @@ it("pulls everyone else's dates from the assignment", () => {
       onChangeAssignment={() => {}}
       onValidate={() => true}
       invalidMessage={() => undefined}
-    />
+    />,
   )
   expect(getByText('Everyone else')).toBeInTheDocument()
 
@@ -58,7 +58,7 @@ it("pulls everyone else's dates from the assignment", () => {
 
   const dates = `${tz.format(aUnlockAt, I18n.t('#date.formats.short'))} to ${tz.format(
     aLockAt,
-    I18n.t('#date.formats.short')
+    I18n.t('#date.formats.short'),
   )}`
   expect(getAllByText(dates)[0]).toBeInTheDocument()
 })

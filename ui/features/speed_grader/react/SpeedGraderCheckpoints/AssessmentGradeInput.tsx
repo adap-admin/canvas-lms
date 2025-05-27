@@ -25,14 +25,13 @@ import {Text} from '@instructure/ui-text'
 import {TextInput, type TextInputProps} from '@instructure/ui-text-input'
 import {View} from '@instructure/ui-view'
 import React, {useCallback, useEffect, useState} from 'react'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import type {
   Assignment,
   SubAssignmentSubmission,
   SubmissionGradeParams,
 } from './SpeedGraderCheckpointsContainer'
 import Big from 'big.js'
-// @ts-expect-error
 import parseNumber from 'parse-decimal-number'
 
 // The types/methods following up can be deleted when this is moved to SpeedGrader 2...
@@ -43,7 +42,6 @@ import parseNumber from 'parse-decimal-number'
 //   - getLocaleSeparators
 //   - parseFormattedNumber
 
-// @ts-expect-error
 const numberFormatter = Intl.NumberFormat(ENV.LOCALE)
 
 type Submission = SubAssignmentSubmission
@@ -61,7 +59,6 @@ const isScientific = (inputString: string) => {
   return inputString.match(scientificPattern)
 }
 
-// eslint-disable-next-line @typescript-eslint/no-shadow
 const getLocaleSeparators = (numberFormatter: Intl.NumberFormat) => {
   // Generate a localized number to find out the thousand and decimal separators
   const parts = numberFormatter.formatToParts(1234567.89)
@@ -71,7 +68,6 @@ const getLocaleSeparators = (numberFormatter: Intl.NumberFormat) => {
   return {thousands: thousands || ',', decimal: decimal || '.'}
 }
 
-// eslint-disable-next-line @typescript-eslint/no-shadow
 const parseFormattedNumber = (input: number | string, numberFormatter: Intl.NumberFormat) => {
   if (input === null) {
     return Number.NaN
@@ -97,7 +93,7 @@ const parseFormattedNumber = (input: number | string, numberFormatter: Intl.Numb
   return num
 }
 
-const I18n = useI18nScope('SpeedGraderCheckpoints')
+const I18n = createI18nScope('SpeedGraderCheckpoints')
 
 export type AssessmentGradeInputProps = {
   assignment: Assignment
@@ -130,9 +126,10 @@ export const AssessmentGradeInput = ({
     (gradeToUseSubmission: SubAssignmentSubmission) => {
       return (isDisabled ? gradeToUseSubmission?.grade : gradeToUseSubmission?.entered_grade) || ''
     },
-    [isDisabled]
+    [isDisabled],
   )
 
+  // @ts-expect-error
   const [gradeValue, setGradeValue] = useState<string>(gradeToUse(submission))
 
   const formatGradeForSubmission = useCallback(
@@ -155,10 +152,11 @@ export const AssessmentGradeInput = ({
       }
       return formattedGrade
     },
-    [assignment.grading_type]
+    [assignment.grading_type],
   )
 
   useEffect(() => {
+    // @ts-expect-error
     setGradeValue(formatGradeForSubmission(gradeToUse(submission), submission?.excused || false))
   }, [formatGradeForSubmission, gradeToUse, submission, submission.excused, submission.grade])
 
@@ -181,7 +179,13 @@ export const AssessmentGradeInput = ({
 
     const formattedGrade = formatGradeForSubmission(grade, excuse)
     if (!isValidPreliminaryGrade(formattedGrade)) {
-      setGradeValue(formatGradeForSubmission(gradeToUse(submission), submission?.excused || false))
+      setGradeValue(
+        formatGradeForSubmission(
+          // @ts-expect-error
+          gradeToUse(submission),
+          submission?.excused || false,
+        ),
+      )
       showAlert(I18n.t('Invalid grade value'), 'error')
       return
     }

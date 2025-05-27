@@ -17,13 +17,13 @@
  */
 
 import React from 'react'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {Modal} from '@instructure/ui-modal'
 import {View} from '@instructure/ui-view'
 import {CloseButton, Button} from '@instructure/ui-buttons'
 import {Heading} from '@instructure/ui-heading'
 
-const I18n = useI18nScope('rubrics-form')
+const I18n = createI18nScope('rubrics-form')
 
 type WarningModalProps = {
   isOpen: boolean
@@ -34,7 +34,7 @@ type WarningModalProps = {
 export function WarningModal({isOpen, onCancel, onDismiss}: WarningModalProps) {
   const modalHeader = I18n.t('Warning')
   const message = I18n.t(
-    'You are about to exit the rubric editor. Any unsaved changes will be lost.'
+    'You are about to exit the rubric editor. Any unsaved changes will be lost.',
   )
   const exitButtonText = I18n.t('Exit')
   const cancelButtonText = I18n.t('Cancel')

@@ -32,6 +32,12 @@
     "additional_considerations_f3801683": {
         "message": "Ytterliggare hänsynstaganden"
     },
+    "address_applied_64269b0b": {
+        "message": "Adress tillämpad"
+    },
+    "address_removed_fcb496e0": {
+        "message": "Adress borttagen"
+    },
     "adjacent_links_with_the_same_url_should_be_a_singl_7a1f7f6c": {
         "message": "Intilliggande länkar med samma webbadress ska vara en enda länk."
     },
@@ -167,6 +173,9 @@
     "available_folders_694d0436": {
         "message": "Tillgängliga mappar"
     },
+    "background_1bc88842": {
+        "message": "Bakgrund"
+    },
     "backslash_b2d5442d": {
         "message": "Omvänt snedstreck"
     },
@@ -199,6 +208,15 @@
     },
     "blue_daf8fea9": {
         "message": "Blå"
+    },
+    "bold_applied_42d547b7": {
+        "message": "Fet stil tillämpad"
+    },
+    "bold_removed_da474a5c": {
+        "message": "Fet stil borttagen"
+    },
+    "border_5b08b06d": {
+        "message": "Gräns"
     },
     "bottom_15a2a9be": {
         "message": "Längst ned"
@@ -341,11 +359,23 @@
     "collapse_to_hide_types_1ab46d2e": {
         "message": "Minimera för att dölja { types }"
     },
+    "color_a363e1b0": {
+        "message": "Färg"
+    },
+    "color_contrast_4c418add": {
+        "message": "Färgkontrast"
+    },
+    "color_contrast_ratio_687782f0": {
+        "message": "Färgkontrastförhållande"
+    },
     "color_picker_6b359edf": {
         "message": "Färgväljaren"
     },
     "color_picker_colorname_selected_ad4cf400": {
         "message": "Färgväljaren ({ colorName } valda)"
+    },
+    "color_popup_af39810f": {
+        "message": "Färg-popup"
     },
     "column_e1ae5c64": {
         "message": "Kolumn"
@@ -494,6 +524,9 @@
     "deep_purple_bb3e2907": {
         "message": "Djup lila"
     },
+    "default_9db103d": {
+        "message": "Standard"
+    },
     "default_bulleted_unordered_list_47079da8": {
         "message": "punktmarkera oordnad lista som standard"
     },
@@ -574,6 +607,12 @@
     },
     "display_text_link_opens_in_a_new_tab_75e9afc9": {
         "message": "Visa textlänk (öppnas i en ny flik)"
+    },
+    "div_applied_49ad83fc": {
+        "message": "Diverse tillämpade"
+    },
+    "div_removed_d13f8e17": {
+        "message": "Diverse borttagna"
     },
     "division_sign_72190870": {
         "message": "Divisionstecken"
@@ -779,6 +818,9 @@
     "f_function_fe422d65": {
         "message": "F (funktion)"
     },
+    "fail_544e5dde": {
+        "message": "MISSLYCKADES"
+    },
     "failed_getting_file_contents_e9ea19f4": {
         "message": "Det gick inte att hämta filinnehåll"
     },
@@ -896,6 +938,9 @@
     "grades_a61eba0a": {
         "message": "Omdömen"
     },
+    "graphics_text_bc9568bc": {
+        "message": "Bildtext"
+    },
     "greater_than_e98af662": {
         "message": "Större än"
     },
@@ -964,6 +1009,12 @@
     },
     "heading_4_b2e74be7": {
         "message": "Rubrik 4"
+    },
+    "heading_h_applied_eccd294d": {
+        "message": "{ h } tillämpades i rubriken"
+    },
+    "heading_h_removed_745f24a6": {
+        "message": "{ h } togs bort från rubriken"
     },
     "heading_levels_should_not_be_skipped_3947c0e0": {
         "message": "Rubriknivåer bör inte hoppas över."
@@ -1121,6 +1172,18 @@
     "infinity_7a10f206": {
         "message": "Oändlighet"
     },
+    "input_field_for_alpha_678265fd": {
+        "message": "Inmatningsfält för alfa"
+    },
+    "input_field_for_blue_561e020a": {
+        "message": "Inmatningsfält för blått"
+    },
+    "input_field_for_green_67f8b2b6": {
+        "message": "Inmatningsfält för grönt"
+    },
+    "input_field_for_red_86a84615": {
+        "message": "Inmatningsfält för rött"
+    },
     "insert_593145ef": {
         "message": "Infoga"
     },
@@ -1135,6 +1198,9 @@
     },
     "intersection_cd4590e4": {
         "message": "Genomskärning"
+    },
+    "invalid_description_991e23bb": {
+        "message": "Ogiltig beskrivning"
     },
     "invalid_entry_f7d2a0f5": {
         "message": "Ogiltig inmatning."
@@ -1159,6 +1225,12 @@
     },
     "italian_bd3c792d": {
         "message": "Italienska"
+    },
+    "italic_applied_8f59a684": {
+        "message": "Kursiv stil tillämpad"
+    },
+    "italic_removed_17cbab6f": {
+        "message": "Kursiv stil borttagen"
     },
     "japanese_b5721ca7": {
         "message": "Japanska"
@@ -1189,6 +1261,9 @@
     },
     "large_9c5e80e7": {
         "message": "Stor"
+    },
+    "large_text_e7ba08cd": {
+        "message": "Stor text"
     },
     "latvian_2bbb6aab": {
         "message": "Lettiska"
@@ -1442,12 +1517,6 @@
     "music_icon_4db5c972": {
         "message": "Musikikon"
     },
-    "must_be_at_least_percentage_22e373b6": {
-        "message": "Måste vara minst { percentage }%"
-    },
-    "must_be_at_least_width_x_height_px_41dc825e": {
-        "message": "Måste vara minst { width } x { height }pixlar"
-    },
     "my_files_2f621040": {
         "message": "Mina filer"
     },
@@ -1562,6 +1631,9 @@
     "none_selected_b93d56d2": {
         "message": "Inga valda"
     },
+    "normal_text_7b03da48": {
+        "message": "Normal text"
+    },
     "norwegian_53f391ec": {
         "message": "Norska"
     },
@@ -1640,8 +1712,8 @@
     "outline_size_a6059a21": {
         "message": "Konturstorlek"
     },
-    "p_is_not_a_valid_protocol_which_must_be_ftp_http_h_adf13fc2": {
-        "message": "{ p } är inte ett giltigt protokoll. Protokollet måste vara ftp, http, https, mailto, skype, tel eller så kan det utelämnas"
+    "p_is_not_a_valid_protocol_b1c4efaa": {
+        "message": "{ p } är inte ett giltigt protokoll."
     },
     "page_50c4823d": {
         "message": "Sida"
@@ -1652,6 +1724,12 @@
     "paragraph_5e5ad8eb": {
         "message": "Paragraf"
     },
+    "paragraph_applied_959b3fe5": {
+        "message": "Stycke tillämpat"
+    },
+    "paragraph_removed_d09320e": {
+        "message": "Stycke borttaget"
+    },
     "paragraph_starting_with_start_a59923f8": {
         "message": "Stycke som börjar med { start }"
     },
@@ -1660,6 +1738,9 @@
     },
     "partial_derivative_4a9159df": {
         "message": "Partiell (derivat)"
+    },
+    "pass_1c19a2b3": {
+        "message": "GODKÄND"
     },
     "paste_5963d1c1": {
         "message": "Klistra in"
@@ -1678,6 +1759,9 @@
     },
     "percentage_must_be_a_number_8033c341": {
         "message": "Procenttalet måste vara ett tal"
+    },
+    "percentage_must_be_at_least_percentage_a98ca8fc": {
+        "message": "Procenttalet måste vara minst { percentage }%"
     },
     "performing_arts_icon_f3497486": {
         "message": "Underhållningsikon"
@@ -1703,11 +1787,17 @@
     "pi_variant_10f5f520": {
         "message": "Pi (variant)"
     },
+    "pick_a_color_557abfb0": {
+        "message": "Välj en färg"
+    },
     "pink_68ad45cb": {
         "message": "Rosa"
     },
     "pixels_52ece7d1": {
         "message": "Pixlar"
+    },
+    "pixels_must_be_at_least_width_x_height_px_e965edd5": {
+        "message": "Antalet pixlar måste vara minst { width } x { height } pixlar"
     },
     "play_1a47eaa7": {
         "message": "Spela upp"
@@ -1721,8 +1811,17 @@
     "please_allow_canvas_to_access_your_microphone_and__dc2c3079": {
         "message": "Ge Canvas åtkomst till din mikrofon och webbkamera."
     },
+    "please_choose_a_file_c2449cc": {
+        "message": "Välj en fil"
+    },
     "please_decribe_what_you_would_like_to_compose_27a51be5": {
         "message": "Beskriv vad du vill komponera."
+    },
+    "please_enter_a_file_name_f159edc1": {
+        "message": "Ange ett filnamn"
+    },
+    "please_select_a_file_of_a_supported_type_1fc578f2": {
+        "message": "Välj en fil som stöds."
     },
     "plus_d43cd4ec": {
         "message": "Plus"
@@ -1774,6 +1873,9 @@
     },
     "previous_findtext_8dfbfd30": {
         "message": "Föregående { findText }"
+    },
+    "previously_chosen_colors_f1338315": {
+        "message": "Tidigare valda färger"
     },
     "prime_917ea60e": {
         "message": "Prim"
@@ -2306,9 +2408,6 @@
     "the_first_heading_on_a_page_should_be_an_h2_859089f2": {
         "message": "Den första rubriken på en sida ska vara i H2."
     },
-    "the_following_content_is_partner_provided_ed1da756": {
-        "message": "Följande innehåll har tillhandahållits av partner"
-    },
     "the_material_is_in_the_public_domain_279c39a3": {
         "message": "Materialet är i den offentliga domänen"
     },
@@ -2317,9 +2416,6 @@
     },
     "the_material_is_subject_to_an_exception_e_g_fair_u_a39c8ca2": {
         "message": "Undantag finns för materialet – t.ex. rättvis användning, rätt att citera, eller andra gällande copyright-lagar."
-    },
-    "the_preceding_content_is_partner_provided_d753928c": {
-        "message": "Det föregående innehållet har tillhandahållits av partner"
     },
     "the_pretty_html_editor_is_not_keyboard_accessible__d6d5d2b": {
         "message": "Tangentbordet fungerar inte i den nätta HTML-redigeraren. Tryck på Skift+O för att öppna den råa HTML-redigeraren."
@@ -2416,6 +2512,12 @@
     },
     "unable_to_determine_resource_selection_url_7867e060": {
         "message": "Det gick inte att bestämma URL för resursurval"
+    },
+    "underline_applied_ae01ec97": {
+        "message": "Understrykning tillämpad"
+    },
+    "underline_removed_3693e17c": {
+        "message": "Understrykning borttagen"
     },
     "union_e6b57a53": {
         "message": "Union"
@@ -2674,6 +2776,15 @@
     },
     "yiddish_f96986df": {
         "message": "Jiddisch"
+    },
+    "you_are_on_a_color_palette_to_navigate_on_the_pale_227fc3a6": {
+        "message": "Du är på en färgpalett. För att navigera upp, till vänster/höger eller ned på paletten, använd knapparna W, A, S och D."
+    },
+    "you_are_on_a_color_slider_to_navigate_the_slider_l_e800f68a": {
+        "message": "Du är på ett färgreglage. För att navigera upp, till vänster/höger eller ned i skjutreglaget, använd knapparna A och D."
+    },
+    "you_are_on_an_alpha_slider_to_navigate_the_slider__3a014dc5": {
+        "message": "Du är på ett alfareglage. För att navigera upp, till vänster/höger eller ned i skjutreglaget, använd knapparna A och D."
     },
     "you_can_replace_by_uploading_a_new_caption_file_6c88ce00": {
         "message": "Du kan ersätta genom att ladda upp en ny undertextfil."

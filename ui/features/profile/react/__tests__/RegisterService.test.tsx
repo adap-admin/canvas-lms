@@ -28,7 +28,6 @@ describe('RegisterService', () => {
   const USER_SERVICE_URI = '/profile/user_services'
 
   beforeAll(() => {
-    // @ts-expect-error
     window.ENV.google_drive_oauth_url = mockUrl
   })
 
@@ -94,7 +93,7 @@ describe('RegisterService', () => {
       fireEvent.click(button)
 
       const errorText = await screen.findByText(
-        `Exceeded the maximum length (${USERNAME_MAX_LENGTH} characters).`
+        `Exceeded the maximum length (${USERNAME_MAX_LENGTH} characters).`,
       )
       expect(errorText).toBeInTheDocument()
     })
@@ -109,7 +108,7 @@ describe('RegisterService', () => {
       fireEvent.click(button)
 
       const errorAlerts = await screen.findAllByText(
-        'Registration failed. Check the username and/or password, and try again.'
+        'Registration failed. Check the username and/or password, and try again.',
       )
       expect(errorAlerts.length).toBeTruthy()
     })
@@ -174,7 +173,7 @@ describe('RegisterService', () => {
       fireEvent.click(button)
 
       const errorText = await screen.findByText(
-        `Exceeded the maximum length (${USERNAME_MAX_LENGTH} characters).`
+        `Exceeded the maximum length (${USERNAME_MAX_LENGTH} characters).`,
       )
       expect(errorText).toBeInTheDocument()
     })
@@ -189,7 +188,7 @@ describe('RegisterService', () => {
       fireEvent.click(button)
 
       const errorAlerts = await screen.findAllByText(
-        'Registration failed. Check the username and/or password, and try again.'
+        'Registration failed. Check the username and/or password, and try again.',
       )
       expect(errorAlerts.length).toBeTruthy()
     })

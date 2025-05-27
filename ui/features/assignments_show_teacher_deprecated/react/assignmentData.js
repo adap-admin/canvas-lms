@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU Affero General Public License along
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-import gql from 'graphql-tag'
+import {gql} from '@apollo/client'
 import {bool, number, oneOf, oneOfType, shape, string, arrayOf} from 'prop-types'
 
 // This ENV shape is for the controller's current show action. We'll have
@@ -28,11 +28,7 @@ export const EnvShape = shape({
   PERMISSIONS: shape({
     context: shape({
       read_as_admin: bool.isRequired,
-      // FYI the backend now separates manage_assignments_add,
-      // manage_assignments_edit and manage_assignments_delete as separate
-      // permissions. If this ends up needing to be used in the future,
-      // consider whether those might be more appropriate.
-      manage_assignments: bool.isRequired,
+      manage_assignments_edit: bool.isRequired,
     }).isRequired,
     assignment: shape({
       update: bool.isRequired,
@@ -464,7 +460,7 @@ export const StudentSearchQueryShape = shape({
     shape({
       field: string,
       direction: oneOf(['ascending', 'descending']),
-    })
+    }),
   ),
 })
 
@@ -474,7 +470,7 @@ export const StudentSearchQueryShape = shape({
 export function requiredIfDetail(props, propName, componentName) {
   if (!props[propName] && props.variant === 'detail') {
     return new Error(
-      `The prop ${propName} is required on ${componentName} if the variant is 'detail'`
+      `The prop ${propName} is required on ${componentName} if the variant is 'detail'`,
     )
   }
 }

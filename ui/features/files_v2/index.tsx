@@ -17,33 +17,20 @@
  */
 
 import React from 'react'
-import filesEnv from '@canvas/files_v2/react/modules/filesEnv'
-import FilesApp from './react/components/FilesApp'
-import {createBrowserRouter, RouterProvider} from 'react-router-dom'
-import {QueryClient, QueryClientProvider} from '@tanstack/react-query'
 import {createRoot} from 'react-dom/client'
-
-// TODO fix ENV typing
-// @ts-expect-error
-const contextAssetString = window.ENV.context_asset_string
-const router = createBrowserRouter(
-  [
-    {
-      path: '/',
-      element: <FilesApp contextAssetString={contextAssetString} />,
-    },
-  ],
-  {
-    basename: filesEnv.baseUrl,
-  }
-)
-
-const queryClient = new QueryClient()
+import {RouterProvider} from 'react-router-dom'
+import {QueryClientProvider} from '@tanstack/react-query'
+import {router} from './routes/router'
+import {FilesErrorBoundary} from './react/components/FilesErrorBoundary'
+import {queryClient} from '@canvas/query'
 
 const root = createRoot(document.getElementById('content')!)
-
 root.render(
-  <QueryClientProvider client={queryClient}>
-    <RouterProvider router={router} />
-  </QueryClientProvider>
+  <React.StrictMode>
+    <FilesErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </FilesErrorBoundary>
+  </React.StrictMode>,
 )

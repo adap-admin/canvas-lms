@@ -62,10 +62,12 @@ describe Api::V1::ExternalTools do
     it "generates json with 1.3 version" do
       tool.use_1_3 = true
       tool.developer_key_id = 1
+      tool.lti_registration_id = 1
       tool.save!
       json = controller.external_tool_json(tool, @course, @student, nil)
       expect(json["version"]).to eq "1.3"
       expect(json["developer_key_id"]).to eq 1
+      expect(json["lti_registration_id"]).to eq 1
     end
 
     it "gets default extension settings" do
@@ -126,6 +128,22 @@ describe Api::V1::ExternalTools do
       it "excludes is_rce_favorite when not can_be_rce_favorite?" do
         json = controller.external_tool_json(root_acount_tool, @course.root_account, account_admin_user, nil)
         expect(json).not_to have_key(:is_top_nav_favorite)
+      end
+    end
+
+    context "in a horizon course" do
+      before do
+        @course.update!(horizon_course: true)
+        account = @course.account
+        account.update!(horizon_account: true)
+        account.enable_feature!(:horizon_course_setting)
+      end
+
+      it "includes estimated duration" do
+        tool.estimated_duration_attributes = { minutes: 15 }
+        tool.save
+        json = controller.external_tool_json(tool, @course, @student, nil)
+        expect(json["estimated_duration"]["duration"]).to eq 15.minutes
       end
     end
   end

@@ -46,7 +46,6 @@ npm-debug.log
 /public/doc/api_md/
 /public/javascripts/translations/*
 !/public/javascripts/translations/en.json
-/storybook-static/
 /tmp/*
 !/tmp/.keep
 /vendor
@@ -98,8 +97,9 @@ docker-compose/api-gateway.override.yml
 coverage-jest
 coverage-karma
 
-# generated graphql schema
-schema.graphql
-
 # Ignore master key for decrypting credentials and more.
 /config/master.key
+
+# Allows devs to create their own devcontainer files
+/.devcontainer/*
+/!.devcontainer/.keep

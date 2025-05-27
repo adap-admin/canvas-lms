@@ -464,7 +464,11 @@ class OutcomeResultsController < ApplicationController
     #   app/controllers/quizzes/quizzes_controller.rb
     #   app/controllers/quizzes_next/quizzes_api_controller.rb
     #   app/controllers/application_controller.rb
-    [results_type, "context_uuid", @context.uuid, "current_user_uuid", @current_user.uuid, "account_uuid", @domain_root_account.uuid]
+
+    # If there are outcome ids in the params we need to take them into consideration when caching
+    outcome_ids_key = Digest::MD5.hexdigest(params[:outcome_ids].split(",").sort.join("|")) if params[:outcome_ids].present?
+
+    [results_type, "context_uuid", @context.uuid, "current_user_uuid", @current_user.uuid, "account_uuid", @domain_root_account.uuid, outcome_ids_key].compact
   end
 
   # used in sLMGB/LMGB
@@ -509,12 +513,15 @@ class OutcomeResultsController < ApplicationController
     # NOTE: If viewing all sections and a user is concluded or inactive in one section and not another,
     # the student should always be visible
 
-    join_query = "LEFT JOIN #{Enrollment.quoted_table_name} ON enrollments.type IN ('StudentEnrollment', 'StudentViewEnrollment') AND enrollments.user_id = users.id"
-    if params[:section_id]
-      join_query += " AND enrollments.course_section_id = #{params[:section_id]}"
+    user_query = User.joins(:enrollments)
+                     .where(enrollments: { type: ["StudentEnrollment", "StudentViewEnrollment"], course_id: @context.id })
+                     .where.not(enrollments: { workflow_state: filters })
+
+    if params[:section_id]&.to_i&.positive?
+      user_query = user_query.where(enrollments: { course_section_id: params[:section_id].to_i })
     end
 
-    @users = User.joins(join_query).where("#{Enrollment.quoted_table_name}.course_id = #{@context.id} AND enrollments.workflow_state NOT IN (?)", filters).distinct
+    @users = user_query.distinct
   end
 
   # used in LMGB
@@ -555,7 +562,7 @@ class OutcomeResultsController < ApplicationController
 
   def handle_inst_statsd_outcomes_page_views
     if student_lmgb_view? || observer_lmgb_view?
-      InstStatsd::Statsd.increment("outcomes_page_views", tags: { type: "student_lmgb" })
+      InstStatsd::Statsd.distributed_increment("outcomes_page_views", tags: { type: "student_lmgb" })
     end
   end
 

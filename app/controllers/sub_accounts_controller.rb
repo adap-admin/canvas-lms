@@ -48,6 +48,9 @@ class SubAccountsController < ApplicationController
   before_action :require_context
   before_action :require_account_management, except: [:index]
 
+  include HorizonMode
+  before_action :load_canvas_career, only: [:index]
+
   def index
     add_crumb t("titles.sub_accounts", "Sub-Accounts")
 
@@ -137,7 +140,7 @@ class SubAccountsController < ApplicationController
     parent_id = if params[:account][:parent_account_id]
                   params[:account].delete(:parent_account_id)
                 else
-                  params[:account_id]
+                  api_find(Account.active, params[:account_id]).id
                 end
     @parent_account = subaccount_or_self(parent_id)
     return unless authorized_action(@parent_account, @current_user, :manage_account_settings)

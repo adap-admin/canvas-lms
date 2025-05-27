@@ -22,7 +22,6 @@ import ReactDOM from 'react-dom'
 import bridge from '../../../../bridge'
 import {asAudioElement, findMediaPlayerIframe} from '../../shared/ContentSelection'
 import AudioOptionsTray from '.'
-import RCEGlobals from '../../../RCEGlobals'
 
 export const CONTAINER_ID = 'instructure-audio-options-tray-container'
 
@@ -87,7 +86,7 @@ export default class TrayController {
 
   _applyAudioOptions(audioOptions) {
     const hasAttachmentId =
-      RCEGlobals.getFeatures().media_links_use_attachment_id && audioOptions.attachment_id
+      audioOptions.attachment_id
 
     if (
       !hasAttachmentId &&
@@ -104,7 +103,7 @@ export default class TrayController {
       })
       .then(() => container?.contentWindow.location.reload())
       .catch(ex => {
-        // eslint-disable-next-line no-console
+         
         console.error('Failed updating audio captions', ex)
       })
   }
@@ -121,12 +120,12 @@ export default class TrayController {
           cb(event?.data?.payload)
         }
       },
-      {signal: this._subtitleListener.signal}
+      {signal: this._subtitleListener.signal},
     )
 
     this._audioContainer?.contentWindow?.postMessage(
       {subject: 'media_tracks_request'},
-      bridge.canvasOrigin
+      bridge.canvasOrigin,
     )
   }
 

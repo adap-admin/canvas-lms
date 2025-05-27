@@ -204,6 +204,7 @@ export type Assignment = Readonly<{
   intra_group_peer_reviews: boolean
   is_quiz_assignment: boolean
   lock_at: null | string
+  has_rubric: null | boolean
   locked_for_user: boolean
   lti_context_id: string
   max_name_length: number
@@ -346,6 +347,7 @@ export type SectionMap = {
 }
 
 export type GradingType =
+  | 'no_submission'
   | 'points'
   | 'percent'
   | 'letter_grade'
@@ -355,6 +357,8 @@ export type GradingType =
 
 export type SubmissionType =
   | null
+  | ''
+  | 'none'
   | 'basic_lti_launch'
   | 'discussion_topic'
   | 'external_tool'
@@ -610,9 +614,15 @@ export type Account = Readonly<{
 }>
 
 // '/api/v1/users/self/favorites/courses?include[]=term&include[]=sections&sort=nickname',
+// '/api/v1/courses/:id',
 export type Course = Readonly<{
   id: string
   name: string
+  course_code?: string
+  start_at?: string
+  end_at?: string
+  time_zone: string
+  blueprint: boolean
   workflow_state: string
   enrollment_term_id: number
   term: {
@@ -624,8 +634,26 @@ export type Course = Readonly<{
     {
       id: string
       name: string
-    }
+    },
   ]
+  restrict_enrollments_to_course_dates: boolean
+  horizon_course: boolean
+}>
+
+export type ContentMigration = Readonly<{
+  id: string
+  migration_type: string
+}>
+
+export type Term = Readonly<{
+  id: string
+  name: string
+  start_at: string
+  end_at: string
+}>
+
+export type EnrollmentTerms = Readonly<{
+  enrollment_terms: Term[]
 }>
 
 // '/api/v1/users/self/tabs',
@@ -681,6 +709,8 @@ export type Checkpoint = {
   overrides: CheckpointOverride[]
   points_possible: number
   tag: string
+  unlock_at: string | null
+  lock_at: string | null
 }
 
 export type CheckpointOverride = {
@@ -692,4 +722,35 @@ export type CheckpointOverride = {
   student_ids: string[]
   title: string
   unassign_item: boolean
+  unlock_at: string | null
+  lock_at: string | null
+}
+
+export type SisImport = {
+  id: string
+  created_at: string
+  started_at: string | null
+  ended_at: string | null
+  updated_at: string
+  progress: number
+  workflow_state: string
+  data: {
+    import_type: string
+  }
+  batch_mode: boolean
+  batch_mode_term_id: string
+  multi_term_batch_mode: boolean
+  override_sis_stickiness: boolean
+  add_sis_stickiness: boolean
+  update_sis_id_if_login_claimed: boolean
+  clear_sis_stickiness: boolean
+  diffing_data_set_identifier: string
+  diffing_remaster: boolean
+  diffed_against_import_id: string
+  diffing_drop_status: string
+  diffing_user_remove_status: string
+  skip_deletes: boolean
+  change_threshold: number
+  diff_row_count_threshold: number
+  user: User
 }

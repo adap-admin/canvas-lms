@@ -21,6 +21,12 @@
 module AccountReports::ReportHelper
   include ::Api
 
+  class ReportStopped < StandardError; end
+
+  def self.included(base)
+    base.singleton_class.delegate :value_to_boolean, to: :"Canvas::Plugin"
+  end
+
   class DatabaseReplicationError < StandardError; end
 
   def parse_utc_string(datetime)
@@ -281,6 +287,20 @@ module AccountReports::ReportHelper
     end
   end
 
+  #
+  # Returns a string suitable for substitution into a join clause that will ensure only the
+  # most relevant pseudonym is joined
+  #
+  # If the query is already using a DISTINCT ON, it's best to just use SisPseudonym.order
+  # on the final relation, instead of introducing a subquery
+  #
+  # @example
+  #   User.joins("INNER JOIN #{ordered_pseudonyms} p ON users.id = p.user_id")
+  #
+  def ordered_pseudonyms(relation = Pseudonym.all)
+    "(#{SisPseudonym.order(relation.select("DISTINCT ON (user_id) *").order(:user_id)).to_sql})"
+  end
+
   def valid_enrollment_workflow_states
     %w[invited creation_pending active completed inactive deleted rejected].freeze &
       Api.value_to_array(@account_report.parameters["enrollment_states"])
@@ -361,9 +381,10 @@ module AccountReports::ReportHelper
 
     @account_report.update(total_lines: total_runners)
 
-    args = { priority: Delayed::LOW_PRIORITY, n_strand: ["account_report_runner", root_account.global_id] }
-    # allow retries if account report runner fails
-    args[:max_attempts] = 2 if root_account.feature_enabled?(:custom_report_experimental)
+    args = { priority: Delayed::LOW_PRIORITY,
+             n_strand: ["account_report_runner", root_account.global_id],
+             max_attempts: 2,
+             on_permanent_failure: :fail_with_error }
     @account_report.account_report_runners.find_each do |runner|
       delay(**args).run_account_report_runner(runner, headers, files:)
     end
@@ -408,18 +429,15 @@ module AccountReports::ReportHelper
     GuardRail.activate(:primary) { @account_report.write_report_runners }
   end
 
-  def activate_report_db(replica: :report, &block)
+  def activate_report_db(replica: :report, &)
     # if there is no report db configured, use the secondary.
-    # Rails 6.1 - Shard.current.database_server.roles will be set.
-    # It is not set in older versions of Rails.
-    Shard.current.database_server.tap do |ds|
-      if (ds.respond_to?(:roles) && ds.roles.include?(replica)) || ds.config[replica]
-        GuardRail.activate(replica, &block)
-      else
-        GuardRail.activate(:secondary, &block)
-      end
+    if Shard.current.database_server.roles.include?(replica)
+      GuardRail.activate(replica, &)
+    else
+      GuardRail.activate(:secondary, &)
     end
   end
+  module_function :activate_report_db
 
   def run_account_report_runner(report_runner, headers, files: nil)
     return if report_runner.reload.workflow_state == "aborted"
@@ -496,11 +514,17 @@ module AccountReports::ReportHelper
   end
 
   def fail_with_error(error)
+    # ReportStopped is a special kind of exception: it is raised
+    # when the Account Report is deleted or aborted during execution.
+    #
+    # As such, it is only used to cancel the execution of a running job,
+    # but it does not need to be captured in Canvas::Errors, nor need to change the workflow_state
+    return if error.is_a? ReportStopped
+
     GuardRail.activate(:primary) do
       Canvas::Errors.capture_exception(:account_report, error)
       @account_report.workflow_state = "error"
       @account_report.save!
-      raise error
     end
   end
 
@@ -556,11 +580,8 @@ module AccountReports::ReportHelper
           updates[:current_line] = lineno
           updates[:progress] = (lineno.to_f / (report.total_lines + 1) * 100).to_i if report.total_lines
           report.update(updates)
-          if report.workflow_state == "deleted"
-            report.workflow_state = "aborted"
-            report.save!
-            raise "aborted"
-          end
+
+          raise ReportStopped if report.stopped?
         end
       end
       super

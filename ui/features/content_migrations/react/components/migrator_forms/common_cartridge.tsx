@@ -16,14 +16,19 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React, {useState} from 'react'
-import CommonMigratorControls from './common_migrator_controls'
+import React, {useState, useRef} from 'react'
+import {
+  CommonMigratorControls,
+  parseDateToISOString,
+  noFileSelectedFormMessage,
+} from '@canvas/content-migrations'
 import type {onSubmitMigrationFormCallback} from '../types'
 import QuestionBankSelector from './question_bank_selector'
 import MigrationFileInput from './file_input'
-import {parseDateToISOString} from '../utils'
 import {useSubmitHandlerWithQuestionBank} from '../../hooks/form_handler_hooks'
-import {noFileSelectedFormMessage} from './error_form_message'
+import {ImportLabel} from './import_label'
+import {ImportInProgressLabel} from './import_in_progress_label'
+import {ImportClearLabel} from './import_clear_label'
 
 type CommonCartridgeImporterProps = {
   onSubmit: onSubmitMigrationFormCallback
@@ -39,14 +44,9 @@ const CommonCartridgeImporter = ({
   isSubmitting,
 }: CommonCartridgeImporterProps) => {
   const [isQuestionBankDisabled, setIsQuestionBankDisabled] = useState(false)
-  const {
-    setFile,
-    fileError,
-    questionBankSettings,
-    setQuestionBankSettings,
-    questionBankError,
-    handleSubmit,
-  } = useSubmitHandlerWithQuestionBank(onSubmit)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const {setFile, fileError, questionBankSettings, setQuestionBankSettings, handleSubmit} =
+    useSubmitHandlerWithQuestionBank(onSubmit, fileInputRef)
 
   return (
     <>
@@ -56,10 +56,10 @@ const CommonCartridgeImporter = ({
         isSubmitting={isSubmitting}
         externalFormMessage={fileError ? noFileSelectedFormMessage : undefined}
         isRequired={true}
+        inputRef={ref => (fileInputRef.current = ref)}
       />
       <QuestionBankSelector
         onChange={setQuestionBankSettings}
-        questionBankError={questionBankError}
         disable={isSubmitting || isQuestionBankDisabled}
         notCompatible={isQuestionBankDisabled}
         questionBankSettings={questionBankSettings}
@@ -76,8 +76,9 @@ const CommonCartridgeImporter = ({
         setIsQuestionBankDisabled={setIsQuestionBankDisabled}
         newStartDate={parseDateToISOString(ENV.OLD_START_DATE)}
         newEndDate={parseDateToISOString(ENV.OLD_END_DATE)}
-        oldStartDate={null}
-        oldEndDate={null}
+        SubmitLabel={ImportLabel}
+        SubmittingLabel={ImportInProgressLabel}
+        CancelLabel={ImportClearLabel}
       />
     </>
   )

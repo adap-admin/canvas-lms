@@ -16,10 +16,10 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {generateActionTemplates} from '../generateActionTemplates'
 
-const I18n = useI18nScope('permissions_templates_34')
+const I18n = createI18nScope('permissions_templates_34')
 
 export const template = generateActionTemplates(
   [
@@ -30,10 +30,23 @@ export const template = generateActionTemplates(
   ],
   [
     {
-      description: I18n.t('Allows user to delete differentiated tags'),
+      title: I18n.t('What it allows'),
+      description: I18n.t('This permission controls the ability to:'),
+    },
+    {
+      description: I18n.t('Delete differentiation tags'),
+    },
+    {
+      description: I18n.t('Remove users from differentiation tags'),
+    },
+    {
+      title: I18n.t('Warning'),
+      description: I18n.t(
+        'A user who can delete differentiation tags has the ability to remove users from an assignment by deleting the tags assigned to an assignment.',
+      ),
     },
   ],
   [
     // course "OTHER CONSIDERATIONS"
-  ]
+  ],
 )

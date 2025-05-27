@@ -17,7 +17,7 @@
  */
 
 import getCookie from '@instructure/get-cookie'
-import gql from 'graphql-tag'
+import {gql} from '@apollo/client'
 import qs from 'qs'
 import type {GradingRubricContext} from '../types/rubricAssignment'
 import type {Rubric, RubricAssociation} from '../../types/rubric'
@@ -41,12 +41,12 @@ export const removeRubricFromAssignment = async (courseId: string, rubricAssocia
   })
 }
 
-export type AssignmentRubric = Rubric & {can_update?: boolean}
+export type AssignmentRubric = Rubric & {can_update?: boolean; association_count?: number}
 export const addRubricToAssignment = async (
   courseId: string,
   assignmentId: string,
   rubricId: string,
-  updatedAssociation: RubricAssociation
+  updatedAssociation: RubricAssociation,
 ) => {
   const {hidePoints, hideOutcomeResults, hideScoreTotal, useForGrading} = updatedAssociation
 
@@ -81,7 +81,11 @@ export const addRubricToAssignment = async (
 
   return {
     rubricAssociation: result.rubric_association,
-    rubric: {...mappedRubric, can_update: result.rubric.permissions?.update} as AssignmentRubric,
+    rubric: {
+      ...mappedRubric,
+      can_update: result.rubric.permissions?.update,
+      association_count: result.rubric.association_count,
+    } as AssignmentRubric,
   }
 }
 
@@ -181,5 +185,41 @@ export const setRubricSelfAssessment = async ({
 
   if (errors) {
     throw new Error('Failed to set rubric self assessment on assignment')
+  }
+}
+
+export const ASSIGNMENT_RUBRIC_SELF_ASSESSMENTS_QUERY = gql`
+  query GetAssignmentRubricSelfAssessmentSettings($assignmentId: ID!) {
+    assignment(id: $assignmentId) {
+      canUpdateRubricSelfAssessment
+      rubricSelfAssessmentEnabled
+    }
+  }
+`
+type RubricSelfAssessmentSettingsParams = {
+  queryKey: (string | number)[]
+}
+type RubricSelfAssessmentSettingsResponse = {
+  assignment: {
+    canUpdateRubricSelfAssessment: boolean
+    rubricSelfAssessmentEnabled: boolean
+  }
+}
+export const getRubricSelfAssessmentSettings = async ({
+  queryKey,
+}: RubricSelfAssessmentSettingsParams) => {
+  const [_, assignmentId] = queryKey
+  const {
+    assignment: {canUpdateRubricSelfAssessment, rubricSelfAssessmentEnabled},
+  } = await executeQuery<RubricSelfAssessmentSettingsResponse>(
+    ASSIGNMENT_RUBRIC_SELF_ASSESSMENTS_QUERY,
+    {
+      assignmentId,
+    },
+  )
+
+  return {
+    canUpdateRubricSelfAssessment,
+    rubricSelfAssessmentEnabled,
   }
 }

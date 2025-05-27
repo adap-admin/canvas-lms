@@ -129,7 +129,7 @@ describe Quizzes::Quiz do
       quiz = nil
       Timecop.freeze(5.minutes.ago) do
         quiz = @course.quizzes.create! title: "hello"
-        quiz.published_at = Time.now
+        quiz.published_at = Time.zone.now
         quiz.publish!
         expect(quiz.unpublished_changes?).to be_falsey
       end
@@ -144,7 +144,7 @@ describe Quizzes::Quiz do
       quiz = nil
       Timecop.freeze(5.minutes.ago) do
         quiz = @course.quizzes.create! title: "hello"
-        quiz.published_at = Time.now
+        quiz.published_at = Time.zone.now
         quiz.publish!
         expect(quiz.unpublished_changes?).to be_falsey
       end
@@ -268,7 +268,6 @@ describe Quizzes::Quiz do
     context "with course paces" do
       before do
         create_quiz_with_submission(quiz_type: "assignment")
-        @course.root_account.enable_feature!(:course_paces)
         @course.enable_course_paces = true
         @course.save!
         @course_pace = course_pace_model(course: @course)
@@ -441,7 +440,7 @@ describe Quizzes::Quiz do
     a = @course.assignments.create!(title: "some assignment", points_possible: 5)
     expect(a.points_possible).to be(5.0)
     expect(a.submission_types).not_to eql("online_quiz")
-    a.update_attribute(:created_at, Time.now - (40 * 60))
+    a.update_attribute(:created_at, Time.zone.now - (40 * 60))
     q = @course.quizzes.build(assignment_id: a.id, title: "some quiz", points_possible: 10)
     q.workflow_state = "available"
     expect(q.assignment).to receive(:save_without_broadcasting!).at_least(:once)
@@ -457,7 +456,7 @@ describe Quizzes::Quiz do
     a.unmute!
     expect(a.points_possible).to be(5.0)
     expect(a.submission_types).not_to eql("online_quiz")
-    a.update_attribute(:created_at, Time.now - (40 * 60))
+    a.update_attribute(:created_at, Time.zone.now - (40 * 60))
     q = @course.quizzes.build(assignment_id: a.id, title: "some quiz", points_possible: 10)
     q.workflow_state = "available"
     q.notify_of_update = 1
@@ -1240,6 +1239,31 @@ describe Quizzes::Quiz do
     end
   end
 
+  describe "#effective_group_category_id" do
+    it "returns group category id if it has an assignment" do
+      group_category = @course.group_categories.create!(name: "category")
+      quiz = @course.quizzes.create(title: "test quiz")
+      quiz.publish!
+      expect(quiz.assignment).to be_present
+      quiz.assignment.group_category_id = group_category.id
+      quiz.save!
+      expect(quiz.effective_group_category_id).to eq group_category.id
+      expect(quiz.group_category_id).to eq group_category.id
+    end
+
+    it "returns nil if the assignment does not have a group category id" do
+      quiz = @course.quizzes.create(title: "test quiz")
+      quiz.publish!
+      expect(quiz.assignment).to be_present
+      expect(quiz.effective_group_category_id).to be_nil
+    end
+
+    it "returns nil if it doesn't have an assignment" do
+      quiz = @course.quizzes.create(title: "test quiz")
+      expect(quiz.effective_group_category_id).to be_nil
+    end
+  end
+
   describe "linking overrides with assignments" do
     let_once(:course) { course_model }
     let_once(:quiz) { quiz_model(course:, due_at: 5.days.from_now).reload }
@@ -1394,7 +1418,7 @@ describe Quizzes::Quiz do
         quiz = @course.quizzes.create! title: "test quiz"
         quiz.time_limit = -60
         expect(quiz.save).to be_falsey
-        expect(quiz.errors["time_limit"]).to be_present
+        expect(quiz.errors["invalid_time_limit"]).to be_present
       end
 
       it "does not validate time_limit if not changed" do
@@ -1991,7 +2015,7 @@ describe Quizzes::Quiz do
 
     it "lets admins read quizzes that are unpublished even without management rights" do
       @quiz.unpublish!.reload
-      @course.account.role_overrides.create!(role: teacher_role, permission: "manage_assignments", enabled: false)
+      @course.account.role_overrides.create!(role: teacher_role, permission: "manage_assignments_add", enabled: false)
       @course.account.role_overrides.create!(role: teacher_role, permission: "manage_grades", enabled: false)
       expect(@quiz.grants_right?(@teacher, :read)).to be true
     end
@@ -2488,11 +2512,11 @@ describe Quizzes::Quiz do
     end
 
     it "returns quizzes due between the given dates" do
-      expect(@course.quizzes.due_between_with_overrides(2.days.ago, Time.now)).to include(@quiz)
+      expect(@course.quizzes.due_between_with_overrides(2.days.ago, Time.zone.now)).to include(@quiz)
     end
 
     it "returns quizzes with overrides between the given dates" do
-      expect(@course.quizzes.due_between_with_overrides(Time.now, 2.days.from_now)).to include(@quiz)
+      expect(@course.quizzes.due_between_with_overrides(Time.zone.now, 2.days.from_now)).to include(@quiz)
     end
 
     it "excludes quizzes that don't meet either criterion" do
@@ -2674,6 +2698,13 @@ describe Quizzes::Quiz do
       expect(ids.class).to eq Array
       expect(ids.count).to eq 1
       expect(ids.first).to eq @bank.id
+    end
+  end
+
+  describe "Horizon course" do
+    it "does not allow classic quiz creation" do
+      allow(@course).to receive(:horizon_course?).and_return(true)
+      expect { @course.quizzes.create!(title: "test") }.to raise_error(ActiveRecord::RecordInvalid)
     end
   end
 end

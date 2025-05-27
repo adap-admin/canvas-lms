@@ -23,12 +23,10 @@ require "webmock/rspec"
 class AssignmentApiHarness
   include Api::V1::Assignment
 
-  def value_to_boolean(value)
-    Canvas::Plugin.value_to_boolean(value)
-  end
+  delegate :value_to_boolean, to: :"Canvas::Plugin"
 
-  def api_user_content(description, course, user, _)
-    "api_user_content(#{description}, #{course.id}, #{user.id})"
+  def api_user_content(description, course, user, _, location: nil)
+    "api_user_content(#{description}, #{course.id}, #{user.id}, location: #{location})"
   end
 
   def course_assignment_url(context_id, assignment)
@@ -213,6 +211,7 @@ describe "Api::V1::Assignment" do
     context "checkpoints" do
       context "not in-place" do
         it "json does not have has_sub_assignments and checkpoints when FF is turned off" do
+          assignment.course.account.disable_feature!(:discussion_checkpoints)
           json = api.assignment_json(assignment, user, session, { include_checkpoints: true })
           expect(json).not_to have_key "has_sub_assignments"
           expect(json).not_to have_key "checkpoints"
@@ -221,7 +220,7 @@ describe "Api::V1::Assignment" do
 
       context "discussion_checkpoints enabled without checkpoints" do
         before do
-          assignment.root_account.enable_feature!(:discussion_checkpoints)
+          assignment.course.account.enable_feature!(:discussion_checkpoints)
         end
 
         it "returns false for the has_sub_assignments attribute and [] for the checkpoints attribute" do
@@ -233,7 +232,7 @@ describe "Api::V1::Assignment" do
 
       context "discussion_checkpoints enabled with checkpoints" do
         before do
-          assignment.root_account.enable_feature!(:discussion_checkpoints)
+          assignment.course.account.enable_feature!(:discussion_checkpoints)
 
           assignment.update_attribute(:has_sub_assignments, true)
 
@@ -354,7 +353,7 @@ describe "Api::V1::Assignment" do
       describe "checkpointed assignments" do
         before do
           @student1 = student_in_course(course: @course, active_all: true).user
-          @course.root_account.enable_feature!(:discussion_checkpoints)
+          @course.account.enable_feature!(:discussion_checkpoints)
 
           @topic = DiscussionTopic.create_graded_topic!(course: @course, title: "checkpointed discussion")
           Checkpoints::DiscussionCheckpointCreatorService.call(
@@ -400,6 +399,16 @@ describe "Api::V1::Assignment" do
       end
     end
 
+    context "when file_association_access feature flag is enabled" do
+      it "adds location tag to description" do
+        attachment = Attachment.create!(context: user, filename: "user_avatar_pic", uploaded_data: StringIO.new("sometextgoeshere"))
+        assignment.description = "<img src='/users/#{user.id}/files/#{attachment.id}>"
+
+        json = api.assignment_json(assignment, user, session, { override_dates: false })
+        expect(json["description"]).to eq(api.api_user_content(assignment.description, @course, user, {}, location: assignment.asset_string))
+      end
+    end
+
     it "includes all assignment overrides fields when an assignment_override exists" do
       assignment.assignment_overrides.create(workflow_state: "active")
       overrides = assignment.assignment_overrides
@@ -416,7 +425,7 @@ describe "Api::V1::Assignment" do
                                  { override_dates: false })
       expect(json).to be_a(Hash)
       expect(json).to have_key "description"
-      expect(json["description"]).to eq(api.api_user_content("Foobers", @course, user, {}))
+      expect(json["description"]).to eq(api.api_user_content("Foobers", @course, user, {}, location: assignment.asset_string))
 
       json = api.assignment_json(assignment,
                                  user,
@@ -431,7 +440,7 @@ describe "Api::V1::Assignment" do
                                  { override_dates: false })
       expect(json).to be_a(Hash)
       expect(json).to have_key "description"
-      expect(json["description"]).to eq(api.api_user_content("Foobers", @course, user, {}))
+      expect(json["description"]).to eq(api.api_user_content("Foobers", @course, user, {}, location: assignment.asset_string))
     end
 
     it "excludes needs_grading_counts when exclude_response_fields flag is " \
@@ -568,6 +577,22 @@ describe "Api::V1::Assignment" do
           expect(json).to have_key("require_lockdown_browser")
           expect(json["require_lockdown_browser"]).to be_falsy
         end
+      end
+    end
+
+    context "in a horizon course" do
+      let(:account) { Account.create!(name: "Horizon Account", horizon_account: true) }
+      let(:course) { Course.create!(horizon_course: true, account:) }
+      let(:assignment) { assignment_model(course:) }
+
+      before do
+        account.enable_feature!(:horizon_course_setting)
+        EstimatedDuration.create!(duration: 5.minutes, assignment:)
+      end
+
+      it "returns estimated duration" do
+        json = api.assignment_json(assignment, user, session, {})
+        expect(json).to have_key("estimated_duration")
       end
     end
   end
@@ -1029,7 +1054,7 @@ describe "Api::V1::Assignment" do
     let_once(:assignment) { Assignment.new(context: course) }
     let_once(:course) { course_model }
     let_once(:account) { assignment.root_account }
-    let_once(:developer_key) { dev_key_model_1_3(account:) }
+    let_once(:developer_key) { lti_developer_key_model(account:) }
     let_once(:user) { user_model }
 
     context "external tool url" do
@@ -1094,6 +1119,69 @@ describe "Api::V1::Assignment" do
       it "doesn't create the assignment if the custom params are invalid" do
         assignment_create_params[:external_tool_tag_attributes][:custom_params] = "invalid"
         expect { subject }.not_to change { Assignment.count }
+      end
+    end
+
+    context "when asset processor content items are passed in" do
+      let_once(:tool) { external_tool_1_3_model(context: account, developer_key:) }
+      let_once(:assignment_create_params) do
+        ActionController::Parameters.new(
+          name: "New Assignment",
+          asset_processors: [
+            { "new_content_item" => make_ap_content_item("Processor 1!") },
+            { "new_content_item" => make_ap_content_item("Processor 2!") },
+          ],
+          submission_type: "online",
+          submission_types: ["online_upload"],
+          similarityDetectionTool: ""
+        )
+      end
+
+      before do
+        Account.default.enable_feature! :lti_asset_processor
+      end
+
+      def make_ap_content_item(title)
+        {
+          "url" => "",
+          "title" => title,
+          "text" => "Lti 1.3 Tool Text",
+          "custom" => { k: "v" },
+          "icon" => {},
+          "report" => { released: true, indicator: false, custom: { some_setting: "az-123" } },
+          "context_external_tool_id" => tool.id,
+        }
+      end
+
+      context "when the content_items are valid" do
+        it "creates asset processors for the assignment" do
+          expect { subject }.to change { Assignment.count }.by(1)
+          expect(subject.lti_asset_processors.pluck(:title)).to match_array ["Processor 1!", "Processor 2!"]
+        end
+      end
+
+      context "when the content_items is nil" do
+        it "does not create asset processors for the assignment" do
+          assignment_create_params[:asset_processors] = nil
+          expect { subject }.to change { Assignment.count }.by(1)
+          expect(subject.lti_asset_processors.count).to eq 0
+        end
+      end
+
+      context "when the assignment is not asset processor capable" do
+        it "does not create asset processors for the assignment" do
+          assignment_create_params[:submission_types] = ["online_url"]
+          expect { subject }.to change { Assignment.count }.by(1)
+          expect(subject.lti_asset_processors.count).to eq 0
+        end
+      end
+
+      context "when the lti_asset_processor FF is off" do
+        it "does not create asset processors for the assignment" do
+          Account.default.disable_feature! :lti_asset_processor
+          expect { subject }.to change { Assignment.count }.by(1)
+          expect(subject.lti_asset_processors.count).to eq 0
+        end
       end
     end
   end
@@ -1197,6 +1285,129 @@ describe "Api::V1::Assignment" do
           json = api.assignment_json(assignment, user, session, opts)
           expect(json).to be_a(Hash)
           expect(json).to_not have_key "migrated_urls_content_migration_id"
+        end
+      end
+    end
+
+    context "when asset processor content items are passed in" do
+      def make_ap(title, context_external_tool)
+        assignment.lti_asset_processors.create!(title:, context_external_tool:)
+      end
+
+      let(:account) { assignment.root_account }
+      let(:developer_key) { lti_developer_key_model(account:) }
+      let(:tool) { external_tool_1_3_model(context: account, developer_key:) }
+      let(:tool2) { external_tool_1_3_model(context: account, developer_key:) }
+
+      let(:existing_ap1) { make_ap("Existing1", tool) }
+      let(:existing_ap2) { make_ap("Existing2", tool2) }
+
+      let(:content_items) do
+        [
+          { "existing_id" => existing_ap1.id },
+          {
+            "new_content_item" => {
+              "title" => "AP Title",
+              "text" => "AP Text",
+              "report" => {},
+              "context_external_tool_id" => tool.id,
+            }
+          }
+        ]
+      end
+
+      # don't use let_once (it could cause two different assignments to be created)
+      let(:assignment_update_params) do
+        ActionController::Parameters.new(
+          name: assignment.name,
+          submission_type: "online",
+          submission_types: ["online_upload"],
+          asset_processors: content_items,
+          similarityDetectionTool: ""
+        )
+      end
+
+      before do
+        Account.default.enable_feature! :lti_asset_processor
+        assignment.update!(submission_types: "online_upload")
+        existing_ap1
+        existing_ap2
+      end
+
+      context "when the content_items are valid" do
+        it "creates, deletes, and retains asset processors as appropriate" do
+          expect { subject }.to \
+            change { assignment.lti_asset_processors.pluck(:title).sort }
+            .from(["Existing1", "Existing2"])
+            .to(["AP Title", "Existing1"])
+        end
+      end
+
+      context "when the assignment is no longer asset processor capable" do
+        it "deletes any previous asset processors" do
+          assignment_update_params[:submission_types] = ["online_url"]
+          expect { subject }.to change { assignment.lti_asset_processors.count }.from(2).to(0)
+        end
+      end
+    end
+
+    context "when not in a horizon course" do
+      context "when estimated duration attrs are passed in" do
+        let(:assignment_update_params) do
+          ActionController::Parameters.new(
+            estimated_duration_attributes: {
+              minutes: 5
+            }
+          )
+        end
+
+        it "does not update the estimated duration" do
+          expect { subject }.not_to change { assignment.estimated_duration&.duration }.from(nil)
+        end
+      end
+    end
+
+    context "when in a horizon course" do
+      let(:account) { Account.create!(name: "Horizon Account", horizon_account: true) }
+      let(:course) { Course.create!(horizon_course: true, account:) }
+      let(:assignment) { assignment_model(course:) }
+
+      before do
+        account.enable_feature!(:horizon_course_setting)
+      end
+
+      context "when estimated duration attrs are passed in" do
+        let(:assignment_update_params) do
+          ActionController::Parameters.new(
+            estimated_duration_attributes: {
+              minutes: 5
+            }
+          )
+        end
+
+        it "updates the estimated duration" do
+          expect { subject }.to change {
+            assignment.estimated_duration&.duration
+          }.from(nil).to(5.minutes)
+        end
+      end
+
+      context "when estimated duration is set" do
+        let(:estimated_duration) { EstimatedDuration.create!(assignment:) }
+
+        context "when options to remove estimated duration are set" do
+          let(:assignment_update_params) do
+            ActionController::Parameters.new(
+              estimated_duration_attributes: {
+                id: estimated_duration.id,
+                _destroy: true
+              }
+            )
+          end
+
+          it "removes the estimated duration" do
+            expect { subject }.to change { estimated_duration.destroyed? }.to(true)
+          end
         end
       end
     end

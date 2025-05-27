@@ -21,7 +21,7 @@ import userEvent from '@testing-library/user-event'
 import {mockConfigWithPlacements, mockRegistration} from './helpers'
 import {PlacementsConfirmationWrapper} from '../components/PlacementsConfirmationWrapper'
 import {UNDOCUMENTED_PLACEMENTS} from '../../registration_wizard_forms/PlacementsConfirmation'
-import {createRegistrationOverlayStore} from '../../registration_wizard/registration_settings/RegistrationOverlayState'
+import {createDynamicRegistrationOverlayStore} from '../DynamicRegistrationOverlayState'
 import {LtiPlacements} from '../../model/LtiPlacement'
 import {i18nLtiPlacement} from '../../model/i18nLtiPlacement'
 
@@ -29,7 +29,7 @@ describe('PlacementsConfirmation', () => {
   it('renders the PlacementsConfirmation', () => {
     const config = mockConfigWithPlacements([LtiPlacements.AccountNavigation])
     const reg = mockRegistration({}, config)
-    const overlayStore = createRegistrationOverlayStore('Foo', reg)
+    const overlayStore = createDynamicRegistrationOverlayStore('Foo', reg)
 
     render(<PlacementsConfirmationWrapper registration={reg} overlayStore={overlayStore} />)
 
@@ -39,12 +39,12 @@ describe('PlacementsConfirmation', () => {
   it("renders a helpful message if the tool doesn't provide placements", () => {
     const config = mockConfigWithPlacements([])
     const reg = mockRegistration({}, config)
-    const overlayStore = createRegistrationOverlayStore('Foo', reg)
+    const overlayStore = createDynamicRegistrationOverlayStore('Foo', reg)
 
     render(<PlacementsConfirmationWrapper registration={reg} overlayStore={overlayStore} />)
 
     expect(
-      screen.getByText(/This tool has not requested access to any placements/i)
+      screen.getByText(/This tool has not requested access to any placements/i),
     ).toBeInTheDocument()
   })
 
@@ -55,7 +55,7 @@ describe('PlacementsConfirmation', () => {
     ])
 
     const reg = mockRegistration({}, placements)
-    const overlayStore = createRegistrationOverlayStore('Foo', reg)
+    const overlayStore = createDynamicRegistrationOverlayStore('Foo', reg)
 
     render(<PlacementsConfirmationWrapper registration={reg} overlayStore={overlayStore} />)
 
@@ -64,7 +64,7 @@ describe('PlacementsConfirmation', () => {
     })
 
     expect(
-      screen.getByTestId(`placement-img-${LtiPlacements.CourseNavigation}`)
+      screen.getByTestId(`placement-img-${LtiPlacements.CourseNavigation}`),
     ).toBeInTheDocument()
   })
 
@@ -73,13 +73,43 @@ describe('PlacementsConfirmation', () => {
     const config = mockConfigWithPlacements(placements)
 
     const reg = mockRegistration({}, config)
-    const overlayStore = createRegistrationOverlayStore('Foo', reg)
+    const overlayStore = createDynamicRegistrationOverlayStore('Foo', reg)
 
     render(<PlacementsConfirmationWrapper registration={reg} overlayStore={overlayStore} />)
 
     placements.forEach(placement => {
       expect(screen.getByTestId(`placement-img-${placement}`)).toBeInTheDocument()
     })
+  })
+
+  it("doesn't show the analytics hub placement if the tool has not requested it", () => {
+    const config = mockConfigWithPlacements([
+      LtiPlacements.CourseNavigation,
+      LtiPlacements.AccountNavigation,
+    ])
+    const reg = mockRegistration({}, config)
+    const overlayStore = createDynamicRegistrationOverlayStore('Foo', reg)
+
+    render(<PlacementsConfirmationWrapper registration={reg} overlayStore={overlayStore} />)
+
+    const checkbox = screen.queryByLabelText(i18nLtiPlacement(LtiPlacements.AnalyticsHub))
+    expect(checkbox).toBeNull()
+  })
+
+  it('shows the analytics hub placement if the tool has requested it', () => {
+    const config = mockConfigWithPlacements([
+      LtiPlacements.CourseNavigation,
+      LtiPlacements.AnalyticsHub,
+      LtiPlacements.AccountNavigation,
+    ])
+    const reg = mockRegistration({}, config)
+    const overlayStore = createDynamicRegistrationOverlayStore('Foo', reg)
+
+    render(<PlacementsConfirmationWrapper registration={reg} overlayStore={overlayStore} />)
+
+    const checkbox = screen.queryByLabelText(i18nLtiPlacement(LtiPlacements.AnalyticsHub))
+    expect(checkbox).toBeTruthy()
+    expect(screen.getByTestId(`placement-img-analytics_hub`)).toBeInTheDocument()
   })
 
   it("let's users toggle placements", async () => {
@@ -89,7 +119,7 @@ describe('PlacementsConfirmation', () => {
       LtiPlacements.TopNavigation,
     ])
     const reg = mockRegistration({}, config)
-    const overlayStore = createRegistrationOverlayStore('Foo', reg)
+    const overlayStore = createDynamicRegistrationOverlayStore('Foo', reg)
 
     render(<PlacementsConfirmationWrapper registration={reg} overlayStore={overlayStore} />)
 
@@ -110,19 +140,19 @@ describe('PlacementsConfirmation', () => {
       LtiPlacements.EditorButton,
     ])
     const reg = mockRegistration({}, config)
-    const overlayStore = createRegistrationOverlayStore('Foo', reg)
+    const overlayStore = createDynamicRegistrationOverlayStore('Foo', reg)
     render(<PlacementsConfirmationWrapper registration={reg} overlayStore={overlayStore} />)
 
     const boxes = screen.getAllByText('Default to Hidden')
-    expect(boxes.length).toBe(1)
+    expect(boxes).toHaveLength(1)
   })
 
   it("renders the default disabled checkbox as on when the registration has default='disabled'", () => {
     const config = mockConfigWithPlacements([LtiPlacements.CourseNavigation])
-    config.extensions![0].settings.placements[0].default = 'disabled'
+    config.placements![0].default = 'disabled'
 
     const reg = mockRegistration({}, config)
-    const overlayStore = createRegistrationOverlayStore('Foo', reg)
+    const overlayStore = createDynamicRegistrationOverlayStore('Foo', reg)
 
     render(<PlacementsConfirmationWrapper registration={reg} overlayStore={overlayStore} />)
 
@@ -134,7 +164,7 @@ describe('PlacementsConfirmation', () => {
   it("renders the default disabled checkbox as on when the overlay has default='disabled'", () => {
     const config = mockConfigWithPlacements([LtiPlacements.CourseNavigation])
     const reg = mockRegistration({}, config)
-    const overlayStore = createRegistrationOverlayStore('Foo', reg)
+    const overlayStore = createDynamicRegistrationOverlayStore('Foo', reg)
     overlayStore.getState().updatePlacement(LtiPlacements.CourseNavigation)(p => ({
       ...p,
       default: 'disabled',
@@ -149,10 +179,10 @@ describe('PlacementsConfirmation', () => {
 
   it('renders the default disabled checkbox as off when the overlay has default="enabled" but the registration has the opposite', () => {
     const config = mockConfigWithPlacements([LtiPlacements.CourseNavigation])
-    config.extensions![0].settings.placements[0].default = 'disabled'
+    config.placements![0].default = 'disabled'
 
     const reg = mockRegistration({}, config)
-    const overlayStore = createRegistrationOverlayStore('Foo', reg)
+    const overlayStore = createDynamicRegistrationOverlayStore('Foo', reg)
     overlayStore.getState().updatePlacement(LtiPlacements.CourseNavigation)(p => ({
       ...p,
       default: 'enabled',
@@ -168,12 +198,12 @@ describe('PlacementsConfirmation', () => {
   it("doesn't render a default disabled checkbox when course navigation is disabled", () => {
     const config = mockConfigWithPlacements([LtiPlacements.CourseNavigation])
     const reg = mockRegistration({}, config)
-    const overlayStore = createRegistrationOverlayStore('Foo', reg)
+    const overlayStore = createDynamicRegistrationOverlayStore('Foo', reg)
     overlayStore.getState().toggleDisabledPlacement(LtiPlacements.CourseNavigation)
     render(<PlacementsConfirmationWrapper registration={reg} overlayStore={overlayStore} />)
 
     const boxes = screen.queryAllByText('Default to Hidden')
-    expect(boxes.length).toBe(0)
+    expect(boxes).toHaveLength(0)
   })
 
   it('renders a checkbox for each placement in the configuration', () => {
@@ -184,7 +214,7 @@ describe('PlacementsConfirmation', () => {
     ]
     const config = mockConfigWithPlacements(placements)
     const reg = mockRegistration({}, config)
-    const overlayStore = createRegistrationOverlayStore('Foo', reg)
+    const overlayStore = createDynamicRegistrationOverlayStore('Foo', reg)
     render(<PlacementsConfirmationWrapper registration={reg} overlayStore={overlayStore} />)
 
     // Assert that checkboxes for each placement are rendered

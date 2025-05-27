@@ -17,7 +17,7 @@
  */
 
 import React, {useState} from 'react'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import type {Rubric} from '@canvas/rubrics/react/types/rubric'
 import {ScreenReaderContent} from '@instructure/ui-a11y-content'
 import {Checkbox} from '@instructure/ui-checkbox'
@@ -28,7 +28,7 @@ import {Table} from '@instructure/ui-table'
 import {useParams} from 'react-router-dom'
 import {RubricPopover} from './RubricPopover'
 
-const I18n = useI18nScope('rubrics-list-table')
+const I18n = createI18nScope('rubrics-list-table')
 
 const {Head, Row, Cell, ColHeader, Body} = Table
 
@@ -87,8 +87,8 @@ export const RubricTable = ({
           ? -1
           : 1
         : a.hasRubricAssociations
-        ? 1
-        : -1
+          ? 1
+          : -1
     } else {
       // Default sorting by ID if no specific column is selected
       return a.id.localeCompare(b.id)
@@ -124,7 +124,7 @@ export const RubricTable = ({
             sortDirection={sortedColumn === 'Criterion' ? sortDirection : undefined}
             data-testid="rubric-criterion-header"
           >
-            {I18n.t('Criterion')}
+            {I18n.t('Criteria')}
           </ColHeader>
           <ColHeader
             id="LocationUsed"
@@ -148,7 +148,9 @@ export const RubricTable = ({
                 {canImportExportRubrics && (
                   <Flex.Item margin="0 small 0 0">
                     <Checkbox
-                      label=""
+                      label={
+                        <ScreenReaderContent>{`${I18n.t('Select')} ${rubric.title}`}</ScreenReaderContent>
+                      }
                       value={rubric.id}
                       onChange={event => handleCheckboxChange(event, rubric.id)}
                       checked={selectedRubricIds.includes(rubric.id)}
@@ -202,6 +204,7 @@ export const RubricTable = ({
                   freeFormCriterionComments={rubric.freeFormCriterionComments}
                   hasRubricAssociations={rubric.hasRubricAssociations}
                   onArchiveRubricChange={() => handleArchiveRubricChange(rubric.id)}
+                  workflowState={rubric.workflowState}
                   active={active}
                 />
               )}

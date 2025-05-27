@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import React from 'react'
 import PropTypes from 'prop-types'
 import store from '../lib/ExternalAppsStore'
@@ -28,7 +28,7 @@ import {Flex} from '@instructure/ui-flex'
 import {IconCheckMarkSolid, IconEndSolid} from '@instructure/ui-icons'
 import {Spinner} from '@instructure/ui-spinner'
 
-const I18n = useI18nScope('external_tools')
+const I18n = createI18nScope('external_tools')
 
 const ALL_PLACEMENTS = {
   account_navigation: I18n.t('Account Navigation'),
@@ -71,6 +71,7 @@ const ALL_PLACEMENTS = {
   wiki_page_menu: I18n.t('Page Menu'),
   wiki_index_menu: I18n.t('Pages Index Menu'),
   default_placements: I18n.t('Assignment and Link Selection'), // for 1.1 display only
+  ActivityAssetProcessor: I18n.t('Activity Asset Processor'),
 }
 
 const DEFAULT_1_1_PLACEMENTS = ['assignment_selection', 'link_selection', 'resource_selection']
@@ -185,19 +186,21 @@ export default class ExternalToolPlacementList extends React.Component {
    *  the `lti_toggle_placements` feature flag is enabled, which allows toggling for 1.3 tools,
    * 2. the user has permission to update the tool (teacher in a course view or admin),
    * 3. the tool is being viewed in the context in which it was installed (no
-   *  toggling an account-level tool from a course).
+   *  toggling a root-account-level tool from a course or subaccount).
    */
   shouldShowToggleButtons = () => {
     const tool = this.state.tool
     const is_1_1_tool = tool.version === '1.1'
     const isFlagEnabled = ENV.FEATURES.lti_toggle_placements
-    const canUpdateTool =
-      ENV.PERMISSIONS &&
-      (ENV.PERMISSIONS.create_tool_manually || ENV.PERMISSIONS.edit_tool_manually)
+    const canUpdateTool = ENV.PERMISSIONS && ENV.PERMISSIONS.edit_tool_manually
+    const [_, contextType, contextId] = ENV.CONTEXT_BASE_URL?.split('/') || []
     const isEditableContext =
-      ENV.CONTEXT_BASE_URL &&
+      contextType &&
+      contextId &&
       tool.context &&
-      ENV.CONTEXT_BASE_URL.includes(tool.context.toLowerCase())
+      tool.context_id &&
+      contextId === tool.context_id.toString() &&
+      contextType.replace(/s$/, '') === tool.context.toLowerCase()
 
     return (is_1_1_tool || isFlagEnabled) && canUpdateTool && isEditableContext
   }
@@ -230,7 +233,7 @@ export default class ExternalToolPlacementList extends React.Component {
     }
 
     return placements.map(key =>
-      this.placementToggle(key, ALL_PLACEMENTS[key], this.isPlacementEnabled(tool, key))
+      this.placementToggle(key, ALL_PLACEMENTS[key], this.isPlacementEnabled(tool, key)),
     )
   }
 
@@ -248,7 +251,7 @@ export default class ExternalToolPlacementList extends React.Component {
 
     if (this.shouldShowToggleButtons()) {
       return placements.map(key =>
-        this.placementToggle(key, ALL_PLACEMENTS[key], this.isPlacementEnabled(tool, key))
+        this.placementToggle(key, ALL_PLACEMENTS[key], this.isPlacementEnabled(tool, key)),
       )
     } else {
       return placements
@@ -334,14 +337,14 @@ export default class ExternalToolPlacementList extends React.Component {
         <p style={{margin: 0}}>
           {I18n.t(
             'It may take some time for placement availability to reflect any changes made here. ' +
-              'You can also clear your cache and hard refresh on pages where you expect placements to change.'
+              'You can also clear your cache and hard refresh on pages where you expect placements to change.',
           )}
         </p>
         {this.state.tool.version === '1.3' && (
           <p style={{margin: '8px 0 0 0'}}>
             {I18n.t(
               'Changes made to placements here for 1.3 tools will be reset by any changes made to the ' +
-                'LTI developer key, including changes made by Instructure to inherited LTI keys.'
+                'LTI developer key, including changes made by Instructure to inherited LTI keys.',
             )}
           </p>
         )}

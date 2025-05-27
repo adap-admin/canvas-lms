@@ -30,11 +30,6 @@ RSpec.describe Lti::ResourceLink do
   end
 
   context "relationships" do
-    it { is_expected.to belong_to(:context) }
-    it { is_expected.to belong_to(:root_account) }
-
-    it { is_expected.to have_many(:line_items) }
-
     it "maintains associated line items when destroying and undestroying" do
       line_item = line_item_model(resource_link:)
       expect(line_item).to be_active
@@ -64,10 +59,6 @@ RSpec.describe Lti::ResourceLink do
 
     it 'sets the "context_external_tool"' do
       expect(resource_link.original_context_external_tool).to eq tool
-    end
-
-    it "`lookup_uuid` should be unique scoped to `context`" do
-      expect(resource_link).to validate_uniqueness_of(:lookup_uuid).scoped_to(:context_id, :context_type).ignoring_case_sensitivity
     end
   end
 
@@ -226,8 +217,8 @@ RSpec.describe Lti::ResourceLink do
 
         it_behaves_like "creating a new resource link"
 
-        it "ContextExternalTool.find_external_tool to look up the tool" do
-          expect(ContextExternalTool).to receive(:find_external_tool)
+        it "Lti::ToolFinder.from_url to look up the tool" do
+          expect(Lti::ToolFinder).to receive(:from_url)
             .with(tool.url, context, only_1_3: true).and_call_original
           subject
         end

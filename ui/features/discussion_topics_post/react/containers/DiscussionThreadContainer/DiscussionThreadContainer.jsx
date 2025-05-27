@@ -17,7 +17,6 @@
  */
 
 import {
-  addReplyToDiscussionEntry,
   getSpeedGraderUrl,
   updateDiscussionTopicEntryCounts,
   responsiveQuerySizes,
@@ -40,7 +39,7 @@ import {DISCUSSION_ENTRY_ALL_ROOT_ENTRIES_QUERY} from '../../../graphql/Queries'
 import {DiscussionEdit} from '../../components/DiscussionEdit/DiscussionEdit'
 import {Flex} from '@instructure/ui-flex'
 import {Highlight} from '../../components/Highlight/Highlight'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {Spinner} from '@instructure/ui-spinner'
 import {
   SearchContext,
@@ -57,14 +56,17 @@ import {Responsive} from '@instructure/ui-responsive'
 import theme from '@instructure/canvas-theme'
 import {ThreadActions} from '../../components/ThreadActions/ThreadActions'
 import {ThreadingToolbar} from '../../components/ThreadingToolbar/ThreadingToolbar'
-import {useMutation, useQuery} from '@apollo/react-hooks'
+import {useMutation, useQuery} from '@apollo/client'
 import {View} from '@instructure/ui-view'
 import {ReportReply} from '../../components/ReportReply/ReportReply'
 import {Text} from '@instructure/ui-text'
 import useCreateDiscussionEntry from '../../hooks/useCreateDiscussionEntry'
 import {useUpdateDiscussionThread} from '../../hooks/useUpdateDiscussionThread'
+import {useEventHandler, KeyboardShortcuts} from '../../KeyboardShortcuts/useKeyboardShortcut'
+import useHighlightStore from '../../hooks/useHighlightStore'
+import useSpeedGrader from '../../hooks/useSpeedGrader'
 
-const I18n = useI18nScope('discussion_topics_post')
+const I18n = createI18nScope('discussion_topics_post')
 
 const defaultExpandedReplies = id => {
   if (
@@ -83,14 +85,16 @@ export const DiscussionThreadContainer = props => {
   const expansionButtonRef = useRef()
   const moreOptionsButtonRef = useRef()
 
+  const {isInSpeedGrader, handleCommentKeyPress, handleGradeKeyPress} = useSpeedGrader()
+
   const {searchTerm, filter, allThreadsStatus, expandedThreads, setExpandedThreads} =
     useContext(SearchContext)
   const {setOnFailure, setOnSuccess} = useContext(AlertManagerContext)
   const {replyFromId, setReplyFromId, usedThreadingToolbarChildRef} = useContext(
-    DiscussionManagerUtilityContext
+    DiscussionManagerUtilityContext,
   )
   const [expandReplies, setExpandReplies] = useState(
-    defaultExpandedReplies(props.discussionEntry._id)
+    defaultExpandedReplies(props.discussionEntry._id),
   )
   const [isEditing, setIsEditing] = useState(false)
   const [editorExpanded, setEditorExpanded] = useState(false)
@@ -136,9 +140,17 @@ export const DiscussionThreadContainer = props => {
     }
   }
 
+  const removeRef = useHighlightStore(state => state.removeReplyRef)
+
+  useEffect(() => {
+    return () => {
+      removeRef(props.discussionEntry._id)
+    }
+  }, [removeRef, props.discussionEntry._id])
+
   const {createDiscussionEntry, isSubmitting} = useCreateDiscussionEntry(
     onEntryCreationCompletion,
-    updateCache
+    updateCache,
   )
 
   const [deleteDiscussionEntry] = useMutation(DELETE_DISCUSSION_ENTRY, {
@@ -192,6 +204,12 @@ export const DiscussionThreadContainer = props => {
     },
   })
 
+  const toggleRatingKeyboard = e => {
+    if (e.detail.entryId === props.discussionEntry._id && props.discussionEntry.permissions.rate) {
+      toggleRating()
+    }
+  }
+
   const toggleRating = () => {
     updateDiscussionEntryParticipant({
       variables: {
@@ -200,6 +218,8 @@ export const DiscussionThreadContainer = props => {
       },
     })
   }
+
+  useEventHandler(KeyboardShortcuts.TOGGLE_RATING_KEYBOARD, toggleRatingKeyboard)
 
   const getReplyLeftMargin = responsiveProp => {
     // In mobile we dont want any margin
@@ -215,7 +235,7 @@ export const DiscussionThreadContainer = props => {
     const responsiveLeftPadding = responsiveProp.padding.split(' ')[1] || ''
     // The flex component uses the notation xx-small but the canvas theme saves the value as xxSmall
     const camelCaseResponsiveLeftPadding = responsiveLeftPadding.replace(/-(.)/g, (_, nextLetter) =>
-      nextLetter.toUpperCase()
+      nextLetter.toUpperCase(),
     )
     // Retrieve the css value based on the canvas theme variable
     const discussionEditLeftPadding = theme.spacing[camelCaseResponsiveLeftPadding] || '0'
@@ -228,6 +248,23 @@ export const DiscussionThreadContainer = props => {
 
   // Condense SplitScreen to one variable & link with the SplitScreenButton
   const splitScreenOn = props.userSplitScreenPreference
+
+  const onShowRepliesKeyboard = e => {
+    if (e.detail.entryId === props.discussionEntry._id) {
+      onShowReplies()
+    }
+  }
+
+  const onShowReplies = () => {
+    if (splitScreenOn) {
+      usedThreadingToolbarChildRef.current = expansionButtonRef.current
+      props.onOpenSplitView(props.discussionEntry._id, false)
+    } else {
+      setExpandReplies(!expandReplies)
+    }
+  }
+
+  useEventHandler(KeyboardShortcuts.ON_SHOW_REPLIES_KEYBOARD, onShowRepliesKeyboard)
 
   const showReplies = (
     <ThreadingToolbar.Expansion
@@ -242,17 +279,28 @@ export const DiscussionThreadContainer = props => {
           showHide={expandReplies}
         />
       }
-      onClick={() => {
-        if (splitScreenOn) {
-          usedThreadingToolbarChildRef.current = expansionButtonRef.current
-          props.onOpenSplitView(props.discussionEntry._id, false)
-        } else {
-          setExpandReplies(!expandReplies)
-        }
-      }}
+      onClick={onShowReplies}
       isExpanded={expandReplies}
     />
   )
+
+  const onThreadReplyKeyboard = e => {
+    if (e.detail.entryId === props.discussionEntry._id) {
+      onThreadReply()
+    }
+  }
+
+  const onThreadReply = () => {
+    const newEditorExpanded = !editorExpanded
+    setEditorExpanded(newEditorExpanded)
+
+    if (splitScreenOn) {
+      usedThreadingToolbarChildRef.current = replyButtonRef.current
+      props.onOpenSplitView(props.discussionEntry._id, true)
+    }
+  }
+
+  useEventHandler(KeyboardShortcuts.ON_THREAD_REPLY_KEYBOARD, onThreadReplyKeyboard)
 
   const getThreadActions = responsiveProp => {
     const threadActions = []
@@ -269,16 +317,8 @@ export const DiscussionThreadContainer = props => {
           key={`reply-${props.discussionEntry._id}`}
           authorName={getDisplayName(props.discussionEntry)}
           delimiterKey={`reply-delimiter-${props.discussionEntry._id}`}
-          onClick={() => {
-            const newEditorExpanded = !editorExpanded
-            setEditorExpanded(newEditorExpanded)
-
-            if (splitScreenOn) {
-              usedThreadingToolbarChildRef.current = replyButtonRef.current
-              props.onOpenSplitView(props.discussionEntry._id, true)
-            }
-          }}
-        />
+          onClick={onThreadReply}
+        />,
       )
     }
     if (
@@ -294,7 +334,7 @@ export const DiscussionThreadContainer = props => {
           isLiked={!!props.discussionEntry.entryParticipant?.rating}
           likeCount={props.discussionEntry.ratingSum || 0}
           interaction={props.discussionEntry.permissions.rate ? 'enabled' : 'disabled'}
-        />
+        />,
       )
     }
 
@@ -306,15 +346,23 @@ export const DiscussionThreadContainer = props => {
           isRead={props.discussionEntry.entryParticipant?.read}
           authorName={getDisplayName(props.discussionEntry)}
           onClick={toggleUnread}
-        />
+        />,
       )
     }
 
     return threadActions
   }
 
+  const onDeleteKeyboard = e => {
+    if (
+      e.detail.entryId === props.discussionEntry._id &&
+      props.discussionEntry.permissions.delete
+    ) {
+      onDelete()
+    }
+  }
+
   const onDelete = () => {
-    // eslint-disable-next-line no-alert
     if (window.confirm(I18n.t('Are you sure you want to delete this entry?'))) {
       deleteDiscussionEntry({
         variables: {
@@ -323,6 +371,57 @@ export const DiscussionThreadContainer = props => {
       })
     }
   }
+
+  useEventHandler(KeyboardShortcuts.ON_DELETE_KEYBOARD, onDeleteKeyboard)
+
+  const onEditKeyboard = e => {
+    if (
+      e.detail.entryId === props.discussionEntry._id &&
+      props.discussionEntry.permissions.update
+    ) {
+      onEdit()
+    }
+  }
+
+  const onEdit = () => {
+    setIsEditing(true)
+  }
+
+  useEventHandler(KeyboardShortcuts.ON_EDIT_KEYBOARD, onEditKeyboard)
+
+  const onSpeedGraderCommentKeyboard = e => {
+    // When full context view is on in speedgrader, the full Discussion view
+    // is shown, an entry is also immediately highlighted.
+    // because of this highlight, speedgrader's listeners no longer work,
+    // so we need to listen for them here instead.
+    //
+    // NOTE: Splitscreen view is disabled in speedgrader, so we only need to
+    // listen here, in threaded view
+    //
+    // we are checking entry id so that we don't call handleCommentKeyPress for every
+    // entry, instead, we call it for just one
+    if (isInSpeedGrader && e.detail.entryId === props.discussionEntry._id) {
+      handleCommentKeyPress()
+    }
+  }
+  useEventHandler(KeyboardShortcuts.ON_SPEEDGRADER_COMMENT, onSpeedGraderCommentKeyboard)
+
+  const onSpeedGraderGradeKeyboard = e => {
+    // When full context view is on in speedgrader, the full Discussion view
+    // is shown, an entry is also immediately highlighted.
+    // because of this highlight, speedgrader's listeners no longer work,
+    // so we need to listen for them here instead.
+    //
+    // NOTE: Splitscreen view is disabled in speedgrader, so we only need to
+    // listen here, in threaded view
+    //
+    // we are checking entry id so that we don't call handleGradetKeyPress for every
+    // entry, instead, we call it for just one
+    if (isInSpeedGrader && e.detail.entryId === props.discussionEntry._id) {
+      handleGradeKeyPress()
+    }
+  }
+  useEventHandler(KeyboardShortcuts.ON_SPEEDGRADER_GRADE, onSpeedGraderGradeKeyboard)
 
   const onUpdate = (message, quotedEntryId, file) => {
     updateDiscussionEntry({
@@ -339,7 +438,7 @@ export const DiscussionThreadContainer = props => {
   const onOpenInSpeedGrader = () => {
     window.open(
       getSpeedGraderUrl(props.discussionEntry.author._id, props.discussionEntry._id),
-      '_blank'
+      '_blank',
     )
   }
 
@@ -352,10 +451,11 @@ export const DiscussionThreadContainer = props => {
     discussionEntry => {
       props.markAsRead(discussionEntry._id)
       // manually update this entry's read state, then updateLoadedSubentry
-      discussionEntry.entryParticipant.read = !discussionEntry.entryParticipant?.read
-      updateLoadedSubentry(discussionEntry)
+      const data = JSON.parse(JSON.stringify(discussionEntry))
+      data.entryParticipant.read = !data.entryParticipant?.read
+      updateLoadedSubentry(data)
     },
-    [props, updateLoadedSubentry]
+    [props, updateLoadedSubentry],
   )
 
   useEffect(() => {
@@ -374,7 +474,7 @@ export const DiscussionThreadContainer = props => {
           root: null,
           rootMargin: '0px',
           threshold: 0.0,
-        }
+        },
       )
 
       if (threadRefCurrent) observer.observe(threadRefCurrent)
@@ -471,7 +571,10 @@ export const DiscussionThreadContainer = props => {
       }}
       render={responsiveProps => (
         <>
-          <Highlight isHighlighted={props.discussionEntry._id === props.highlightEntryId}>
+          <Highlight
+            isHighlighted={props.discussionEntry._id === props.highlightEntryId}
+            discussionEntryId={props.discussionEntry._id}
+          >
             <div style={{marginLeft: responsiveProps.marginDepth}} ref={onThreadRefCurrentSet}>
               <Flex padding={responsiveProps.padding}>
                 <Flex.Item shouldShrink={true} shouldGrow={true}>
@@ -489,13 +592,7 @@ export const DiscussionThreadContainer = props => {
                           isUnread={!props.discussionEntry.entryParticipant?.read}
                           onToggleUnread={toggleUnread}
                           onDelete={props.discussionEntry.permissions?.delete ? onDelete : null}
-                          onEdit={
-                            props.discussionEntry.permissions?.update
-                              ? () => {
-                                  setIsEditing(true)
-                                }
-                              : null
-                          }
+                          onEdit={props.discussionEntry.permissions?.update ? onEdit : null}
                           onOpenInSpeedGrader={
                             props.discussionTopic.permissions?.speedGrader
                               ? onOpenInSpeedGrader
@@ -509,6 +606,7 @@ export const DiscussionThreadContainer = props => {
                                 }
                           }
                           goToTopic={props.goToTopic}
+                          permalinkId={props.discussionEntry._id}
                           onReport={
                             ENV.discussions_reporting &&
                             props.discussionTopic.permissions?.studentReporting
@@ -570,20 +668,20 @@ export const DiscussionThreadContainer = props => {
                     isForcedRead={props.discussionEntry.entryParticipant?.forcedReadState}
                     createdAt={props.discussionEntry.createdAt}
                     timingDisplay={DateHelper.formatDatetimeForDiscussions(
-                      props.discussionEntry.createdAt
+                      props.discussionEntry.createdAt,
                     )}
                     editedTimingDisplay={DateHelper.formatDatetimeForDiscussions(
                       props.discussionEntry.deleted
                         ? props.discussionEntry.updatedAt
-                        : props.discussionEntry.editedAt
+                        : props.discussionEntry.editedAt,
                     )}
                     lastReplyAtDisplay={DateHelper.formatDatetimeForDiscussions(
-                      props.discussionEntry.lastReply?.createdAt
+                      props.discussionEntry.lastReply?.createdAt,
                     )}
                     deleted={props.discussionEntry.deleted}
                     isTopicAuthor={isTopicAuthor(
                       props.discussionTopic.author,
-                      props.discussionEntry.author
+                      props.discussionEntry.author,
                     )}
                     attachment={props.discussionEntry.attachment}
                     quotedEntry={props.discussionEntry.quotedEntry}
@@ -667,7 +765,7 @@ export const DiscussionThreadContainer = props => {
                             data-mention={props.discussionEntry.author?._id}
                           >
                             @{getDisplayName(props.discussionEntry)}
-                          </span>
+                          </span>,
                         )
                       : ''
                   }
@@ -729,6 +827,21 @@ const DiscussionSubentries = props => {
     variables,
     skip: props.allRootEntries && Array.isArray(props.allRootEntries),
   })
+
+  const pushSubEntries = useHighlightStore(state => state.pushSubEntries)
+
+  useEffect(() => {
+    if (query.data) {
+      pushSubEntries(
+        query.data.legacyNode.allRootEntries.map(({_id, deleted, parentId}) => ({
+          _id,
+          deleted,
+          parentId,
+        })),
+        props.discussionEntryId,
+      )
+    }
+  }, [query.data, pushSubEntries, props.discussionEntryId])
 
   const allRootEntries = props.allRootEntries || query?.data?.legacyNode?.allRootEntries || []
   const subentries = allRootEntries.filter(entry => entry.parentId === props.discussionEntryId)

@@ -20,6 +20,7 @@ import MessageStudentsWhoHelper from './shared/grading/messageStudentsWhoHelper'
 import type {GlobalEnv} from '@canvas/global/env/GlobalEnv.d'
 import {GlobalInst} from '@canvas/global/inst/GlobalInst'
 import {GlobalRemotes} from '@canvas/global/remotes/GlobalRemotes'
+import {ajaxJSON} from '@canvas/jquery/jquery.ajaxJSON'
 
 declare global {
   interface Global {
@@ -56,15 +57,21 @@ declare global {
      */
     INST: GlobalInst
 
+    /**
+     * Remote locations for various pure front-end functionality.
+     */
+    REMOTES: GlobalRemotes
+
     webkitSpeechRecognition: any
     messageStudents: (
-      options: ReturnType<typeof MessageStudentsWhoHelper.sendMessageStudentsWho>
+      options: ReturnType<typeof MessageStudentsWhoHelper.sendMessageStudentsWho>,
     ) => void
     updateGrades: () => void
 
     bundles: string[]
     deferredBundles: string[]
     canvasReadyState?: 'loading' | 'complete'
+    CANVAS_ACTIVE_BRAND_VARIABLES?: Record<string, unknown>
   }
 
   /**
@@ -93,7 +100,8 @@ declare global {
     (num?: number): JQuery<HTMLElement>
   }
 
-  interface JQuery {
+  interface JQuery<TResponse = any> {
+    responseJSON?: TResponse & CanvasApiErrorResponse
     scrollTo: (y: number, x?: number) => void
     confirmDelete: any
     datetime_field: () => JQuery<HTMLInputElement>
@@ -105,7 +113,7 @@ declare global {
     errorBox: (
       message: string,
       scroll?: boolean,
-      override_position?: string | number
+      override_position?: string | number,
     ) => JQuery<HTMLElement>
     getFormData: <T>(obj?: Record<string, unknown>) => T
     live: any
@@ -131,11 +139,23 @@ declare global {
       required: string[]
       success: (data: any) => void
       beforeSubmit?: (data: any) => void
+      error?: (data: JQuery.jqXHR) => void
+      onClientSideValidationError?: () => void
+      disableErrorBox?: boolean
     }) => void
     formErrors: (errors: Record<string, string>) => void
     getTemplateData: (options: {textValues: string[]}) => Record<string, unknown>
     fancyPlaceholder: () => void
     loadingImage: (str?: string) => void
+  }
+
+  interface CanvasApiErrorResponse {
+    errors: {
+      [key: string]: Array<{
+        message: string
+        type?: string
+      }>
+    }
   }
 
   interface JQueryStatic {
@@ -146,6 +166,7 @@ declare global {
     datetimeString: any
     ajaxJSONFiles: any
     isPreviewable: any
+    ajaxJSON: typeof ajaxJSON
   }
 
   // due to overrides in packages/date-js/core.js
@@ -183,6 +204,7 @@ declare global {
     setTimezone(offset: string): Date
     setTimezoneOffset(offset: number): Date
     toString(format?: string): string
+    Deferred<T>(): JQueryDeferred<T>
   }
 }
 

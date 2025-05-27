@@ -377,7 +377,7 @@ describe "Grade Detail Tray:" do
 
   context "checkpoints" do
     before do
-      @course.root_account.enable_feature!(:discussion_checkpoints)
+      @course.account.enable_feature!(:discussion_checkpoints)
 
       create_checkpoint_assignment
 
@@ -400,6 +400,36 @@ describe "Grade Detail Tray:" do
 
       reply_to_topic_checkpoint = @checkpoint_assignment.sub_assignments.find_by(sub_assignment_tag: "reply_to_topic")
       reply_to_entry_checkpoint = @checkpoint_assignment.sub_assignments.find_by(sub_assignment_tag: "reply_to_entry")
+
+      student0_reply_to_topic_submission = reply_to_topic_checkpoint.submissions.find_by(user_id: @students[0].id)
+      student0_reply_to_entry_submission = reply_to_entry_checkpoint.submissions.find_by(user_id: @students[0].id)
+      student0_parent_submission = @checkpoint_assignment.submissions.find_by(user_id: @students[0].id)
+
+      expect(student0_reply_to_topic_submission.score).to eq 3
+      expect(student0_reply_to_entry_submission.score).to eq 9
+      expect(student0_parent_submission.score).to eq 12
+    end
+
+    it "SubmissionTray is still usable without errors submissions do not exist on page request" do
+      reply_to_topic_checkpoint = @checkpoint_assignment.sub_assignments.find_by(sub_assignment_tag: "reply_to_topic")
+      reply_to_entry_checkpoint = @checkpoint_assignment.sub_assignments.find_by(sub_assignment_tag: "reply_to_entry")
+
+      # simulate an envirionment where checkpoint submissions do not exist
+      reply_to_entry_checkpoint.submissions.destroy_all
+      reply_to_topic_checkpoint.submissions.destroy_all
+
+      Gradebook.visit(@course)
+      Gradebook::Cells.open_tray(@students[0], @checkpoint_assignment)
+
+      reply_to_topic_input = Gradebook::GradeDetailTray.grade_inputs[0]
+      required_replies_input = Gradebook::GradeDetailTray.grade_inputs[1]
+      current_total = Gradebook::GradeDetailTray.grade_inputs[2]
+
+      Gradebook::GradeDetailTray.edit_grade_for_input(reply_to_topic_input, 3)
+      Gradebook::GradeDetailTray.edit_grade_for_input(required_replies_input, 9)
+
+      expect(current_total).to have_attribute("disabled", "true")
+      expect(current_total).to have_value("12")
 
       student0_reply_to_topic_submission = reply_to_topic_checkpoint.submissions.find_by(user_id: @students[0].id)
       student0_reply_to_entry_submission = reply_to_entry_checkpoint.submissions.find_by(user_id: @students[0].id)

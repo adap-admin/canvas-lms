@@ -17,7 +17,7 @@
  */
 
 import React, {useEffect} from 'react'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {Heading} from '@instructure/ui-heading'
 import {Modal} from '@instructure/ui-modal'
 import {Button, CloseButton} from '@instructure/ui-buttons'
@@ -27,19 +27,19 @@ import * as z from 'zod'
 import {Controller, useForm} from 'react-hook-form'
 import {zodResolver} from '@hookform/resolvers/zod'
 import {TextInput} from '@instructure/ui-text-input'
-import {focusFiled, getFormErrorMessage} from '@canvas/forms/react/react-hook-form/utils'
+import {getFormErrorMessage} from '@canvas/forms/react/react-hook-form/utils'
 import {SimpleSelect} from '@instructure/ui-simple-select'
 import doFetchApi from '@canvas/do-fetch-api-effect'
 import {showFlashError} from '@canvas/alerts/react/FlashAlert'
 import {computeShortAndSortableNamesFromName} from '@canvas/user-sortable-name/react'
 
-const I18n = useI18nScope('user_name')
+const I18n = createI18nScope('user_name')
 
 export interface UserDetails {
   name: string
   short_name: string
   sortable_name: string
-  email: string
+  email?: string
   time_zone: string
 }
 
@@ -51,8 +51,8 @@ const createValidationSchema = (canManageUserDetails: boolean) =>
     ...(canManageUserDetails && {
       email: z
         .string()
-        .min(1, I18n.t('Email is required.'))
-        .email(I18n.t('Invalid email address.')),
+        .email(I18n.t('Invalid email address.'))
+        .or(z.literal('')),
       time_zone: z.string().optional(),
     }),
   })
@@ -80,6 +80,7 @@ const EditUserDetails = ({
     getValues,
     setValue,
     handleSubmit,
+    setFocus,
   } = useForm({
     defaultValues: userDetails,
     resolver: zodResolver(createValidationSchema(canManageUserDetails)),
@@ -88,11 +89,16 @@ const EditUserDetails = ({
   const buttonText = isSubmitting ? I18n.t('Updating User Details...') : I18n.t('Update Details')
 
   const handleFormSubmit = async (user: UserDetails) => {
+    let userData = user
+    if (user.email === '') {
+      const {email, ...rest} = user
+      userData = rest
+    }
     try {
       const {json} = await doFetchApi<UserDetails>({
         path: `/users/${userId}`,
         method: 'PATCH',
-        body: {user},
+        body: {user: userData},
       })
 
       onSubmit(json!)
@@ -102,8 +108,8 @@ const EditUserDetails = ({
   }
 
   useEffect(() => {
-    focusFiled(control, 'name')
-  }, [control])
+    setFocus('name')
+  }, [setFocus])
 
   return (
     <Modal
@@ -129,7 +135,7 @@ const EditUserDetails = ({
         <Flex direction="column" gap="small">
           <Text>
             {I18n.t(
-              "You can update some of this user's information, but they can change it back if they choose."
+              "You can update some of this user's information, but they can change it back if they choose.",
             )}
           </Text>
           <Controller
@@ -204,7 +210,6 @@ const EditUserDetails = ({
                 render={({field}) => (
                   <TextInput
                     {...field}
-                    isRequired={true}
                     renderLabel={I18n.t('Default Email')}
                     messages={getFormErrorMessage(errors, 'email')}
                   />

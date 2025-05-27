@@ -17,12 +17,11 @@
  */
 
 import doFetchApi from '@canvas/do-fetch-api-effect'
-import {showFlashError} from '@canvas/alerts/react/FlashAlert'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {type AssigneeOption} from '../../react/Item/types'
 import {getStudentsByCourse} from './getStudentsByCourse'
 
-const I18n = useI18nScope('differentiated_modules')
+const I18n = createI18nScope('differentiated_modules')
 
 type JSONResult = {id: string; name: string; group_category_id: string}[]
 
@@ -33,7 +32,7 @@ export const processResult = async (
     link?: {next: {url: string}}
   }> | null,
   key: string,
-  groupKey: string
+  groupKey: string,
 ) => {
   // @ts-expect-error ts-migrate(2531) FIXME: Object is possibly 'null'.
   if (result && !result?.response?.ok)
@@ -52,21 +51,22 @@ export const processResult = async (
       ({
         id,
         name,
-        group_category_id: groupCategoryId,
+        group_category,
       }: {
         id: string
         name: string
-        group_category_id: string
+        group_category: {id: string; name: string}
       }) => {
         const parsedId = `${key.toLowerCase()}-${id}`
         // if an existing override exists for this asignee, use it so we have its overrideId
         return {
           id: parsedId,
           value: name,
-          groupCategoryId,
+          groupCategoryId: group_category?.id,
+          groupCategoryName: group_category?.name,
           group: I18n.t('%{groupKey}', {groupKey}),
         }
-      }
+      },
     ) ?? []
 
   return resultParsedResult
@@ -74,7 +74,7 @@ export const processResult = async (
 
 export const fetchNextPages = async (
   next: {url: string},
-  results: {id: string; name: string; group_category_id: string}[]
+  results: {id: string; name: string; group_category_id: string}[],
 ): Promise<{id: string; name: string; group_category_id: string}[]> => {
   let mergedResults = results
   const {json, link} = await doFetchApi({
@@ -110,9 +110,10 @@ export const getSections = async ({queryKey}: {queryKey: any}) => {
 
 export const getCourseSettings = async ({queryKey}: {queryKey: any}) => {
   const [, currentCourseId] = queryKey
-  return doFetchApi({
+  const {json} = await doFetchApi<{conditional_release: boolean}>({
     path: `/api/v1/courses/${currentCourseId}/settings`,
   })
+  return json
 }
 
 export const getGroups = async ({queryKey}: {queryKey: any}) => {
@@ -125,7 +126,31 @@ export const getGroups = async ({queryKey}: {queryKey: any}) => {
     // @ts-expect-error ts-migrate(2531) FIXME: Object is possibly 'null'.
     result,
     'group',
-    'Groups'
+    'Groups',
   )
+  return parsedResult || []
+}
+
+export const getDifferentiationTags = async ({queryKey}: {queryKey: any}) => {
+  // return early if user cannot view/manage differentiation tags
+  if (!ENV.ALLOW_ASSIGN_TO_DIFFERENTIATION_TAGS || !ENV.CAN_MANAGE_DIFFERENTIATION_TAGS) {
+    return []
+  }
+  const [, , currentCourseId, currentParams] = queryKey
+  const result = await doFetchApi({
+    path: `/api/v1/courses/${currentCourseId}/groups`,
+    params: {
+      collaboration_state: 'non_collaborative',
+      include: 'group_category',
+      ...currentParams,
+    },
+  })
+  const parsedResult: AssigneeOption[] = await processResult(
+    // @ts-expect-error ts-migrate(2531) FIXME: Object is possibly 'null'.
+    result,
+    'tag',
+    'Tags',
+  )
+
   return parsedResult || []
 }

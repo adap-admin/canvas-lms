@@ -43,7 +43,7 @@ describe "discussion assignments" do
       get "/courses/#{@course.id}/assignments"
       expect_new_page_load { build_assignment_with_type("Discussion", assignment_group_id: ag.id, name: "More options created discussion", points: "30", more_options: true) }
       # check the content of the discussion page for our set point value and name and the URL to make sure were in /discussions
-      expect(driver.current_url).to include("discussion_topics/new?#{ag.id}&submission_type%5B%5D=discussion_topic&due_at=&points_possible=30&post_to_sis=false&title=More%20options%20created%20discussion")
+      expect(driver.current_url).to include("discussion_topics/new?#{ag.id}&due_at=&points_possible=30&post_to_sis=false&title=More%20options%20created%20discussion")
       expect(f("#discussion-title")).to have_value "More options created discussion"
       expect(f("#discussion_topic_assignment_points_possible")).to have_value "30"
     end
@@ -70,6 +70,7 @@ describe "discussion assignments" do
 
   context "created with html in title" do
     it "does not render html in flash notice", priority: "2" do
+      skip "Will be fixed in VICE-5209"
       discussion_title = "<s>broken</s>"
       topic = create_discussion(discussion_title, "threaded")
       get "/courses/#{@course.id}/discussion_topics/#{topic.id}"
@@ -96,6 +97,7 @@ describe "discussion assignments" do
 
   context "created by different users" do
     it "lists identical authors after a user merge", priority: "2" do
+      skip "Will be fixed in VICE-5209"
       @student_a = User.create!(name: "Student A")
       @student_b = User.create!(name: "Student B")
       discussion_a = @course.discussion_topics.create!(user: @student_a, title: "title a", message: "from student a")

@@ -29,7 +29,9 @@ class Login::CanvasController < ApplicationController
   protect_from_forgery except: :create, with: :exception
 
   def new
-    @allow_robot_indexing = true unless @domain_root_account&.disable_login_search_indexing?
+    if @domain_root_account.disable_login_search_indexing? && @domain_root_account.enable_search_indexing?
+      @allow_robot_indexing = false
+    end
     @pseudonym_session = PseudonymSession.new
     @headers = false
     flash.now[:error] = params[:message] if params[:message]
@@ -64,6 +66,8 @@ class Login::CanvasController < ApplicationController
       return unsuccessful_login(t("No password was given"))
     end
 
+    increment_statsd(:attempts)
+
     # strip leading and trailing whitespace off the entered unique id. some
     # mobile clients (e.g. android) will add a space after the login when using
     # autocomplete. this would prevent us from recognizing someone's username,
@@ -97,6 +101,7 @@ class Login::CanvasController < ApplicationController
         next unless pseudonym
 
         pseudonym.instance_variable_set(:@ldap_result, res.first)
+        @aac = aac
         pseudonym.infer_auth_provider(aac)
         @pseudonym_session = PseudonymSession.new(pseudonym, params[:pseudonym_session][:remember_me] == "1")
         @pseudonym_session.save
@@ -115,6 +120,7 @@ class Login::CanvasController < ApplicationController
     login_error = @pseudonym_session&.login_error || pseudonym
     case login_error
     when :remaining_attempts_2, :remaining_attempts_1, :final_attempt
+      increment_statsd(:failure, reason: :invalid_credentials)
       attempts = Canvas::Security::LoginRegistry::WARNING_ATTEMPTS[login_error]
       if login_error == :final_attempt
         unsuccessful_login t("We've received several incorrect username or password entries. To protect your account, it has been locked. Please contact your system administrator.")
@@ -123,12 +129,15 @@ class Login::CanvasController < ApplicationController
       end
       return
     when :impossible_credentials
+      increment_statsd(:failure, reason: :impossible_credentials)
       unsuccessful_login t("Please verify your username or password and try again.")
       return
     when :too_many_attempts
+      increment_statsd(:failure, reason: :too_many_attempts)
       unsuccessful_login t("Too many failed login attempts. Please try again later or contact your system administrator.")
       return
     when :too_recent_login
+      increment_statsd(:failure, reason: :too_recent_login)
       unsuccessful_login t("You have recently logged in multiple times too quickly. Please wait a few seconds and try again.")
       return
     end
@@ -164,7 +173,7 @@ class Login::CanvasController < ApplicationController
   protected
 
   def aac
-    @domain_root_account.authentication_providers.where(auth_type: params[:controller].sub(%r{^login/}, "")).active.take!
+    @aac ||= @domain_root_account.authentication_providers.where(auth_type: params[:controller].sub(%r{^login/}, "")).active.take!
   end
   alias_method :validate_auth_type, :aac
 
@@ -205,6 +214,8 @@ class Login::CanvasController < ApplicationController
         display_name: provider.class.display_name
       }
     end
+    # disable custom js/css if flag enabled
+    @exclude_account_css = @exclude_account_js = @domain_root_account.feature_enabled?(:login_registration_ui_identity)
     render "login/canvas/new_login", layout: "bare", status: status || :ok
   end
 
@@ -216,5 +227,9 @@ class Login::CanvasController < ApplicationController
     @login_handle_name = @domain_root_account.login_handle_name_with_inference
     @login_handle_is_email = @login_handle_name == AuthenticationProvider.default_login_handle_name
     render :mobile_login, layout: "mobile_auth", status:
+  end
+
+  def auth_type
+    AuthenticationProvider::Canvas.sti_name
   end
 end

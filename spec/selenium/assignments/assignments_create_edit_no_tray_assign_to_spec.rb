@@ -23,13 +23,11 @@ require_relative "page_objects/assignment_page"
 require_relative "../helpers/items_assign_to_tray"
 require_relative "../helpers/context_modules_common"
 require_relative "../helpers/groups_common"
-require_relative "../../helpers/selective_release_common"
 
 shared_examples_for "item assign to on page during assignment creation/update" do
   include AssignmentsIndexPage
   include ItemsAssignToTray
   include ContextModulesCommon
-  include SelectiveReleaseCommon
 
   it "assigns student and saves assignment" do
     AssignmentCreateEditPage.replace_assignment_name("new test assignment")
@@ -105,6 +103,65 @@ shared_examples_for "item assign to on page during assignment creation/update" d
     check_element_has_focus(assign_to_card_delete_button[1])
   end
 
+  context "differentiaiton tags" do
+    before :once do
+      @course.account.enable_feature! :assign_to_differentiation_tags
+      @course.account.tap do |a|
+        a.settings[:allow_assign_to_differentiation_tags] = { value: true }
+        a.save!
+      end
+
+      @differentiation_tag_category = @course.group_categories.create!(name: "Differentiation Tag Category", non_collaborative: true)
+      @diff_tag1 = @course.groups.create!(name: "Differentiation Tag 1", group_category: @differentiation_tag_category, non_collaborative: true)
+      @diff_tag2 = @course.groups.create!(name: "Differentiation Tag 2", group_category: @differentiation_tag_category, non_collaborative: true)
+    end
+
+    it "assigns a differentiation tag and saves assignment" do
+      AssignmentCreateEditPage.replace_assignment_name("new test assignment")
+      AssignmentCreateEditPage.enter_points_possible("100")
+      AssignmentCreateEditPage.select_text_entry_submission_type
+
+      click_add_assign_to_card
+      select_module_item_assignee(1, @diff_tag1.name)
+      update_due_date(1, "12/31/2022")
+      update_due_time(1, "5:00 PM")
+      update_available_date(1, "12/27/2022")
+      update_available_time(1, "8:00 AM")
+      update_until_date(1, "1/7/2023")
+      update_until_time(1, "9:00 PM")
+
+      AssignmentCreateEditPage.save_assignment
+
+      assignment = Assignment.last
+      expect(assignment.assignment_overrides.last.set_type).to eq("Group")
+
+      due_at_row = AssignmentPage.retrieve_due_date_table_row("1 Group")
+      expect(due_at_row).not_to be_nil
+      expect(due_at_row.text.split("\n").first).to include("Dec 31, 2022")
+      expect(due_at_row.text.split("\n").third).to include("Dec 27, 2022")
+      expect(due_at_row.text.split("\n").last).to include("Jan 7, 2023")
+
+      due_at_row = AssignmentPage.retrieve_due_date_table_row("Everyone else")
+      expect(due_at_row).not_to be_nil
+      expect(due_at_row.text.count("-")).to eq(3)
+    end
+
+    context "existing differentiation tag overrides" do
+      before do
+        @assignment = Assignment.create!(context: @course, title: "Test Assignment", only_visible_to_overrides: true)
+        @assignment.assignment_overrides.create!(set_type: "Group", set_id: @diff_tag1.id, title: @diff_tag1.name)
+        @assignment.assignment_overrides.create!(set_type: "Group", set_id: @diff_tag2.id, title: @diff_tag2.name)
+      end
+
+      it "renders all the override assignees" do
+        AssignmentCreateEditPage.visit_assignment_edit_page(@course.id, @assignment.id)
+
+        # 2 differentiation tags
+        expect(selected_assignee_options.count).to eq 2
+      end
+    end
+  end
+
   context "Module overrides" do
     before do
       @context_module = @course.context_modules.create! name: "Mod"
@@ -157,11 +214,9 @@ describe "override assignees" do
   include ItemsAssignToTray
   include ContextModulesCommon
   include GroupsCommon
-  include SelectiveReleaseCommon
 
   context "basic assignee overrides" do
     before :once do
-      Account.site_admin.enable_feature!(:selective_release_edit_page)
       course_with_teacher(active_all: true)
       @assignment = Assignment.create!(context: @course, title: "Test Assignment", only_visible_to_overrides: true)
       @assignment.assignment_overrides.create!(set_type: "ADHOC")
@@ -188,7 +243,6 @@ describe "override assignees" do
 
   context "group assignments", :ignore_js_errors do
     before :once do
-      Account.site_admin.enable_feature!(:selective_release_edit_page)
       course_with_teacher(active_all: true)
       group_test_setup(3, 3, 1, true)
       @normal_assignment = Assignment.create!(context: @course, title: "Normal Assignment")
@@ -205,7 +259,7 @@ describe "override assignees" do
     it "creates group assignment overrides" do
       AssignmentCreateEditPage.visit_assignment_edit_page(@course.id, @normal_assignment.id)
       AssignmentCreateEditPage.click_group_category_assignment_check
-      AssignmentCreateEditPage.select_assignment_group_category(-3)
+      AssignmentCreateEditPage.select_assignment_group_category(-4)
 
       click_add_assign_to_card
       select_module_item_assignee(1, @testgroup[0].name)
@@ -222,12 +276,12 @@ describe "override assignees" do
       expect(@group_assignment.assignment_overrides.active.count).to eq(1)
       expect(@group_assignment.assignment_overrides.active.last.title).to eq(@testgroup[0].name)
 
-      AssignmentCreateEditPage.select_assignment_group_category(-2)
+      AssignmentCreateEditPage.select_assignment_group_category(-3)
       expect(AssignmentCreateEditPage.group_error).to be_displayed
 
       click_delete_assign_to_item("Remove #{@testgroup[0].name}", 0)
 
-      AssignmentCreateEditPage.select_assignment_group_category(-2)
+      AssignmentCreateEditPage.select_assignment_group_category(-3)
       expect(AssignmentCreateEditPage.group_error).not_to be_displayed
 
       click_add_assign_to_card
@@ -258,8 +312,6 @@ describe "override assignees" do
 
   context "assignments show page assign to", :ignore_js_errors do
     before :once do
-      Account.site_admin.enable_feature!(:selective_release_edit_page)
-
       course_with_teacher(active_all: true)
       @assignment1 = @course.assignments.create(name: "test assignment", submission_types: "online_url")
       @section1 = @course.course_sections.create!(name: "section1")

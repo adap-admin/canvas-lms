@@ -16,10 +16,10 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import type {Sticker, StickerDescriptions} from '../types/stickers.d'
 
-const I18n = useI18nScope('submission_sticker')
+const I18n = createI18nScope('submission_sticker')
 
 export function stickerDescriptions(): StickerDescriptions {
   const descriptions: StickerDescriptions = {
@@ -52,7 +52,7 @@ export function stickerDescriptions(): StickerDescriptions {
     mouse: I18n.t('A sticker with a picture of a computer mouse.'),
     panda1: I18n.t('A sticker with a picture of an open-mouth smiling panda crying tears of joy.'),
     panda2: I18n.t(
-      'A sticker with a picture of an open-mouth smiling panda with hearts in its eyes.'
+      'A sticker with a picture of an open-mouth smiling panda with hearts in its eyes.',
     ),
     panda3: I18n.t('A sticker with a picture of a closed-mouth panda smiling.'),
     panda4: I18n.t('A sticker with a picture of an open-mouth panda making a surprised face.'),
@@ -74,7 +74,7 @@ export function stickerDescriptions(): StickerDescriptions {
     tape: I18n.t('A sticker with a picture of a tape roll dispenser.'),
     tag: I18n.t('A sticker with a picture of a clip-on identification tag.'),
     presentation: I18n.t(
-      'A sticker with a picture of a projector screen with presentation content on it.'
+      'A sticker with a picture of a projector screen with presentation content on it.',
     ),
     column: I18n.t('A sticker with a picture of a roman column.'),
   }

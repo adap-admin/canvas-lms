@@ -32,6 +32,12 @@
     "additional_considerations_f3801683": {
         "message": "अतिरिक्त विचार"
     },
+    "address_applied_64269b0b": {
+        "message": "पता लागू किया गया"
+    },
+    "address_removed_fcb496e0": {
+        "message": "पता निकाला गया"
+    },
     "adjacent_links_with_the_same_url_should_be_a_singl_7a1f7f6c": {
         "message": "समान URL वाले निकटवर्ती लिंक एक ही लिंक होने चाहिए।"
     },
@@ -167,6 +173,9 @@
     "available_folders_694d0436": {
         "message": "उपलब्ध फ़ोल्डर"
     },
+    "background_1bc88842": {
+        "message": "पृष्ठभूमि"
+    },
     "backslash_b2d5442d": {
         "message": "बैकस्लैश"
     },
@@ -199,6 +208,15 @@
     },
     "blue_daf8fea9": {
         "message": "नीला"
+    },
+    "bold_applied_42d547b7": {
+        "message": "बोल्ड लागू किया गया"
+    },
+    "bold_removed_da474a5c": {
+        "message": "बोल्ड निकाला गया"
+    },
+    "border_5b08b06d": {
+        "message": "बॉर्डर"
     },
     "bottom_15a2a9be": {
         "message": "तल"
@@ -341,11 +359,23 @@
     "collapse_to_hide_types_1ab46d2e": {
         "message": "{ types } छिपाने के लिए संक्षिप्त करें"
     },
+    "color_a363e1b0": {
+        "message": "रंग"
+    },
+    "color_contrast_4c418add": {
+        "message": "कलर कंट्रास्ट"
+    },
+    "color_contrast_ratio_687782f0": {
+        "message": "कलर कंट्रास्ट अनुपात"
+    },
     "color_picker_6b359edf": {
         "message": "कलर पिकर"
     },
     "color_picker_colorname_selected_ad4cf400": {
         "message": "कलर पिकर ({ colorName } चयनित)"
+    },
+    "color_popup_af39810f": {
+        "message": "कलर पॉपअप"
     },
     "column_e1ae5c64": {
         "message": "स्तंभ"
@@ -494,6 +524,9 @@
     "deep_purple_bb3e2907": {
         "message": "गहरा बैंगनी"
     },
+    "default_9db103d": {
+        "message": "डिफ़ॉल्ट"
+    },
     "default_bulleted_unordered_list_47079da8": {
         "message": "डिफ़ॉल्ट बुलेटेड अक्रमित सूची"
     },
@@ -574,6 +607,12 @@
     },
     "display_text_link_opens_in_a_new_tab_75e9afc9": {
         "message": "पाठ लिंक डिस्प्ले करें (नए टैब में खुलता है)"
+    },
+    "div_applied_49ad83fc": {
+        "message": "डिव लागू किया गया"
+    },
+    "div_removed_d13f8e17": {
+        "message": "डिव निकाला गया"
     },
     "division_sign_72190870": {
         "message": "विभाजन चिह्न"
@@ -779,6 +818,9 @@
     "f_function_fe422d65": {
         "message": "F (फ़ंक्शन)"
     },
+    "fail_544e5dde": {
+        "message": "विफल"
+    },
     "failed_getting_file_contents_e9ea19f4": {
         "message": "फ़ाइल की सामग्री पाने में विफल"
     },
@@ -896,6 +938,9 @@
     "grades_a61eba0a": {
         "message": "ग्रेड"
     },
+    "graphics_text_bc9568bc": {
+        "message": "ग्राफ़िक पाठ"
+    },
     "greater_than_e98af662": {
         "message": "इससे अधिक:"
     },
@@ -964,6 +1009,12 @@
     },
     "heading_4_b2e74be7": {
         "message": "हेडिंग 4"
+    },
+    "heading_h_applied_eccd294d": {
+        "message": "हेडिंग { h } लागू किया गया"
+    },
+    "heading_h_removed_745f24a6": {
+        "message": "हेडिंग { h } निकाला गया"
     },
     "heading_levels_should_not_be_skipped_3947c0e0": {
         "message": "हेडिंग स्तरों को छोड़ा नहीं जाना चाहिए।"
@@ -1121,6 +1172,18 @@
     "infinity_7a10f206": {
         "message": "अनंत"
     },
+    "input_field_for_alpha_678265fd": {
+        "message": "अल्फ़ा के लिए फ़ील्ड दर्ज करें"
+    },
+    "input_field_for_blue_561e020a": {
+        "message": "नीले के लिए फ़ील्ड दर्ज करें"
+    },
+    "input_field_for_green_67f8b2b6": {
+        "message": "हरे के लिए फ़ील्ड दर्ज करें"
+    },
+    "input_field_for_red_86a84615": {
+        "message": "लाल के लिए फ़ील्ड दर्ज करें"
+    },
     "insert_593145ef": {
         "message": "डालें"
     },
@@ -1135,6 +1198,9 @@
     },
     "intersection_cd4590e4": {
         "message": "प्रतिच्छेदन"
+    },
+    "invalid_description_991e23bb": {
+        "message": "अमान्य विवरण"
     },
     "invalid_entry_f7d2a0f5": {
         "message": "अमान्य प्रविष्टि।"
@@ -1159,6 +1225,12 @@
     },
     "italian_bd3c792d": {
         "message": "इतालवी"
+    },
+    "italic_applied_8f59a684": {
+        "message": "इटैलिक लागू किया गया"
+    },
+    "italic_removed_17cbab6f": {
+        "message": "इटैलिक निकाला गया"
     },
     "japanese_b5721ca7": {
         "message": "जापानी"
@@ -1189,6 +1261,9 @@
     },
     "large_9c5e80e7": {
         "message": "बड़ा"
+    },
+    "large_text_e7ba08cd": {
+        "message": "बड़ा पाठ"
     },
     "latvian_2bbb6aab": {
         "message": "लातवियाई"
@@ -1442,12 +1517,6 @@
     "music_icon_4db5c972": {
         "message": "संगीत आइकन"
     },
-    "must_be_at_least_percentage_22e373b6": {
-        "message": "कम से कम { percentage }% होना चाहिए"
-    },
-    "must_be_at_least_width_x_height_px_41dc825e": {
-        "message": "कम से कम { width } x { height }px होना चाहिए"
-    },
     "my_files_2f621040": {
         "message": "मेरी फ़ाइलें"
     },
@@ -1562,6 +1631,9 @@
     "none_selected_b93d56d2": {
         "message": "कोई भी चयनित नहीं"
     },
+    "normal_text_7b03da48": {
+        "message": "सामान्य पाठ"
+    },
     "norwegian_53f391ec": {
         "message": "नॉर्वेजियन"
     },
@@ -1640,8 +1712,8 @@
     "outline_size_a6059a21": {
         "message": "रूपरेखा साइज़"
     },
-    "p_is_not_a_valid_protocol_which_must_be_ftp_http_h_adf13fc2": {
-        "message": "{ p } एक वैध प्रोटोकॉल नहीं है जिसे ftp, http, https, mailto, skype, tel होना चाहिए या छोड़ा जा सकता है"
+    "p_is_not_a_valid_protocol_b1c4efaa": {
+        "message": "{ p } मान्य प्रोटोकॉल नहीं है।"
     },
     "page_50c4823d": {
         "message": "पेज"
@@ -1652,6 +1724,12 @@
     "paragraph_5e5ad8eb": {
         "message": "पैराग्राफ़"
     },
+    "paragraph_applied_959b3fe5": {
+        "message": "पैराग्राफ़ लागू किया गया"
+    },
+    "paragraph_removed_d09320e": {
+        "message": "पैराग्राफ़ निकाला गया"
+    },
     "paragraph_starting_with_start_a59923f8": {
         "message": "{ start } से शुरू होता पैराग्राफ़"
     },
@@ -1660,6 +1738,9 @@
     },
     "partial_derivative_4a9159df": {
         "message": "आंशिक (यौगिक)"
+    },
+    "pass_1c19a2b3": {
+        "message": "पास"
     },
     "paste_5963d1c1": {
         "message": "पेस्ट करें"
@@ -1678,6 +1759,9 @@
     },
     "percentage_must_be_a_number_8033c341": {
         "message": "प्रतिशत संख्या होनी चाहिए"
+    },
+    "percentage_must_be_at_least_percentage_a98ca8fc": {
+        "message": "प्रतिशत कम से कम { percentage }% होना चाहिए"
     },
     "performing_arts_icon_f3497486": {
         "message": "प्रदर्शन कला आइकन"
@@ -1703,11 +1787,17 @@
     "pi_variant_10f5f520": {
         "message": "पाई (प्रकार)"
     },
+    "pick_a_color_557abfb0": {
+        "message": "कोई रंग चुनें"
+    },
     "pink_68ad45cb": {
         "message": "गुलाबी"
     },
     "pixels_52ece7d1": {
         "message": "पिक्सल"
+    },
+    "pixels_must_be_at_least_width_x_height_px_e965edd5": {
+        "message": "पिक्सल कम से कम { width } x { height }px होने चाहिए"
     },
     "play_1a47eaa7": {
         "message": "चलाएं"
@@ -1721,8 +1811,17 @@
     "please_allow_canvas_to_access_your_microphone_and__dc2c3079": {
         "message": "कृपया Canvas को अपने माइक्रोफ़ोन और वेबकैम के लिए एक्सेस की अनुमति दें।"
     },
+    "please_choose_a_file_c2449cc": {
+        "message": "कृपया कोई फ़ाइल चुनें"
+    },
     "please_decribe_what_you_would_like_to_compose_27a51be5": {
         "message": "कृपया बताएं कि आप क्या लिखना चाहेंगे।"
+    },
+    "please_enter_a_file_name_f159edc1": {
+        "message": "कृपया फ़ाइल नाम दर्ज करें"
+    },
+    "please_select_a_file_of_a_supported_type_1fc578f2": {
+        "message": "कृपया समर्थित प्रकार की फ़ाइल चुनें"
     },
     "plus_d43cd4ec": {
         "message": "घन"
@@ -1774,6 +1873,9 @@
     },
     "previous_findtext_8dfbfd30": {
         "message": "पिछला { findText }"
+    },
+    "previously_chosen_colors_f1338315": {
+        "message": "पहले चुने गए रंग"
     },
     "prime_917ea60e": {
         "message": "अभाज्य"
@@ -2306,9 +2408,6 @@
     "the_first_heading_on_a_page_should_be_an_h2_859089f2": {
         "message": "किसी पेज पर पहली हेडिंग H2 होनी चाहिए।"
     },
-    "the_following_content_is_partner_provided_ed1da756": {
-        "message": "निम्नलिखित सामग्री भागीदार द्वारा प्रदान की गई है"
-    },
     "the_material_is_in_the_public_domain_279c39a3": {
         "message": "यह सामग्री सार्वजनिक डोमेन में है"
     },
@@ -2317,9 +2416,6 @@
     },
     "the_material_is_subject_to_an_exception_e_g_fair_u_a39c8ca2": {
         "message": "सामग्री अपवाद के अधीन है - उदाहरण के लिए, उचित उपयोग, उद्धरण का अधिकार, या लागू कॉपीराइट कानूनों के तहत अन्य"
-    },
-    "the_preceding_content_is_partner_provided_d753928c": {
-        "message": "पूर्ववर्ती सामग्री भागीदार द्वारा प्रदान की गई है"
     },
     "the_pretty_html_editor_is_not_keyboard_accessible__d6d5d2b": {
         "message": "सुंदर HTML संपादक में कुंजीपटल इस्तेमाल नहीं किया जा सकता। Shift O दबा कर रॉ HTML संपादक खोलें।"
@@ -2416,6 +2512,12 @@
     },
     "unable_to_determine_resource_selection_url_7867e060": {
         "message": "संसाधन चयन URLनिर्धारित करने में असमर्थ"
+    },
+    "underline_applied_ae01ec97": {
+        "message": "अंडरलाइन लागू किया गया"
+    },
+    "underline_removed_3693e17c": {
+        "message": "अंडरलाइन निकाला गया"
     },
     "union_e6b57a53": {
         "message": "संघ"
@@ -2674,6 +2776,15 @@
     },
     "yiddish_f96986df": {
         "message": "यहूदी"
+    },
+    "you_are_on_a_color_palette_to_navigate_on_the_pale_227fc3a6": {
+        "message": "आप कलर पैलेट पर हैं। पैलेट पर ऊपर, बाएं, नीचे या दाएं नेविगेट करने के लिए क्रमशः ''W'', ''A'', ''S'' और ''D'' बटन का उपयोग करें"
+    },
+    "you_are_on_a_color_slider_to_navigate_the_slider_l_e800f68a": {
+        "message": "आप कलर स्लाइडर पर हैं। स्लाइडर को बाएं या दाएं नेविगेट करने के लिए, क्रमशः ''A'' और ''D'' बटन का उपयोग करें"
+    },
+    "you_are_on_an_alpha_slider_to_navigate_the_slider__3a014dc5": {
+        "message": "आप अल्फ़ा स्लाइडर पर हैं। स्लाइडर को बाएं या दाएं नेविगेट करने के लिए, क्रमशः ''A'' और ''D'' बटन का उपयोग करें"
     },
     "you_can_replace_by_uploading_a_new_caption_file_6c88ce00": {
         "message": "आप नई कैप्शन फ़ाइल अपलोड करके प्रतिस्थापित कर सकते हैं।"

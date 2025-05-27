@@ -31,7 +31,7 @@ class TestCourseApi
     "course_url(Course.find(#{course.id}), :host => #{HostUrl.context_host(@course1)})"
   end
 
-  def api_user_content(syllabus, course)
+  def api_user_content(syllabus, course, location: nil)
     "api_user_content(#{syllabus}, #{course.id})"
   end
 end
@@ -506,12 +506,6 @@ describe CoursesController, type: :request do
       @course2.update_attribute(:sis_source_id, "TEST-SIS-ONE.2011")
       @course2.update(default_view: "assignments")
       @user.pseudonym.update_attribute(:sis_user_id, "user1")
-    end
-
-    before do
-      @course_dates_stubbed = true
-      allow_any_instance_of(Course).to(receive(:start_at).and_wrap_original { |original| original.call unless @course_dates_stubbed })
-      allow_any_instance_of(Course).to(receive(:end_at).and_wrap_original { |original| original.call unless @course_dates_stubbed })
     end
 
     describe "observer viewing a course" do
@@ -1179,10 +1173,6 @@ describe CoursesController, type: :request do
           @resource_params = { controller: "courses", action: "create", format: "json", account_id: @account.id.to_s }
         end
 
-        before do
-          @course_dates_stubbed = false
-        end
-
         it "creates a new course" do
           term = @account.enrollment_terms.create
           post_params = {
@@ -1247,7 +1237,7 @@ describe CoursesController, type: :request do
              public_description
              restrict_enrollments_to_course_dates].each do |attr|
             expect(new_course.send(attr)).to eq(if [:start_at, :end_at].include?(attr)
-                                                  Time.parse(post_params["course"][attr.to_s])
+                                                  Time.zone.parse(post_params["course"][attr.to_s])
                                                 else
                                                   post_params["course"][attr.to_s]
                                                 end)
@@ -1510,7 +1500,7 @@ describe CoursesController, type: :request do
             "course" => {
               "name" => "Test Course 📝",
               "term_id" => term.id,
-              "start_at" => Time.now,
+              "start_at" => Time.zone.now,
               "conclude_at" => 16.weeks.from_now,
             }
           }
@@ -1529,7 +1519,7 @@ describe CoursesController, type: :request do
               "name" => "Test Course 📝",
               "term_id" => term.id,
               "restrict_enrollments_to_course_dates" => true,
-              "start_at" => Time.now,
+              "start_at" => Time.zone.now,
               "conclude_at" => 16.weeks.from_now,
 
             }
@@ -1589,10 +1579,6 @@ describe CoursesController, type: :request do
                           "time_zone" => "Pacific/Honolulu"
                         },
                         "offer" => true }
-      end
-
-      before do
-        @course_dates_stubbed = false
       end
 
       context "an account admin" do
@@ -1669,7 +1655,7 @@ describe CoursesController, type: :request do
         end
 
         it "allows a date to be deleted" do
-          @course.update_attribute(:conclude_at, Time.now)
+          @course.update_attribute(:conclude_at, Time.zone.now)
           @new_values["course"]["end_at"] = nil
           api_call(:put, @path, @params, @new_values)
           @course.reload
@@ -2098,7 +2084,7 @@ describe CoursesController, type: :request do
           @course.enroll_teacher(@user, role: @role).accept!
         end
 
-        it "cannot update the course without any manage_content permissions" do
+        it "cannot update the course without any manage_course_content permissions" do
           RoleOverride::GRANULAR_MANAGE_COURSE_CONTENT_PERMISSIONS.each do |permission|
             Account.default.role_overrides.create!(role: @role, permission:, enabled: false)
           end
@@ -3543,7 +3529,8 @@ describe CoursesController, type: :request do
               "sis_user_id" => nil,
               "integration_id" => nil,
               "email" => "ta@ta.com",
-              "bio" => "hey"
+              "bio" => "hey",
+              "has_non_collaborative_groups" => false
             }
           ]
         end
@@ -4398,7 +4385,7 @@ describe CoursesController, type: :request do
 
       context "include[]=sections" do
         before :once do
-          @other_section = @course1.course_sections.create! name: "Other Section", start_at: DateTime.parse("2020-01-01T00:00:00Z")
+          @other_section = @course1.course_sections.create! name: "Other Section", start_at: Time.zone.parse("2020-01-01T00:00:00Z")
         end
 
         it "includes enrolled sections if requested" do
@@ -4881,20 +4868,22 @@ describe CoursesController, type: :request do
     describe "/preview_html" do
       before :once do
         course_with_teacher(active_all: true)
+        attachment_model(context: @course)
       end
 
-      it "sanitizes html and process links" do
-        @user = @teacher
-        attachment_model(context: @course)
-        html = %(<p><a href="/files/#{@attachment.id}/download?verifier=huehuehuehue">Click!</a><script></script></p>)
-        json = api_call(:post,
-                        "/api/v1/courses/#{@course.id}/preview_html",
-                        { controller: "courses", action: "preview_html", course_id: @course.to_param, format: "json" },
-                        { html: })
+      double_testing_with_disable_adding_uuid_verifier_in_api_ff do
+        it "sanitizes html and process links" do
+          @user = @teacher
+          html = %(<p><a href="/files/#{@attachment.id}/download?verifier=huehuehuehue">Click!</a><script></script></p>)
+          json = api_call(:post,
+                          "/api/v1/courses/#{@course.id}/preview_html",
+                          { controller: "courses", action: "preview_html", course_id: @course.to_param, format: "json" },
+                          { html: })
 
-        returned_html = json["html"]
-        expect(returned_html).not_to include("<script>")
-        expect(returned_html).to include("/courses/#{@course.id}/files/#{@attachment.id}/download?verifier=#{@attachment.uuid}")
+          returned_html = json["html"]
+          expect(returned_html).not_to include("<script>")
+          expect(returned_html).to include("/courses/#{@course.id}/files/#{@attachment.id}/download#{"?verifier=#{@attachment.uuid}" unless disable_adding_uuid_verifier_in_api}")
+        end
       end
 
       it "requires permission to preview" do

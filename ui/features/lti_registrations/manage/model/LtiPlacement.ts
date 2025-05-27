@@ -17,6 +17,7 @@
  */
 import * as z from 'zod'
 import {LtiDeepLinkingRequest, LtiResourceLinkRequest} from './LtiMessageType'
+import {DeveloperKeyId} from './developer_key/DeveloperKeyId'
 
 // TODO: this list is duplicated in ui/features/external_apps/react/components/ExternalToolPlacementList.jsx
 // We should consolidate some of the lti "models" into a shared package that both features depend on
@@ -131,6 +132,7 @@ export const LtiPlacements = {
   UserNavigation: 'user_navigation',
   WikiPageMenu: 'wiki_page_menu',
   WikiIndexMenu: 'wiki_index_menu',
+  ActivityAssetProcessor: 'ActivityAssetProcessor',
 } as const
 
 export const AllLtiPlacements = [
@@ -173,6 +175,13 @@ export const AllLtiPlacements = [
   LtiPlacements.UserNavigation,
   LtiPlacements.WikiPageMenu,
   LtiPlacements.WikiIndexMenu,
+  LtiPlacements.ActivityAssetProcessor,
+] as const
+
+export const InternalOnlyLtiPlacements = [
+  LtiPlacements.ConferenceSelection, // Locked behind a Site Admin FF that's off
+  LtiPlacements.SimilarityDetection, // Only really relevant for LTI 2
+  LtiPlacements.AnalyticsHub,
 ] as const
 
 export const ZLtiPlacement = z.enum(AllLtiPlacements)
@@ -187,6 +196,11 @@ export const LtiPlacementsWithIcons = [
   LtiPlacements.EditorButton,
   LtiPlacements.FileIndexMenu,
   LtiPlacements.GlobalNavigation,
+  LtiPlacements.TopNavigation,
+] as const
+
+export const LtiPlacementsWithDefaultIcon = [
+  LtiPlacements.EditorButton,
   LtiPlacements.TopNavigation,
 ] as const
 
@@ -248,6 +262,7 @@ export const LtiPlacementsByMessageType = {
     LtiPlacements.ModuleIndexMenuModal,
     LtiPlacements.ModuleMenuModal,
     LtiPlacements.SubmissionTypeSelection,
+    LtiPlacements.ActivityAssetProcessor,
   ],
 } as const
 
@@ -258,7 +273,7 @@ export const LtiPlacementsByMessageType = {
 export const DeepLinkingRequestPlacements = LtiPlacementsByMessageType.LtiDeepLinkingRequest
 
 export const supportsDeepLinkingRequest = (
-  placement: LtiPlacement
+  placement: LtiPlacement,
 ): placement is (typeof DeepLinkingRequestPlacements)[number] => {
   return DeepLinkingRequestPlacements.includes(placement as any)
 }
@@ -268,7 +283,7 @@ export const supportsDeepLinkingRequest = (
  */
 export const ResourceLinkRequestPlacements = LtiPlacementsByMessageType.LtiResourceLinkRequest
 export const supportsResourceLinkRequest = (
-  placement: LtiPlacement
+  placement: LtiPlacement,
 ): placement is (typeof ResourceLinkRequestPlacements)[number] => {
   return ResourceLinkRequestPlacements.includes(placement as any)
 }
@@ -281,4 +296,12 @@ export const isLtiPlacement = (placement: unknown): placement is LtiPlacement =>
 
 export const isLtiPlacementWithIcon = (placement: unknown): placement is LtiPlacementWithIcon => {
   return LtiPlacementsWithIcons.includes(placement as LtiPlacementWithIcon)
+}
+
+export type LtiPlacementWithDefaultIcon = (typeof LtiPlacementsWithDefaultIcon)[number]
+
+export const isLtiPlacementWithDefaultIcon = (
+  placement: unknown,
+): placement is LtiPlacementWithDefaultIcon => {
+  return LtiPlacementsWithDefaultIcon.includes(placement as LtiPlacementWithDefaultIcon)
 }

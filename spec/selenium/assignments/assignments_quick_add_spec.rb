@@ -51,6 +51,15 @@ describe "assignments" do
       expect(f("[data-testid='modal-title']")).to include_text("Create Assignment")
     end
 
+    it "creating basic assignment defaults to 'online_text_entry' submission type", priority: "1" do
+      get "/courses/#{@course.id}/assignments"
+
+      build_assignment_with_type("Assignment", name: "pink panther", points: "3", due_at: "2015-07-31", submit: true)
+
+      a = Assignment.last
+      expect(a.submission_types).to eq("online_text_entry")
+    end
+
     context "more options button" do
       it "works for assignments and transfer values", priority: "1" do
         fill_out_quick_add_modal("Assignment")
@@ -59,9 +68,6 @@ describe "assignments" do
         expect(f("#edit_assignment_header")).to be
         expect(f("#assignment_name").attribute(:value)).to include(@assignment_name)
         expect(f("#assignment_points_possible").attribute(:value)).to include(@assignment_points)
-        unless Account.site_admin.feature_enabled?(:selective_release_ui_api)
-          expect(f("input.date_field.datePickerDateField.DueDateInput.datetime_field_enabled.hasDatepicker").attribute(:value)).to include("Jul 31")
-        end
       end
 
       it "works for discussions and transfer values", priority: "1" do
@@ -71,9 +77,6 @@ describe "assignments" do
         expect(f(".discussion-edit-header")).to be
         expect(f("#discussion-title").attribute(:value)).to include(@assignment_name)
         expect(f("#discussion_topic_assignment_points_possible").attribute(:value)).to include(@assignment_points)
-        unless Account.site_admin.feature_enabled?(:selective_release_ui_api)
-          expect(f("input.date_field.datePickerDateField.DueDateInput.datetime_field_enabled.hasDatepicker").attribute(:value)).to include("Jul 31")
-        end
       end
 
       it "works for quizzes and transfer values", priority: "1" do
@@ -82,9 +85,6 @@ describe "assignments" do
 
         expect(f("#quiz_edit_wrapper")).to be
         expect(f("#quiz_title").attribute(:value)).to include(@assignment_name)
-        unless Account.site_admin.feature_enabled?(:selective_release_ui_api)
-          expect(f("input.date_field.datePickerDateField.DueDateInput.datetime_field_enabled.hasDatepicker").attribute(:value)).to include("Jul 31")
-        end
       end
     end
   end
@@ -115,6 +115,20 @@ describe "assignments" do
       get "/courses/#{@course.id}/assignments"
       click_cog_to_edit
       expect(f("[data-testid='assignment-name-input']").attribute(:value)).to include(@title)
+    end
+
+    context "more options button" do
+      it "redirects to quiz edit page", priority: "1" do
+        quiz = @course.quizzes.create
+        quiz.publish!
+
+        get "/courses/#{@course.id}/assignments"
+        click_cog_to_edit
+
+        f("[data-testid='more-options-button']").click
+
+        expect(driver.current_url).to include("/quizzes/#{quiz.id}/edit")
+      end
     end
   end
 end

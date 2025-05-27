@@ -38,7 +38,7 @@ describe('when a submission is graded', () => {
 
       const {getByTestId} = render(<SubmissionWorkflowTracker submission={submission} />)
       expect(getByTestId('submission-workflow-tracker-subtitle')).toHaveTextContent(
-        'SUBMITTED: Jun 1, 2021 7:27pm'
+        'SUBMITTED: Jun 1, 2021 7:27pm',
       )
     })
 
@@ -48,7 +48,7 @@ describe('when a submission is graded', () => {
 
       const {getByTestId} = render(<SubmissionWorkflowTracker submission={submission} />)
       expect(getByTestId('submission-workflow-tracker-subtitle')).toHaveStyle(
-        `color: ${canvas.colors.textSuccess}`
+        `color: ${canvas.colors.contrasts.green5782}`,
       )
     })
 
@@ -82,6 +82,13 @@ it('renders as "Submitted" when the student has submitted', async () => {
   expect(getByTestId('submission-workflow-tracker-title')).toHaveTextContent(/Submitted/i)
 })
 
+it('renders as "Submitted" when submission state is pending_review', async () => {
+  const submission = await mockSubmission({Submission: {...SubmissionMocks.pendingReview}})
+
+  const {getByTestId} = render(<SubmissionWorkflowTracker submission={submission} />)
+  expect(getByTestId('submission-workflow-tracker-title')).toHaveTextContent(/Submitted/i)
+})
+
 it('renders the time submitted when the student has submitted', async () => {
   const submission = await mockSubmission({Submission: {...SubmissionMocks.submitted}})
   submission.submittedAt = tz.parse('2021-06-01T19:27:54Z')
@@ -94,7 +101,7 @@ it('renders the proxy submitter name when submission was proxy', async () => {
   const submission = await mockSubmission({Submission: {...SubmissionMocks.proxySubmitted}})
   const {getByTestId} = render(<SubmissionWorkflowTracker submission={submission} />)
   expect(getByTestId('submission-workflow-tracker-proxy-indicator')).toHaveTextContent(
-    'by Marty McFly'
+    'by Marty McFly',
   )
 })
 

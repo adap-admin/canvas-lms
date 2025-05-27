@@ -38,12 +38,13 @@ export default function useSpeedGrader() {
       {
         subject: 'SG.focusPreviousStudentButton',
       },
-      '*'
+      '*',
     )
   }
 
   function sendPostMessage(message) {
     window.postMessage(message, '*')
+    window.top.postMessage(message, '*')
   }
 
   function handlePreviousStudentReply() {
@@ -56,10 +57,28 @@ export default function useSpeedGrader() {
     sendPostMessage(message)
   }
 
+  const handleSwitchClick = () => {
+    const message = {subject: 'SG.switchToIndividualPosts'}
+    sendPostMessage(message)
+  }
+
+  const handleCommentKeyPress = () => {
+    const message = {subject: 'SG.commentKeyPress'}
+    sendPostMessage(message)
+  }
+
+  const handleGradeKeyPress = () => {
+    const message = {subject: 'SG.gradeKeyPress'}
+    sendPostMessage(message)
+  }
+
   return {
     isInSpeedGrader,
     handlePreviousStudentReply,
     handleNextStudentReply,
     handleJumpFocusToSpeedGrader,
+    handleSwitchClick,
+    handleCommentKeyPress,
+    handleGradeKeyPress,
   }
 }

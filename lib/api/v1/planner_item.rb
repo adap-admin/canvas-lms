@@ -163,6 +163,12 @@ module Api::V1::PlannerItem
     discussions = context_items.select { |i| i.is_a?(::DiscussionTopic) }
     topics_status = topics_status_for(user, discussions.map(&:id))
 
+    items = items.reject do |item|
+      item.try(:context).is_a?(Course) &&
+        item.context.horizon_course? &&
+        !item.context.grants_right?(user, session, :read_as_admin)
+    end
+
     items.map do |item|
       planner_item_json(item, user, session, opts.merge(submission_statuses: ss, topics_status:))
     end

@@ -21,14 +21,24 @@
 # @API Rubrics
 class RubricsController < ApplicationController
   before_action :require_context
+
+  include HorizonMode
+  before_action :load_canvas_career, only: [:index, :show]
+
   before_action { |c| c.active_tab = "rubrics" }
 
   include Api::V1::Outcome
+  include Api::V1::Progress
   include K5Mode
 
   def index
     permission = @context.is_a?(User) ? :manage : [:manage_rubrics, :read_rubrics]
     return unless authorized_action(@context, @current_user, permission)
+
+    if @context.is_a?(Course) && @context.horizon_course?
+      redirect_to named_context_url(@context, :context_context_modules_url)
+      return
+    end
 
     js_env ROOT_OUTCOME_GROUP: get_root_outcome,
            PERMISSIONS: {
@@ -112,7 +122,7 @@ class RubricsController < ApplicationController
   # @argument id [Integer]
   #   The id of the rubric
   # @argument rubric_association_id [Integer]
-  #   The id of the object with which this rubric is associated
+  #   The id of the rubric association object (not the course/assignment itself, but the join table record id). It can be used in place of rubric_association[association_id] and rubric_association[association_type] if desired.
   # @argument rubric[title] [String]
   #   The title of the rubric
   # @argument rubric[free_form_criterion_comments] [Boolean]
@@ -131,6 +141,10 @@ class RubricsController < ApplicationController
   #   or if it's to indicate the rubric should appear in its context
   # @argument rubric[criteria] [Hash]
   #   An indexed Hash of RubricCriteria objects where the keys are integer ids and the values are the RubricCriteria objects
+  # TODO: document once feature is public: rubric[criteria_via_llm] [Boolean]
+  #   When true, rubric[criteria] will be ignored (does not need to be included
+  #   at all). Instead, rubric criteria will be automatically generated from a
+  #   large language model (llm).
   def create
     update
   end
@@ -156,7 +170,7 @@ class RubricsController < ApplicationController
   # @argument id [Integer]
   #   The id of the rubric
   # @argument rubric_association_id [Integer]
-  #   The id of the object with which this rubric is associated
+  #   The id of the rubric association object (not the course/assignment itself, but the join table record id). It can be used in place of rubric_association[association_id] and rubric_association[association_type] if desired.
   # @argument rubric[title] [String]
   #   The title of the rubric
   # @argument rubric[free_form_criterion_comments] [Boolean]
@@ -193,7 +207,7 @@ class RubricsController < ApplicationController
       association_params[:update_if_existing] = params[:action] == "update"
       skip_points_update = !!(params[:skip_updating_points_possible] =~ /true/i)
       association_params[:skip_updating_points_possible] = skip_points_update
-      @rubric = @association.rubric if params[:id] && @association && (@association.rubric_id == params[:id].to_i || (@association.rubric && @association.rubric.migration_id == "cloned_from_#{params[:id]}"))
+      @rubric = @association.rubric if params[:id] && (@association&.rubric_id == params[:id].to_i || (@association&.rubric && @association.rubric.migration_id == "cloned_from_#{params[:id]}"))
       @rubric ||= @context.rubrics.where(id: params[:id]).first if params[:id].present?
       @association = nil unless @association && @rubric && @association.rubric_id == @rubric.id
       association_params[:id] = @association.id if @association
@@ -231,7 +245,42 @@ class RubricsController < ApplicationController
     end
   end
 
-  # @API Delete a single rubric
+  ALLOWED_GENERATE_PARAMS = %w[criteria_count rating_count points_per_criterion use_range].freeze
+  def llm_criteria
+    association_object = RubricAssociation.get_association_object(params[:rubric_association])
+    generate_options = (params[:generate_options] || {}).permit(*ALLOWED_GENERATE_PARAMS)
+    generate_options[:use_range] = value_to_boolean(generate_options[:use_range])
+    if generate_options[:criteria_count].present? && !(2..8).cover?(generate_options[:criteria_count].to_i)
+      return render json: { error: "criteria_count must be between 2 and 8 inclusive" }, status: :bad_request
+    end
+    if generate_options[:rating_count].present? && !(2..8).cover?(generate_options[:rating_count].to_i)
+      return render json: { error: "rating_count must be between 2 and 8 inclusive" }, status: :bad_request
+    end
+
+    return render_unauthorized_action unless Rubric.ai_rubrics_enabled?(context)
+
+    @rubric = @context.rubrics.build(user: @current_user)
+    if can_manage_rubrics_or_association_object?(association_object) && authorized_action(@rubric, @current_user, :update)
+      progress = Progress.create!(context: association_object, user: @current_user, tag: "llm_rubric_generation")
+      progress.process_job(
+        Rubric,
+        :process_generate_criteria_via_llm,
+        {
+          priority: Delayed::NORMAL_PRIORITY,
+          n_strand: ["Rubric.process_generate_criteria_via_llm", @domain_root_account.global_id],
+          max_attempts: 3,
+        },
+        @context,
+        @current_user,
+        association_object,
+        generate_options.to_h
+      )
+
+      render json: progress_json(progress, @current_user, session)
+    end
+  end
+
+  # @API Delete a single
   #
   # Deletes a Rubric and removes all RubricAssociations.
   #
@@ -284,7 +333,7 @@ class RubricsController < ApplicationController
 
   def track_metrics
     if @association_object.is_a?(Assignment)
-      InstStatsd::Statsd.increment("#{@context.class.to_s.downcase}.rubrics.created_from_assignment")
+      InstStatsd::Statsd.distributed_increment("#{@context.class.to_s.downcase}.rubrics.created_from_assignment")
     end
   end
 end

@@ -26,6 +26,7 @@ module Api::V1::Assignment
   include Api::V1::AssignmentOverride
   include SubmittablesGradingPeriodProtection
   include Api::V1::PlannerOverride
+  include Api::V1::EstimatedDuration
 
   ALL_DATES_LIMIT = 25
 
@@ -150,11 +151,11 @@ module Api::V1::Assignment
     end
 
     hash = api_json(assignment, user, session, fields)
-
     description = api_user_content(hash["description"],
                                    @context || assignment.context,
                                    user,
-                                   opts[:preloaded_user_content_attachments] || {})
+                                   opts[:preloaded_user_content_attachments] || {},
+                                   location: assignment.asset_string)
 
     hash["secure_params"] = assignment.secure_params(include_description: description.present?) if assignment.has_attribute?(:lti_context_id)
     hash["lti_context_id"] = assignment.lti_context_id if assignment.has_attribute?(:lti_context_id)
@@ -165,7 +166,7 @@ module Api::V1::Assignment
     hash["due_date_required"] = assignment.due_date_required?
     hash["max_name_length"] = assignment.max_name_length
     hash["allowed_attempts"] = -1 if assignment.allowed_attempts.nil?
-    paced_course = assignment.course.account.feature_enabled?(:course_paces) && Course.find_by(id: assignment.context_id)&.enable_course_paces?
+    paced_course = Course.find_by(id: assignment.context_id)&.enable_course_paces?
     hash["in_paced_course"] = paced_course if paced_course
 
     unless opts[:exclude_response_fields].include?("in_closed_grading_period")
@@ -175,7 +176,7 @@ module Api::V1::Assignment
     hash["grades_published"] = assignment.grades_published? if opts[:include_grades_published]
     hash["graded_submissions_exist"] = assignment.graded_submissions_exist?
 
-    if opts[:include_checkpoints] && assignment.root_account.feature_enabled?(:discussion_checkpoints)
+    if opts[:include_checkpoints] && assignment.context.discussion_checkpoints_enabled?
       hash["has_sub_assignments"] = assignment.has_sub_assignments?
       hash["checkpoints"] = assignment.sub_assignments.map { |sub_assignment| Checkpoint.new(sub_assignment, user).as_json }
     end
@@ -242,7 +243,7 @@ module Api::V1::Assignment
       hash["description"] = description
     end
 
-    can_manage = assignment.context.grants_any_right?(user, :manage, :manage_grades, :manage_assignments, :manage_assignments_edit)
+    can_manage = assignment.context.grants_any_right?(user, :manage, :manage_grades, :manage_assignments_edit)
     hash["muted"] = assignment.muted?
     hash["html_url"] = course_assignment_url(assignment.context_id, assignment)
     if can_manage
@@ -315,6 +316,10 @@ module Api::V1::Assignment
       end
     end
 
+    if opts[:include_has_rubric]
+      hash["has_rubric"] = assignment.active_rubric_association?
+    end
+
     unless opts[:exclude_response_fields].include?("rubric")
       if assignment.active_rubric_association?
         hash["use_rubric_for_grading"] = !!assignment.rubric_association.use_for_grading
@@ -373,10 +378,10 @@ module Api::V1::Assignment
           hash["all_dates"] = []
 
           assignment.sub_assignments.each do |sub_assignment|
-            hash["all_dates"].concat(sub_assignment.dates_hash_visible_to(user))
+            hash["all_dates"].concat(sub_assignment.formatted_dates_hash_visible_to(user))
           end
         elsif override_count < ALL_DATES_LIMIT
-          hash["all_dates"] = assignment.dates_hash_visible_to(user)
+          hash["all_dates"] = assignment.formatted_dates_hash_visible_to(user)
         else
           hash["all_dates_count"] = override_count
         end
@@ -423,13 +428,29 @@ module Api::V1::Assignment
 
       if submission.is_a?(Array)
         ActiveRecord::Associations.preload(submission, :quiz_submission) if assignment.quiz?
-        hash["submission"] = submission.map { |s| submission_json(s, assignment, user, session, assignment.context, params[:include], params) }
+        hash["submission"] = submission.map do |s|
+          submission_json(s,
+                          assignment,
+                          user,
+                          session,
+                          assignment.context,
+                          params[:include],
+                          params,
+                          preloaded_enrollments_by_user_id: opts[:preloaded_enrollments_by_user_id])
+        end
         should_show_statistics &&= submission.any? do |s|
           s.assignment = assignment # Avoid extra query in submission.hide_grade_from_student? to get assignment
           s.eligible_for_showing_score_statistics?
         end
       else
-        hash["submission"] = submission_json(submission, assignment, user, session, assignment.context, params[:include], params)
+        hash["submission"] = submission_json(submission,
+                                             assignment,
+                                             user,
+                                             session,
+                                             assignment.context,
+                                             params[:include],
+                                             params,
+                                             preloaded_enrollments_by_user_id: opts[:preloaded_enrollments_by_user_id])
         submission.assignment = assignment # Avoid extra query in submission.hide_grade_from_student? to get assignment
         should_show_statistics &&= submission.eligible_for_showing_score_statistics?
       end
@@ -491,6 +512,10 @@ module Api::V1::Assignment
 
     if opts[:migrated_urls_content_migration_id]
       hash["migrated_urls_content_migration_id"] = opts[:migrated_urls_content_migration_id]
+    end
+
+    if estimated_duration_enabled?(assignment) && assignment.estimated_duration&.marked_for_destruction? == false
+      hash["estimated_duration"] = estimated_duration_json(assignment.estimated_duration, user, session)
     end
 
     hash
@@ -614,7 +639,7 @@ module Api::V1::Assignment
     prepared_update = prepare_assignment_create_or_update(assignment, assignment_params, user, context)
     return false unless prepared_update[:valid]
 
-    if !(assignment_params["due_at"]).nil? && assignment["only_visible_to_overrides"]
+    if !assignment_params["due_at"].nil? && assignment["only_visible_to_overrides"]
       assignment["only_visible_to_overrides"] = false
     end
 
@@ -1084,6 +1109,7 @@ module Api::V1::Assignment
     unless assignment.new_record?
       assignment.restore_attributes
       old_assignment = assignment.clone
+      old_assignment.instance_variable_set(:@new_record, false)
       old_assignment.id = assignment.id
     end
 
@@ -1099,6 +1125,12 @@ module Api::V1::Assignment
     end
 
     apply_external_tool_settings(assignment, assignment_params)
+    begin
+      apply_asset_processor_settings(assignment, assignment_params) if assignment.root_account.feature_enabled?(:lti_asset_processor)
+    rescue Schemas::Base::InvalidSchema
+      assignment.errors.add("asset_processors", I18n.t("The document processing app is invalid. Please contact the tool provider"))
+      return invalid
+    end
     overrides = pull_overrides_from_params(assignment_params)
 
     if assignment_params[:allowed_extensions].present? && assignment_params[:allowed_extensions].length > Assignment.maximum_string_length
@@ -1165,6 +1197,11 @@ module Api::V1::Assignment
     :created
   end
 
+  def remove_differentiation_tag_overrides(overrides_to_delete)
+    tag_overrides = overrides_to_delete.select { |o| o.set_type == "Group" && o.set.non_collaborative? }
+    tag_overrides.each(&:destroy!)
+  end
+
   def update_api_assignment_with_overrides(prepared_update, user)
     assignment = prepared_update[:assignment]
     overrides = prepared_update[:overrides]
@@ -1177,6 +1214,13 @@ module Api::V1::Assignment
 
     assignment.transaction do
       assignment.validate_overrides_for_sis(prepared_batch)
+
+      # remove differentiation tag overrides if they are being deleted
+      # and account setting is disabled. The assignment will fail validation
+      # if these overrides exist and the account setting is disabled
+      unless @context.account.allow_assign_to_differentiation_tags?
+        remove_differentiation_tag_overrides(prepared_batch[:overrides_to_delete])
+      end
 
       # validate_assignment_overrides runs as a save callback, but if the group
       # category is changing, remove overrides for old groups first so we don't
@@ -1228,12 +1272,36 @@ module Api::V1::Assignment
     end
   end
 
+  def apply_asset_processor_settings(assignment, assignment_params)
+    # Ignore unless truly an edit (e.g. ignore publish/unpublish, which should really be a PATCH, but the API doesn't work that way...)
+    submission_types = assignment_params["submission_types"]
+    return unless submission_types.present?
+
+    if asset_processor_capable?(submission_types:)
+      add_or_remove_asset_processors(assignment, assignment_params)
+    elsif asset_processor_capable?(submission_types: assignment.submission_types_array)
+      # Remove APs if the assignment is no longer capable.
+      assignment.lti_asset_processors.destroy_all
+    end
+  end
+
+  def add_or_remove_asset_processors(assignment, assignment_params)
+    asset_processors = assignment_params["asset_processors"] || []
+    existing_ids_to_keep = asset_processors.filter_map { |ap| ap["existing_id"] }
+    content_items_to_create = asset_processors.filter_map { |ap| ap["new_content_item"] }
+
+    assignment.lti_asset_processors.where.not(id: existing_ids_to_keep).destroy_all
+    assignment.lti_asset_processors += content_items_to_create.filter_map do |content_item|
+      Lti::AssetProcessor.build_for_assignment(content_item:, context: assignment.context)
+    end
+  end
+
   def assignment_configuration_tool(assignment_params)
     tool_id = assignment_params["similarityDetectionTool"].split("_").last.to_i
     tool = nil
     case assignment_params["configuration_tool_type"]
     when "ContextExternalTool"
-      tool = ContextExternalTool.find_external_tool_by_id(tool_id, context)
+      tool = Lti::ToolFinder.from_id(tool_id, context)
     when "Lti::MessageHandler"
       mh = Lti::MessageHandler.find(tool_id)
       mh_context = mh.resource_handler.tool_proxy.context
@@ -1258,6 +1326,10 @@ module Api::V1::Assignment
       assignment_params["submission_types"].include?("online_text_entry"))
   end
 
+  def asset_processor_capable?(submission_types:)
+    submission_types.presence&.include?("online_upload")
+  end
+
   def submissions_download_url(context, assignment)
     if assignment.quiz?
       course_quiz_quiz_submissions_url(context, assignment.quiz, zip: 1)
@@ -1279,7 +1351,12 @@ module Api::V1::Assignment
       { "external_tool_tag_attributes" => strong_anything },
       ({ "submission_types" => strong_anything } if should_update_submission_types),
       { "ab_guid" => strong_anything },
+      ({ "estimated_duration_attributes" => strong_anything } if estimated_duration_enabled?(assignment)),
     ].compact
+  end
+
+  def estimated_duration_enabled?(assignment)
+    assignment.context.is_a?(Course) && assignment.context.horizon_course?
   end
 
   def update_lockdown_browser?(assignment_params)

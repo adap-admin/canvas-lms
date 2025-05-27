@@ -43,7 +43,7 @@ class RubricAssessmentExport
       "Student Name"
     ]
 
-    rubric.rubric_criteria.each do |criteria|
+    rubric.criteria_object.each do |criteria|
       headers << "#{criteria.description} - Rating" if rating_visible?
       headers << "#{criteria.description} - Points" if points_visible?
       headers << "#{criteria.description} - Comments"
@@ -75,9 +75,9 @@ class RubricAssessmentExport
     rubric.criteria_object.each do |criteria|
       rating = ratings[criteria.id]
 
-      row << (rating[:description] || "") if rating_visible?
-      row << (rating[:points] || "") if points_visible?
-      row << (rating[:comments] || "")
+      row << (rating&.dig(:description) || "") if rating_visible?
+      row << (rating&.dig(:points) || "") if points_visible?
+      row << (rating&.dig(:comments) || "")
     end
 
     row

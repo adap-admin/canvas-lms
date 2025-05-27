@@ -23,9 +23,9 @@ import {Flex} from '@instructure/ui-flex'
 import {IconEditLine} from '@instructure/ui-icons'
 import {type QuestionProps, type KnowledgeCheckSectionProps} from './types'
 import {QuizModal} from './QuizModal'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 
-const I18n = useI18nScope('block-editor')
+const I18n = createI18nScope('block-editor')
 
 const KnowledgeCheckSectionToolbar = () => {
   const {
@@ -48,7 +48,7 @@ const KnowledgeCheckSectionToolbar = () => {
       })
       setModalOpen(false)
     },
-    [setProp]
+    [setProp],
   )
 
   return (
@@ -58,6 +58,7 @@ const KnowledgeCheckSectionToolbar = () => {
         withBackground={false}
         withBorder={false}
         screenReaderLabel={I18n.t('Edit Quiz')}
+        title={I18n.t('Edit Quiz')}
         onClick={() => setModalOpen(true)}
         data-testid="edit-quiz-button"
       >

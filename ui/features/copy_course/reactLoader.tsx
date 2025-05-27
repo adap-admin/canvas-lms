@@ -19,11 +19,35 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import ready from '@instructure/ready'
-import App from './react/app'
+import App from './react/App'
 
 ready(() => {
   const root = document.getElementById('instui_course_copy')
   if (root) {
-    ReactDOM.createRoot(root).render(<App />)
+    const courseId: string = ENV.current_context?.id || ''
+    const rootAccountId: string = ENV.DOMAIN_ROOT_ACCOUNT_ID
+    const accountId: string = ENV.ACCOUNT_ID
+    const canImportAsNewQuizzes: boolean = ENV.NEW_QUIZZES_MIGRATION || false
+    const userTimeZone: string | undefined = ENV.TIMEZONE
+    const courseTimeZone: string | undefined = ENV.CONTEXT_TIMEZONE
+
+    if (!courseId) {
+      throw Error('Course id is not provided!')
+    }
+
+    if (!rootAccountId) {
+      throw Error('Account id is not provided!')
+    }
+
+    ReactDOM.createRoot(root).render(
+      <App
+        courseId={courseId}
+        rootAccountId={rootAccountId}
+        accountId={accountId}
+        userTimeZone={userTimeZone}
+        courseTimeZone={courseTimeZone}
+        canImportAsNewQuizzes={canImportAsNewQuizzes}
+      />,
+    )
   }
 })

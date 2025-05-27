@@ -23,14 +23,12 @@ require_relative "pages/discussions_index_page"
 require_relative "../helpers/discussions_common"
 require_relative "../helpers/context_modules_common"
 require_relative "../helpers/items_assign_to_tray"
-require_relative "../../helpers/selective_release_common"
 
 describe "discussions index" do
   include_context "in-process server selenium tests"
   include ContextModulesCommon
   include ItemsAssignToTray
   include DiscussionsCommon
-  include SelectiveReleaseCommon
 
   context "as a teacher" do
     discussion1_title = "Meaning of life"
@@ -123,7 +121,9 @@ describe "discussions index" do
 
     context "discussion with checkpoints" do
       before :once do
-        Account.site_admin.enable_feature! :discussion_checkpoints
+        sub_account = Account.create!(name: "Sub Account", parent_account: Account.default)
+        @course.update!(account: sub_account)
+        @course.account.enable_feature! :discussion_checkpoints
         @reply_to_topic, _, @topic = graded_discussion_topic_with_checkpoints(context: @course, title: "foo")
       end
 
@@ -237,11 +237,11 @@ describe "discussions index" do
     end
 
     it "duplicates a checkpointed discussion properly" do
-      Account.site_admin.enable_feature! :discussion_checkpoints
+      @course.account.enable_feature! :discussion_checkpoints
       checkpointed_discussion = DiscussionTopic.create_graded_topic!(course: @course, title: "checkpointed topic")
-      checkpointed_discussion.assignment.lock_at = 3.days.from_now
-      checkpointed_discussion.assignment.unlock_at = 3.days.ago
-      checkpointed_discussion.assignment.save!
+      checkpointed_discussion.lock_at = 3.days.from_now
+      checkpointed_discussion.unlock_at = 3.days.ago
+      checkpointed_discussion.save!
 
       rtt = Checkpoints::DiscussionCheckpointCreatorService.call(
         discussion_topic: checkpointed_discussion,
@@ -315,7 +315,6 @@ describe "discussions index" do
       # Displayed from the index page
 
       before do
-        differentiated_modules_on
         @student1 = student_in_course(course: @course, active_all: true).user
         @student2 = student_in_course(course: @course, active_all: true).user
         @course_section = @course.course_sections.create!(name: "section alpha")

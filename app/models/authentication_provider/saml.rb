@@ -47,6 +47,10 @@ class AuthenticationProvider::SAML < AuthenticationProvider::Delegated
     ].freeze
   end
 
+  def self.sensitive_params
+    [*super, :metadata].freeze
+  end
+
   def self.deprecated_params
     %i[change_password_url login_handle_name unknown_user_url].freeze
   end
@@ -101,8 +105,6 @@ class AuthenticationProvider::SAML < AuthenticationProvider::Delegated
        idp_logout_response_xml_encrypted: -> { t("IdP LogoutResponse XML") },
      }]
   end
-
-  SENSITIVE_PARAMS = [:metadata].freeze
 
   before_validation :set_saml_defaults
   before_validation :download_metadata
@@ -164,7 +166,7 @@ class AuthenticationProvider::SAML < AuthenticationProvider::Delegated
       next unless metadata_uri == federation::URN
 
       if idp_entity_id.blank?
-        errors.add(:idp_entity_id, :present)
+        errors.add(:idp_entity_id, :blank)
         return
       end
 
@@ -496,6 +498,11 @@ class AuthenticationProvider::SAML < AuthenticationProvider::Delegated
     end
 
     path.exist? ? path.to_s : nil
+  end
+
+  def slo?
+    idp = idp_metadata.identity_providers.first
+    !idp.single_logout_services.empty?
   end
 
   def user_logout_redirect(controller, current_user)

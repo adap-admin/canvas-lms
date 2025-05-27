@@ -20,13 +20,10 @@ import {screen, render} from '@testing-library/react'
 
 import React from 'react'
 import {ReviewScreenWrapper} from '../components/ReviewScreenWrapper'
-import {mockConfigWithPlacements, mockRegistration} from './helpers'
+import {mockConfigWithPlacements, mockRegistration, mockToolConfiguration} from './helpers'
 import {LtiPlacements, type LtiPlacementWithIcon} from '../../model/LtiPlacement'
 import {i18nLtiPlacement} from '../../model/i18nLtiPlacement'
-import {
-  canvasPlatformSettings,
-  createRegistrationOverlayStore,
-} from '../../registration_wizard/registration_settings/RegistrationOverlayState'
+import {createDynamicRegistrationOverlayStore} from '../DynamicRegistrationOverlayState'
 import {i18nLtiScope} from '@canvas/lti/model/i18nLtiScope'
 import {i18nLtiPrivacyLevelDescription} from '../../model/i18nLtiPrivacyLevel'
 
@@ -37,14 +34,14 @@ describe('ReviewScreen', () => {
       LtiPlacements.GlobalNavigation,
     ])
     const reg = mockRegistration({}, config)
-    const overlayStore = createRegistrationOverlayStore('Foo', reg)
+    const overlayStore = createDynamicRegistrationOverlayStore('Foo', reg)
 
     render(
       <ReviewScreenWrapper
         registration={reg}
         overlayStore={overlayStore}
         transitionToConfirmationState={jest.fn()}
-      />
+      />,
     )
 
     expect(screen.getByText('Review')).toBeInTheDocument()
@@ -56,19 +53,19 @@ describe('ReviewScreen', () => {
       LtiPlacements.GlobalNavigation,
     ])
     const reg = mockRegistration({}, config)
-    const overlayStore = createRegistrationOverlayStore('Foo', reg)
+    const overlayStore = createDynamicRegistrationOverlayStore('Foo', reg)
 
     render(
       <ReviewScreenWrapper
         registration={reg}
         overlayStore={overlayStore}
         transitionToConfirmationState={jest.fn()}
-      />
+      />,
     )
 
     expect(screen.getByText('Permissions')).toBeInTheDocument()
 
-    for (const scope of reg.scopes) {
+    for (const scope of reg.configuration.scopes) {
       expect(screen.getByText(i18nLtiScope(scope))).toBeInTheDocument()
     }
     expect(screen.getByRole('button', {name: 'Edit Permissions'})).toBeInTheDocument()
@@ -79,24 +76,20 @@ describe('ReviewScreen', () => {
       LtiPlacements.CourseNavigation,
       LtiPlacements.GlobalNavigation,
     ])
-    config.extensions![0].privacy_level = 'public'
+    config.privacy_level = 'public'
     const reg = mockRegistration({}, config)
-    const overlayStore = createRegistrationOverlayStore('Foo', reg)
+    const overlayStore = createDynamicRegistrationOverlayStore('Foo', reg)
     render(
       <ReviewScreenWrapper
         registration={reg}
         overlayStore={overlayStore}
         transitionToConfirmationState={jest.fn()}
-      />
+      />,
     )
 
     expect(screen.getByText('Data Sharing')).toBeInTheDocument()
     expect(
-      screen.getByText(
-        i18nLtiPrivacyLevelDescription(
-          canvasPlatformSettings(reg.tool_configuration)?.privacy_level!
-        )
-      )
+      screen.getByText(i18nLtiPrivacyLevelDescription(reg.configuration.privacy_level!)),
     ).toBeInTheDocument()
     expect(screen.getByRole('button', {name: 'Edit Data Sharing'})).toBeInTheDocument()
   })
@@ -110,14 +103,14 @@ describe('ReviewScreen', () => {
     const config = mockConfigWithPlacements(placements)
 
     const reg = mockRegistration({}, config)
-    const overlayStore = createRegistrationOverlayStore('Foo', reg)
+    const overlayStore = createDynamicRegistrationOverlayStore('Foo', reg)
 
     render(
       <ReviewScreenWrapper
         registration={reg}
         overlayStore={overlayStore}
         transitionToConfirmationState={jest.fn()}
-      />
+      />,
     )
 
     expect(screen.getByText('Placements')).toBeInTheDocument()
@@ -137,22 +130,25 @@ describe('ReviewScreen', () => {
       LtiPlacements.GlobalNavigation,
     ])
     const reg = mockRegistration({}, config)
-    const overlayStore = createRegistrationOverlayStore('Foo', reg)
+    const overlayStore = createDynamicRegistrationOverlayStore('Foo', reg)
     overlayStore.setState(s => {
       return {
         ...s,
         state: {
           ...s.state,
           adminNickname: nickname,
-          registration: {
-            ...s.state.registration,
+          overlay: {
+            ...s.state.overlay,
             description,
-            placements: s.state.registration.placements!.map(p => {
-              return {
-                ...p,
-                label: placementLabel,
-              }
-            }),
+            placements: Object.fromEntries(
+              Object.entries(s.state.overlay.placements!).map(([k, p]) => [
+                k,
+                {
+                  ...p,
+                  text: placementLabel,
+                },
+              ]),
+            ),
           },
         },
       }
@@ -162,15 +158,13 @@ describe('ReviewScreen', () => {
         registration={reg}
         overlayStore={overlayStore}
         transitionToConfirmationState={jest.fn()}
-      />
+      />,
     )
 
     expect(screen.getByText('Naming')).toBeInTheDocument()
     expect(screen.getByText(nickname)).toBeInTheDocument()
     expect(screen.getByText(description)).toBeInTheDocument()
-    expect(screen.getAllByText(placementLabel).length).toBe(
-      canvasPlatformSettings(reg.tool_configuration)!.settings.placements.length
-    )
+    expect(screen.getAllByText(placementLabel)).toHaveLength(reg.configuration.placements.length)
     expect(screen.getByText('Edit Naming')).toBeInTheDocument()
   })
 
@@ -180,20 +174,20 @@ describe('ReviewScreen', () => {
         LtiPlacements.CourseNavigation,
         LtiPlacements.GlobalNavigation,
       ])
-      config.extensions![0].settings.placements.forEach(p => {
+      config.placements!.forEach(p => {
         p.icon_url = 'https://example.com/icon.png'
       })
 
       const reg = mockRegistration({}, config)
 
-      const overlayStore = createRegistrationOverlayStore('Foo', reg)
+      const overlayStore = createDynamicRegistrationOverlayStore('Foo', reg)
 
       render(
         <ReviewScreenWrapper
           registration={reg}
           overlayStore={overlayStore}
           transitionToConfirmationState={jest.fn()}
-        />
+        />,
       )
 
       expect(screen.getByText('Icon URLs')).toBeInTheDocument()
@@ -208,26 +202,31 @@ describe('ReviewScreen', () => {
         LtiPlacements.EditorButton,
       ]
       const config = mockConfigWithPlacements(placements)
-      config.extensions![0].settings.placements.forEach(p => {
+      config.placements!.forEach(p => {
         p.icon_url = ''
       })
 
-      const reg = mockRegistration({}, config)
-      canvasPlatformSettings(reg.tool_configuration)!.settings.icon_url =
-        'https://example.com/icon.png'
+      const reg = mockRegistration({
+        configuration: mockToolConfiguration({
+          ...config,
+          launch_settings: {
+            icon_url: 'https://example.com/icon.png',
+          },
+        }),
+      })
 
-      const overlayStore = createRegistrationOverlayStore('Foo', reg)
+      const overlayStore = createDynamicRegistrationOverlayStore('Foo', reg)
 
       render(
         <ReviewScreenWrapper
           registration={reg}
           overlayStore={overlayStore}
           transitionToConfirmationState={jest.fn()}
-        />
+        />,
       )
 
       expect(screen.getByText('Icon URLs')).toBeInTheDocument()
-      expect(screen.getAllByText('Default Icon').length).toBe(placements.length)
+      expect(screen.getAllByText('Default Icon')).toHaveLength(placements.length)
     })
 
     it("says a 'Custom Icon' is being used if the user added their own custom icon url", () => {
@@ -236,27 +235,30 @@ describe('ReviewScreen', () => {
         LtiPlacements.FileIndexMenu,
       ]
       const config = mockConfigWithPlacements(placements)
-      config.extensions![0].settings.placements.forEach(p => {
+      config.placements!.forEach(p => {
         p.icon_url = 'https://example.com/icon.png'
       })
 
       const reg = mockRegistration({}, config)
 
-      const overlayStore = createRegistrationOverlayStore('Foo', reg)
+      const overlayStore = createDynamicRegistrationOverlayStore('Foo', reg)
 
       overlayStore.setState(s => {
         return {
           ...s,
           state: {
             ...s.state,
-            registration: {
-              ...s.state.registration,
-              placements: s.state.registration.placements!.map(p => {
-                return {
-                  ...p,
-                  icon_url: 'https://example.com/custom-icon.png',
-                }
-              }),
+            overlay: {
+              ...s.state.overlay,
+              placements: Object.fromEntries(
+                Object.entries(s.state.overlay.placements!).map(([k, p]) => [
+                  k,
+                  {
+                    ...p,
+                    icon_url: 'https://example.com/custom-icon.png',
+                  },
+                ]),
+              ),
             },
           },
         }
@@ -267,11 +269,11 @@ describe('ReviewScreen', () => {
           registration={reg}
           overlayStore={overlayStore}
           transitionToConfirmationState={jest.fn()}
-        />
+        />,
       )
 
       expect(screen.getByText('Icon URLs')).toBeInTheDocument()
-      expect(screen.getAllByText('Custom Icon').length).toBe(placements.length)
+      expect(screen.getAllByText('Custom Icon')).toHaveLength(placements.length)
     })
 
     it("says that a 'Generated Icon' is being used if the configured icon is blank, the tool doesn't have a top-level icon, and the placement is the editor button", () => {
@@ -281,21 +283,21 @@ describe('ReviewScreen', () => {
         LtiPlacements.EditorButton,
       ]
       const config = mockConfigWithPlacements(placements)
-      config.extensions![0].settings.placements.forEach(p => {
+      config.placements!.forEach(p => {
         p.icon_url = ''
       })
 
       const reg = mockRegistration({}, config)
-      canvasPlatformSettings(reg.tool_configuration)!.settings.icon_url = ''
+      reg.configuration.launch_settings!.icon_url = ''
 
-      const overlayStore = createRegistrationOverlayStore('Foo', reg)
+      const overlayStore = createDynamicRegistrationOverlayStore('Foo', reg)
 
       render(
         <ReviewScreenWrapper
           registration={reg}
           overlayStore={overlayStore}
           transitionToConfirmationState={jest.fn()}
-        />
+        />,
       )
 
       expect(screen.getByText('Icon URLs')).toBeInTheDocument()
@@ -308,25 +310,25 @@ describe('ReviewScreen', () => {
         LtiPlacements.FileIndexMenu,
       ]
       const config = mockConfigWithPlacements(placements)
-      config.extensions![0].settings.placements.forEach(p => {
+      config.placements!.forEach(p => {
         p.icon_url = ''
       })
 
       const reg = mockRegistration({}, config)
-      canvasPlatformSettings(reg.tool_configuration)!.settings.icon_url = ''
+      reg.configuration.launch_settings!.icon_url = ''
 
-      const overlayStore = createRegistrationOverlayStore('Foo', reg)
+      const overlayStore = createDynamicRegistrationOverlayStore('Foo', reg)
 
       render(
         <ReviewScreenWrapper
           registration={reg}
           overlayStore={overlayStore}
           transitionToConfirmationState={jest.fn()}
-        />
+        />,
       )
 
       expect(screen.getByText('Icon URLs')).toBeInTheDocument()
-      expect(screen.getAllByText('No Icon').length).toBe(placements.length)
+      expect(screen.getAllByText('No Icon')).toHaveLength(placements.length)
     })
   })
 })

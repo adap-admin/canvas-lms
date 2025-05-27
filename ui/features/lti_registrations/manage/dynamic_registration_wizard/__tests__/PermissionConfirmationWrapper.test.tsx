@@ -16,34 +16,35 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React from 'react'
 import {render, screen} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {PermissionConfirmationWrapper} from '../components/PermissionConfirmationWrapper'
-import {mockRegistration} from './helpers'
+import {mockRegistration, mockToolConfiguration} from './helpers'
 import {LtiScopes} from '@canvas/lti/model/LtiScope'
 import {i18nLtiScope} from '@canvas/lti/model/i18nLtiScope'
-import {createRegistrationOverlayStore} from '../../registration_wizard/registration_settings/RegistrationOverlayState'
+import {createDynamicRegistrationOverlayStore} from '../DynamicRegistrationOverlayState'
 
 describe('PermissionConfirmationWrapper', () => {
   const registration = mockRegistration({
-    client_name: 'Test App',
-    scopes: [LtiScopes.AgsLineItem, LtiScopes.AgsLineItemReadonly, LtiScopes.AgsResultReadonly],
+    name: 'Test App',
+    configuration: mockToolConfiguration({
+      scopes: [LtiScopes.AgsLineItem, LtiScopes.AgsLineItemReadonly, LtiScopes.AgsResultReadonly],
+    }),
   })
 
-  const overlayStore = createRegistrationOverlayStore(registration.client_name, registration)
+  const overlayStore = createDynamicRegistrationOverlayStore(registration.name, registration)
 
   it('renders the PermissionConfirmation component with the correct props', () => {
     render(
-      <PermissionConfirmationWrapper registration={registration} overlayStore={overlayStore} />
+      <PermissionConfirmationWrapper registration={registration} overlayStore={overlayStore} />,
     )
 
     expect(screen.getByText('Permissions')).toBeInTheDocument()
     expect(
-      screen.getByText(/is requesting permission to perform the following actions/i)
+      screen.getByText(/is requesting permission to perform the following actions/i),
     ).toBeInTheDocument()
 
-    registration.scopes.forEach(s => {
+    registration.configuration.scopes.forEach(s => {
       const scope = i18nLtiScope(s)
       expect(screen.getByText(scope)).toBeInTheDocument()
     })
@@ -51,12 +52,12 @@ describe('PermissionConfirmationWrapper', () => {
 
   it('toggles the scope when a checkbox is clicked', async () => {
     render(
-      <PermissionConfirmationWrapper registration={registration} overlayStore={overlayStore} />
+      <PermissionConfirmationWrapper registration={registration} overlayStore={overlayStore} />,
     )
 
     const lineItemCheckbox = screen.getByLabelText(i18nLtiScope(LtiScopes.AgsLineItem))
     const lineItemReadonlyCheckbox = screen.getByLabelText(
-      i18nLtiScope(LtiScopes.AgsLineItemReadonly)
+      i18nLtiScope(LtiScopes.AgsLineItemReadonly),
     )
     const resultReadonlyCheckbox = screen.getByLabelText(i18nLtiScope(LtiScopes.AgsResultReadonly))
 
@@ -77,9 +78,11 @@ describe('PermissionConfirmationWrapper', () => {
   it('renders an appropriate message if no scopes are requested', async () => {
     render(
       <PermissionConfirmationWrapper
-        registration={mockRegistration({scopes: []})}
+        registration={mockRegistration({
+          configuration: mockToolConfiguration({scopes: []}),
+        })}
         overlayStore={overlayStore}
-      />
+      />,
     )
 
     expect(screen.getByText('Permissions')).toBeInTheDocument()

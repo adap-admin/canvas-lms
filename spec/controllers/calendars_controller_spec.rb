@@ -99,6 +99,16 @@ describe CalendarsController do
       expect(assigns[:js_env][:MAX_NAME_LENGTH]).to eq(15)
     end
 
+    it "ignores trying to include a course section context" do
+      section = @course.course_sections.first
+
+      get "show", params: { include_contexts: section.asset_string }
+      expect(response).to be_successful
+
+      context_info = assigns[:contexts_json].find { |c| c[:asset_string] == section.asset_string }
+      expect(context_info).to be_nil
+    end
+
     it "sets account's auto_subscribe" do
       account = @user.account
       account.account_calendar_visible = true
@@ -209,11 +219,11 @@ describe CalendarsController do
     end
 
     it "emits calendar.visit metric to statsd with appropriate enrollment tags" do
-      allow(InstStatsd::Statsd).to receive(:increment)
+      allow(InstStatsd::Statsd).to receive(:distributed_increment)
       course_with_teacher(user: @user, active_all: true)
 
       get "show", params: { user_id: @user.id }
-      expect(InstStatsd::Statsd).to have_received(:increment).once.with("calendar.visit", tags: %w[enrollment_type:StudentEnrollment enrollment_type:TeacherEnrollment])
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).once.with("calendar.visit", tags: %w[enrollment_type:StudentEnrollment enrollment_type:TeacherEnrollment])
     end
 
     context "with sharding" do
@@ -268,7 +278,7 @@ describe CalendarsController do
 end
 
 describe CalendarEventsApiController do
-  def course_event(date = Time.now)
+  def course_event(date = Time.zone.now)
     @event = @course.calendar_events.create(title: "some assignment", start_at: date, end_at: date)
   end
 

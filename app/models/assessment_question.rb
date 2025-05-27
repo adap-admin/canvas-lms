@@ -58,19 +58,17 @@ class AssessmentQuestion < ActiveRecord::Base
 
   set_policy do
     given do |user, session|
-      context.grants_any_right?(user, session, :manage_assignments, :manage_assignments_edit)
+      context.grants_right?(user, session, :manage_assignments_edit)
     end
     can :read and can :create and can :update and can :delete
 
     given do |user, session|
-      context.root_account.feature_enabled?(:granular_permissions_manage_assignments) &&
-        context.grants_right?(user, session, :manage_assignments_add)
+      context.grants_right?(user, session, :manage_assignments_add)
     end
     can :read and can :create
 
     given do |user, session|
-      context.root_account.feature_enabled?(:granular_permissions_manage_assignments) &&
-        context.grants_right?(user, session, :manage_assignments_delete)
+      context.grants_right?(user, session, :manage_assignments_delete)
     end
     can :read and can :delete
   end
@@ -220,10 +218,10 @@ class AssessmentQuestion < ActiveRecord::Base
 
   def question_data=(data)
     data = if data.is_a?(String)
-             ActiveSupport::JSON.decode(data) rescue nil
+             JSON.parse(data)
            else
              # we may be modifying this data (translate_links), and only want to work on a copy
-             data.try(:dup)
+             data&.dup
            end
     super(data.to_hash.with_indifferent_access)
   end
@@ -370,7 +368,7 @@ class AssessmentQuestion < ActiveRecord::Base
 
     question = Quizzes::QuizQuestion::QuestionData.generate(data)
 
-    question[:assessment_question_id] = assessment_question.id rescue nil
+    question[:assessment_question_id] = assessment_question&.id
     question
   end
 

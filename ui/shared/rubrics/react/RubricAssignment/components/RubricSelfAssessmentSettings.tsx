@@ -17,35 +17,40 @@
  */
 
 import React from 'react'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {Checkbox} from '@instructure/ui-checkbox'
 import {View} from '@instructure/ui-view'
-import {useMutation} from '@tanstack/react-query'
-import {setRubricSelfAssessment} from '../queries'
+import {queryClient} from '@canvas/query'
+import {getRubricSelfAssessmentSettings, setRubricSelfAssessment} from '../queries'
 import {showFlashError} from '@canvas/alerts/react/FlashAlert'
+import {Tooltip} from '@instructure/ui-tooltip'
+import {useMutation, useQuery} from '@tanstack/react-query'
 
-const I18n = useI18nScope('enhanced-rubrics-self-assessments')
+const I18n = createI18nScope('enhanced-rubrics-self-assessments')
 
 type RubricSelfAssessmentSettingsProps = {
   assignmentId: string
-  canUpdateSelfAssessment: boolean
-  rubricSelfAssessmentEnabled: boolean
+  rubricId?: string
 }
 export const RubricSelfAssessmentSettings = ({
   assignmentId,
-  canUpdateSelfAssessment,
-  rubricSelfAssessmentEnabled,
+  rubricId,
 }: RubricSelfAssessmentSettingsProps) => {
-  const [selfAssessmentEnabled, setSelfAssessmentEnabled] = React.useState(
-    rubricSelfAssessmentEnabled
-  )
+  const queryKey = ['assignment-self-assessment-settings', assignmentId, rubricId ?? '']
+  const [showTooltip, setShowTooltip] = React.useState(false)
 
-  const {isLoading: mutationLoading, mutateAsync} = useMutation({
+  const {isPending: mutationLoading, mutateAsync} = useMutation({
     mutationFn: setRubricSelfAssessment,
-    mutationKey: ['set-rubric-self-assessment'],
+    mutationKey: ['set-rubric-self-assessment', assignmentId, rubricId],
     onError: _error => {
       showFlashError('Failed to update self assessment settings')()
     },
+  })
+
+  const {data: selfAssessmentSettings} = useQuery({
+    queryKey,
+    queryFn: getRubricSelfAssessmentSettings,
+    enabled: !!rubricId,
   })
 
   const handleSettingChange = async (enabled: boolean) => {
@@ -54,20 +59,41 @@ export const RubricSelfAssessmentSettings = ({
       enabled,
     })
 
-    setSelfAssessmentEnabled(enabled)
+    queryClient.invalidateQueries({queryKey})
   }
 
+  if (!rubricId || !selfAssessmentSettings) {
+    return null
+  }
+
+  const {canUpdateRubricSelfAssessment, rubricSelfAssessmentEnabled} = selfAssessmentSettings
+
   return (
-    <View>
+    <View as="div">
       <View as="div" margin="small 0">
-        <Checkbox
-          data-testid="rubric-self-assessment-checkbox"
-          label={I18n.t('Enable self assessment')}
-          checked={selfAssessmentEnabled}
-          disabled={mutationLoading || !canUpdateSelfAssessment}
-          name="self-assessment-settings"
-          onChange={e => handleSettingChange(e.target.checked)}
-        />
+        <Tooltip
+          renderTip={
+            <View width="336px" as="div">
+              {I18n.t(
+                'This toggle will be disabled if the due date has passed OR there have already been self-assessments made on this assignment OR if the assignment is a group assignment.',
+              )}
+            </View>
+          }
+          isShowingContent={!canUpdateRubricSelfAssessment && showTooltip}
+          placement="top start"
+          offsetX="10px"
+        >
+          <Checkbox
+            data-testid="rubric-self-assessment-checkbox"
+            label={I18n.t('Enable self assessment')}
+            checked={rubricSelfAssessmentEnabled}
+            disabled={mutationLoading || !canUpdateRubricSelfAssessment}
+            name="self-assessment-settings"
+            onChange={e => handleSettingChange(e.target.checked)}
+            onMouseOver={() => setShowTooltip(true)}
+            onMouseOut={() => setShowTooltip(false)}
+          />
+        </Tooltip>
       </View>
     </View>
   )

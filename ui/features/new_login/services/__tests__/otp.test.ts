@@ -16,8 +16,10 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {cancelOtpRequest, initiateOtpRequest, verifyOtpRequest} from '../otp'
 import doFetchApi from '@canvas/do-fetch-api-effect'
+import {cancelOtpRequest, initiateOtpRequest, verifyOtpRequest} from '../otp'
+
+jest.mock('@canvas/authenticity-token', () => jest.fn(() => 'testCsrfToken'))
 
 jest.mock('@canvas/do-fetch-api-effect', () => ({
   __esModule: true,
@@ -62,6 +64,7 @@ describe('OTP Service', () => {
         path: '/login/otp',
         method: 'POST',
         body: {
+          authenticity_token: 'testCsrfToken',
           otp_login: {
             verification_code: '123456',
             remember_me: '1',
@@ -79,6 +82,7 @@ describe('OTP Service', () => {
         path: '/login/otp',
         method: 'POST',
         body: {
+          authenticity_token: 'testCsrfToken',
           otp_login: {
             verification_code: '123456',
             remember_me: '1',
@@ -97,6 +101,9 @@ describe('OTP Service', () => {
       expect(doFetchApi).toHaveBeenCalledWith({
         path: '/login/otp/cancel',
         method: 'DELETE',
+        body: {
+          authenticity_token: 'testCsrfToken',
+        },
       })
       expect(result).toEqual({status: 200, data: {}})
     })
@@ -108,6 +115,9 @@ describe('OTP Service', () => {
       expect(doFetchApi).toHaveBeenCalledWith({
         path: '/login/otp/cancel',
         method: 'DELETE',
+        body: {
+          authenticity_token: 'testCsrfToken',
+        },
       })
       expect(result).toEqual({status: 400, data: {}})
     })

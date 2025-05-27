@@ -39,9 +39,7 @@
         },
         "parent": "TLyO3eZuxL",
         "hidden": false,
-        "nodes": [
-          "_XxLVx-F1J"
-        ],
+        "nodes": ["_XxLVx-F1J"],
         "linkedNodes": {}
       },
       "_XxLVx-F1J": {
@@ -88,11 +86,7 @@
         },
         "parent": "_XxLVx-F1J",
         "hidden": false,
-        "nodes": [
-          "zaHmb_oUjd",
-          "z1mT6TYlac",
-          "emHMl61Jgt"
-        ],
+        "nodes": ["zaHmb_oUjd", "z1mT6TYlac", "emHMl61Jgt"],
         "linkedNodes": {}
       },
       "zaHmb_oUjd": {
@@ -139,12 +133,7 @@
         },
         "parent": "zaHmb_oUjd",
         "hidden": false,
-        "nodes": [
-          "lhek4Mfd_G",
-          "VZf1m9OIjv",
-          "Q-4hy6Iwx1",
-          "SOLmh5Flzl"
-        ],
+        "nodes": ["lhek4Mfd_G", "VZf1m9OIjv", "Q-4hy6Iwx1", "SOLmh5Flzl"],
         "linkedNodes": {}
       },
       "lhek4Mfd_G": {
@@ -167,15 +156,13 @@
       },
       "VZf1m9OIjv": {
         "type": {
-          "resolvedName": "HeadingBlock"
+          "resolvedName": "RCETextBlock"
         },
         "isCanvas": false,
         "props": {
-          "text": "Reading Checklist",
-          "level": "h2",
-          "fontSize": "1.375rem"
+          "text": "<h2><span style='font-size: 18pt'>Reading Checklist</span></h2>"
         },
-        "displayName": "Heading",
+        "displayName": "Text",
         "custom": {
           "isResizable": true,
           "isBlock": true
@@ -187,16 +174,11 @@
       },
       "Q-4hy6Iwx1": {
         "type": {
-          "resolvedName": "TextBlock"
+          "resolvedName": "RCETextBlock"
         },
         "isCanvas": false,
         "props": {
-          "fontSize": "12pt",
-          "textAlign": "initial",
-          "color": "var(--ic-brand-font-color-dark)",
-          "text": "<p>Weekly reading materials can be found here.</p>",
-          "width": 209,
-          "height": 41
+          "text": "<p style='text-align: center;'>Weekly reading materials can be found here.</p>"
         },
         "displayName": "Text",
         "custom": {
@@ -218,7 +200,6 @@
           "href": "",
           "size": "medium",
           "variant": "outlined",
-          "color": "secondary",
           "iconName": ""
         },
         "displayName": "Button",
@@ -275,12 +256,7 @@
         },
         "parent": "z1mT6TYlac",
         "hidden": false,
-        "nodes": [
-          "oHy2URC0yL",
-          "_1b2OmZ-tj",
-          "yGUiDgwWgQ",
-          "D6fosm5oc-"
-        ],
+        "nodes": ["oHy2URC0yL", "_1b2OmZ-tj", "yGUiDgwWgQ", "D6fosm5oc-"],
         "linkedNodes": {}
       },
       "oHy2URC0yL": {
@@ -303,15 +279,13 @@
       },
       "_1b2OmZ-tj": {
         "type": {
-          "resolvedName": "HeadingBlock"
+          "resolvedName": "RCETextBlock"
         },
         "isCanvas": false,
         "props": {
-          "text": "Study Groups",
-          "level": "h2",
-          "fontSize": "1.375rem"
+          "text": "<h2><span style='font-size: 18pt'>Study Groups</span></h2>"
         },
-        "displayName": "Heading",
+        "displayName": "Text",
         "custom": {
           "isResizable": true,
           "isBlock": true
@@ -323,16 +297,11 @@
       },
       "yGUiDgwWgQ": {
         "type": {
-          "resolvedName": "TextBlock"
+          "resolvedName": "RCETextBlock"
         },
         "isCanvas": false,
         "props": {
-          "fontSize": "12pt",
-          "textAlign": "initial",
-          "color": "var(--ic-brand-font-color-dark)",
-          "text": "<p>Join a group to ensure your success in the course.</p>",
-          "width": 209,
-          "height": 41
+          "text": "<p style='text-align: center;'>Join a group to ensure your success in the course.</p>"
         },
         "displayName": "Text",
         "custom": {
@@ -354,7 +323,6 @@
           "href": "",
           "size": "medium",
           "variant": "outlined",
-          "color": "secondary",
           "iconName": ""
         },
         "displayName": "Button",
@@ -411,12 +379,7 @@
         },
         "parent": "emHMl61Jgt",
         "hidden": false,
-        "nodes": [
-          "wdF_GFFhl4",
-          "DIaZk454yk",
-          "9uQCG1WptZ",
-          "valyI9upJK"
-        ],
+        "nodes": ["wdF_GFFhl4", "DIaZk454yk", "9uQCG1WptZ", "valyI9upJK"],
         "linkedNodes": {}
       },
       "wdF_GFFhl4": {
@@ -439,15 +402,13 @@
       },
       "DIaZk454yk": {
         "type": {
-          "resolvedName": "HeadingBlock"
+          "resolvedName": "RCETextBlock"
         },
         "isCanvas": false,
         "props": {
-          "text": "Resources",
-          "level": "h2",
-          "fontSize": "1.375rem"
+          "text": "<h2><span style='font-size: 18pt'>Resources</span></h2>"
         },
-        "displayName": "Heading",
+        "displayName": "Text",
         "custom": {
           "isResizable": true,
           "isBlock": true
@@ -459,16 +420,11 @@
       },
       "9uQCG1WptZ": {
         "type": {
-          "resolvedName": "TextBlock"
+          "resolvedName": "RCETextBlock"
         },
         "isCanvas": false,
         "props": {
-          "fontSize": "12pt",
-          "textAlign": "initial",
-          "color": "var(--ic-brand-font-color-dark)",
-          "text": "<p>See tutoring schedule and contact information.</p>",
-          "width": 209,
-          "height": 41
+          "text": "<p style='text-align: center;'>See tutoring schedule and contact information.</p>"
         },
         "displayName": "Text",
         "custom": {
@@ -490,7 +446,6 @@
           "href": "",
           "size": "medium",
           "variant": "outlined",
-          "color": "secondary",
           "iconName": ""
         },
         "displayName": "Button",

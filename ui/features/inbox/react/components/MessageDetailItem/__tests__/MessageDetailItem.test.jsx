@@ -20,6 +20,7 @@ import {render, fireEvent} from '@testing-library/react'
 import React from 'react'
 import {responsiveQuerySizes} from '../../../../util/utils'
 import {MessageDetailItem} from '../MessageDetailItem'
+import fakeENV from '@canvas/test-utils/fakeENV'
 
 jest.mock('../../../../util/utils', () => ({
   ...jest.requireActual('../../../../util/utils'),
@@ -44,6 +45,19 @@ const setup = props => {
 }
 
 describe('MessageDetailItem', () => {
+  beforeEach(() => {
+    fakeENV.setup({
+      CONVERSATIONS: {
+        ATTACHMENTS_FOLDER_ID: '1',
+      },
+      inbox_translation_enabled: true,
+    })
+  })
+
+  afterEach(() => {
+    fakeENV.teardown()
+  })
+
   beforeAll(() => {
     // Add appropriate mocks for responsive
     window.matchMedia = jest.fn().mockImplementation(() => {
@@ -157,7 +171,7 @@ describe('MessageDetailItem', () => {
         ],
         createdAt: 'Tue, 20 Apr 2021 14:31:25 UTC +00:00',
         body: 'Text\nOn a new line',
-        htmlBody: 'Text\nOn a new line'
+        htmlBody: 'Text\nOn a new line',
       },
       contextName: 'Fake Course 1',
     }
@@ -248,7 +262,7 @@ describe('MessageDetailItem', () => {
 
     const moreOptionsButton = getByRole(
       (role, element) =>
-        role === 'button' && element.textContent === 'More options for message from Tom Thompson'
+        role === 'button' && element.textContent === 'More options for message from Tom Thompson',
     )
 
     fireEvent.click(moreOptionsButton)
@@ -301,14 +315,13 @@ describe('MessageDetailItem', () => {
         const {queryByText} = setup()
         expect(queryByText('he/him')).not.toBeInTheDocument()
       })
-
     })
     describe('can_add_pronouns enabled', () => {
       beforeEach(() => {
         ENV = {
           SETTINGS: {
-            can_add_pronouns: true
-          }
+            can_add_pronouns: true,
+          },
         }
       })
 
@@ -345,7 +358,7 @@ describe('MessageDetailItem', () => {
         }))
       })
 
-      it('Should emite correct Mobile Test Id', async () => {
+      it('Should emit correct Mobile Test Id', async () => {
         const {findByTestId} = setup()
         const item = await findByTestId('message-detail-item-mobile')
         expect(item).toBeTruthy()
@@ -359,7 +372,7 @@ describe('MessageDetailItem', () => {
         }))
       })
 
-      it('Should emite correct Tablet Test Id', async () => {
+      it('Should emit correct Tablet Test Id', async () => {
         const {findByTestId} = setup()
         const item = await findByTestId('message-detail-item-tablet')
         expect(item).toBeTruthy()
@@ -373,7 +386,7 @@ describe('MessageDetailItem', () => {
         }))
       })
 
-      it('Should emite correct Desktop Test Id', async () => {
+      it('Should emit correct Desktop Test Id', async () => {
         const {findByTestId} = setup()
         const item = await findByTestId('message-detail-item-desktop')
         expect(item).toBeTruthy()

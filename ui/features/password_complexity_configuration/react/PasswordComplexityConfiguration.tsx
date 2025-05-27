@@ -17,7 +17,7 @@
  */
 
 import React, {useEffect, useState} from 'react'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {Heading} from '@instructure/ui-heading'
 import {Text} from '@instructure/ui-text'
 import {View} from '@instructure/ui-view'
@@ -35,7 +35,7 @@ import CustomForbiddenWordsSection from './CustomForbiddenWordsSection'
 import type {PasswordPolicy, PasswordSettings, PasswordSettingsResponse} from './types'
 import {deleteForbiddenWordsFile} from './apiClient'
 
-const I18n = useI18nScope('password_complexity_configuration')
+const I18n = createI18nScope('password_complexity_configuration')
 
 declare const ENV: GlobalEnv
 
@@ -86,7 +86,7 @@ const PasswordComplexityConfiguration = () => {
             setRequireNumbersEnabled(passwordPolicy.require_number_characters === 'true')
             setRequireSymbolsEnabled(passwordPolicy.require_symbol_characters === 'true')
             setMinimumCharacterLength(
-              passwordPolicy.minimum_character_length || MINIMUM_CHARACTER_LENGTH
+              passwordPolicy.minimum_character_length || MINIMUM_CHARACTER_LENGTH,
             )
             setMinimumCharacterLengthEnabled(!!passwordPolicy.minimum_character_length)
             setMaxLoginAttempts(passwordPolicy.maximum_login_attempts || DEFAULT_MAX_LOGIN_ATTEMPTS)
@@ -177,7 +177,6 @@ const PasswordComplexityConfiguration = () => {
       try {
         await deleteForbiddenWordsFile(newlyUploadedAttachmentId)
       } catch (error) {
-        // eslint-disable-next-line no-console
         console.error('Error deleting forbidden words file on cancel:', error)
       }
       setNewlyUploadedAttachmentId(null)
@@ -208,7 +207,7 @@ const PasswordComplexityConfiguration = () => {
       if (!customForbiddenWordsEnabled) {
         if (settingsResult.password_policy.common_passwords_attachment_id) {
           await deleteForbiddenWordsFile(
-            settingsResult.password_policy.common_passwords_attachment_id
+            settingsResult.password_policy.common_passwords_attachment_id,
           )
         }
       } else if (settingsResult.password_policy.common_passwords_attachment_id) {
@@ -298,7 +297,7 @@ const PasswordComplexityConfiguration = () => {
               <View as="div" margin="xxx-small auto small auto">
                 <Text size="small" lineHeight="fit">
                   {I18n.t(
-                    'Some institutions have very strict policies regarding passwords. This feature enables customization of password requirements and options for this auth provider. Modifications to password options will customize the password configuration text as seen below. If a custom minimum character length or maximum login attempts is not set, their default values will be used.'
+                    'Some institutions have very strict policies regarding passwords. This feature enables customization of password requirements and options for this auth provider. Modifications to password options will customize the password configuration text as seen below. If a custom minimum character length or maximum login attempts is not set, their default values will be used.',
                   )}
                 </Text>
               </View>
@@ -322,7 +321,7 @@ const PasswordComplexityConfiguration = () => {
                 )}
                 <List.Item>
                   {I18n.t(
-                    'Must not use words or sequences of characters common in passwords (ie: password, 12345, etc...)'
+                    'Must not use words or sequences of characters common in passwords (ie: password, 12345, etc...)',
                   )}
                 </List.Item>
               </List>
@@ -388,7 +387,7 @@ const PasswordComplexityConfiguration = () => {
               >
                 <Text size="small">
                   {I18n.t(
-                    'This option controls the number of attempts a single user can make consecutively to login without success before their user’s login is suspended temporarily (5 min). Cannot be higher than 20 attempts.'
+                    'This option controls the number of attempts a single user can make consecutively to login without success before their user’s login is suspended temporarily (5 min). Cannot be higher than 20 attempts.',
                   )}
                 </Text>
               </View>
@@ -420,7 +419,7 @@ const PasswordComplexityConfiguration = () => {
                 >
                   <Text size="small">
                     {I18n.t(
-                      'Users with a suspended login (because of maximum login attempt policy) must be unsuspended by institutional admins.'
+                      'Users with a suspended login (because of maximum login attempt policy) must be unsuspended by institutional admins.',
                     )}
                   </Text>
                 </View>

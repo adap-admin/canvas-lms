@@ -21,9 +21,9 @@ import {IconButton} from '@instructure/ui-buttons'
 import {IconEditLine, IconXLine} from '@instructure/ui-icons'
 import {type KeyboardOrMouseEvent} from './types'
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 
-const I18n = useI18nScope('block-editor')
+const I18n = createI18nScope('block-editor')
 
 type EditTemplateButtonsProps = {
   templateId: string
@@ -41,7 +41,7 @@ const EditTemplateButtons = ({
       event.stopPropagation()
       onDeleteTemplate(id)
     },
-    [onDeleteTemplate]
+    [onDeleteTemplate],
   )
 
   const handleEditTemplate = useCallback(
@@ -49,7 +49,7 @@ const EditTemplateButtons = ({
       event.stopPropagation()
       onEditTemplate(id)
     },
-    [onEditTemplate]
+    [onEditTemplate],
   )
 
   return (
@@ -67,20 +67,24 @@ const EditTemplateButtons = ({
       <IconButton
         themeOverride={{smallHeight: '.75rem'}}
         screenReaderLabel={I18n.t('Edit Template')}
+        title={I18n.t('Edit Template')}
         size="small"
         withBackground={false}
         withBorder={false}
         onClick={handleEditTemplate.bind(null, templateId)}
+        data-testid="edit-template-icon-button-edit"
       >
         <IconEditLine size="x-small" themeOverride={{sizeXSmall: '.5rem'}} />
       </IconButton>
       <IconButton
         themeOverride={{smallHeight: '.75rem'}}
         screenReaderLabel={I18n.t('Delete Template')}
+        title={I18n.t('Delete Template')}
         size="small"
         withBackground={false}
         withBorder={false}
         onClick={handleDeleteTemplate.bind(null, templateId)}
+        data-testid="edit-template-icon-button-delete"
       >
         <IconXLine size="x-small" themeOverride={{sizeXSmall: '.5rem'}} />
       </IconButton>

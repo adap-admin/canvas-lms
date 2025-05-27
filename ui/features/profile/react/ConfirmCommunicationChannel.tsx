@@ -17,7 +17,7 @@
  */
 
 import React, {type ReactNode} from 'react'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {Heading} from '@instructure/ui-heading'
 import {Modal} from '@instructure/ui-modal'
 import {Button, CloseButton} from '@instructure/ui-buttons'
@@ -28,19 +28,22 @@ import {Flex} from '@instructure/ui-flex'
 import doFetchApi from '@canvas/do-fetch-api-effect'
 import {zodResolver} from '@hookform/resolvers/zod'
 import * as z from 'zod'
-import {Controller, useForm} from 'react-hook-form'
+import {Controller, useForm, type SubmitHandler} from 'react-hook-form'
 import {getFormErrorMessage} from '@canvas/forms/react/react-hook-form/utils'
 
-const I18n = useI18nScope('profile')
+const I18n = createI18nScope('profile')
 
 const defaultValues = {code: ''}
 
-const validationSchema = z.object({
-  code: z
-    .string()
-    .min(1, I18n.t('Code is required.'))
-    .length(4, I18n.t('Code must be four characters.')),
-})
+const createValidationSchema = () =>
+  z.object({
+    code: z
+      .string()
+      .min(1, I18n.t('Code is required.'))
+      .length(4, I18n.t('Code must be four characters.')),
+  })
+
+type FormValues = z.infer<ReturnType<typeof createValidationSchema>>
 
 interface ConfirmChannelResponse {
   communication_channel: {id: string; pseudonym_id: string}
@@ -69,12 +72,12 @@ const ConfirmCommunicationChannel = ({
     handleSubmit,
   } = useForm({
     defaultValues,
-    resolver: zodResolver(validationSchema),
+    resolver: zodResolver(createValidationSchema()),
   })
   const title = I18n.t('Confirm Communication Channel')
   const buttonText = isSubmitting ? I18n.t('Confirming...') : I18n.t('Confirm')
 
-  const handleFormSubmit = async ({code}: typeof defaultValues) => {
+  const handleFormSubmit: SubmitHandler<FormValues> = async ({code}) => {
     try {
       const {json} = await doFetchApi<ConfirmChannelResponse>({
         path: `/register/${code}`,
@@ -117,8 +120,8 @@ const ConfirmCommunicationChannel = ({
               __html: raw(
                 I18n.t(
                   'To activate this communication channel, enter the four-character confirmation code sent to *%{phoneNumberOrEmail}*. The code is case sensitive.',
-                  {wrapper: '<b>$1</b>', phoneNumberOrEmail}
-                )
+                  {wrapper: '<b>$1</b>', phoneNumberOrEmail},
+                ),
               ),
             }}
           />

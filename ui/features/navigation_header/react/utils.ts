@@ -16,10 +16,10 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import axios from '@canvas/axios'
 
-const I18n = useI18nScope('Navigation')
+const I18n = createI18nScope('Navigation')
 
 export type ExternalTool = {
   href: string | null
@@ -30,7 +30,7 @@ export type ExternalTool = {
 
 export const getExternalApps = async (): Promise<ExternalTool[]> => {
   const {data: tools} = await axios.get(
-    `/api/v1/accounts/${window.ENV.ACCOUNT_ID}/lti_apps/launch_definitions?per_page=50&placements[]=global_navigation&only_visible=true`
+    `/api/v1/accounts/${window.ENV.ACCOUNT_ID}/lti_apps/launch_definitions?per_page=50&placements[]=global_navigation&only_visible=true`,
   )
   if (!Array.isArray(tools)) return []
   return tools

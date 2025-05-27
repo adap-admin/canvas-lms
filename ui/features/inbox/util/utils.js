@@ -16,9 +16,9 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 import {User} from '../graphql/User'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 
-const I18n = useI18nScope('conversations_2')
+const I18n = createI18nScope('conversations_2')
 
 export const responsiveQuerySizes = ({mobile = false, tablet = false, desktop = false} = {}) => {
   const querySizes = {}
@@ -60,7 +60,7 @@ export const inboxConversationsWrapper = (data, isSubmissionComments = false) =>
         inboxConversation.lastMessageContent = newestSubmissionComment?.comment
         inboxConversation.participantString = getParticipantsString(
           conversation?.commentsConnection.nodes,
-          isSubmissionComments
+          isSubmissionComments,
         )
         inboxConversation.messages = conversation?.commentsConnection.nodes
         inboxConversation.count = conversation?.commentsConnection.nodes.length || 0
@@ -83,7 +83,7 @@ export const inboxConversationsWrapper = (data, isSubmissionComments = false) =>
           inboxConversation?.participants,
           isSubmissionComments,
           inboxConversation?.messages[inboxConversation.messages.length - 1]?.author?.shortName ||
-            DEFAULT_USER_PROPERTIES.name
+            DEFAULT_USER_PROPERTIES.name,
         )
         inboxConversation.isPrivate = conversation?.conversation?.isPrivate
       }
@@ -166,7 +166,7 @@ const getConversationParticipantString = (participants, conversationOwnerName) =
 const getParticipantsString = (
   participants,
   isSubmissionComments,
-  conversationOwnerName = null
+  conversationOwnerName = null,
 ) => {
   return isSubmissionComments
     ? getSubmissionCommentsParticipantString(participants)

@@ -19,27 +19,25 @@
 
 module SectionTabHelper
   # This should contain all the permissions that are checked in Course#uncached_tabs_available
-  PERMISSIONS_TO_PRECALCULATE = %i[
-    create_conferences
-    create_forum
-    manage_admin_users
-    manage_assignments
-    manage_assignments_add
-    manage_assignments_edit
-    manage_assignments_delete
-    manage_content
-    manage_files_add
-    manage_files_edit
-    manage_files_delete
-    manage_grades
-    manage_students
-    moderate_forum
-    post_to_forum
-    read_announcements
-    read_course_content
-    read_forum
-    read_roster
-    view_all_grades
+  PERMISSIONS_TO_PRECALCULATE = [
+    :create_conferences,
+    :create_forum,
+    :manage_assignments_add,
+    :manage_assignments_edit,
+    :manage_assignments_delete,
+    :manage_files_add,
+    :manage_files_edit,
+    :manage_files_delete,
+    :manage_grades,
+    :manage_students,
+    :moderate_forum,
+    :post_to_forum,
+    :read_announcements,
+    :read_course_content,
+    :read_forum,
+    :read_roster,
+    :view_all_grades,
+    *RoleOverride::GRANULAR_MANAGE_USER_PERMISSIONS
   ].freeze
 
   def available_section_tabs
@@ -197,6 +195,7 @@ module SectionTabHelper
       {
         href: @tab.path,
         title: a_title,
+        id: "#{@tab.label.downcase.tr(" ", "-")}-link",
         "aria-label": a_aria_label,
         "aria-current": a_aria_current_page,
         class: a_classes

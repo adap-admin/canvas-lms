@@ -43,19 +43,27 @@ beforeEach(() => {
 
 const setup = props => {
   return render(
-    <MarkAsRead onClick={Function.prototype} isRead={false} isSplitScreenView={false} {...props} />
+    <MarkAsRead onClick={Function.prototype} isRead={false} isSplitScreenView={false} {...props} />,
   )
 }
 
 describe('MarkAsRead', () => {
   it('renders text for desktop view', () => {
-    const {getAllByText} = setup()
+    const {getAllByText, queryByTestId} = setup()
     expect(getAllByText('Mark as Read')).toBeTruthy()
+    expect(queryByTestId('threading-toolbar-mark-as-read')).toHaveAttribute(
+      'data-action-state',
+      'readButton',
+    )
   })
 
   it('renders unread text for desktop view', () => {
-    const {getAllByText} = setup({isRead: true})
+    const {getAllByText, queryByTestId} = setup({isRead: true})
     expect(getAllByText('Mark as Unread')).toBeTruthy()
+    expect(queryByTestId('threading-toolbar-mark-as-read')).toHaveAttribute(
+      'data-action-state',
+      'unreadButton',
+    )
   })
 
   it('does not render text for split screen view', () => {
@@ -66,9 +74,9 @@ describe('MarkAsRead', () => {
   it('calls provided callback when clicked', () => {
     const onClickMock = jest.fn()
     const {getAllByText} = setup({onClick: onClickMock})
-    expect(onClickMock.mock.calls.length).toBe(0)
+    expect(onClickMock.mock.calls).toHaveLength(0)
     fireEvent.click(getAllByText('Mark as Read')[0])
-    expect(onClickMock.mock.calls.length).toBe(1)
+    expect(onClickMock.mock.calls).toHaveLength(1)
   })
 
   describe('Mobile', () => {

@@ -21,7 +21,7 @@ import PropTypes from 'prop-types'
 import React, {useLayoutEffect, useRef, useContext} from 'react'
 import {DiscussionManagerUtilityContext} from '../../utils/constants'
 import theme from '@instructure/canvas-theme'
-
+import {scrollToHighlight} from './ScrollToHighlight'
 export function Highlight({...props}) {
   const highlightRef = useRef()
   const urlParams = new URLSearchParams(window.location.search)
@@ -33,26 +33,24 @@ export function Highlight({...props}) {
     if (!element) {
       return
     }
-    let eventType = "onfocusin" in element ? "focusin" : "focus";
-    let bubbles = "onfocusin" in element;
-    let event;
+    const eventType = 'onfocusin' in element ? 'focusin' : 'focus'
+    const bubbles = 'onfocusin' in element
+    let event
 
-    if ("createEvent" in document) {
-        event = document.createEvent("Event");
-        event.initEvent(eventType, bubbles, true);
-    }
-    else if ("Event" in window) {
-        event = new Event(eventType, { bubbles: bubbles, cancelable: true });
+    if ('createEvent' in document) {
+      event = document.createEvent('Event')
+      event.initEvent(eventType, bubbles, true)
+    } else if ('Event' in window) {
+      event = new Event(eventType, {bubbles, cancelable: true})
     }
 
-    element.focus();
-    element.dispatchEvent(event);
+    element.focus()
+    element.dispatchEvent(event)
   }
 
   useLayoutEffect(() => {
     if (props.isHighlighted && highlightRef.current) {
       setTimeout(() => {
-        highlightRef.current?.scrollIntoView({behavior: 'smooth', block: 'center'})
         if (focusSelector) {
           const speedGraderDiv = highlightRef.current?.querySelector('#speedgrader-navigator')
           triggerFocus(speedGraderDiv)
@@ -61,18 +59,22 @@ export function Highlight({...props}) {
         } else {
           highlightRef.current?.querySelector('button').focus({preventScroll: true})
         }
+        scrollToHighlight(highlightRef.current)
       }, 0)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.isHighlighted, highlightRef])
 
   return (
     <div
       style={{
         borderRadius: theme.borders.radiusLarge,
+        padding: `${props.isHighlighted ? theme.spacing.xSmall : 0} 0 0 0`,
       }}
       className={classNames({[className]: props.isHighlighted})}
       data-testid={props.isHighlighted ? 'isHighlighted' : 'notHighlighted'}
       ref={highlightRef}
+      data-entry-id={props.discussionEntryId}
     >
       {props.children}
     </div>
@@ -85,6 +87,7 @@ Highlight.propTypes = {
    */
   isHighlighted: PropTypes.bool,
   children: PropTypes.node,
+  discussionEntryId: PropTypes.string,
 }
 
 Highlight.defaultProps = {

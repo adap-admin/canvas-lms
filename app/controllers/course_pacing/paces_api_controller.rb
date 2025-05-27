@@ -19,7 +19,6 @@
 
 class CoursePacing::PacesApiController < ApplicationController
   before_action :load_contexts
-  before_action :require_feature_flag
   before_action :authorize_action
 
   include Api::V1::Progress
@@ -85,10 +84,11 @@ class CoursePacing::PacesApiController < ApplicationController
   def update_params
     params.require(:pace).permit(
       :end_date,
-      :exclude_weekends,
       :hard_end_dates,
       :workflow_state,
-      course_pace_module_items_attributes: %i[id duration module_item_id root_account_id]
+      :exclude_weekends,
+      course_pace_module_items_attributes: %i[id duration module_item_id root_account_id],
+      selected_days_to_skip: []
     )
   end
 
@@ -109,14 +109,10 @@ class CoursePacing::PacesApiController < ApplicationController
   end
 
   def authorize_action
-    authorized_action(course, @current_user, [:manage_content, :manage_course_content_edit])
+    authorized_action(course, @current_user, :manage_course_content_edit)
   end
 
   def load_contexts
     raise NotImplementedError
-  end
-
-  def require_feature_flag
-    not_found unless Account.site_admin.feature_enabled?(:course_paces_redesign)
   end
 end

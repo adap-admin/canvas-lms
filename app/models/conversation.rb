@@ -480,7 +480,7 @@ class Conversation < ActiveRecord::Base
     updated = false
     conversation_participants.shard(self).activate do |conversation_participants|
       if options[:only_users]
-        conversation_participants = conversation_participants.where(user_id:           (options[:only_users]).map(&:id))
+        conversation_participants = conversation_participants.where(user_id:           options[:only_users].map(&:id))
       end
 
       skip_ids = options[:skip_users].try(:map, &:id) || [message.author_id]
@@ -805,7 +805,7 @@ class Conversation < ActiveRecord::Base
 
   def maybe_update_timestamp(col, val, additional_conditions = [])
     scope = self.class.where(["(#{col} IS NULL OR #{col} < ?)", val]).where(additional_conditions)
-    condition = scope.where_clause.send(:predicates).join(" AND ")
+    condition = /WHERE (.+)$/.match(scope.to_sql)[1]
     sanitize_sql ["#{col} = CASE WHEN #{condition} THEN ? ELSE #{col} END", val]
   end
 end

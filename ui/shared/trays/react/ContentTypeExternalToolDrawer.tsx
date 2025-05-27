@@ -29,6 +29,8 @@ import {handleExternalContentMessages} from '@canvas/external-tools/messages'
 import ToolLaunchIframe from '@canvas/external-tools/react/components/ToolLaunchIframe'
 import MutexManager from '@canvas/mutex-manager/MutexManager'
 import type {Tool} from '@canvas/global/env/EnvCommon'
+import iframeAllowances from '@canvas/external-apps/iframeAllowances'
+import {onLtiClosePostMessage} from '@canvas/lti/jquery/messages'
 
 type Props = {
   tool: Tool | null
@@ -61,8 +63,9 @@ export default function ContentTypeExternalToolDrawer({
   const toolTitle = tool ? tool.title : 'External Tool'
   const toolIconUrl = tool?.icon_url
   const toolIconAlt = toolTitle ? `${toolTitle} Icon` : 'Tool Icon'
-  const iframeRef = useRef()
+  const iframeRef = useRef<HTMLIFrameElement>(null)
   const pageContentRef = useRef()
+  // @ts-expect-error
   const initDrawerLayoutMutex = window.ENV.INIT_DRAWER_LAYOUT_MUTEX
 
   useEffect(
@@ -70,6 +73,7 @@ export default function ContentTypeExternalToolDrawer({
     () => {
       // appends pageContent to DrawerLayout.content
       if (pageContentRef.current && pageContent) {
+        // @ts-expect-error
         pageContentRef.current.appendChild(pageContent)
       }
       /* Reparenting causes iFrames to reload or cancel load.
@@ -80,7 +84,7 @@ export default function ContentTypeExternalToolDrawer({
         MutexManager.releaseMutex(initDrawerLayoutMutex)
       }
     },
-    [pageContent, initDrawerLayoutMutex]
+    [pageContent, initDrawerLayoutMutex],
   )
 
   useEffect(() => {
@@ -94,13 +98,22 @@ export default function ContentTypeExternalToolDrawer({
   useEffect(
     // returns cleanup function:
     () => handleExternalContentMessages({ready: onExternalContentReady}),
-    [onExternalContentReady]
+    [onExternalContentReady],
   )
+
+  useEffect(() => {
+    // this drawer is mounted on page load, but listening for tool messages
+    // only needs to happen when the drawer is open
+    if (open) {
+      return onLtiClosePostMessage('top_navigation', onDismiss)
+    }
+  }, [open])
 
   return (
     <View display="block" height={pageContentHeight}>
       <DrawerLayout minWidth={pageContentMinWidth}>
         <DrawerLayout.Content label={pageContentTitle} id="drawer-layout-content">
+          {/* @ts-expect-error */}
           <div ref={pageContentRef} />
         </DrawerLayout.Content>
         <DrawerLayout.Tray
@@ -134,6 +147,7 @@ export default function ContentTypeExternalToolDrawer({
                 </Flex.Item>
                 <Flex.Item padding="none small none none">
                   {(toolIconUrl && <Img src={toolIconUrl} height="1rem" alt={toolIconAlt} />) || (
+                    // @ts-expect-error
                     <IconLtiLine alt={toolIconAlt} />
                   )}
                 </Flex.Item>
@@ -142,10 +156,12 @@ export default function ContentTypeExternalToolDrawer({
             <Flex.Item shouldGrow={true}>
               {tool && (
                 <ToolLaunchIframe
+                  className={`tool_launch tool_launch_${tool.placement}`}
                   data-testid="ltiIframe"
                   ref={iframeRef}
                   src={iframeUrl}
                   title={toolTitle}
+                  allow={iframeAllowances()}
                 />
               )}
             </Flex.Item>

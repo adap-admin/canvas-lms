@@ -17,7 +17,6 @@
  */
 
 import {type Node} from '@craftjs/core'
-import {ROOT_NODE} from '@craftjs/utils'
 import {findFirstChildBlock} from './KBNavigator'
 import {TemplateEditor} from '../types'
 
@@ -25,7 +24,7 @@ const getToolbarPos = (
   domNode: HTMLElement | null,
   mountPoint: HTMLElement,
   currentToolbarOrTagRef: HTMLElement | null,
-  includeOffset: boolean = true
+  includeOffset: boolean = true,
 ) => {
   if (!domNode) return {top: 0, left: 0}
 
@@ -45,16 +44,22 @@ const getToolbarPos = (
 
   const offsetLeft = includeOffset ? 5 : 0
 
-  return {
-    top: ntop - ptop - offsetTop,
-    left: nleft - pleft - offsetLeft,
+  let top = ntop - ptop - offsetTop
+  const left = nleft - pleft - offsetLeft
+
+  // if the toolbar will overlap the Topbar, move it to the bottom of its node
+  const topbarBottom = document.querySelector('.topbar')?.getBoundingClientRect().bottom || 0
+  if (topbarBottom > ntop - offsetTop) {
+    top += nodeRect.height + offsetTop
   }
+
+  return {top, left}
 }
 
 function findUpNode(
   node: Node,
   query: any,
-  templateEditor: TemplateEditor = TemplateEditor.NONE
+  templateEditor: TemplateEditor = TemplateEditor.NONE,
 ): Node | undefined {
   let upnode = node.data.parent ? query.node(node.data.parent).get() : undefined
   while (upnode && upnode.data.parent && upnode.data.custom?.noToolbar) {

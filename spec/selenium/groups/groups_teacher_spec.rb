@@ -32,7 +32,9 @@ describe "new groups" do
 
     context "differentiation_tags" do
       before :once do
-        Account.default.enable_feature!(:differentiation_tags)
+        Account.default.settings[:allow_assign_to_differentiation_tags] = { value: true }
+        Account.default.save!
+        Account.default.reload
       end
 
       it "does not have Visit Group Homepage option in group actions for non_collaborative groups" do
@@ -210,7 +212,8 @@ describe "new groups" do
 
       click_add_group_set
       replace_and_proceed f("#new-group-set-name"), "Test Group Set"
-      fxpath("//input[@data-testid='checkbox-allow-self-signup']/..").click
+      f("body").send_keys(:tab)
+      f("span[data-testid='allow-self-signup-wrapper'] div div").click
       force_click('[data-testid="group-member-limit"]')
       f('[data-testid="group-member-limit"]').send_keys("2")
       f(%(button[data-testid="group-set-save"])).click
@@ -760,6 +763,24 @@ describe "new groups" do
         expect(f(".errorBox:not(#error_box_template)")).to include_text(@group_category.first.name + " is already in use.")
       end
 
+      it "shows error for name field and clears it if user closes modal" do
+        group_test_setup
+        get "/courses/#{@course.id}/groups"
+
+        open_clone_group_set_option
+
+        replace_content(f('input[data-testid="cloned_category_name_input"]'), "")
+        f('button[type="submit"]').click
+        expect(fj("span:contains('Group set name is required')")).to be_present
+
+        f('button[data-testid="cancel_clone_group_set"]').click
+        open_clone_group_set_option
+
+        expect do
+          fj("span:contains('Group set name is required')")
+        end.to raise_error(Selenium::WebDriver::Error::NoSuchElementError) # rubocop:disable Specs/NoNoSuchElementError
+      end
+
       it "changes group membership after an assignment has been deleted" do
         group_test_setup
         add_user_to_group(@students.first, @testgroup[0])
@@ -843,14 +864,25 @@ describe "new groups" do
         end
 
         it "clones group set when deleting a group with submission" do
-          skip("KNO-187")
+          # skip("KNO-187")
           group_test_setup
           add_user_to_group(@students.first, @testgroup.first)
           create_and_submit_assignment_from_group(@students.first)
 
           CourseGroups.visit_course_groups(@course.id)
-          CourseGroups.delete_group(@testgroup.first.id)
+          manually_delete_group
+
+          set_value f("#cloned_category_name"), ""
           CourseGroups.clone_category_confirm
+          expect(f("body")).to include_text("Name is required")
+
+          set_value f("#cloned_category_name"), "a" * 300
+          CourseGroups.clone_category_confirm
+          expect(f("body")).to include_text("Enter a shorter category name")
+
+          set_value f("#cloned_category_name"), "(Cloned) #{@testgroup.first.name}"
+          CourseGroups.clone_category_confirm
+
           CourseGroups.toggle_group_detail_view(@testgroup.first.name)
 
           # Verifies student has not changed groups and there is a new groupset tab

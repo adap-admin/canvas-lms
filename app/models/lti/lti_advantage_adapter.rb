@@ -160,6 +160,33 @@ module Lti
       @tool.login_or_launch_url(extension_type: resource_type)
     end
 
+    # Generates a login request pointing to a cached launch (ID token)
+    # suitable for asset processor settings request
+    #
+    # These launches occur when an already attached asset processor
+    # settings are requested from the tool and used to update those.
+    def generate_post_payload_for_asset_processor_settings
+      login_request(asset_processor_settings_request.to_cached_hash)
+    end
+
+    # Generates a login request pointing to a cached launch (ID token)
+    # suitable for report review request used in asset processor.
+    #
+    # These launches show a detailed report of an asset
+    # processed created by an lti tool using asset processor.
+    def generate_post_payload_for_report_review
+      login_request(report_review_request.to_cached_hash)
+    end
+
+    # Generates a login request pointing to a cached launch (ID token)
+    # for an deployment-level EULA launch (1EdTech Eula Message spec)
+    #
+    # These launches show the EULA of a tool
+    # that can be accessed on deployment level.
+    def generate_post_payload_for_eula
+      login_request(eula_request.to_cached_hash)
+    end
+
     private
 
     def target_link_uri
@@ -190,7 +217,7 @@ module Lti
 
     def login_request(lti_params)
       message_hint = cache_payload(lti_params)
-      login_hint = Lti::Asset.opaque_identifier_for(@user, context: @context) || User.public_lti_id
+      login_hint = Lti::V1p1::Asset.opaque_identifier_for(@user, context: @context) || User.public_lti_id
       deployment_id_flag_on = @context.root_account.feature_enabled?(:lti_deployment_id_in_login_request)
 
       req_params = {
@@ -240,6 +267,41 @@ module Lti
 
     def resource_link_request
       @_resource_link_request ||= Lti::Messages::ResourceLinkRequest.new(
+        tool: @tool,
+        context: @context,
+        user: @user,
+        expander: @expander,
+        return_url: @return_url,
+        opts: @opts.merge(option_overrides)
+      )
+    end
+
+    def asset_processor_settings_request
+      @_asset_processor_settings_request ||= Lti::Messages::AssetProcessorSettingsRequest.new(
+        tool: @tool,
+        context: @context,
+        user: @user,
+        expander: @expander,
+        return_url: @return_url,
+        asset_processor: @opts[:asset_processor],
+        opts: @opts.merge(option_overrides)
+      )
+    end
+
+    def report_review_request
+      @_report_review_request ||= Lti::Messages::ReportReviewRequest.new(
+        tool: @tool,
+        context: @context,
+        user: @user,
+        expander: @expander,
+        return_url: @return_url,
+        asset_report: @opts[:asset_report],
+        opts: @opts.merge(option_overrides)
+      )
+    end
+
+    def eula_request
+      @_eula_request ||= Lti::Messages::EulaRequest.new(
         tool: @tool,
         context: @context,
         user: @user,

@@ -167,6 +167,31 @@ Rails.application.config.to_prepare do
         ],
         true_for: %w[AccountAdmin]
       },
+      undelete_courses: {
+        label: -> { I18n.t("permissions.undelete_courses", "Undelete courses") },
+        label_v2: -> { I18n.t("Courses - undelete") },
+        admin_tool: true,
+        account_only: true,
+        available_to: %w[
+          AccountAdmin
+          AccountMembership
+        ],
+        true_for: %w[AccountAdmin]
+      },
+      view_archived_courses: {
+        label: -> { I18n.t("View archived courses") },
+        label_v2: -> { I18n.t("Courses - view archived") },
+        group: "manage_courses",
+        group_label: -> { I18n.t("Manage Courses") },
+        available_to: %w[
+          AccountAdmin
+          AccountMembership
+          TeacherEnrollment
+          DesignerEnrollment
+        ],
+        true_for: %w[AccountAdmin],
+        account_allows: ->(a) { a.root_account.feature_enabled?(:course_archival) }
+      },
       manage_data_services: {
         label: -> { I18n.t("permissions.manage_data_services", "Manage data services") },
         label_v2: -> { I18n.t("Data Services - manage ") },
@@ -404,17 +429,6 @@ Rails.application.config.to_prepare do
         true_for: %w[AccountAdmin],
         available_to: %w[AccountAdmin AccountMembership]
       },
-      undelete_courses: {
-        label: -> { I18n.t("permissions.undelete_courses", "Undelete courses") },
-        label_v2: -> { I18n.t("Courses - undelete") },
-        admin_tool: true,
-        account_only: true,
-        available_to: [
-          "AccountAdmin",
-          "AccountMembership"
-        ],
-        true_for: ["AccountAdmin"]
-      },
       create_collaborations: {
         label: -> { I18n.t("permissions.create_collaborations", "Create student collaborations") },
         label_v2: -> { I18n.t("Student Collaborations - create") },
@@ -498,25 +512,6 @@ Rails.application.config.to_prepare do
           AccountAdmin
         ]
       },
-      # lagacy role override
-      lti_add_edit: {
-        label: -> { I18n.t("LTI add and edit") },
-        label_v2: -> { I18n.t("LTI - add / edit / delete") },
-        available_to: %w[
-          TeacherEnrollment
-          TaEnrollment
-          DesignerEnrollment
-          AccountAdmin
-          AccountMembership
-        ],
-        true_for: %w[
-          TeacherEnrollment
-          TaEnrollment
-          DesignerEnrollment
-          AccountAdmin
-        ],
-        account_allows: ->(a) { !a.root_account.feature_enabled?(:granular_permissions_manage_lti) }
-      },
       manage_lti_add: {
         label: -> { I18n.t("Add LTI") },
         label_v2: -> { I18n.t("LTI - add") },
@@ -534,8 +529,7 @@ Rails.application.config.to_prepare do
           TaEnrollment
           DesignerEnrollment
           AccountAdmin
-        ],
-        account_allows: ->(a) { a.root_account.feature_enabled?(:granular_permissions_manage_lti) }
+        ]
       },
       manage_lti_edit: {
         label: -> { I18n.t("Edit LTI") },
@@ -554,8 +548,7 @@ Rails.application.config.to_prepare do
           TaEnrollment
           DesignerEnrollment
           AccountAdmin
-        ],
-        account_allows: ->(a) { a.root_account.feature_enabled?(:granular_permissions_manage_lti) }
+        ]
       },
       manage_lti_delete: {
         label: -> { I18n.t("Delete LTI") },
@@ -574,24 +567,7 @@ Rails.application.config.to_prepare do
           TaEnrollment
           DesignerEnrollment
           AccountAdmin
-        ],
-        account_allows: ->(a) { a.root_account.feature_enabled?(:granular_permissions_manage_lti) }
-      },
-      manage_admin_users: {
-        label: -> { I18n.t("permissions.manage_admin_users", "Add/remove other teachers, course designers or TAs to the course") },
-        label_v2: -> { I18n.t("Users - add / remove teachers, course designers, or TAs in courses") },
-        available_to: %w[
-          TaEnrollment
-          DesignerEnrollment
-          TeacherEnrollment
-          AccountAdmin
-          AccountMembership
-        ],
-        true_for: [
-          "TeacherEnrollment",
-          "AccountAdmin"
-        ],
-        account_allows: ->(a) { !a.root_account.feature_enabled?(:granular_permissions_manage_users) }
+        ]
       },
       allow_course_admin_actions: {
         label: -> { I18n.t("Allow administrative actions in courses") },
@@ -606,8 +582,7 @@ Rails.application.config.to_prepare do
         true_for: [
           "TeacherEnrollment",
           "AccountAdmin"
-        ],
-        account_allows: ->(a) { a.root_account.feature_enabled?(:granular_permissions_manage_users) }
+        ]
       },
       add_teacher_to_course: {
         label: -> { I18n.t("Add Teachers to courses") },
@@ -624,8 +599,7 @@ Rails.application.config.to_prepare do
           "AccountAdmin"
         ],
         group: "manage_course_teacher_enrollments",
-        group_label: -> { I18n.t("Users - Teachers") },
-        account_allows: ->(a) { a.root_account.feature_enabled?(:granular_permissions_manage_users) }
+        group_label: -> { I18n.t("Users - Teachers") }
       },
       remove_teacher_from_course: {
         label: -> { I18n.t("Remove Teachers from courses") },
@@ -642,8 +616,7 @@ Rails.application.config.to_prepare do
           "AccountAdmin"
         ],
         group: "manage_course_teacher_enrollments",
-        group_label: -> { I18n.t("Users - Teachers") },
-        account_allows: ->(a) { a.root_account.feature_enabled?(:granular_permissions_manage_users) }
+        group_label: -> { I18n.t("Users - Teachers") }
       },
       add_ta_to_course: {
         label: -> { I18n.t("Add TAs to courses") },
@@ -660,8 +633,7 @@ Rails.application.config.to_prepare do
           "AccountAdmin"
         ],
         group: "manage_course_ta_enrollments",
-        group_label: -> { I18n.t("Users - TAs") },
-        account_allows: ->(a) { a.root_account.feature_enabled?(:granular_permissions_manage_users) }
+        group_label: -> { I18n.t("Users - TAs") }
       },
       remove_ta_from_course: {
         label: -> { I18n.t("Remove TAs from courses") },
@@ -678,8 +650,7 @@ Rails.application.config.to_prepare do
           "AccountAdmin"
         ],
         group: "manage_course_ta_enrollments",
-        group_label: -> { I18n.t("Users - TAs") },
-        account_allows: ->(a) { a.root_account.feature_enabled?(:granular_permissions_manage_users) }
+        group_label: -> { I18n.t("Users - TAs") }
       },
       add_observer_to_course: {
         label: -> { I18n.t("Add Observers to courses") },
@@ -698,8 +669,7 @@ Rails.application.config.to_prepare do
           AccountAdmin
         ],
         group: "manage_course_observer_enrollments",
-        group_label: -> { I18n.t("Users - Observers") },
-        account_allows: ->(a) { a.root_account.feature_enabled?(:granular_permissions_manage_users) }
+        group_label: -> { I18n.t("Users - Observers") }
       },
       remove_observer_from_course: {
         label: -> { I18n.t("Remove Observers from courses") },
@@ -718,8 +688,7 @@ Rails.application.config.to_prepare do
           AccountAdmin
         ],
         group: "manage_course_observer_enrollments",
-        group_label: -> { I18n.t("Users - Observers") },
-        account_allows: ->(a) { a.root_account.feature_enabled?(:granular_permissions_manage_users) }
+        group_label: -> { I18n.t("Users - Observers") }
       },
       add_designer_to_course: {
         label: -> { I18n.t("Add Designers to courses") },
@@ -736,8 +705,7 @@ Rails.application.config.to_prepare do
           "AccountAdmin"
         ],
         group: "manage_course_designer_enrollments",
-        group_label: -> { I18n.t("Users - Designers") },
-        account_allows: ->(a) { a.root_account.feature_enabled?(:granular_permissions_manage_users) }
+        group_label: -> { I18n.t("Users - Designers") }
       },
       remove_designer_from_course: {
         label: -> { I18n.t("Remove Designers from courses") },
@@ -754,28 +722,7 @@ Rails.application.config.to_prepare do
           "AccountAdmin"
         ],
         group: "manage_course_designer_enrollments",
-        group_label: -> { I18n.t("Users - Designers") },
-        account_allows: ->(a) { a.root_account.feature_enabled?(:granular_permissions_manage_users) }
-      },
-      manage_assignments: {
-        label: -> { I18n.t("permissions.manage_assignments", "Manage (add / edit / delete) assignments and quizzes") },
-        label_v2: -> { I18n.t("Assignments and Quizzes - add / edit / delete") },
-        available_to: %w[
-          TaEnrollment
-          DesignerEnrollment
-          TeacherEnrollment
-          ObserverEnrollment
-          AccountAdmin
-          AccountMembership
-        ],
-        true_for: %w[
-          TaEnrollment
-          DesignerEnrollment
-          TeacherEnrollment
-          AccountAdmin
-        ],
-        acts_as_access_token_scope: true,
-        account_allows: ->(a) { !a.root_account.feature_enabled?(:granular_permissions_manage_assignments) }
+        group_label: -> { I18n.t("Users - Designers") }
       },
       manage_assignments_add: {
         label: -> { I18n.t("Add assignments and quizzes") },
@@ -796,8 +743,7 @@ Rails.application.config.to_prepare do
         ],
         acts_as_access_token_scope: true,
         group: "manage_assignments_and_quizzes",
-        group_label: -> { I18n.t("Manage Assignments and Quizzes") },
-        account_allows: ->(a) { a.root_account.feature_enabled?(:granular_permissions_manage_assignments) }
+        group_label: -> { I18n.t("Manage Assignments and Quizzes") }
       },
       manage_assignments_edit: {
         label: -> { I18n.t("Manage / edit assignments and quizzes") },
@@ -818,8 +764,7 @@ Rails.application.config.to_prepare do
         ],
         acts_as_access_token_scope: true,
         group: "manage_assignments_and_quizzes",
-        group_label: -> { I18n.t("Manage Assignments and Quizzes") },
-        account_allows: ->(a) { a.root_account.feature_enabled?(:granular_permissions_manage_assignments) }
+        group_label: -> { I18n.t("Manage Assignments and Quizzes") }
       },
       manage_assignments_delete: {
         label: -> { I18n.t("Delete assignments and quizzes") },
@@ -840,8 +785,7 @@ Rails.application.config.to_prepare do
         ],
         acts_as_access_token_scope: true,
         group: "manage_assignments_and_quizzes",
-        group_label: -> { I18n.t("Manage Assignments and Quizzes") },
-        account_allows: ->(a) { a.root_account.feature_enabled?(:granular_permissions_manage_assignments) }
+        group_label: -> { I18n.t("Manage Assignments and Quizzes") }
       },
       manage_account_calendar_visibility: {
         label: -> { I18n.t("Change visibility of account calendars") },
@@ -880,26 +824,6 @@ Rails.application.config.to_prepare do
           AccountAdmin
         ]
       },
-      # legacy role override
-      manage_content: {
-        label: -> { I18n.t("Manage all other course content") },
-        label_v2: -> { I18n.t("Course Content - add / edit / delete") },
-        available_to: %w[
-          TaEnrollment
-          TeacherEnrollment
-          DesignerEnrollment
-          ObserverEnrollment
-          AccountAdmin
-          AccountMembership
-        ],
-        true_for: %w[
-          TaEnrollment
-          TeacherEnrollment
-          DesignerEnrollment
-          AccountAdmin
-        ],
-        account_allows: ->(a) { !a.root_account.feature_enabled?(:granular_permissions_manage_course_content) }
-      },
       manage_course_content_add: {
         label: -> { I18n.t("Add all other course content") },
         label_v2: -> { I18n.t("Course Content - add") },
@@ -918,8 +842,7 @@ Rails.application.config.to_prepare do
           TeacherEnrollment
           DesignerEnrollment
           AccountAdmin
-        ],
-        account_allows: ->(a) { a.root_account.feature_enabled?(:granular_permissions_manage_course_content) }
+        ]
       },
       manage_course_content_edit: {
         label: -> { I18n.t("Edit all other course content") },
@@ -939,8 +862,7 @@ Rails.application.config.to_prepare do
           TeacherEnrollment
           DesignerEnrollment
           AccountAdmin
-        ],
-        account_allows: ->(a) { a.root_account.feature_enabled?(:granular_permissions_manage_course_content) }
+        ]
       },
       manage_course_content_delete: {
         label: -> { I18n.t("Delete all other course content") },
@@ -960,8 +882,7 @@ Rails.application.config.to_prepare do
           TeacherEnrollment
           DesignerEnrollment
           AccountAdmin
-        ],
-        account_allows: ->(a) { a.root_account.feature_enabled?(:granular_permissions_manage_course_content) }
+        ]
       },
       # Course Template account permissions
       add_course_template: {
@@ -1146,10 +1067,10 @@ Rails.application.config.to_prepare do
         acts_as_access_token_scope: true
       },
       manage_tags_add: {
-        label: -> { I18n.t("Add Differentiated Tags") },
-        label_v2: -> { I18n.t("Differentiated Tags - add") },
-        group: "manage_differentiated_tags",
-        group_label: -> { I18n.t("Manage Differentiated Tags") },
+        label: -> { I18n.t("Add Differentiation Tags") },
+        label_v2: -> { I18n.t("Differentiation Tags - add") },
+        group: "manage_differentiation_tags",
+        group_label: -> { I18n.t("Manage Differentiation Tags") },
         available_to: %w[
           TaEnrollment
           DesignerEnrollment
@@ -1159,13 +1080,13 @@ Rails.application.config.to_prepare do
         ],
         true_for: %w[TeacherEnrollment AccountAdmin],
         acts_as_access_token_scope: true,
-        account_allows: ->(a) { a.feature_allowed?(:differentiation_tags) }
+        account_allows: ->(a) { a.allow_assign_to_differentiation_tags_unlocked? },
       },
       manage_tags_manage: {
-        label: -> { I18n.t("Manage Differentiated Tags") },
-        label_v2: -> { I18n.t("Differentiated Tags - manage") },
-        group: "manage_differentiated_tags",
-        group_label: -> { I18n.t("Manage Differentiated Tags") },
+        label: -> { I18n.t("Manage Differentiation Tags") },
+        label_v2: -> { I18n.t("Differentiation Tags - manage") },
+        group: "manage_differentiation_tags",
+        group_label: -> { I18n.t("Manage Differentiation Tags") },
         available_to: %w[
           TaEnrollment
           DesignerEnrollment
@@ -1175,13 +1096,13 @@ Rails.application.config.to_prepare do
         ],
         true_for: %w[TeacherEnrollment AccountAdmin],
         acts_as_access_token_scope: true,
-        account_allows: ->(a) { a.feature_allowed?(:differentiation_tags) }
+        account_allows: ->(a) { a.allow_assign_to_differentiation_tags_unlocked? },
       },
       manage_tags_delete: {
-        label: -> { I18n.t("Delete Differentiated Tags") },
-        label_v2: -> { I18n.t("Differentiated Tags - delete") },
-        group: "manage_differentiated_tags",
-        group_label: -> { I18n.t("Manage Differentiated Tags") },
+        label: -> { I18n.t("Delete Differentiation Tags") },
+        label_v2: -> { I18n.t("Differentiation Tags - delete") },
+        group: "manage_differentiation_tags",
+        group_label: -> { I18n.t("Manage Differentiation Tags") },
         available_to: %w[
           TaEnrollment
           DesignerEnrollment
@@ -1191,7 +1112,7 @@ Rails.application.config.to_prepare do
         ],
         true_for: %w[TeacherEnrollment AccountAdmin],
         acts_as_access_token_scope: true,
-        account_allows: ->(a) { a.feature_allowed?(:differentiation_tags) }
+        account_allows: ->(a) { a.allow_assign_to_differentiation_tags_unlocked? },
       },
       manage_interaction_alerts: {
         label: -> { I18n.t("permissions.manage_interaction_alerts", "Manage alerts") },
@@ -1286,20 +1207,8 @@ Rails.application.config.to_prepare do
         true_for: %w[AccountAdmin TeacherEnrollment DesignerEnrollment]
       },
       manage_students: {
-        label: lambda do
-          if Account.site_admin.feature_enabled?(:granular_permissions_manage_users)
-            I18n.t("Manage students for the course")
-          else
-            I18n.t("permissions.manage_students", "Add/remove students for the course")
-          end
-        end,
-        label_v2: lambda do
-                    if Account.site_admin.feature_enabled?(:granular_permissions_manage_users)
-                      I18n.t("Users - manage students in courses")
-                    else
-                      I18n.t("Users - add / remove students in courses")
-                    end
-                  end,
+        label: -> { I18n.t("Manage students for the course") },
+        label_v2: -> { I18n.t("Users - manage students in courses") },
         available_to: %w[
           TaEnrollment
           DesignerEnrollment
@@ -1331,8 +1240,7 @@ Rails.application.config.to_prepare do
           AccountAdmin
         ],
         group: "manage_course_student_enrollments",
-        group_label: -> { I18n.t("Users - Students") },
-        account_allows: ->(a) { a.root_account.feature_enabled?(:granular_permissions_manage_users) }
+        group_label: -> { I18n.t("Users - Students") }
       },
       remove_student_from_course: {
         label: -> { I18n.t("Remove Students from courses") },
@@ -1351,8 +1259,7 @@ Rails.application.config.to_prepare do
           AccountAdmin
         ],
         group: "manage_course_student_enrollments",
-        group_label: -> { I18n.t("Users - Students") },
-        account_allows: ->(a) { a.root_account.feature_enabled?(:granular_permissions_manage_users) }
+        group_label: -> { I18n.t("Users - Students") }
       },
       temporary_enrollments_add: {
         label: -> { I18n.t("permissions.temporary_enrollments_add", "Add temporary enrollments") },
@@ -1640,7 +1547,8 @@ Rails.application.config.to_prepare do
         label: -> { I18n.t("permission.read_sis", "Read SIS data") },
         label_v2: -> { I18n.t("SIS Data - read") },
         true_for: %w[AccountAdmin TeacherEnrollment],
-        available_to: %w[AccountAdmin AccountMembership TeacherEnrollment TaEnrollment StudentEnrollment]
+        available_to: %w[AccountAdmin AccountMembership TeacherEnrollment TaEnrollment StudentEnrollment],
+        applies_to_concluded: %w[TeacherEnrollment TaEnrollment]
       },
       select_final_grade: {
         label: -> { I18n.t("Grades - select final grade for moderation") },
@@ -1739,7 +1647,8 @@ Rails.application.config.to_prepare do
         label: -> { I18n.t("View login ids for users") },
         label_v2: -> { I18n.t("Users - view login IDs") },
         available_to: %w[AccountAdmin AccountMembership TeacherEnrollment TaEnrollment],
-        true_for: %w[AccountAdmin TeacherEnrollment TaEnrollment]
+        true_for: %w[AccountAdmin TeacherEnrollment TaEnrollment],
+        applies_to_concluded: %w[TeacherEnrollment TaEnrollment]
       },
       view_admin_analytics: {
         label: -> { I18n.t("Admin Analytics - view and export data") },
@@ -1773,6 +1682,12 @@ Rails.application.config.to_prepare do
         account_only: true,
         account_allows: ->(a) { a.feature_enabled?(:k20_students_in_need_of_attention) }
       },
+      view_students_in_need_in_course: {
+        label: -> { I18n.t("Intelligent Insights - Students in Need of Attention - Course Level") },
+        available_to: %w[AccountAdmin AccountMembership TeacherEnrollment TaEnrollment],
+        true_for: %w[AccountAdmin],
+        account_allows: ->(a) { a.feature_enabled?(:k20_students_in_need_of_attention) && a.feature_enabled?(:students_in_need_of_attention_course_level_beta) } ## AND they are part of the beta group.
+      },
       view_course_readiness: {
         label: -> { I18n.t("Course Readiness") },
         group: "view_advanced_analytics",
@@ -1790,15 +1705,6 @@ Rails.application.config.to_prepare do
         true_for: %w[AccountAdmin],
         account_only: true,
         account_allows: ->(a) { a.feature_enabled?(:k20_lti_usage) }
-      },
-      view_lti_insights: {
-        label: -> { I18n.t("LTI Insights") },
-        group: "view_advanced_analytics",
-        group_label: -> { I18n.t("Intelligent Insights") },
-        available_to: %w[AccountAdmin AccountMembership],
-        true_for: %w[AccountAdmin],
-        account_only: true,
-        account_allows: ->(a) { a.feature_enabled?(:k20_lti_insights) }
       },
       manage_impact: {
         label: -> { I18n.t("Manage Impact") },

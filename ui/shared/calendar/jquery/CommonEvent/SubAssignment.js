@@ -16,17 +16,17 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import CommonEvent from './CommonEvent'
 import fcUtil from '../fcUtil'
 import {extend} from '@canvas/util/legacyCoffeesScriptHelpers'
 import '@canvas/jquery/jquery.instructure_misc_helpers'
 
-const I18n = useI18nScope('calendar')
+const I18n = createI18nScope('calendar')
 
 const deleteConfirmation = I18n.t(
   'prompts.delete_sub_assignment',
-  'Are you sure you want to delete this event? Deleting this event will also delete the associated assignment and other checkpoints associated with the assignment.'
+  'Are you sure you want to delete this event? Deleting this event will also delete the associated assignment and other checkpoints associated with the assignment.',
 )
 
 export const subAssignmentOrOverride = eventType =>
@@ -45,12 +45,7 @@ Object.assign(SubAssignment.prototype, {
   copyDataFromObject(data) {
     this.object = this.assignment = data
     if (data.id) this.id = `sub_assignment_${data.id}`
-    const numReplies = data?.discussion_topic?.reply_to_entry_required_count || 1
-    const title = data.title || data.name || I18n.t('Untitled')
-    this.title =
-      data?.sub_assignment_tag === 'reply_to_topic'
-        ? I18n.t('%{title} Reply to Topic', {title})
-        : I18n.t('%{title} Required Replies (%{numReplies})', {title, numReplies})
+    this.title = data.title || data.name || I18n.t('Untitled')
     this.lock_explanation = null // not set at sub assignment level
     this.description = data.description
     this.start = this.parseStartDate()

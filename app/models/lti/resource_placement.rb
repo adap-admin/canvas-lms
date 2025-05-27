@@ -25,6 +25,7 @@ module Lti
   class ResourcePlacement < ActiveRecord::Base
     CANVAS_PLACEMENT_EXTENSION_PREFIX = "https://canvas.instructure.com/lti/"
 
+    # TODO: these are strings, later constants use symbols... should probably be consistent to avoid bugs
     ACCOUNT_NAVIGATION = "account_navigation"
     ASSIGNMENT_EDIT = "assignment_edit"
     ASSIGNMENT_SELECTION = "assignment_selection"
@@ -41,6 +42,8 @@ module Lti
     CONTENT_AREA = "ContentArea"
     RICH_TEXT_EDITOR = "RichTextEditor"
 
+    ASSET_PROCESSOR = "ActivityAssetProcessor"
+
     SIMILARITY_DETECTION_LTI2 = "Canvas.placements.similarityDetection"
 
     # Default placements for LTI 1 and LTI 2, ignored for LTI 1.3
@@ -51,6 +54,9 @@ module Lti
 
     # These placements require tools to be on an allow list
     RESTRICTED_PLACEMENTS = %i[submission_type_selection top_navigation].freeze
+
+    # These placements don't need the CANVAS_PLACEMENT_EXTENSION_PREFIX
+    STANDARD_PLACEMENTS = %i[ActivityAssetProcessor].freeze
 
     PLACEMENTS_BY_MESSAGE_TYPE = {
       LtiAdvantage::Messages::ResourceLinkRequest::MESSAGE_TYPE => %i[
@@ -96,6 +102,7 @@ module Lti
       ],
       LtiAdvantage::Messages::DeepLinkingRequest::MESSAGE_TYPE => %i[
         assignment_selection
+        ActivityAssetProcessor
         collaboration
         conference_selection
         course_assignments_menu
@@ -130,22 +137,23 @@ module Lti
 
     validates :placement, inclusion: { in: PLACEMENT_LOOKUP.values }
 
-    def self.add_extension_prefix(placement)
-      "#{CANVAS_PLACEMENT_EXTENSION_PREFIX}#{placement}"
+    def self.add_extension_prefix_if_necessary(placement)
+      if STANDARD_PLACEMENTS.include?(placement.to_sym)
+        placement
+      else
+        "#{CANVAS_PLACEMENT_EXTENSION_PREFIX}#{placement}"
+      end
     end
 
-    def self.valid_placements(_root_account)
+    def self.valid_placements(root_account)
       PLACEMENTS.dup.tap do |p|
         p.delete(:conference_selection) unless Account.site_admin.feature_enabled?(:conference_selection_lti_placement)
+        p.delete(:ActivityAssetProcessor) unless root_account&.feature_enabled?(:lti_asset_processor)
       end
     end
 
     def self.public_placements(root_account)
-      if root_account.feature_enabled?(:remove_submission_type_selection_from_dev_keys_edit_page)
-        valid_placements(root_account) - NON_PUBLIC_PLACEMENTS
-      else
-        valid_placements(root_account)
-      end
+      valid_placements(root_account) - NON_PUBLIC_PLACEMENTS
     end
 
     def self.update_tabs_and_return_item_banks_tab(tabs, new_label = nil)

@@ -15,20 +15,26 @@
  * You should have received a copy of the GNU Affero General Public License along
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-import React from 'react'
-import {act, fireEvent, render, cleanup, waitFor, screen} from '@testing-library/react'
-import userEvent, {PointerEventsCheckLevel} from '@testing-library/user-event'
-import fetchMock from 'fetch-mock'
-import ItemAssignToTray, {type ItemAssignToTrayProps} from '../ItemAssignToTray'
-import {
-  SECTIONS_DATA,
-  STUDENTS_DATA,
-  FIRST_GROUP_CATEGORY_DATA,
-  SECOND_GROUP_CATEGORY_DATA,
-  ADHOC_WITHOUT_STUDENTS,
-} from '../../__tests__/mocks'
+
 import {queryClient} from '@canvas/query'
 import {MockedQueryProvider} from '@canvas/test-utils/query'
+import {reloadWindow} from '@canvas/util/globalUtils'
+import {act, cleanup, render, screen, waitFor} from '@testing-library/react'
+import userEvent, {PointerEventsCheckLevel} from '@testing-library/user-event'
+import fetchMock from 'fetch-mock'
+import React from 'react'
+import {
+  ADHOC_WITHOUT_STUDENTS,
+  FIRST_GROUP_CATEGORY_DATA,
+  SECOND_GROUP_CATEGORY_DATA,
+  SECTIONS_DATA,
+  STUDENTS_DATA,
+} from '../../__tests__/mocks'
+import ItemAssignToTray, {type ItemAssignToTrayProps} from '../ItemAssignToTray'
+
+jest.mock('@canvas/util/globalUtils', () => ({
+  reloadWindow: jest.fn(),
+}))
 
 const USER_EVENT_OPTIONS = {pointerEventsCheck: PointerEventsCheckLevel.Never, delay: null}
 
@@ -39,7 +45,7 @@ jest.mock('@canvas/alerts/react/FlashAlert', () => ({
 }))
 
 describe('ItemAssignToTray', () => {
-  let originalLocation = window.location
+  const originalLocation = window.location
   const props: ItemAssignToTrayProps = {
     open: true,
     onClose: () => {},
@@ -97,10 +103,7 @@ describe('ItemAssignToTray', () => {
     ENV.POST_TO_SIS = false
     ENV.DUE_DATE_REQUIRED_FOR_ACCOUNT = false
     ENV.MASTER_COURSE_DATA = undefined
-    originalLocation = window.location
-    // @ts-expect-error
-    delete window.location
-    window.location = {...originalLocation, reload: jest.fn()}
+    // originalLocation = window.location
     // an assignment with valid dates and overrides
     fetchMock.get('/api/v1/courses/1/settings', {conditional_release: false})
     fetchMock
@@ -141,6 +144,8 @@ describe('ItemAssignToTray', () => {
       .get(FIRST_GROUP_CATEGORY_URL, FIRST_GROUP_CATEGORY_DATA)
       .get(SECOND_GROUP_CATEGORY_URL, SECOND_GROUP_CATEGORY_DATA)
     queryClient.setQueryData(['students', props.courseId, {per_page: 100}], STUDENTS_DATA)
+
+    jest.resetAllMocks()
   })
 
   afterEach(() => {
@@ -156,7 +161,7 @@ describe('ItemAssignToTray', () => {
     render(
       <MockedQueryProvider>
         <ItemAssignToTray {...props} {...overrides} />
-      </MockedQueryProvider>
+      </MockedQueryProvider>,
     )
 
   const renderComponentAndGetElements = async (text: any, payload: any = undefined) => {
@@ -301,7 +306,7 @@ describe('ItemAssignToTray', () => {
       },
       {
         overwriteRoutes: true,
-      }
+      },
     )
     const {findAllByTestId, getAllByTestId} = renderComponent()
     const cards = await findAllByTestId('item-assign-to-card')
@@ -340,7 +345,7 @@ describe('ItemAssignToTray', () => {
       },
       {
         overwriteRoutes: true,
-      }
+      },
     )
     const {findAllByTestId, getAllByTestId} = renderComponent()
     const cards = await findAllByTestId('item-assign-to-card')
@@ -363,7 +368,7 @@ describe('ItemAssignToTray', () => {
       })
 
       expect(
-        getAllByText((_, e) => e?.textContent === 'Locked: Availability Dates')[0]
+        getAllByText((_, e) => e?.textContent === 'Locked: Availability Dates')[0],
       ).toBeInTheDocument()
     })
 
@@ -374,6 +379,7 @@ describe('ItemAssignToTray', () => {
       const {getAllByText, findAllByTestId} = renderComponent({
         itemContentId: '31',
         defaultCards: [
+          // @ts-expect-error
           {
             defaultOptions: ['everyone'],
             key: 'key-card-0',
@@ -389,7 +395,7 @@ describe('ItemAssignToTray', () => {
       })
       await findAllByTestId('item-assign-to-card')
       expect(
-        getAllByText((_, e) => e?.textContent === 'Locked: Availability Dates')[0]
+        getAllByText((_, e) => e?.textContent === 'Locked: Availability Dates')[0],
       ).toBeInTheDocument()
     })
 
@@ -424,6 +430,7 @@ describe('ItemAssignToTray', () => {
       const {getAllByTestId, findAllByText} = renderComponent({
         itemContentId: '31',
         defaultCards: [
+          // @ts-expect-error
           {
             defaultOptions: ['everyone'],
             key: 'key-card-0',
@@ -461,7 +468,7 @@ describe('ItemAssignToTray', () => {
       })
 
       expect(
-        getAllByText((_, e) => e?.textContent === 'Locked: Availability Dates')[0]
+        getAllByText((_, e) => e?.textContent === 'Locked: Availability Dates')[0],
       ).toBeInTheDocument()
     })
 
@@ -508,10 +515,10 @@ describe('ItemAssignToTray', () => {
       },
       {
         overwriteRoutes: true,
-      }
+      },
     )
     renderComponent({defaultCards: []})
-    expect(fetchMock.calls(OVERRIDES_URL).length).toBe(1)
+    expect(fetchMock.calls(OVERRIDES_URL)).toHaveLength(1)
   })
 
   it('calls customAddCard if passed when a card is added', () => {
@@ -537,11 +544,11 @@ describe('ItemAssignToTray', () => {
         },
         {
           overwriteRoutes: true,
-        }
+        },
       )
       const {findAllByTestId, getAllByTestId} = renderComponent()
       const sectionOverride = SECTIONS_DATA.find(
-        section => section.id === OVERRIDES[0].course_section_id
+        section => section.id === OVERRIDES[0].course_section_id,
       )!
       const selectedOptions = await findAllByTestId('assignee_selector_selected_option')
       const cards = getAllByTestId('item-assign-to-card')
@@ -565,7 +572,7 @@ describe('ItemAssignToTray', () => {
         },
         {
           overwriteRoutes: true,
-        }
+        },
       )
       const {findAllByTestId} = renderComponent()
       const selectedOptions = await findAllByTestId('assignee_selector_selected_option')
@@ -602,7 +609,7 @@ describe('ItemAssignToTray', () => {
         },
         {
           overwriteRoutes: true,
-        }
+        },
       )
       const {findAllByTestId} = renderComponent()
       const selectedOptions = await findAllByTestId('assignee_selector_selected_option')
@@ -614,7 +621,7 @@ describe('ItemAssignToTray', () => {
       fetchMock.get(
         '/api/v1/courses/1/settings',
         {conditional_release: true},
-        {overwriteRoutes: true}
+        {overwriteRoutes: true},
       )
       fetchMock.get(
         OVERRIDES_URL,
@@ -629,7 +636,7 @@ describe('ItemAssignToTray', () => {
             },
           ],
         },
-        {overwriteRoutes: true}
+        {overwriteRoutes: true},
       )
       const {findAllByTestId} = renderComponent()
       const selectedOptions = await findAllByTestId('assignee_selector_selected_option')
@@ -740,7 +747,7 @@ describe('ItemAssignToTray', () => {
       savebtn.click()
       expect(getByText('Please fix errors before continuing')).toBeInTheDocument()
       expect(
-        fetchMock.lastOptions('/api/v1/courses/1/assignments/24/date_details?per_page=100')?.method
+        fetchMock.lastOptions('/api/v1/courses/1/assignments/24/date_details?per_page=100')?.method,
       ).toBe('GET')
       expect(onDismissMock).not.toHaveBeenCalled()
     })
@@ -756,7 +763,7 @@ describe('ItemAssignToTray', () => {
       await waitFor(() => expect(save).not.toBeDisabled())
       await user.click(save)
       await waitFor(() => {
-        expect(window.location.reload).toHaveBeenCalled()
+        expect(reloadWindow).toHaveBeenCalled()
       })
     })
 
@@ -804,6 +811,7 @@ describe('ItemAssignToTray', () => {
       expect(cards).toHaveLength(1)
     })
 
+    // TODO: fix for jsdom 25
     it.skip('does not include ADHOC overrides without students when saving', async () => {
       fetchMock.get(OVERRIDES_URL, ADHOC_WITHOUT_STUDENTS, {
         overwriteRoutes: true,
@@ -820,6 +828,7 @@ describe('ItemAssignToTray', () => {
       const save = await findByTestId('differentiated_modules_save_button')
       await user.click(save)
       expect((await findAllByText(`${props.itemName} updated`))[0]).toBeInTheDocument()
+      // @ts-expect-error
       const requestBody = JSON.parse(fetchMock.lastOptions(DATE_DETAILS)?.body)
       // filters out invalid overrides
       expect(requestBody.assignment_overrides).toHaveLength(2)
@@ -903,7 +912,7 @@ describe('ItemAssignToTray', () => {
     await user.click(addButton)
     const deleteButtons = await findAllByTestId('delete-card-button')
     await waitFor(() =>
-      expect(deleteButtons[deleteButtons.length - 1].closest('button')).toHaveFocus()
+      expect(deleteButtons[deleteButtons.length - 1].closest('button')).toHaveFocus(),
     )
   })
 
@@ -946,7 +955,7 @@ describe('ItemAssignToTray', () => {
       rerender(
         <MockedQueryProvider>
           <ItemAssignToTray {...props} defaultGroupCategoryId={SECOND_GROUP_CATEGORY_ID} />
-        </MockedQueryProvider>
+        </MockedQueryProvider>,
       )
 
       await findByText(SECOND_GROUP_CATEGORY_DATA[0].name)
@@ -959,10 +968,13 @@ describe('ItemAssignToTray', () => {
   describe('in a paced course', () => {
     beforeEach(() => {
       ENV.IN_PACED_COURSE = true
+      ENV.FEATURES ||= {}
+      ENV.FEATURES.course_pace_pacing_with_mastery_paths = true
     })
 
     afterEach(() => {
       ENV.IN_PACED_COURSE = false
+      ENV.FEATURES.course_pace_pacing_with_mastery_paths = false
     })
 
     it('shows the course pacing notice', () => {
@@ -972,18 +984,40 @@ describe('ItemAssignToTray', () => {
 
     it('does not request existing overrides', () => {
       renderComponent()
-      expect(fetchMock.calls(OVERRIDES_URL).length).toBe(0)
+      expect(fetchMock.calls(OVERRIDES_URL)).toHaveLength(0)
     })
 
     it('does not fetch assignee options', () => {
       renderComponent()
-      expect(fetchMock.calls(SECTIONS_URL).length).toBe(0)
+      expect(fetchMock.calls(SECTIONS_URL)).toHaveLength(0)
+    })
+
+    describe('with mastery paths', () => {
+      beforeEach(() => {
+        ENV.CONDITIONAL_RELEASE_SERVICE_ENABLED = true
+      })
+
+      afterEach(() => {
+        ENV.CONDITIONAL_RELEASE_SERVICE_ENABLED = false
+      })
+
+      it('requests the existing overrides', () => {
+        renderComponent()
+        expect(fetchMock.calls(OVERRIDES_URL)).toHaveLength(1)
+      })
+
+      it('shows the mastery path toggle', () => {
+        const {getByTestId} = renderComponent()
+        expect(getByTestId('MasteryPathToggle')).toBeInTheDocument()
+      })
     })
   })
 
   describe('required due dates', () => {
     beforeEach(() => {
+      // @ts-expect-error
       global.ENV = {
+        // @ts-expect-error
         ...global.ENV,
         DUE_DATE_REQUIRED_FOR_ACCOUNT: true,
       }
@@ -1059,14 +1093,14 @@ describe('ItemAssignToTray', () => {
     const {findAllByTestId} = renderComponent()
 
     await waitFor(async () => {
-      expect(fetchMock.calls(OVERRIDES_URL).length).toBe(1)
+      expect(fetchMock.calls(OVERRIDES_URL)).toHaveLength(1)
 
       expect(
-        fetchMock.calls(`/api/v1/courses/1/assignments/23/date_details?page=2&per_page=100`).length
-      ).toBe(1)
+        fetchMock.calls(`/api/v1/courses/1/assignments/23/date_details?page=2&per_page=100`),
+      ).toHaveLength(1)
       expect(
-        fetchMock.calls(`/api/v1/courses/1/assignments/23/date_details?page=3&per_page=100`).length
-      ).toBe(1)
+        fetchMock.calls(`/api/v1/courses/1/assignments/23/date_details?page=3&per_page=100`),
+      ).toHaveLength(1)
       const cards = await findAllByTestId('item-assign-to-card')
       expect(cards).toHaveLength(5)
     })

@@ -43,6 +43,7 @@ class DiscussionEntriesController < ApplicationController
     parent_id = params[:discussion_entry].delete(:parent_id)
 
     entry_params = params.require(:discussion_entry).permit(:message, :plaintext_message)
+    entry_params[:message] = process_incoming_html_content(entry_params[:message]) if entry_params[:message]
 
     @entry = @topic.discussion_entries.temp_record(entry_params)
     @entry.current_user = @current_user
@@ -178,7 +179,7 @@ class DiscussionEntriesController < ApplicationController
           channel.title = t :podcast_feed_title, "%{title} Posts Podcast Feed", title: @topic.title
           channel.description = t :podcast_description, "Any media files linked from or embedded within entries in the topic \"%{title}\" will appear in this feed.", title: @topic.title
           channel.link = polymorphic_url([@context, @topic])
-          channel.pubDate = Time.now.strftime("%a, %d %b %Y %H:%M:%S %z")
+          channel.pubDate = Time.zone.now.strftime("%a, %d %b %Y %H:%M:%S %z")
           elements = Announcement.podcast_elements(@entries, @context)
           elements.each do |item|
             channel.items << item

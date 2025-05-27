@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 import {func} from 'prop-types'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import NotificationPreferencesSetting from './Setting'
 import {NotificationPreferencesShape} from './Shape'
 import React, {useEffect, useState} from 'react'
@@ -30,7 +30,7 @@ import {Tooltip} from '@instructure/ui-tooltip'
 import {TruncateText} from '@instructure/ui-truncate-text'
 import {View} from '@instructure/ui-view'
 
-const I18n = useI18nScope('notification_preferences')
+const I18n = createI18nScope('notification_preferences')
 
 const formattedCategoryNames = {
   courseActivities: () => I18n.t('Course Activities'),
@@ -109,7 +109,7 @@ const renderNotificationCategory = (
   updatePreferenceCallback,
   renderChannelHeader,
   sendScoresInEmails,
-  setSendScoresInEmails
+  setSendScoresInEmails,
 ) => (
   <React.Fragment key={notificationCategory}>
     {!(notificationCategory === 'conversations' && ENV.current_user_disabled_inbox) && (
@@ -170,7 +170,7 @@ const renderNotificationCategory = (
             .filter(
               category =>
                 notificationPreferences.channels[0].categories[notificationCategory][category]
-                  .notification
+                  .notification,
             )
             .map(category => (
               <Table.Row key={category} data-testid={formatCategoryKey(category)}>
@@ -217,7 +217,7 @@ const renderNotificationCategory = (
                     renderSendScoresInEmailsToggle(
                       sendScoresInEmails,
                       setSendScoresInEmails,
-                      updatePreferenceCallback
+                      updatePreferenceCallback,
                     )}
                 </Table.RowHeader>
                 {notificationPreferences.channels.map(channel => (
@@ -250,7 +250,7 @@ const renderNotificationCategory = (
 const renderSendScoresInEmailsToggle = (
   sendScoresInEmails,
   setSendScoresInEmails,
-  updatePreferenceCallback
+  updatePreferenceCallback,
 ) => {
   if (ENV.NOTIFICATION_PREFERENCES_OPTIONS.send_scores_in_emails_text !== null) {
     return (
@@ -282,7 +282,10 @@ const formatPreferencesData = preferences => {
     // preferences are displayed in.
     formattedPreferences.channels[i].categories = JSON.parse(JSON.stringify(notificationCategories))
     setNotificationPolicy(channel.notificationPolicies, formattedPreferences.channels[i].categories)
-    setNotificationPolicy(channel.notificationPolicyOverrides, formattedPreferences.channels[i].categories)
+    setNotificationPolicy(
+      channel.notificationPolicyOverrides,
+      formattedPreferences.channels[i].categories,
+    )
     dropEmptyCategories(formattedPreferences.channels[i].categories)
   })
 
@@ -316,7 +319,7 @@ const dropEmptyCategories = categories => {
 const NotificationPreferencesTable = props => {
   const {sendScoresInEmails} = props.preferences
   const [stageSendScoresInEmails, setStageSendScoresInEmails] = useState(
-    props.preferences.sendScoresInEmails
+    props.preferences.sendScoresInEmails,
   )
 
   useEffect(() => {
@@ -338,8 +341,8 @@ const NotificationPreferencesTable = props => {
             props.updatePreference,
             i === 0,
             stageSendScoresInEmails,
-            setStageSendScoresInEmails
-          )
+            setStageSendScoresInEmails,
+          ),
         )}
       </>
     )

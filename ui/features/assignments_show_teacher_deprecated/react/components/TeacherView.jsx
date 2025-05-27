@@ -18,8 +18,8 @@
 
 import React from 'react'
 import {bool, string} from 'prop-types'
-import {useScope as useI18nScope} from '@canvas/i18n'
-import {Mutation} from '@apollo/react-components'
+import {useScope as createI18nScope} from '@canvas/i18n'
+import {Mutation} from '@apollo/client/react/components'
 import classnames from 'classnames'
 import produce from 'immer'
 import get from 'lodash/get'
@@ -47,7 +47,7 @@ import MessageStudentsWhoDialog from './MessageStudentsWhoDialog'
 import TeacherViewContext, {TeacherViewContextDefaults} from './TeacherViewContext'
 import AssignmentFieldValidator from '../AssignentFieldValidator'
 
-const I18n = useI18nScope('assignments_2')
+const I18n = createI18nScope('assignments_2')
 
 const pathToOverrides = /assignmentOverrides\.nodes\.\d+/
 
@@ -239,7 +239,7 @@ export default class TeacherView extends React.Component {
               })),
             },
           })
-        }
+        },
       )
     } else {
       showFlashAlert({
@@ -274,7 +274,7 @@ export default class TeacherView extends React.Component {
       if (state.isTogglingWorkstate) {
         workingAssignment = this.updateWorkingAssignment(
           'state',
-          workingAssignment.state === 'published' ? 'unpublished' : 'published'
+          workingAssignment.state === 'published' ? 'unpublished' : 'published',
         )
       }
       return {
@@ -344,7 +344,7 @@ export default class TeacherView extends React.Component {
             // save everything
             this.handleSave(saveAssignment)
           }
-        }
+        },
       )
     } else {
       showFlashAlert({

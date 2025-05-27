@@ -119,10 +119,6 @@ class Discussion
       "[data-testid='summary-generate-button']"
     end
 
-    def summary_disable_button_selector
-      "[data-testid='summary-disable-button']"
-    end
-
     def summary_user_input_selector
       "[data-testid='summary-user-input']"
     end
@@ -228,16 +224,16 @@ class Discussion
       f(summary_generate_button_selector)
     end
 
-    def summary_disable_button
-      f(summary_disable_button_selector)
-    end
-
     def summary_user_input
       f(summary_user_input_selector)
     end
 
     def sync_to_sis_checkbox
       f(sync_to_sis_checkbox_selector)
+    end
+
+    def mastery_path_toggle
+      f("[data-testid='MasteryPathToggle'] svg[name='IconCheck'], [data-testid='MasteryPathToggle'] svg[name='IconX']")
     end
 
     # ---------------------- Actions ----------------------
@@ -276,6 +272,10 @@ class Discussion
 
     def group_category_option(group_cat_name)
       fj(group_category_option_selector(group_cat_name))
+    end
+
+    def save_discussion
+      f("button[type='submit']").click
     end
 
     # ---------------------- Actions ----------------------
@@ -318,10 +318,6 @@ class Discussion
 
     def click_summary_generate_button
       summary_generate_button.click
-    end
-
-    def click_summary_disable_button
-      summary_disable_button.click
     end
 
     def click_sync_to_sis_checkbox

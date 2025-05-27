@@ -16,21 +16,21 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 import React from 'react'
-import ReactDOM from 'react-dom'
-import {ApolloProvider} from '@apollo/react-common'
+import {createRoot} from 'react-dom/client'
+import {ApolloProvider} from '@apollo/client'
 // import TeacherView from './teacher/components/TeacherView'
 import TeacherQuery from './components/TeacherQuery'
-import {createClient} from '@canvas/apollo'
+import {createClient} from '@canvas/apollo-v3'
 
 export default function renderAssignmentsApp(env, elt) {
   const client = createClient()
-  ReactDOM.render(
+  const root = createRoot(elt)
+  root.render(
     <ApolloProvider client={client}>
       <TeacherQuery
         assignmentLid={ENV.ASSIGNMENT_ID.toString()}
         messageAttachmentUploadFolderId={null} // This needs to be defined before this view can be enabled
       />
     </ApolloProvider>,
-    elt
   )
 }

@@ -17,7 +17,7 @@
  */
 
 import React, {useEffect, useState} from 'react'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 
 import {FormFieldGroup, type FormMessageType} from '@instructure/ui-form-field'
 import {DateTimeInput} from '@instructure/ui-date-time-input'
@@ -25,7 +25,7 @@ import {DateTimeInput} from '@instructure/ui-date-time-input'
 import {validateAvailability} from '../../util/formValidation'
 import {Button} from '@instructure/ui-buttons'
 
-const I18n = useI18nScope('discussion_create')
+const I18n = createI18nScope('discussion_create')
 
 type Props = {
   availableFrom: string
@@ -78,14 +78,16 @@ export const NonGradedDateOptions = ({
         value={availableFrom}
         onChange={(_event, newAvailableFrom = '') => {
           if (newAvailableFrom === '') {
+            // @ts-expect-error
             newAvailableFrom = null
           }
           validateAvailability(
             newAvailableFrom,
             availableUntil,
             isGraded,
-            setAvailabilityValidationMessages
+            setAvailabilityValidationMessages,
           )
+          // @ts-expect-error
           setAvailableFrom(newAvailableFrom)
         }}
         datePlaceholder={I18n.t('Select Date')}
@@ -121,14 +123,16 @@ export const NonGradedDateOptions = ({
         value={availableUntil}
         onChange={(_event, newAvailableUntil = '') => {
           if (newAvailableUntil === '') {
+            // @ts-expect-error
             newAvailableUntil = null
           }
           validateAvailability(
             availableFrom,
             newAvailableUntil,
             isGraded,
-            setAvailabilityValidationMessages
+            setAvailabilityValidationMessages,
           )
+          // @ts-expect-error
           setAvailableUntil(newAvailableUntil)
         }}
         datePlaceholder={I18n.t('Select Date')}

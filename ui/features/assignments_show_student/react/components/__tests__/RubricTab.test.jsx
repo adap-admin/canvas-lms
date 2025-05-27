@@ -99,8 +99,6 @@ async function makeProps(opts = {}) {
   const assessments = result.data.submission.rubricAssessmentsConnection?.nodes
   return {
     assessments: assessments?.map(assessment => transformRubricAssessmentData(assessment)) || [],
-    proficiencyRatings:
-      result.data.course.account.outcomeProficiency?.proficiencyRatingsConnection?.nodes,
     rubric: transformRubricData(result.data.assignment.rubric),
   }
 }
@@ -218,8 +216,8 @@ describe('RubricTab', () => {
 
       expect(
         await findByText(
-          'Fill out the rubric below after reviewing the student submission to complete this review.'
-        )
+          'Fill out the rubric below after reviewing the student submission to complete this review.',
+        ),
       ).toBeInTheDocument()
     })
 
@@ -233,8 +231,8 @@ describe('RubricTab', () => {
 
       expect(
         await queryByText(
-          'Fill out the rubric below after reviewing the student submission to complete this review.'
-        )
+          'Fill out the rubric below after reviewing the student submission to complete this review.',
+        ),
       ).not.toBeInTheDocument()
     })
 

@@ -25,7 +25,6 @@ import AudioOptionsTrayDriver from './AudioOptionsTrayDriver'
 import * as contentSelection from '../../../shared/ContentSelection'
 import {createLiveRegion, removeLiveRegion} from '../../../../__tests__/liveRegionHelper'
 import bridge from '../../../../../bridge'
-import RCEGlobals from '../../../../RCEGlobals'
 
 const MOCK_AUDIO_PLAYERS = [
   {
@@ -50,7 +49,6 @@ describe('RCE "Audios" Plugin > AudioOptionsTray > TrayController', () => {
   let trayController
 
   beforeEach(() => {
-    RCEGlobals.getFeatures = jest.fn().mockReturnValue({media_links_use_attachment_id: true})
     createLiveRegion()
 
     const trayProps = {
@@ -169,7 +167,10 @@ describe('RCE "Audios" Plugin > AudioOptionsTray > TrayController', () => {
         attachment_id: '123',
         updateMediaObject,
       })
-      expect(updateMediaObject).toHaveBeenCalledWith({attachment_id: '123', media_object_id: undefined})
+      expect(updateMediaObject).toHaveBeenCalledWith({
+        attachment_id: '123',
+        media_object_id: undefined,
+      })
     })
   })
 
@@ -196,7 +197,7 @@ describe('RCE "Audios" Plugin > AudioOptionsTray > TrayController', () => {
     it('posts message to iframe onload', () => {
       const postMessageMock = jest.fn()
       const iframe = contentSelection.findMediaPlayerIframe(editors[0].selection.getNode())
-      iframe.contentWindow.postMessage = postMessageMock;
+      iframe.contentWindow.postMessage = postMessageMock
       trayController.showTrayForEditor(editors[0])
       expect(postMessageMock).toHaveBeenCalledTimes(1)
     })
@@ -204,7 +205,7 @@ describe('RCE "Audios" Plugin > AudioOptionsTray > TrayController', () => {
     it('cleans up event listener on tray close', () => {
       const postMessageMock = jest.fn()
       const iframe = contentSelection.findMediaPlayerIframe(editors[0].selection.getNode())
-      iframe.contentWindow.postMessage = postMessageMock;
+      iframe.contentWindow.postMessage = postMessageMock
       trayController.showTrayForEditor(editors[0])
       trayController.hideTrayForEditor(editors[0])
       trayController.showTrayForEditor(editors[0])

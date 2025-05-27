@@ -17,7 +17,7 @@
  */
 import React, {useCallback, useEffect, useState} from 'react'
 import {showFlashError, showFlashSuccess} from '@canvas/alerts/react/FlashAlert'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {Modal} from '@instructure/ui-modal'
 import {Button, CloseButton} from '@instructure/ui-buttons'
 import {Checkbox} from '@instructure/ui-checkbox'
@@ -35,11 +35,11 @@ import {
 } from '../../../types'
 import {isExcused} from '@canvas/grading/GradeInputHelper'
 import {useDefaultGrade, type DefaultGradeSubmissionParams} from '../../hooks/useDefaultGrade'
-import {assignmentHasCheckpoints} from '../../../utils/gradebookUtils'
 import {REPLY_TO_ENTRY, REPLY_TO_TOPIC} from '../GradingResults'
+import {assignmentHasCheckpoints} from '../../../utils/gradeInputUtils'
 
 const {Header: ModalHeader, Body: ModalBody} = Modal as any
-const I18n = useI18nScope('enhanced_individual_gradebook')
+const I18n = createI18nScope('enhanced_individual_gradebook')
 
 type Props = {
   assignment: AssignmentConnection
@@ -73,10 +73,6 @@ export default function DefaultGradeModal({
 
   const isCheckpointed = assignmentHasCheckpoints(assignment)
 
-  const getCheckpointSubmissions = submissions => {
-    return submissions.flatMap(submission => submission.subAssignmentSubmissions)
-  }
-
   const setGradeSuccessText = useCallback(
     (count: number): string => {
       return gradeIsMissing(savedGrade)
@@ -87,7 +83,7 @@ export default function DefaultGradeModal({
             },
             {
               count,
-            }
+            },
           )
         : I18n.t(
             {
@@ -96,10 +92,10 @@ export default function DefaultGradeModal({
             },
             {
               count,
-            }
+            },
           )
     },
-    [savedGrade]
+    [savedGrade],
   )
 
   useEffect(() => {
@@ -132,7 +128,7 @@ export default function DefaultGradeModal({
         showFlashError(
           I18n.t('Default grade cannot be set to %{ex}', {
             ex: 'EX',
-          })
+          }),
         )(new Error())
         return
       }
@@ -159,7 +155,7 @@ export default function DefaultGradeModal({
         showFlashError(
           I18n.t('Default grade for Reply to Topic cannot be set to %{ex}', {
             ex: 'EX',
-          })
+          }),
         )(new Error())
         return
       }
@@ -168,7 +164,7 @@ export default function DefaultGradeModal({
         showFlashError(
           I18n.t('Default grade for Required Replies cannot be set to %{ex}', {
             ex: 'EX',
-          })
+          }),
         )(new Error())
         return
       }
@@ -245,7 +241,7 @@ export default function DefaultGradeModal({
           </View>
         )}
         {isCheckpointed && (
-          <Flex>
+          <Flex height="8rem" alignItems="start">
             <Flex.Item shouldShrink={true}>
               <View as="div" margin="small medium">
                 <DefaultGradeInput
@@ -280,7 +276,7 @@ export default function DefaultGradeModal({
             </Flex.Item>
           </Flex>
         )}
-        <View as="div" margin="small medium">
+        <View as="div" margin="large medium medium medium">
           <Checkbox
             label={I18n.t('Overwrite already-entered grades')}
             checked={gradeOverwrite}

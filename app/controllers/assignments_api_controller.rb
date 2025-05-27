@@ -865,8 +865,7 @@ class AssignmentsApiController < ApplicationController
     return unless authorized_action(old_assignment, @current_user, :create)
 
     if target_course.present?
-      course_permission = target_course.root_account.feature_enabled?(:granular_permissions_manage_assignments) ? :manage_assignments_add : :manage_assignments
-      return unless authorized_action(target_course, @current_user, course_permission)
+      return unless authorized_action(target_course, @current_user, :manage_assignments_add)
     end
 
     new_assignment = old_assignment.duplicate(
@@ -1071,17 +1070,13 @@ class AssignmentsApiController < ApplicationController
       include_visibility = include_params.include?("assignment_visibility") && @context.grants_any_right?(user, :read_as_admin, :manage_grades, *RoleOverride::GRANULAR_MANAGE_ASSIGNMENT_PERMISSIONS)
 
       if include_visibility
-        assignment_visibilities = if Account.site_admin.feature_enabled?(:selective_release_backend)
-                                    AssignmentVisibility::AssignmentVisibilityService.users_with_visibility_by_assignment(course_id: @context.id, assignment_ids: assignments.map(&:id))
-                                  else
-                                    AssignmentStudentVisibility.users_with_visibility_by_assignment(course_id: @context.id, assignment_id: assignments.map(&:id))
-                                  end
+        assignment_visibilities = AssignmentVisibility::AssignmentVisibilityService.users_with_visibility_by_assignment(course_id: @context.id, assignment_ids: assignments.map(&:id))
       end
 
       needs_grading_by_section_param = params[:needs_grading_count_by_section] || false
       needs_grading_count_by_section = value_to_boolean(needs_grading_by_section_param)
 
-      if @context.grants_any_right?(user, :manage_assignments, :manage_assignments_edit)
+      if @context.grants_right?(user, :manage_assignments_edit)
         Assignment.preload_can_unpublish(assignments)
       end
 
@@ -1202,7 +1197,7 @@ class AssignmentsApiController < ApplicationController
         include_can_submit: included_params.include?("can_submit"),
         include_webhook_info: included_params.include?("webhook_info"),
         include_ab_guid: included_params.include?("ab_guid"),
-        include_checkpoints: included_params.include?("checkpoints")
+        include_checkpoints: included_params.include?("checkpoints"),
       }
 
       result_json = if use_quiz_json?
@@ -1667,7 +1662,7 @@ class AssignmentsApiController < ApplicationController
   #
   # @returns Progress
   def bulk_update
-    return render_json_unauthorized unless @context.grants_any_right?(@current_user, session, :manage_assignments, :manage_assignments_edit)
+    return render_json_unauthorized unless @context.grants_right?(@current_user, session, :manage_assignments_edit)
 
     data = params.permit(_json: [:id, all_dates: %i[id base due_at unlock_at lock_at]]).to_h[:_json]
     return render json: { message: "expected array" }, status: :bad_request unless data.is_a?(Array)
@@ -1793,11 +1788,11 @@ class AssignmentsApiController < ApplicationController
 
   def track_update_metrics(assignment, _params)
     if assignment.hide_in_gradebook_changed?(to: true)
-      InstStatsd::Statsd.increment("assignment.hide_in_gradebook")
+      InstStatsd::Statsd.distributed_increment("assignment.hide_in_gradebook")
     end
   end
 
   def track_create_metrics(assignment)
-    InstStatsd::Statsd.increment("assignment.hide_in_gradebook") if assignment.hide_in_gradebook
+    InstStatsd::Statsd.distributed_increment("assignment.hide_in_gradebook") if assignment.hide_in_gradebook
   end
 end

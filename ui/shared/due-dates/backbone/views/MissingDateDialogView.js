@@ -19,13 +19,13 @@
 import {extend} from '@canvas/backbone/utils'
 import $ from 'jquery'
 import {View} from '@canvas/backbone'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import template from '../../jst/missingDueDateDialog.handlebars'
 import htmlEscape from '@instructure/html-escape'
 import 'jqueryui/dialog'
 import '@canvas/util/jquery/fixDialogButtons'
 
-const I18n = useI18nScope('calendar.edit')
+const I18n = createI18nScope('calendar.edit')
 
 extend(MissingDateDialogView, View)
 
@@ -34,11 +34,6 @@ function MissingDateDialogView() {
   this.onAction = this.onAction.bind(this)
   return MissingDateDialogView.__super__.constructor.apply(this, arguments)
 }
-
-MissingDateDialogView.prototype.dialogTitle =
-  '<span>\n  <i class="icon-warning"></i>\n  ' +
-  htmlEscape(I18n.t('titles.warning', 'Warning')) +
-  '\n</span>'
 
 MissingDateDialogView.prototype.initialize = function (options) {
   MissingDateDialogView.__super__.initialize.apply(this, arguments)
@@ -64,11 +59,10 @@ MissingDateDialogView.prototype.render = function () {
 MissingDateDialogView.prototype.showDialog = function () {
   this.$dialog = $(template())
     .dialog({
-      dialogClass: 'dialog-warning',
       draggable: false,
       modal: true,
       resizable: false,
-      title: $(this.dialogTitle),
+      title: I18n.t('titles.warning', 'Warning'),
       zIndex: 1000,
     })
     .fixDialogButtons()

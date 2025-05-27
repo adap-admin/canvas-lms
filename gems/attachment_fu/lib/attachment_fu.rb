@@ -240,9 +240,7 @@ module AttachmentFu # :nodoc:
     end
 
     # Returns the class used to create new thumbnails for this attachment.
-    def thumbnail_class
-      self.class.thumbnail_class
-    end
+    delegate :thumbnail_class, to: :class
 
     # Gets the thumbnail name for a filename.  'foo.jpg' becomes 'foo_thumbnail.jpg'
     def thumbnail_name_for(thumbnail = nil)
@@ -414,6 +412,8 @@ module AttachmentFu # :nodoc:
     end
 
     def find_existing_attachment_for_md5
+      return nil if avoid_linking_to_root_attachment
+
       shard.activate do
         GuardRail.activate(:secondary) do
           if md5.present? && (ns = infer_namespace)

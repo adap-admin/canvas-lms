@@ -17,10 +17,11 @@
  */
 
 import React from 'react'
-import {render, screen} from '@testing-library/react'
+import {render, screen, waitFor} from '@testing-library/react'
+import {getByText as domGetByText} from '@testing-library/dom'
 import userEvent from '@testing-library/user-event'
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import {useNode} from '@craftjs/core'
+import {useEditor, useNode} from '@craftjs/core'
 import {ButtonBlock, type ButtonBlockProps} from '..'
 import {ButtonBlockToolbar} from '../ButtonBlockToolbar'
 
@@ -35,7 +36,17 @@ jest.mock('@craftjs/core', () => {
     useNode: jest.fn(_node => {
       return {
         actions: {setProp: mockSetProp},
+        node: {
+          dom: undefined,
+        },
         props,
+      }
+    }),
+    useEditor: jest.fn(() => {
+      return {
+        query: {
+          getSerializedNodes: jest.fn(() => ({})),
+        },
       }
     }),
   }
@@ -47,12 +58,13 @@ describe('ButtonBlockToolbar', () => {
   })
 
   it('should render', () => {
-    const {getByText} = render(<ButtonBlockToolbar />)
+    const {getByText, getByTitle} = render(<ButtonBlockToolbar />)
 
-    expect(getByText('Link')).toBeInTheDocument()
-    expect(getByText('Size')).toBeInTheDocument()
-    expect(getByText('Style')).toBeInTheDocument()
+    expect(getByText('Filled')).toBeInTheDocument()
+    expect(getByText('Button Text/Link*')).toBeInTheDocument()
     expect(getByText('Color')).toBeInTheDocument()
+    expect(getByText('Size')).toBeInTheDocument()
+    expect(getByTitle('Style')).toBeInTheDocument()
     expect(getByText('Select Icon')).toBeInTheDocument()
   })
 
@@ -69,9 +81,11 @@ describe('ButtonBlockToolbar', () => {
     expect(smMenuItem).toBeInTheDocument()
     expect(medMenuItem).toBeInTheDocument()
     expect(lgMenuItem).toBeInTheDocument()
+    const li = medMenuItem.parentElement as HTMLLIElement
 
-    const li = medMenuItem.closest('li') as HTMLLIElement
-    expect(li.querySelector('svg[name="IconCheck"]')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(li.querySelector('svg[name="IconCheck"]')).toBeInTheDocument()
+    })
   })
 
   it('changes the size prop', async () => {
@@ -88,30 +102,32 @@ describe('ButtonBlockToolbar', () => {
   })
 
   it('checks the right variant', async () => {
-    const {getByText} = render(<ButtonBlockToolbar />)
+    const {getByTitle} = render(<ButtonBlockToolbar />)
 
-    const btn = getByText('Style').closest('button') as HTMLButtonElement
+    const btn = getByTitle('Style').closest('button') as HTMLButtonElement
     await userEvent.click(btn)
 
-    const textMenuItem = screen.getByText('Text')
-    const outlinedMenuItem = screen.getByText('Outlined')
-    const filledMenuItem = screen.getByText('Filled')
+    const menu = screen.getByRole('menu')
+    const textMenuItem = domGetByText(menu, 'Text')
+    const outlinedMenuItem = domGetByText(menu, 'Outlined')
+    const filledMenuItem = domGetByText(menu, 'Filled')
 
     expect(textMenuItem).toBeInTheDocument()
     expect(outlinedMenuItem).toBeInTheDocument()
     expect(filledMenuItem).toBeInTheDocument()
 
-    const li = filledMenuItem.closest('li') as HTMLLIElement
+    const li = filledMenuItem.parentElement as HTMLLIElement
     expect(li.querySelector('svg[name="IconCheck"]')).toBeInTheDocument()
   })
 
   it('changes the variant prop', async () => {
-    const {getByText} = render(<ButtonBlockToolbar />)
+    const {getByTitle} = render(<ButtonBlockToolbar />)
 
-    const btn = getByText('Style').closest('button') as HTMLButtonElement
+    const btn = getByTitle('Style').closest('button') as HTMLButtonElement
     await userEvent.click(btn)
 
-    const outlinedMenuItem = screen.getByText('Outlined')
+    const menu = screen.getByRole('menu')
+    const outlinedMenuItem = domGetByText(menu, 'Outlined')
     await userEvent.click(outlinedMenuItem)
 
     expect(mockSetProp).toHaveBeenCalled()

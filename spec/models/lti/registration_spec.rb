@@ -16,22 +16,25 @@
 #
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
-require_relative "../../lti_1_3_spec_helper"
 
 RSpec.describe Lti::Registration do
   let(:user) { user_model }
   let(:account) { Account.create! }
 
   describe "validations" do
-    it { is_expected.to validate_length_of(:name).is_at_most(255) }
-    it { is_expected.to validate_length_of(:admin_nickname).is_at_most(255) }
-    it { is_expected.to validate_length_of(:vendor).is_at_most(255) }
-    it { is_expected.to validate_presence_of(:name) }
-    it { is_expected.to have_one(:ims_registration).class_name("Lti::IMS::Registration").with_foreign_key(:lti_registration_id) }
-    it { is_expected.to have_one(:developer_key).class_name("DeveloperKey").inverse_of(:lti_registration).with_foreign_key(:lti_registration_id) }
-    it { is_expected.to belong_to(:created_by).class_name("User").optional(true) }
-    it { is_expected.to belong_to(:updated_by).class_name("User").optional(true) }
-    it { is_expected.to have_many(:lti_registration_account_bindings).class_name("Lti::RegistrationAccountBinding") }
+    subject { registration.valid? }
+
+    let(:registration) { described_class.new(account: Account.new, name: "Test Registration") }
+
+    it "doesn't let the description be too long" do
+      registration.description = "a" * 2049
+      expect(subject).to be false
+    end
+
+    it "doesn't require a description" do
+      registration.description = nil
+      expect(subject).to be true
+    end
   end
 
   describe "#lti_version" do
@@ -64,7 +67,7 @@ RSpec.describe Lti::Registration do
     end
   end
 
-  describe "#configuration" do
+  describe "#internal_lti_configuration" do
     subject { registration.internal_lti_configuration(context: account) }
 
     let(:registration) { lti_registration_model(account:) }
@@ -161,11 +164,10 @@ RSpec.describe Lti::Registration do
     end
 
     context "when tool_configuration is present" do
-      let!(:tool_configuration) do
-        dk = dev_key_model_1_3
-        dk.tool_configuration.update!(lti_registration: registration)
-        dk.tool_configuration
-      end
+      let(:developer_key) { lti_developer_key_model(account:) }
+      let(:tool_configuration) { lti_tool_configuration_model(developer_key:, lti_registration: registration) }
+
+      before { tool_configuration }
 
       it "returns the manual_configuration" do
         expect(subject).to eq(tool_configuration.internal_lti_configuration.with_indifferent_access)
@@ -174,7 +176,6 @@ RSpec.describe Lti::Registration do
       context "when an Lti::Overlay is present" do
         let(:data) do
           {
-            scopes: [TokenScopes::LTI_AGS_LINE_ITEM_SCOPE],
             title: "A Better Title",
             privacy_level: "anonymous",
             placements: {
@@ -205,7 +206,6 @@ RSpec.describe Lti::Registration do
 
           expect(subject["privacy_level"]).to eq("anonymous")
           expect(subject["title"]).to eq("A Better Title")
-          expect(subject["scopes"]).to eq([TokenScopes::LTI_AGS_LINE_ITEM_SCOPE])
           global_nav_config = subject["placements"].find { |p| p["placement"] == "global_navigation" }
           module_config = subject["placements"].find { |p| p["placement"] == "module_index_menu_modal" }
 
@@ -217,6 +217,17 @@ RSpec.describe Lti::Registration do
                                            "icon_url" => "https://example.com/icon.png",
                                            "title" => "A Better Title",
                                            "message_type" => "LtiDeepLinkingRequest")
+        end
+
+        context "with include_overlay: false" do
+          subject { registration.internal_lti_configuration(context: account, include_overlay: false) }
+
+          it "does not overlay fields on top of configuration" do
+            overlay
+
+            expect(subject["privacy_level"]).not_to eq("anonymous")
+            expect(subject["title"]).not_to eq("A Better Title")
+          end
         end
       end
     end
@@ -242,7 +253,8 @@ RSpec.describe Lti::Registration do
     let_once(:registration) { lti_registration_model(account:) }
 
     context "the registration is associated with a manual registration" do
-      include_context "lti_1_3_spec_helper"
+      let_once(:developer_key) { lti_developer_key_model(account:) }
+      let_once(:tool_configuration) { lti_tool_configuration_model(developer_key:, lti_registration: developer_key.lti_registration) }
 
       before do
         tool_configuration.update!(lti_registration: registration, placements: [{ placement: "global_navigation", target_link_uri: "https://example.com/launch" }])
@@ -313,13 +325,12 @@ RSpec.describe Lti::Registration do
 
     context "when a tool configuration is present" do
       let!(:tool_configuration) do
-        dk = dev_key_model_1_3
-        dk.tool_configuration.update!(lti_registration: registration)
-        dk.tool_configuration
+        dk = lti_developer_key_model
+        lti_tool_configuration_model(developer_key: dk, lti_registration: registration)
       end
 
       it "returns the logo_uri" do
-        expect(subject).to eq(tool_configuration.settings["extensions"].first["settings"]["icon_url"])
+        expect(subject).to eq(tool_configuration.launch_settings["icon_url"])
       end
     end
 
@@ -494,197 +505,6 @@ RSpec.describe Lti::Registration do
     end
   end
 
-  describe ".preload_account_bindings" do
-    subject { Lti::Registration.preload_account_bindings(registrations, account) }
-
-    let(:account) { account_model }
-    let(:registrations) { [] }
-
-    context "when account is nil" do
-      let(:account) { nil }
-
-      it "returns nil" do
-        expect(subject).to be_nil
-      end
-    end
-
-    context "when account is not root account" do
-      let(:root_account) { account_model }
-      let(:account) { account_model(parent_account: root_account) }
-
-      let(:registrations) { [lti_registration_model(account: root_account, bound: true)] }
-
-      it "preloads bindings for nearest root account" do
-        subject
-        expect(registrations).to all(have_attributes(account_binding: be_present))
-      end
-    end
-
-    context "with account-level registrations" do
-      let(:registrations) do
-        [
-          lti_registration_model(account:, bound: true, name: "first"),
-          lti_registration_model(account:, bound: true, name: "second")
-        ]
-      end
-
-      it "preloads account_binding on registrations" do
-        subject
-        expect(registrations).to all(have_attributes(account_binding: be_present))
-      end
-    end
-
-    context "with site admin registrations" do
-      let(:registrations) do
-        [
-          lti_registration_model(account:, bound: true, name: "first"),
-          lti_registration_model(account: Account.site_admin, bound: true, name: "second")
-        ]
-      end
-
-      it "preloads bindings from site admin registrations" do
-        subject
-        expect(registrations).to all(have_attributes(account_binding: be_present))
-      end
-
-      context "with sharding" do
-        specs_require_sharding
-
-        let(:account_registration) { @shard2.activate { lti_registration_model(account:, bound: true, name: "account") } }
-        let(:site_admin_registration) { Shard.default.activate { lti_registration_model(account: Account.site_admin, bound: true, name: "site admin") } }
-        let(:registrations) { [account_registration, site_admin_registration] }
-
-        it "preloads bindings from site admin registrations" do
-          @shard2.activate { subject }
-          expect(registrations).to all(have_attributes(account_binding: be_present))
-        end
-      end
-    end
-  end
-
-  describe ".associate_bindings" do
-    subject { Lti::Registration.send :associate_bindings, registrations, account_bindings }
-
-    let(:registrations) { [lti_registration_model] }
-    let(:account_bindings) { [lti_registration_account_binding_model(registration: registrations.first)] }
-
-    context "when binding has no matching registration" do
-      before do
-        account_bindings << lti_registration_account_binding_model
-      end
-
-      it "does not error" do
-        expect { subject }.not_to raise_error
-      end
-
-      it "associates bindings with registrations" do
-        subject
-        expect(registrations.first.account_binding).to eq(account_bindings.first)
-      end
-    end
-
-    it "associates bindings with registrations" do
-      subject
-      expect(registrations.first.account_binding).to eq(account_bindings.first)
-    end
-  end
-
-  describe ".preload_overlays" do
-    subject { Lti::Registration.preload_overlays(registrations, account) }
-
-    let(:account) { account_model }
-    let(:registrations) { [] }
-    let(:overlay) { { title: "Test" } }
-
-    context "when account is nil" do
-      let(:account) { nil }
-
-      it "returns nil" do
-        expect(subject).to be_nil
-      end
-    end
-
-    context "when account is not root account" do
-      let(:root_account) { account_model }
-      let(:account) { account_model(parent_account: root_account) }
-
-      let(:registrations) { [lti_registration_model(account: root_account, overlay:)] }
-
-      it "preloads overlays for nearest root account" do
-        subject
-        expect(registrations).to all(have_attributes(overlay: be_present))
-      end
-    end
-
-    context "with account-level registrations" do
-      let(:registrations) do
-        [
-          lti_registration_model(account:, overlay:, name: "first"),
-          lti_registration_model(account:, overlay:, name: "second")
-        ]
-      end
-
-      it "preloads overlays on registrations" do
-        subject
-        expect(registrations).to all(have_attributes(overlay: be_present))
-      end
-    end
-
-    context "with site admin registrations" do
-      let(:registrations) do
-        [
-          lti_registration_model(account:, overlay:, name: "first"),
-          lti_registration_model(account: Account.site_admin, overlay:, name: "second")
-        ]
-      end
-
-      it "preloads overlays from site admin registrations" do
-        subject
-        expect(registrations).to all(have_attributes(overlay: be_present))
-      end
-
-      context "with sharding" do
-        specs_require_sharding
-
-        let(:account_registration) { @shard2.activate { lti_registration_model(account:, overlay:, name: "account") } }
-        let(:site_admin_registration) { Shard.default.activate { lti_registration_model(account: Account.site_admin, overlay:, name: "site admin") } }
-        let(:registrations) { [account_registration, site_admin_registration] }
-
-        it "preloads overlays from site admin registrations" do
-          @shard2.activate { subject }
-          expect(registrations).to all(have_attributes(overlay: be_present))
-        end
-      end
-    end
-  end
-
-  describe ".associate_overlays" do
-    subject { Lti::Registration.send :associate_overlays, registrations, overlays }
-
-    let(:registrations) { [lti_registration_model] }
-    let(:overlays) { [lti_overlay_model(registration: registrations.first)] }
-
-    context "when overlay has no matching registration" do
-      before do
-        overlays << lti_overlay_model
-      end
-
-      it "does not error" do
-        expect { subject }.not_to raise_error
-      end
-
-      it "associates overlays with registrations" do
-        subject
-        expect(registrations.first.overlay).to eq(overlays.first)
-      end
-    end
-
-    it "associates overlays with registrations" do
-      subject
-      expect(registrations.first.overlay).to eq(overlays.first)
-    end
-  end
-
   describe "#inherited?" do
     subject { registration.inherited_for?(account) }
 
@@ -844,35 +664,46 @@ RSpec.describe Lti::Registration do
     end
   end
 
-  describe "after_update" do
-    let(:developer_key) do
-      DeveloperKey.create!(
-        name: "test devkey",
-        email: "test@test.com",
-        redirect_uri: "http://test.com",
-        account_id: account.id,
-        skip_lti_sync: false
-      )
-    end
-    let(:lti_registration) do
-      Lti::Registration.create!(
-        developer_key:,
-        name: "test registration",
-        admin_nickname: "test reg",
-        vendor: "test vendor",
-        account_id: account.id,
-        created_by: user,
-        updated_by: user
-      )
+  describe "#new_external_tool" do
+    subject { registration.new_external_tool(account) }
+
+    let(:registration) { lti_registration_model(account:) }
+
+    context "with a manual registration" do
+      let_once(:developer_key) { lti_developer_key_model(account:) }
+      let_once(:tool_configuration) { lti_tool_configuration_model(developer_key:, lti_registration: registration) }
+      let_once(:registration) { lti_registration_model(account:, developer_key:) }
+
+      it "returns a new deployment" do
+        expect(subject).to be_a(ContextExternalTool)
+        expect(subject.lti_registration).to eq(registration)
+        expect(subject.account).to eq(account)
+      end
+
+      it "creates a context control" do
+        expect { subject }.to change { Lti::ContextControl.count }.by(1)
+        expect(subject.context_controls).to include(Lti::ContextControl.last)
+        expect(subject.context_controls.first.deployment).to eq(subject)
+      end
     end
 
-    it "updates the developer key after updating lti_registration" do
-      lti_registration.update!(admin_nickname: "new test name")
-      expect(lti_registration.developer_key.name).to eq("new test name")
-    end
+    context "with an ims_registration" do
+      let(:ims_registration) { lti_ims_registration_model(lti_registration: registration) }
 
-    it "does not update the developer key if skip_lti_sync is true" do
-      expect(Lti::Registration.where(developer_key:).first).to be_nil
+      before do
+        ims_registration # instantiate before test runs
+      end
+
+      it "returns a new deployment" do
+        expect(subject).to be_a(ContextExternalTool)
+        expect(subject.lti_registration).to eq(registration)
+      end
+
+      it "creates a context control" do
+        expect { subject }.to change { Lti::ContextControl.count }.by(1)
+        expect(subject.context_controls).to include(Lti::ContextControl.last)
+        expect(subject.context_controls.first.deployment).to eq(subject)
+      end
     end
   end
 end

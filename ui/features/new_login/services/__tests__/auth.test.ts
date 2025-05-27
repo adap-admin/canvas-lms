@@ -16,8 +16,10 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {forgotPassword, performSignIn} from '../auth'
 import doFetchApi from '@canvas/do-fetch-api-effect'
+import {forgotPassword, performSignIn} from '../auth'
+
+jest.mock('@canvas/authenticity-token', () => jest.fn(() => 'testCsrfToken'))
 
 jest.mock('@canvas/do-fetch-api-effect', () => ({
   __esModule: true,
@@ -36,11 +38,12 @@ describe('Auth Service', () => {
         response: {status: 200},
       }
       ;(doFetchApi as jest.Mock).mockResolvedValue(mockResponse)
-      const result = await performSignIn('testUser', 'testPassword', true)
+      const result = await performSignIn('testUser', 'testPassword', true, '/login/canvas')
       expect(doFetchApi).toHaveBeenCalledWith({
         path: '/login/canvas',
         method: 'POST',
         body: {
+          authenticity_token: 'testCsrfToken',
           pseudonym_session: {
             unique_id: 'testUser',
             password: 'testPassword',
@@ -60,7 +63,7 @@ describe('Auth Service', () => {
     it('should return empty data when response has no json', async () => {
       const mockResponse = {json: null, response: {status: 200}}
       ;(doFetchApi as jest.Mock).mockResolvedValue(mockResponse)
-      const result = await performSignIn('testUser', 'testPassword', true)
+      const result = await performSignIn('testUser', 'testPassword', true, '/login/canvas')
       expect(result).toEqual({status: 200, data: {}})
     })
   })
@@ -77,6 +80,7 @@ describe('Auth Service', () => {
         path: '/forgot_password',
         method: 'POST',
         body: {
+          authenticity_token: 'testCsrfToken',
           pseudonym_session: {
             unique_id_forgot: 'test@example.com',
           },

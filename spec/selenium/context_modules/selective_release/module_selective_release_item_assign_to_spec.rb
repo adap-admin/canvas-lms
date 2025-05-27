@@ -26,7 +26,6 @@ require_relative "../../dashboard/pages/k5_dashboard_page"
 require_relative "../../dashboard/pages/k5_dashboard_common_page"
 require_relative "../../../helpers/k5_common"
 require_relative "../shared_examples/module_item_selective_release_assign_to_shared_examples"
-require_relative "../../../helpers/selective_release_common"
 
 describe "selective_release module item assign to tray" do
   include_context "in-process server selenium tests"
@@ -37,10 +36,8 @@ describe "selective_release module item assign to tray" do
   include K5DashboardPageObject
   include K5DashboardCommonPageObject
   include K5Common
-  include SelectiveReleaseCommon
 
   before(:once) do
-    differentiated_modules_on
     course_with_teacher(active_all: true)
 
     @course.enable_feature! :quizzes_next
@@ -122,21 +119,6 @@ describe "selective_release module item assign to tray" do
       expect(item_tray_exists?).to be true
       expect(icon_type_exists?("Quiz")).to be true
       expect(item_type_text.text).to eq("Quiz")
-    end
-
-    it "does not show tray when flag if off after item indent" do
-      Account.site_admin.disable_feature! :selective_release_ui_api
-      go_to_modules
-      add_new_module_item_and_yield("#quizs_select", "Quiz", "[ Create Quiz ]", "A Classic Quiz") do
-        f("label[for=classic_quizzes_radio]").click
-      end
-      module_item = ContentTag.last
-
-      manage_module_item_button(module_item).click
-      click_manage_module_item_indent(module_item)
-      manage_module_item_button(module_item).click
-
-      expect(element_exists?(manage_module_item_assign_to_selector(module_item.id))).to be_falsey
     end
 
     it "shows the assign to option for newly-created items that a teacher can manage" do
@@ -328,6 +310,254 @@ describe "selective_release module item assign to tray" do
       expect(module_item_assign_to_card.count).to be(3)
       click_delete_assign_to_card(2)
       expect(module_item_assign_to_card.count).to be(2)
+    end
+
+    context "differentiation tags" do
+      before :once do
+        @course.account.enable_feature!(:assign_to_differentiation_tags)
+        @course.account.tap do |a|
+          a.settings[:allow_assign_to_differentiation_tags] = { value: true }
+          a.save!
+        end
+
+        @differentiation_tag_category = @course.group_categories.create!(name: "Differentiation Tag Category", non_collaborative: true)
+        @diff_tag1 = @course.groups.create!(name: "Differentiation Tag 1", group_category: @differentiation_tag_category, non_collaborative: true)
+        @diff_tag2 = @course.groups.create!(name: "Differentiation Tag 2", group_category: @differentiation_tag_category, non_collaborative: true)
+
+        @diff_tag1.add_user(@student1)
+        @diff_tag2.add_user(@student2)
+      end
+
+      it "can add differentiation tag to a card and persist the override" do
+        go_to_modules
+        manage_module_item_button(@module_item1).click
+        click_manage_module_item_assign_to(@module_item1)
+        keep_trying_until { expect(item_tray_exists?).to be_truthy }
+
+        click_add_assign_to_card
+        select_module_item_assignee(1, @diff_tag1.name)
+        expect(module_item_assign_to_card.count).to be(2)
+
+        click_save_button
+        manage_module_item_button(@module_item1).click
+        click_manage_module_item_assign_to(@module_item1)
+        expect(module_item_assign_to_card.count).to be(2)
+        expect(assign_to_in_tray("Remove #{@diff_tag1.name}")[0]).to be_displayed
+      end
+
+      it "Displays inherrited differentiation tags from module" do
+        # Create a module override for differentiation tag
+        go_to_modules
+        manage_module_button(@module).click
+        module_index_menu_tool_link("Assign To...").click
+        click_custom_access_radio
+        assignee_selection.send_keys("Differentiation")
+        click_option(assignee_selection, @diff_tag1.name.to_s)
+        click_settings_tray_update_module_button
+
+        # Open the item assign to tray
+        manage_module_item_button(@module_item1).click
+        click_manage_module_item_assign_to(@module_item1)
+        keep_trying_until { expect(item_tray_exists?).to be_truthy }
+
+        expect(module_item_assign_to_card.count).to be(1)
+        expect(assign_to_in_tray("Remove #{@diff_tag1.name}")[0]).to be_displayed
+        expect(f('[data-testid="context-module-text"]').text).to eq("Inherited from Module 1")
+      end
+
+      it "can override an inherited module override for differentiation tags" do
+        go_to_modules
+
+        # Add diff tag module override
+        @module = ContextModule.find(@module_item1.context_module_id)
+        manage_module_button(@module).click
+        module_index_menu_tool_link("Assign To...").click
+        click_custom_access_radio
+        assignee_selection.send_keys("Differentiation")
+        click_option(assignee_selection, "Differentiation Tag 1")
+        click_settings_tray_update_module_button
+
+        # Open item from module
+        manage_module_item_button(@module_item1).click
+        click_manage_module_item_assign_to(@module_item1)
+        expect(f('[data-testid="context-module-text"]').text).to eq("Inherited from Module 1")
+        expect(assign_to_due_date(0).attribute("value")).to eq("")
+        expect(assign_to_due_time(0).attribute("value")).to eq("")
+
+        # Select a due date for the inherited override
+        update_due_date(0, "12/31/2022")
+        update_due_time(0, "11:59 PM")
+        click_save_button
+
+        # Open item from module again and see that it is no longer inherited
+        manage_module_item_button(@module_item1).click
+        click_manage_module_item_assign_to(@module_item1)
+
+        expect(module_item_assign_to_card.count).to be(1)
+        expect(assign_to_due_date(0).attribute("value")).to eq("Dec 31, 2022")
+        expect(assign_to_due_time(0).attribute("value")).to eq("11:59 PM")
+      end
+
+      context "differentiation tag rollback" do
+        before do
+          @diff_tag_module = @course.context_modules.create!(name: "Diff Tag Rollback", workflow_state: "active")
+          @diff_tag_assignment = @course.assignments.create!(title: "Assignment")
+          @diff_tag_quiz = @course.quizzes.create!(title: "Quiz").publish!
+          @diff_tag_discussion = @course.discussion_topics.create!(title: "Discussion")
+          @diff_tag_graded_discussion = DiscussionTopic.create_graded_topic!(course: @course, title: "Graded Discussion")
+          @diff_tag_wiki = @course.wiki_pages.create!(title: "Wiki Page", body: "Wiki Body")
+
+          # Add everything to module
+          @diff_tag_module.add_item type: "assignment", id: @diff_tag_assignment.id
+          @diff_tag_module.add_item type: "quiz", id: @diff_tag_quiz.id
+          @diff_tag_module.add_item type: "discussion_topic", id: @diff_tag_discussion.id
+          @diff_tag_module.add_item type: "discussion_topic", id: @diff_tag_graded_discussion.id
+          @diff_tag_module.add_item type: "wiki_page", id: @diff_tag_wiki.id
+        end
+
+        shared_examples_for "Convertable in Assign To Tray" do
+          def update_date_for_card(date, time, card_index, date_label)
+            if date_label == :due_at
+              update_due_date(card_index, date)
+              update_due_time(card_index, time)
+            elsif date_label == :unlock_at
+              update_available_date(card_index, date, true)
+              update_available_time(card_index, time, true)
+            end
+
+            click_save_button
+          end
+
+          it "displays error message if differentiation tags exist after account setting is turned off" do
+            go_to_modules
+
+            # Add diff tag override to module item
+            manage_module_item_button(module_item).click
+            click_manage_module_item_assign_to(module_item)
+
+            click_add_assign_to_card
+            select_module_item_assignee(1, @diff_tag1.name)
+            update_date_for_card("12/31/2022", "11:59 PM", 1, date_label)
+
+            # Disable differentiation tags in account settings
+            @course.account.tap do |a|
+              a.settings[:allow_assign_to_differentiation_tags] = { value: false }
+              a.save!
+            end
+
+            # Refresh the page
+            go_to_modules
+
+            manage_module_item_button(module_item).click
+            click_manage_module_item_assign_to(module_item)
+
+            # Check that warning box with 'convert tags' button is displayed
+            expect(f("[data-testid='convert-differentiation-tags-button']")).to be_displayed
+          end
+
+          it "removes error message when user manually removes all differentiation tag overrides and can save" do
+            go_to_modules
+
+            # Add diff tag override to module item
+            manage_module_item_button(module_item).click
+            click_manage_module_item_assign_to(module_item)
+
+            click_add_assign_to_card
+            select_module_item_assignee(1, @diff_tag1.name)
+            update_date_for_card("12/31/2022", "11:59 PM", 1, date_label)
+
+            # Disable differentiation tags in account settings
+            @course.account.tap do |a|
+              a.settings[:allow_assign_to_differentiation_tags] = { value: false }
+              a.save!
+            end
+
+            # Refresh the page
+            go_to_modules
+
+            manage_module_item_button(module_item).click
+            click_manage_module_item_assign_to(module_item)
+
+            expect(f("[data-testid='convert-differentiation-tags-button']")).to be_displayed
+
+            # Manually remove the differentiation tag override
+            click_delete_assign_to_card(1)
+
+            # Check that warning box is no longer displayed
+            expect(element_exists?("[data-testid='convert-differentiation-tags-button']")).to be_falsey
+
+            click_save_button
+          end
+
+          it "converts differentiation tags to adhoc student overrides when 'Convert Tags' button is clicked" do
+            go_to_modules
+
+            # Add diff tag override to module item
+            manage_module_item_button(module_item).click
+            click_manage_module_item_assign_to(module_item)
+
+            click_add_assign_to_card
+            select_module_item_assignee(1, @diff_tag1.name)
+            update_date_for_card("12/31/2022", "11:59 PM", 1, date_label)
+
+            # Disable differentiation tags in account settings
+            @course.account.tap do |a|
+              a.settings[:allow_assign_to_differentiation_tags] = { value: false }
+              a.save!
+            end
+
+            # Refresh the page
+            go_to_modules
+
+            manage_module_item_button(module_item).click
+            click_manage_module_item_assign_to(module_item)
+
+            convert_tags_button = f("[data-testid='convert-differentiation-tags-button']")
+            convert_tags_button.click
+
+            # Check that the warning box is no longer displayed
+            expect(element_exists?("[data-testid='convert-differentiation-tags-button']")).to be_falsey
+
+            # Check that the differentiation tag is now an adhoc override
+            expect(assign_to_in_tray("Remove #{@student1.name}")[0]).to be_displayed
+          end
+        end
+
+        context "Assignment" do
+          it_behaves_like "Convertable in Assign To Tray" do
+            let(:module_item) { ContentTag.find_by(context_id: @course.id, context_module_id: @diff_tag_module.id, content_type: "Assignment", content_id: @diff_tag_assignment.id) }
+            let(:date_label) { :due_at }
+          end
+        end
+
+        context "Quiz" do
+          it_behaves_like "Convertable in Assign To Tray" do
+            let(:module_item) { ContentTag.find_by(context_id: @course.id, context_module_id: @diff_tag_module.id, content_type: "Quizzes::Quiz", content_id: @diff_tag_quiz.id) }
+            let(:date_label) { :due_at }
+          end
+        end
+
+        context "Discussion" do
+          it_behaves_like "Convertable in Assign To Tray" do
+            let(:module_item) { ContentTag.find_by(context_id: @course.id, context_module_id: @diff_tag_module.id, content_type: "DiscussionTopic", content_id: @diff_tag_discussion.id) }
+            let(:date_label) { :unlock_at }
+          end
+        end
+
+        context "Graded Discussion" do
+          it_behaves_like "Convertable in Assign To Tray" do
+            let(:module_item) { ContentTag.find_by(context_id: @course.id, context_module_id: @diff_tag_module.id, content_type: "DiscussionTopic", content_id: @diff_tag_graded_discussion.id) }
+            let(:date_label) { :due_at }
+          end
+        end
+
+        context "Wiki Page" do
+          it_behaves_like "Convertable in Assign To Tray" do
+            let(:module_item) { ContentTag.find_by(context_id: @course.id, context_module_id: @diff_tag_module.id, content_type: "WikiPage", content_id: @diff_tag_wiki.id) }
+            let(:date_label) { :unlock_at }
+          end
+        end
+      end
     end
 
     context "due date validations" do

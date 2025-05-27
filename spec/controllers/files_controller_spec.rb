@@ -354,6 +354,53 @@ describe FilesController do
       end
     end
 
+    describe "with an OAuth access token" do
+      before do
+        user_with_pseudonym
+        pseudonym(@teacher)
+        @access_token = AccessToken.create!(user: @teacher)
+        @invalid_token = AccessToken.create!(user: @teacher, permanent_expires_at: 1.day.ago)
+        @unauthorized_token = AccessToken.create!(user: @user)
+      end
+
+      context "with enable_file_access_with_api_tokens disabled" do
+        before do
+          Account.site_admin.disable_feature!(:enable_file_access_with_api_tokens)
+        end
+
+        it "does not allow access with a valid token" do
+          request.headers["Authorization"] = "Bearer #{@access_token.full_token}"
+          get "show", params: { course_id: @course.id, id: @file.id }
+          expect(response).not_to be_successful
+        end
+      end
+
+      it "allows access with a valid token" do
+        request.headers["Authorization"] = "Bearer #{@access_token.full_token}"
+        get "show", params: { course_id: @course.id, id: @file.id }, format: "json"
+        expect(response).to be_successful
+      end
+
+      it "allows download with a valid token" do
+        request.headers["Authorization"] = "Bearer #{@access_token.full_token}"
+        get "show", params: { course_id: @course.id, id: @file.id, download: "1" }
+        expect(response).to be_redirect
+        expect(response.location).to include "/courses/#{@course.id}/files/#{@file.id}/course%20files"
+      end
+
+      it "denies access with an invalid token" do
+        request.headers["Authorization"] = "Bearer #{@invalid_token.full_token}"
+        get "show", params: { course_id: @course.id, id: @file.id }
+        expect(response.status.to_i).to be > 399
+      end
+
+      it "denies access with a valid token for a user who does not have access" do
+        request.headers["Authorization"] = "Bearer #{@unauthorized_token.full_token}"
+        get "show", params: { course_id: @course.id, id: @file.id }
+        expect(response.status.to_i).to be > 399
+      end
+    end
+
     describe "with JWT access token" do
       include_context "InstAccess setup"
 
@@ -421,6 +468,194 @@ describe FilesController do
         claims = Canvas::Security.decode_jwt(sf_verifier)
         expect(claims["attachment_id"]).to eq @file.global_id.to_s
         expect(claims["permission"]).to eq "download"
+      end
+    end
+
+    describe "access via location parameter" do
+      def valid_download_response(response)
+        expect(response.status).to equal(302)
+        expect(response.headers["location"]).to include("download_frd")
+      end
+
+      def valid_denied_access_response(response)
+        expect(response).to have_http_status(:forbidden).or have_http_status(:unauthorized)
+      end
+
+      context "for a deleted file" do
+        before do
+          @course.is_public = false
+          @course.public_syllabus = true
+          @course.save!
+
+          course_file
+
+          AttachmentAssociation.update_associations(@course, [@file.id], @teacher, nil, "syllabus_body")
+
+          @file.destroy
+        end
+
+        let(:params_with_location) { { course_id: @course.id, id: @file.id, download: 1, location: "course_syllabus_#{@course.id}" } }
+
+        context "with disable_file_verifiers_in_public_syllabus enabled" do
+          before do
+            @course.account.root_account.enable_feature!(:disable_file_verifiers_in_public_syllabus)
+          end
+
+          it "denies access even with location" do
+            user_session(@other_user)
+            get "show", params: params_with_location, format: "json"
+            valid_denied_access_response(response)
+          end
+        end
+      end
+
+      context "for a private user file attached to a public course syllabus" do
+        before do
+          @course.is_public = false
+          @course.public_syllabus = true
+          @course.save!
+
+          user_session(@student)
+          user_file
+
+          AttachmentAssociation.update_associations(@course, [@file.id], @student, nil, "syllabus_body")
+        end
+
+        let(:params_with_location) { { user_id: @student.id, id: @file.id, download: 1, location: "course_syllabus_#{@course.id}" } }
+
+        context "with disable_file_verifiers_in_public_syllabus enabled" do
+          before do
+            @course.account.root_account.enable_feature!(:disable_file_verifiers_in_public_syllabus)
+          end
+
+          it "allows access for student/file owner" do
+            user_session(@student)
+            get "show", params: params_with_location, format: "json"
+            valid_download_response(response)
+          end
+
+          it "allows access for teacher/course owner" do
+            user_session(@teacher)
+            get "show", params: params_with_location, format: "json"
+            valid_download_response(response)
+          end
+
+          it "allows access for unassociated user" do
+            user_session(@other_user)
+            get "show", params: params_with_location, format: "json"
+            valid_download_response(response)
+          end
+
+          it "allows access for anonymous user" do
+            remove_user_session
+            get "show", params: params_with_location, format: "json"
+            valid_download_response(response)
+          end
+        end
+
+        context "with disable_file_verifiers_in_public_syllabus disabled" do
+          before do
+            @course.account.root_account.disable_feature!(:disable_file_verifiers_in_public_syllabus)
+          end
+
+          it "allows access for student/file owner" do
+            user_session(@student)
+            get "show", params: params_with_location, format: "json"
+            valid_download_response(response)
+          end
+
+          it "denies access for teacher/course owner" do
+            user_session(@teacher)
+            get "show", params: params_with_location, format: "json"
+            valid_denied_access_response(response)
+          end
+
+          it "denies access for unassociated user" do
+            user_session(@other_user)
+            get "show", params: params_with_location, format: "json"
+            valid_denied_access_response(response)
+          end
+
+          it "denies access for anonymous user" do
+            remove_user_session
+            get "show", params: params_with_location, format: "json"
+            valid_denied_access_response(response)
+          end
+        end
+      end
+
+      context "for a course file attached to a public course syllabus" do
+        before do
+          @course.is_public = false
+          @course.public_syllabus = true
+          @course.save!
+
+          course_file
+
+          AttachmentAssociation.update_associations(@course, [@file.id], @teacher, nil, "syllabus_body")
+        end
+
+        let(:params_with_location) { { course_id: @course.id, id: @file.id, download: 1, location: "course_syllabus_#{@course.id}" } }
+
+        context "with disable_file_verifiers_in_public_syllabus enabled" do
+          before do
+            @course.account.root_account.enable_feature!(:disable_file_verifiers_in_public_syllabus)
+          end
+
+          it "allows access for student/file owner" do
+            user_session(@student)
+            get "show", params: params_with_location, format: "json"
+            valid_download_response(response)
+          end
+
+          it "allows access for teacher/course owner" do
+            user_session(@teacher)
+            get "show", params: params_with_location, format: "json"
+            valid_download_response(response)
+          end
+
+          it "allows access for unassociated user" do
+            user_session(@other_user)
+            get "show", params: params_with_location, format: "json"
+            valid_download_response(response)
+          end
+
+          it "allows access for anonymous user" do
+            remove_user_session
+            get "show", params: params_with_location, format: "json"
+            valid_download_response(response)
+          end
+        end
+
+        context "with disable_file_verifiers_in_public_syllabus disabled" do
+          before do
+            @course.account.root_account.disable_feature!(:disable_file_verifiers_in_public_syllabus)
+          end
+
+          it "allows access for student/file owner" do
+            user_session(@student)
+            get "show", params: params_with_location, format: "json"
+            valid_download_response(response)
+          end
+
+          it "allows access for teacher/course owner" do
+            user_session(@teacher)
+            get "show", params: params_with_location, format: "json"
+            valid_download_response(response)
+          end
+
+          it "denies access for unassociated user" do
+            user_session(@other_user)
+            get "show", params: params_with_location, format: "json"
+            valid_denied_access_response(response)
+          end
+
+          it "denies access for anonymous user" do
+            remove_user_session
+            get "show", params: params_with_location, format: "json"
+            valid_denied_access_response(response)
+          end
+        end
       end
     end
 
@@ -1644,6 +1879,13 @@ describe FilesController do
       assert_status(400)
     end
 
+    it "rejects an empty file" do
+      empty_file = Rack::Test::UploadedFile.new(file_fixture("empty_file.txt"), "")
+      params = @attachment.ajax_upload_params("", "")
+      post "api_create", params: params[:upload_params].merge(file: empty_file)
+      assert_status(400)
+    end
+
     it "rejects an expired policy" do
       params = @attachment.ajax_upload_params("", "", expiration: -60.seconds)
       post "api_create", params: params[:upload_params].merge({ file: @content })
@@ -1973,6 +2215,26 @@ describe FilesController do
         attachment = assigns[:attachment]
         expect(attachment).not_to be_nil
         expect(attachment.shard).to eq @shard1
+      end
+
+      it "stores the correct root_account_id on the attachment for a cross-shard account when the context is on the birth shard" do
+        account = @shard1.activate { Account.create! }
+        user = User.create!(name: "me")
+        Attachment.current_root_account = account
+        post "api_capture", params: {
+          user_id: user.global_id,
+          context_type: "User",
+          context_id: user.global_id,
+          token: @token,
+          name: "test.txt",
+          size: 42,
+          content_type: "text/plain",
+          instfs_uuid: 1,
+          folder_id: user.profile_pics_folder.global_id,
+        }
+        assert_status(201)
+        attachment = assigns[:attachment]
+        expect(attachment.root_account_id).to eq account.global_id
       end
     end
   end

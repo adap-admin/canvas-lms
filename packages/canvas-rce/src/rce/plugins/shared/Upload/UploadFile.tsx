@@ -1,4 +1,3 @@
-// @ts-nocheck
 /*
  * Copyright (C) 2019 - present Instructure, Inc.
  *
@@ -44,10 +43,13 @@ export const handleSubmit = (
   editor: Editor,
   accept: string,
   selectedPanel: UploadFilePanelId,
+  // @ts-expect-error
   uploadData,
+  // @ts-expect-error
   storeProps,
+  // @ts-expect-error
   _source,
-  afterInsert: Function = () => undefined
+  afterInsert: Function = () => undefined,
 ) => {
   Bridge.focusEditor(RCEWrapper.getByEditor(editor)) // necessary since it blurred when the modal opened
   const {altText, isDecorativeImage, displayAs} = uploadData?.imageOptions || {}
@@ -132,6 +134,7 @@ export function UploadFile({
   const [theFile] = useState(preselectedFile)
   const bodyRef = React.useRef<Component>()
 
+  // @ts-expect-error
   trayProps = trayProps || Bridge.trayProps.get(editor)
 
   // the panels get rendered inside tab panels. it's difficult for them to
@@ -151,10 +154,11 @@ export function UploadFile({
 
   return (
     <StoreProvider {...trayProps} canvasOrigin={canvasOrigin}>
+      {/* @ts-expect-error */}
       {contentProps => (
         <UploadFileModal
           ref={bodyRef}
-          // @ts-ignore
+          // @ts-expect-error
           preselectedFile={theFile}
           editor={editor}
           trayProps={trayProps}

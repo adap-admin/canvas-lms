@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU Affero General Public License along
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-import gql from 'graphql-tag'
+import {gql} from '@apollo/client'
 
 import {Conversation} from './Conversation'
 import {ConversationMessage} from './ConversationMessage'
@@ -168,6 +168,7 @@ export const CONVERSATIONS_QUERY = gql`
     $filter: [String!]
     $scope: String = ""
     $afterConversation: String
+    $showHorizonConversations: Boolean = false
   ) {
     legacyNode(_id: $userID, type: User) {
       ... on User {
@@ -178,6 +179,7 @@ export const CONVERSATIONS_QUERY = gql`
           filter: $filter # e.g. [user_1, course_1]
           first: 20
           after: $afterConversation
+          showHorizonConversations: $showHorizonConversations
         ) {
           nodes {
             _id
@@ -247,7 +249,10 @@ export const CONVERSATION_MESSAGES_QUERY = gql`
 `
 
 export const COURSES_QUERY = gql`
-  query GetUserCourses($userID: ID!) {
+  query GetUserCourses(
+    $userID: ID!
+    $horizonCourses: Boolean
+  ) {
     legacyNode(_id: $userID, type: User) {
       ... on User {
         id
@@ -262,7 +267,7 @@ export const COURSES_QUERY = gql`
             ...Course
           }
         }
-        enrollments {
+        enrollments(horizonCourses: $horizonCourses) {
           ...Enrollment
         }
       }

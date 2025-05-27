@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 import {fireEvent, render, waitFor} from '@testing-library/react'
-import {MockedProvider} from '@apollo/react-testing'
+import {MockedProvider} from '@apollo/client/testing'
 import {mockQuery} from '@canvas/assignments/graphql/studentMocks'
 import range from 'lodash/range'
 import React from 'react'
@@ -98,13 +98,21 @@ describe('ViewManager', () => {
       COURSE_ID: '1',
       current_user: {display_name: 'bob', avatar_url: 'awesome.avatar.url'},
       enrollment_state: 'active',
+      can_submit_assignment_from_section: true,
       PREREQS: {},
       current_user_roles: ['user', 'student'],
     }
+    global.fetch = jest.fn(() =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve([]),
+      }),
+    )
   })
 
   afterEach(() => {
     window.ENV = originalEnv
+    jest.restoreAllMocks()
   })
 
   describe('New Attempt Button', () => {
@@ -114,7 +122,7 @@ describe('ViewManager', () => {
         const {getByDisplayValue, getByText} = render(
           <MockedProvider>
             <ViewManager {...props} />
-          </MockedProvider>
+          </MockedProvider>,
         )
         const newAttemptButton = getByText('New Attempt')
         fireEvent.click(newAttemptButton)
@@ -126,7 +134,7 @@ describe('ViewManager', () => {
         const {queryByText, getByText} = render(
           <MockedProvider>
             <ViewManager {...props} />
-          </MockedProvider>
+          </MockedProvider>,
         )
         const newAttemptButton = getByText('New Attempt')
         fireEvent.click(newAttemptButton)
@@ -140,7 +148,7 @@ describe('ViewManager', () => {
         const {queryByText} = render(
           <MockedProvider>
             <ViewManager {...props} />
-          </MockedProvider>
+          </MockedProvider>,
         )
         expect(queryByText('New Attempt')).toBeNull()
       })
@@ -152,7 +160,7 @@ describe('ViewManager', () => {
         const {queryByText} = render(
           <MockedProvider>
             <ViewManager {...props} />
-          </MockedProvider>
+          </MockedProvider>,
         )
         expect(queryByText('New Attempt')).toBeNull()
       })
@@ -162,7 +170,7 @@ describe('ViewManager', () => {
         const {queryByText} = render(
           <MockedProvider>
             <ViewManager {...props} />
-          </MockedProvider>
+          </MockedProvider>,
         )
         expect(queryByText('New Attempt')).not.toBeNull()
       })
@@ -172,7 +180,7 @@ describe('ViewManager', () => {
         const {getByText, getByTestId} = render(
           <MockedProvider>
             <ViewManager {...props} />
-          </MockedProvider>
+          </MockedProvider>,
         )
 
         const mockFocus = jest.fn()
@@ -192,7 +200,7 @@ describe('ViewManager', () => {
         const {queryByText} = render(
           <MockedProvider>
             <ViewManager {...props} />
-          </MockedProvider>
+          </MockedProvider>,
         )
         expect(queryByText('New Attempt')).not.toBeNull()
       })
@@ -204,7 +212,19 @@ describe('ViewManager', () => {
         const {queryByText} = render(
           <MockedProvider>
             <ViewManager {...props} />
-          </MockedProvider>
+          </MockedProvider>,
+        )
+        expect(queryByText('New Attempt')).toBeNull()
+      })
+
+      it('is not displayed if the student is concluded in the section the assignment is assigned to', async () => {
+        window.ENV.can_submit_assignment_from_section = false
+
+        const props = await makeProps({currentAttempt: 1})
+        const {queryByText} = render(
+          <MockedProvider>
+            <ViewManager {...props} />
+          </MockedProvider>,
         )
         expect(queryByText('New Attempt')).toBeNull()
       })
@@ -217,7 +237,7 @@ describe('ViewManager', () => {
       const {getByDisplayValue} = render(
         <MockedProvider>
           <ViewManager {...props} />
-        </MockedProvider>
+        </MockedProvider>,
       )
       expect(getByDisplayValue('Attempt 2')).not.toBeNull()
     })

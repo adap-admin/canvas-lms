@@ -68,7 +68,11 @@ describe GroupCategoriesController do
     end
 
     it "allows teachers to create both types of group categories by default" do
-      Account.default.enable_feature!(:differentiation_tags)
+      @course.account.enable_feature! :assign_to_differentiation_tags
+      @course.account.settings[:allow_assign_to_differentiation_tags] = { value: true }
+      @course.account.save!
+      @course.account.reload
+
       user_session(@teacher)
 
       # Can create collaborative
@@ -94,7 +98,10 @@ describe GroupCategoriesController do
     end
 
     it "prevents creating non-collaborative groups when manage_tags_add permission is revoked" do
-      Account.default.enable_feature!(:differentiation_tags)
+      @course.account.enable_feature! :assign_to_differentiation_tags
+      @course.account.settings[:allow_assign_to_differentiation_tags] = { value: true }
+      @course.account.save!
+      @course.account.reload
 
       # Explicitly remove the permission
       @course.account.role_overrides.create!(
@@ -229,7 +236,10 @@ describe GroupCategoriesController do
 
     context "differentiation_tags" do
       before do
-        Account.default.enable_feature!(:differentiation_tags)
+        @course.account.enable_feature! :assign_to_differentiation_tags
+        @course.account.settings[:allow_assign_to_differentiation_tags] = { value: true }
+        @course.account.save!
+        @course.account.reload
       end
 
       it "allows teachers with :manage_tags_add to create non_collaborative groups" do
@@ -258,7 +268,10 @@ describe GroupCategoriesController do
     end
 
     it "allows teachers to update both types of group categories by default" do
-      Account.default.enable_feature!(:differentiation_tags)
+      @course.account.enable_feature! :assign_to_differentiation_tags
+      @course.account.settings[:allow_assign_to_differentiation_tags] = { value: true }
+      @course.account.save!
+      @course.account.reload
 
       user_session(@teacher)
 
@@ -282,7 +295,10 @@ describe GroupCategoriesController do
     end
 
     it "prevents updating non-collaborative groups when manage_tags_manage permission is revoked" do
-      Account.default.enable_feature!(:differentiation_tags)
+      @course.account.enable_feature! :assign_to_differentiation_tags
+      @course.account.settings[:allow_assign_to_differentiation_tags] = { value: true }
+      @course.account.save!
+      @course.account.reload
 
       @course.account.role_overrides.create!(
         permission: :manage_tags_manage,
@@ -398,6 +414,297 @@ describe GroupCategoriesController do
     end
   end
 
+  describe "POST bulk_manage_differentiation_tag" do
+    before :once do
+      @course.account.enable_feature! :assign_to_differentiation_tags
+      @course.account.settings[:allow_assign_to_differentiation_tags] = { value: true }
+      @course.account.save!
+      @course.account.reload
+      @non_collaborative_category = @course.group_categories.create!(name: "Non-Collaborative Category", non_collaborative: true)
+      @collaborative_category = @course.group_categories.create!(name: "Collaborative Category", non_collaborative: false)
+    end
+
+    context "authorization checks" do
+      it "requires add permission to create differentiation tag" do
+        user_session(@teacher)
+        # Revoke add permission for differentiation tags (non_collaborative)
+        @course.account.role_overrides.create!(
+          permission: :manage_tags_add,
+          role: teacher_role,
+          enabled: false
+        )
+
+        post "bulk_manage_differentiation_tag",
+             params: {
+               course_id: @course.id,
+               group_category: { id: @non_collaborative_category.id },
+               operations: {
+                 create: [{ name: "New Group" }]
+               }
+             }
+        assert_unauthorized
+      end
+
+      it "requires manage permission to update differentiation tag" do
+        user_session(@teacher)
+        # Revoke manage permission
+        @course.account.role_overrides.create!(
+          permission: :manage_tags_manage,
+          role: teacher_role,
+          enabled: false
+        )
+
+        test_group = @non_collaborative_category.groups.create!(name: "Old Group", context: @course)
+
+        post "bulk_manage_differentiation_tag",
+             params: {
+               course_id: @course.id,
+               group_category: { id: @non_collaborative_category.id },
+               operations: {
+                 update: [{ id: test_group.id, name: "Updated Group" }]
+               }
+             }
+        assert_unauthorized
+      end
+
+      it "requires delete permission to delete differentiation tag" do
+        user_session(@teacher)
+        # Revoke delete permission
+        @course.account.role_overrides.create!(
+          permission: :manage_tags_delete,
+          role: teacher_role,
+          enabled: false
+        )
+
+        test_group = @non_collaborative_category.groups.create!(name: "To Be Deleted", context: @course)
+
+        post "bulk_manage_differentiation_tag",
+             params: {
+               course_id: @course.id,
+               group_category: { id: @non_collaborative_category.id },
+               operations: {
+                 delete: [{ id: test_group.id }]
+               }
+             }
+        assert_unauthorized
+      end
+    end
+
+    context "with proper permissions" do
+      before do
+        user_session(@teacher)
+        # Assume teacher has all relevant group permissions (manage_tags_add, manage_tags_manage, manage_tags_delete)
+      end
+
+      it "creates multiple groups" do
+        post "bulk_manage_differentiation_tag",
+             params: {
+               course_id: @course.id,
+               group_category: { id: @non_collaborative_category.id },
+               operations: {
+                 create: [
+                   { name: "Group A" },
+                   { name: "Group B" },
+                   { name: "Group C" }
+                 ]
+               }
+             }
+        expect(response).to be_successful
+        body = response.parsed_body
+        expect(body["created"].size).to eq 3
+      end
+
+      it "updates groups" do
+        group = @non_collaborative_category.groups.create!(name: "Original Name", context: @course)
+
+        post "bulk_manage_differentiation_tag",
+             params: {
+               course_id: @course.id,
+               group_category: { id: @non_collaborative_category.id },
+               operations: {
+                 update: [{ id: group.id, name: "Updated Name" }]
+               }
+             }
+
+        expect(response).to be_successful
+        body = response.parsed_body
+        expect(body["updated"].size).to eq 1
+        expect(group.reload.name).to eq "Updated Name"
+      end
+
+      it "deletes groups" do
+        group = @non_collaborative_category.groups.create!(name: "Delete Me", context: @course)
+
+        post "bulk_manage_differentiation_tag",
+             params: {
+               course_id: @course.id,
+               group_category: { id: @non_collaborative_category.id },
+               operations: {
+                 delete: [{ id: group.id }]
+               }
+             }
+
+        expect(response).to be_successful
+        body = response.parsed_body
+        expect(body["deleted"].size).to eq 1
+        expect(@non_collaborative_category.groups.active.map(&:name)).not_to include("Delete Me")
+      end
+
+      it "handles create, update, and delete in one request" do
+        group1 = @non_collaborative_category.groups.create!(name: "Group1", context: @course)
+        group2 = @non_collaborative_category.groups.create!(name: "Group2", context: @course)
+
+        post "bulk_manage_differentiation_tag",
+             params: {
+               course_id: @course.id,
+               group_category: { id: @non_collaborative_category.id },
+               operations: {
+                 create: [{ name: "New Group" }],
+                 update: [{ id: group1.id, name: "Updated Group1" }],
+                 delete: [{ id: group2.id }]
+               }
+             }
+
+        expect(response).to be_successful
+        body = response.parsed_body
+        expect(body["created"].size).to eq 1
+        expect(body["updated"].size).to eq 1
+        expect(body["deleted"].size).to eq 1
+        expect(@non_collaborative_category.groups.active.map(&:name)).to include("Updated Group1", "New Group")
+        expect(@non_collaborative_category.groups.active.map(&:name)).not_to include("Group2")
+      end
+
+      it "updates group category name if both id and new name provided" do
+        new_name = "Updated Non-Collaborative Category"
+        post "bulk_manage_differentiation_tag",
+             params: {
+               course_id: @course.id,
+               group_category: { id: @non_collaborative_category.id, name: new_name },
+               operations: {
+                 create: [{ name: "New Group" }]
+               }
+             }
+        expect(response).to be_successful
+        body = response.parsed_body
+
+        expect(body["group_category"]["group_category"]["name"]).to eq new_name
+        expect(@non_collaborative_category.reload.name).to eq new_name
+      end
+
+      it "creates a new GroupCategory and new Groups at the same time" do
+        new_category_name = "New Differentiation Category"
+        post "bulk_manage_differentiation_tag",
+             params: {
+               course_id: @course.id,
+               group_category: { name: new_category_name },
+               operations: {
+                 create: [
+                   { name: "Group X" },
+                   { name: "Group Y" }
+                 ]
+               }
+             }
+        expect(response).to be_successful
+
+        new_category = @course.differentiation_tag_categories.find_by(name: new_category_name)
+        expect(new_category).not_to be_nil
+        expect(new_category.groups.active.pluck(:name)).to match_array(["Group X", "Group Y"])
+      end
+    end
+
+    context "with invalid group_category non_collaborative" do
+      it "fails when a non-differentiation (collaborative) category id is provided" do
+        user_session(@teacher)
+        post "bulk_manage_differentiation_tag",
+             params: {
+               course_id: @course.id,
+               group_category: { id: @collaborative_category.id },
+               operations: {
+                 create: [{ name: "New Group" }]
+               }
+             }
+        expect(response).to have_http_status(:bad_request)
+        body = response.parsed_body
+        expect(body["errors"]).to eq I18n.t("This endpoint only works for Differentiation Tags")
+      end
+    end
+
+    context "error conditions" do
+      it "fails if a group to update doesn't exist" do
+        user_session(@teacher)
+        post "bulk_manage_differentiation_tag",
+             params: {
+               course_id: @course.id,
+               group_category: { id: @non_collaborative_category.id },
+               operations: {
+                 update: [{ id: 9999, name: "Nonexistent" }]
+               }
+             }
+        expect(response).to have_http_status(:not_found)
+      end
+
+      it "fails if a group to delete doesn't exist" do
+        user_session(@teacher)
+        post "bulk_manage_differentiation_tag",
+             params: {
+               course_id: @course.id,
+               group_category: { id: @non_collaborative_category.id },
+               operations: {
+                 delete: [{ id: 9999 }]
+               }
+             }
+        expect(response).to have_http_status(:not_found)
+      end
+
+      it "fails if create params are invalid" do
+        user_session(@teacher)
+        post "bulk_manage_differentiation_tag",
+             params: {
+               course_id: @course.id,
+               group_category: { id: @non_collaborative_category.id },
+               operations: {
+                 create: [{ name: "" }]
+               }
+             }
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body["errors"]).to be_present
+      end
+
+      it "fails when the maximum number of operations is exceeded" do
+        user_session(@teacher)
+        post "bulk_manage_differentiation_tag",
+             params: {
+               course_id: @course.id,
+               group_category: { id: @non_collaborative_category.id },
+               operations: {
+                 create: [{ name: "Group" }] * (50 + 1)
+               }
+             }
+        expect(response).to have_http_status(:bad_request)
+        expect(response.parsed_body["errors"]).to match(/You can only perform a maximum of 50 operations at a time./io)
+      end
+
+      it "fails if the GroupCategory id is not part of the given course even if the teacher has permissions" do
+        user_session(@teacher)
+        course1 = @course
+        course2 = course_with_teacher(active_all: true, user: @teacher).course
+        other_category = course2.group_categories.create!(name: "Other Category", non_collaborative: true)
+
+        post "bulk_manage_differentiation_tag",
+             params: {
+               course_id: course1.id,
+               group_category: { id: other_category.id },
+               operations: {
+                 create: [{ name: "Invalid Group" }]
+               }
+             }
+        expect(response).to have_http_status(:bad_request)
+        body = response.parsed_body
+        expect(body["errors"]).to match(/not part of the course/i)
+      end
+    end
+  end
+
   describe "DELETE delete" do
     it "requires authorization" do
       group_category = @course.group_categories.create(name: "Study Groups")
@@ -451,7 +758,10 @@ describe GroupCategoriesController do
     end
 
     it "allows teachers to delete both types of group categories by default" do
-      Account.default.enable_feature!(:differentiation_tags)
+      @course.account.enable_feature! :assign_to_differentiation_tags
+      @course.account.settings[:allow_assign_to_differentiation_tags] = { value: true }
+      @course.account.save!
+      @course.account.reload
 
       user_session(@teacher)
 
@@ -473,7 +783,10 @@ describe GroupCategoriesController do
     end
 
     it "prevents deleting non-collaborative groups when manage_tags_delete permission is revoked" do
-      Account.default.enable_feature!(:differentiation_tags)
+      @course.account.enable_feature! :assign_to_differentiation_tags
+      @course.account.settings[:allow_assign_to_differentiation_tags] = { value: true }
+      @course.account.save!
+      @course.account.reload
 
       @course.account.role_overrides.create!(
         permission: :manage_tags_delete,
@@ -539,7 +852,10 @@ describe GroupCategoriesController do
     end
 
     it "allows teachers to view users in both types of group categories by default" do
-      Account.default.enable_feature!(:differentiation_tags)
+      @course.account.enable_feature! :assign_to_differentiation_tags
+      @course.account.settings[:allow_assign_to_differentiation_tags] = { value: true }
+      @course.account.save!
+      @course.account.reload
 
       user_session(@teacher)
 
@@ -559,7 +875,10 @@ describe GroupCategoriesController do
     end
 
     it "prevents viewing non-collaborative group users when manage_tags_manage permission is revoked" do
-      Account.default.enable_feature!(:differentiation_tags)
+      @course.account.enable_feature! :assign_to_differentiation_tags
+      @course.account.settings[:allow_assign_to_differentiation_tags] = { value: true }
+      @course.account.save!
+      @course.account.reload
 
       @course.account.role_overrides.create!(
         permission: :manage_tags_manage,
@@ -621,7 +940,10 @@ describe GroupCategoriesController do
     end
 
     it "allows teachers to import to both types of group categories by default" do
-      Account.default.enable_feature!(:differentiation_tags)
+      @course.account.enable_feature! :assign_to_differentiation_tags
+      @course.account.settings[:allow_assign_to_differentiation_tags] = { value: true }
+      @course.account.save!
+      @course.account.reload
       user_session(@teacher)
 
       # Can import to collaborative
@@ -642,7 +964,10 @@ describe GroupCategoriesController do
     end
 
     it "prevents importing to non-collaborative groups when manage_tags_add permission is revoked" do
-      Account.default.enable_feature!(:differentiation_tags)
+      @course.account.enable_feature! :assign_to_differentiation_tags
+      @course.account.settings[:allow_assign_to_differentiation_tags] = { value: true }
+      @course.account.save!
+      @course.account.reload
       @course.account.role_overrides.create!(
         permission: :manage_tags_add,
         role: teacher_role,
@@ -754,109 +1079,218 @@ describe GroupCategoriesController do
       get "index", params: { course_id: @course.id }, format: :json
       assert_forbidden
     end
+
+    it "does not double render" do
+      user_session(@student)
+
+      expect(controller).to receive(:render).once.and_call_original
+      get :index, params: { course_id: @course.id }, format: :json
+      assert_forbidden
+    end
   end
 
   context "Differentiation Tags" do
     before do
-      Account.default.enable_feature!(:differentiation_tags)
+      @course.account.enable_feature! :assign_to_differentiation_tags
+      @course.account.settings[:allow_assign_to_differentiation_tags] = { value: true }
+      @course.account.save!
+      @course.account.reload
+      # Assuming @course, @teacher_role, @teacher, @non_collaborative_category, etc., are already set up
     end
 
-    it "returns both collaborative and non-collaborative group categories when user has both group and tag management permissions" do
-      user_session(@teacher)
+    describe "GET #index with collaboration_state" do
+      context "when user has both group and tag management permissions" do
+        before do
+          user_session(@teacher)
+        end
 
-      get "index", params: { course_id: @course.id }, format: :json
-      json = response.parsed_body
+        it "fails when invalid Collaborative state is sent" do
+          get "index", params: { course_id: @course.id, collaboration_state: "gibberish" }, format: :json
+          json = response.parsed_body
+          expect(response).to have_http_status(:bad_request)
+          expect(json["error"]).to include("Invalid collaboration_state")
+        end
 
-      expect(response).to be_successful
-      expect(json.count).to eq 2
-      expect(json.pluck("name")).to include("Collaborative Groups", "Non-Collaborative Groups")
-    end
+        it "defaults to collaborative collaboration_state when send empty string" do
+          get "index", params: { course_id: @course.id, collaboration_state: "" }, format: :json
+          json = response.parsed_body
 
-    it "returns only collaborative group categories if tag management permissions are revoked" do
-      RoleOverride::GRANULAR_MANAGE_TAGS_PERMISSIONS.each do |permission|
-        @course.account.role_overrides.create!(
-          permission:,
-          role: teacher_role,
-          enabled: false
-        )
-      end
-      user_session(@teacher)
+          expect(response).to be_successful
+          expect(json.count).to eq 1
+          expect(json.pluck("name")).to include("Collaborative Groups")
+        end
 
-      get "index", params: { course_id: @course.id }, format: :json
-      json = response.parsed_body
+        it "returns both collaborative and non-collaborative group categories when collaboration_state is 'all'" do
+          get "index", params: { course_id: @course.id, collaboration_state: "all" }, format: :json
+          json = response.parsed_body
 
-      expect(response).to be_successful
-      expect(json.count).to eq 1
-      expect(json[0]["name"]).to eq "Collaborative Groups"
-    end
+          expect(response).to be_successful
+          expect(json.count).to eq 2
+          expect(json.pluck("name")).to include("Collaborative Groups", "Non-Collaborative Groups")
+        end
 
-    it "returns only non-collaborative group categories if group management permissions are revoked" do
-      RoleOverride::GRANULAR_MANAGE_GROUPS_PERMISSIONS.each do |permission|
-        @course.account.role_overrides.create!(
-          permission:,
-          role: teacher_role,
-          enabled: false
-        )
-      end
-      user_session(@teacher)
+        it "returns only collaborative group categories when collaboration_state is 'collaborative'" do
+          get "index", params: { course_id: @course.id, collaboration_state: "collaborative" }, format: :json
+          json = response.parsed_body
 
-      get "index", params: { course_id: @course.id }, format: :json
-      json = response.parsed_body
+          expect(response).to be_successful
+          expect(json.count).to eq 1
+          expect(json.first["name"]).to eq "Collaborative Groups"
+        end
 
-      expect(response).to be_successful
-      expect(json.count).to eq 1
-      expect(json[0]["name"]).to eq "Non-Collaborative Groups"
-    end
+        it "returns only non-collaborative group categories when collaboration_state is 'non_collaborative'" do
+          get "index", params: { course_id: @course.id, collaboration_state: "non_collaborative" }, format: :json
+          json = response.parsed_body
 
-    context "with differentiation tags disabled with existing hidden groups" do
-      before do
-        Account.default.disable_feature!(:differentiation_tags)
-      end
+          expect(response).to be_successful
+          expect(json.count).to eq 1
+          expect(json.first["name"]).to eq "Non-Collaborative Groups"
+        end
 
-      it "prevents teachers from creating non_collaborative groups if differentiation_tags is disabled" do
-        @course.account.role_overrides.create!({
-                                                 role: teacher_role,
-                                                 permission: :manage_tags_add,
-                                                 enabled: true
-                                               })
-        user_session(@teacher)
+        it "returns only collaborative group categories by default when collaboration_state is not provided" do
+          get "index", params: { course_id: @course.id }, format: :json
+          json = response.parsed_body
 
-        post "create", params: { course_id: @course.id, category: { name: "Hidden GC", non_collaborative: true } }
-
-        expect(response).to be_unauthorized
+          expect(response).to be_successful
+          expect(json.count).to eq 1
+          expect(json.first["name"]).to eq "Collaborative Groups"
+        end
       end
 
-      it "does not allow viewing non-collaborative group category" do
-        user_session(@teacher)
-        get "users", params: {
-          course_id: @course.id,
-          group_category_id: @non_collaborative_category.id
-        }
-        assert_unauthorized
+      context "when tag management permissions are revoked" do
+        before do
+          # Revoke all tag management permissions
+          RoleOverride::GRANULAR_MANAGE_TAGS_PERMISSIONS.each do |permission|
+            @course.account.role_overrides.create!(
+              permission:,
+              role: teacher_role,
+              enabled: false
+            )
+          end
+
+          user_session(@teacher)
+        end
+
+        it "returns only collaborative group categories when collaboration_state is 'all' but lacks tag permissions" do
+          get "index", params: { course_id: @course.id, collaboration_state: "all" }, format: :json
+          json = response.parsed_body
+
+          expect(response).to be_successful
+          expect(json.count).to eq 1
+          expect(json.first["name"]).to eq "Collaborative Groups"
+        end
+
+        it "returns only collaborative group categories when collaboration_state is 'collaborative'" do
+          get "index", params: { course_id: @course.id, collaboration_state: "collaborative" }, format: :json
+          json = response.parsed_body
+
+          expect(response).to be_successful
+          expect(json.count).to eq 1
+          expect(json.first["name"]).to eq "Collaborative Groups"
+        end
+
+        it "returns forbidden when trying to access non-collaborative group categories without permissions" do
+          get "index", params: { course_id: @course.id, collaboration_state: "non_collaborative" }, format: :json
+          response.parsed_body
+          expect(response).to be_forbidden
+        end
       end
 
-      it "does not allow adding non-collaborative group category" do
-        user_session(@teacher)
-        post "create", params: {
-          course_id: @course.id,
-          category: {
-            name: "New Non-Collaborative Group",
-            non_collaborative: "1"
+      context "when group management permissions are revoked" do
+        before do
+          # Revoke all group management permissions
+          RoleOverride::GRANULAR_MANAGE_GROUPS_PERMISSIONS.each do |permission|
+            @course.account.role_overrides.create!(
+              permission:,
+              role: teacher_role,
+              enabled: false
+            )
+          end
+
+          user_session(@teacher)
+        end
+
+        it "returns only non-collaborative group categories when collaboration_state is 'all' but lacks group permissions" do
+          get "index", params: { course_id: @course.id, collaboration_state: "all" }, format: :json
+          json = response.parsed_body
+
+          # Since the user lacks group permissions, 'all' should only return non-collaborative categories
+          expect(response).to be_successful
+          expect(json.count).to eq 1
+          expect(json.first["name"]).to eq "Non-Collaborative Groups"
+        end
+
+        it "returns only non-collaborative group categories when collaboration_state is 'non_collaborative'" do
+          get "index", params: { course_id: @course.id, collaboration_state: "non_collaborative" }, format: :json
+          json = response.parsed_body
+
+          expect(response).to be_successful
+          expect(json.count).to eq 1
+          expect(json.first["name"]).to eq "Non-Collaborative Groups"
+        end
+
+        it "returns forbidden when trying to access collaborative group categories without permissions" do
+          user_session(@student)
+          get "index", params: { course_id: @course.id, collaboration_state: "collaborative" }, format: :json
+          response.parsed_body
+
+          expect(response).to be_forbidden
+        end
+      end
+
+      context "with differentiation tags disabled with existing hidden groups" do
+        before do
+          @course.account.disable_feature! :assign_to_differentiation_tags
+          @course.account.settings[:allow_assign_to_differentiation_tags] = { value: false }
+          @course.account.save!
+          @course.account.reload
+        end
+
+        it "prevents teachers from creating non_collaborative groups if differentiation_tags is disabled" do
+          @course.account.role_overrides.create!({
+                                                   role: teacher_role,
+                                                   permission: :manage_tags_add,
+                                                   enabled: true
+                                                 })
+          user_session(@teacher)
+
+          post "create", params: { course_id: @course.id, category: { name: "Hidden GC", non_collaborative: true } }
+
+          expect(response).to be_unauthorized
+        end
+
+        it "does not allow viewing non-collaborative group category" do
+          user_session(@teacher)
+          get "users", params: {
+            course_id: @course.id,
+            group_category_id: @non_collaborative_category.id
           }
-        }
-        assert_unauthorized
-      end
+          assert_unauthorized
+        end
 
-      it "does not allow updating non-collaborative group category" do
-        user_session(@teacher)
-        put "update", params: { course_id: @course.id, id: @non_collaborative_category.id, category: { name: "Updated Non-Collaborative Group" } }
-        assert_unauthorized
-      end
+        it "does not allow adding non-collaborative group category" do
+          user_session(@teacher)
+          post "create", params: {
+            course_id: @course.id,
+            category: {
+              name: "New Non-Collaborative Group",
+              non_collaborative: "1"
+            }
+          }
+          assert_unauthorized
+        end
 
-      it "does not allow deleting non-collaborative group category" do
-        user_session(@teacher)
-        delete "destroy", params: { course_id: @course.id, id: @non_collaborative_category.id }
-        assert_unauthorized
+        it "does not allow updating non-collaborative group category" do
+          user_session(@teacher)
+          put "update", params: { course_id: @course.id, id: @non_collaborative_category.id, category: { name: "Updated Non-Collaborative Group" } }
+          assert_unauthorized
+        end
+
+        it "does not allow deleting non-collaborative group category" do
+          user_session(@teacher)
+          delete "destroy", params: { course_id: @course.id, id: @non_collaborative_category.id }
+          assert_unauthorized
+        end
       end
     end
   end

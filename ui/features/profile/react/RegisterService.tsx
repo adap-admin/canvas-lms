@@ -17,21 +17,21 @@
  */
 
 import React, {type ReactNode} from 'react'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {Heading} from '@instructure/ui-heading'
 import {Modal} from '@instructure/ui-modal'
 import {Button, CloseButton} from '@instructure/ui-buttons'
 import {Text} from '@instructure/ui-text'
 import {Flex} from '@instructure/ui-flex'
 import {TextInput} from '@instructure/ui-text-input'
-import {Controller, useForm, type Control} from 'react-hook-form'
+import {Controller, useForm, type Control, type SubmitHandler} from 'react-hook-form'
 import * as z from 'zod'
 import {getFormErrorMessage} from '@canvas/forms/react/react-hook-form/utils'
 import {zodResolver} from '@hookform/resolvers/zod'
 import doFetchApi from '@canvas/do-fetch-api-effect'
 import {showFlashError} from '@canvas/alerts/react/FlashAlert'
 
-const I18n = useI18nScope('profile')
+const I18n = createI18nScope('profile')
 
 type ServiceName = 'skype' | 'google_drive' | 'diigo'
 
@@ -39,18 +39,21 @@ export const USERNAME_MAX_LENGTH = 255
 
 const defaultValues = {username: '', password: ''}
 
-const validationSchema = z.object({
-  username: z
-    .string()
-    .min(1, I18n.t('This field is required.'))
-    .max(
-      USERNAME_MAX_LENGTH,
-      I18n.t('Exceeded the maximum length (%{usernameMaxLength} characters).', {
-        usernameMaxLength: USERNAME_MAX_LENGTH,
-      })
-    ),
-  password: z.string().optional(),
-})
+const createValidationSchema = () =>
+  z.object({
+    username: z
+      .string()
+      .min(1, I18n.t('This field is required.'))
+      .max(
+        USERNAME_MAX_LENGTH,
+        I18n.t('Exceeded the maximum length (%{usernameMaxLength} characters).', {
+          usernameMaxLength: USERNAME_MAX_LENGTH,
+        }),
+      ),
+    password: z.string().optional(),
+  })
+
+type FormValues = z.infer<ReturnType<typeof createValidationSchema>>
 
 export const serviceConfigByName: Record<
   ServiceName,
@@ -65,7 +68,7 @@ export const serviceConfigByName: Record<
   skype: {
     title: I18n.t('Register Skype'),
     description: I18n.t(
-      'Skype offers free online voice and video calls. Lots of students use Skype as a free, easy way to communicate. If you register your Skype Name and enable visibility, then other students can easily find your contact and call or add you using Skype.'
+      'Skype offers free online voice and video calls. Lots of students use Skype as a free, easy way to communicate. If you register your Skype Name and enable visibility, then other students can easily find your contact and call or add you using Skype.',
     ),
     image: {path: '/images/skype.png', alt: I18n.t('Skype logo')},
     fields: control => (
@@ -94,7 +97,7 @@ export const serviceConfigByName: Record<
   google_drive: {
     title: I18n.t('Authorize Google Drive'),
     description: I18n.t(
-      "Once you authorize us to see your Google Drive you'll be able to submit your assignments directly from Google Drive, and create and share documents with members of your classes."
+      "Once you authorize us to see your Google Drive you'll be able to submit your assignments directly from Google Drive, and create and share documents with members of your classes.",
     ),
     image: {path: '/images/google_docs.png', alt: I18n.t('Google drive logo')},
     button: () => {
@@ -115,7 +118,7 @@ export const serviceConfigByName: Record<
   diigo: {
     title: I18n.t('Diigo login'),
     description: I18n.t(
-      "Diigo is a social bookmarking tool tailored specifically to research and education. Canvas's rich content editor will let you search your Diigo tags to easily link from within Canvas to other resources you find useful."
+      "Diigo is a social bookmarking tool tailored specifically to research and education. Canvas's rich content editor will let you search your Diigo tags to easily link from within Canvas to other resources you find useful.",
     ),
     image: {path: '/images/diigo.png', alt: I18n.t('Diigo logo')},
     fields: control => (
@@ -168,10 +171,10 @@ const RegisterService = ({serviceName, onSubmit, onClose}: RegisterServiceProps)
     control,
     formState: {isSubmitting},
     handleSubmit,
-  } = useForm({defaultValues, resolver: zodResolver(validationSchema)})
+  } = useForm({defaultValues, resolver: zodResolver(createValidationSchema())})
   const {title, image, description, fields, button} = serviceConfigByName[serviceName]
 
-  const handleFormSubmit = async ({username, password}: typeof defaultValues) => {
+  const handleFormSubmit: SubmitHandler<FormValues> = async ({username, password}) => {
     try {
       await doFetchApi({
         path: '/profile/user_services',
@@ -188,7 +191,7 @@ const RegisterService = ({serviceName, onSubmit, onClose}: RegisterServiceProps)
       onSubmit()
     } catch {
       showFlashError(
-        I18n.t('Registration failed. Check the username and/or password, and try again.')
+        I18n.t('Registration failed. Check the username and/or password, and try again.'),
       )()
     }
   }

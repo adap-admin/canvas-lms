@@ -22,9 +22,9 @@ import {ToggleDetails} from '@instructure/ui-toggle-details'
 import {View} from '@instructure/ui-view'
 import {renderQuestion} from './utils/questionUtils'
 import {type QuestionProps} from './types'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 
-const I18n = useI18nScope('block-editor')
+const I18n = createI18nScope('block-editor')
 
 interface QuestionToggleProps {
   question: any
@@ -72,7 +72,9 @@ const QuestionToggle: React.FC<QuestionToggleProps> = ({question, onSelect}) => 
           {questionType()}
         </Text>
         <br />
-        <Text>{question.entry.title}</Text>
+        <Text>
+          {question.entry.title || I18n.t('Question %{position}', {position: question.position})}
+        </Text>
       </View>
     )
   }
@@ -91,6 +93,7 @@ const QuestionToggle: React.FC<QuestionToggleProps> = ({question, onSelect}) => 
         onToggle={handleToggle}
         data-testid={`question-toggle-${question.id}`}
       >
+        {/* @ts-expect-error */}
         <View as="div" padding="small" opacity="50%">
           {renderQuestion(question.entry)}
         </View>

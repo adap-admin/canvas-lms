@@ -50,7 +50,7 @@ class LearningOutcome < ActiveRecord::Base
   validates :display_name, length: { maximum: maximum_string_length, allow_blank: true }
   validates :calculation_method, inclusion: {
     in: OutcomeCalculationMethod::CALCULATION_METHODS,
-    message: lambda do
+    message: lambda do |_object, _data|
       t(
         "calculation_method must be one of the following: %{calc_methods}",
         calc_methods: OutcomeCalculationMethod::CALCULATION_METHODS.to_s
@@ -83,7 +83,7 @@ class LearningOutcome < ActiveRecord::Base
     if data && data[:rubric_criterion]
       data[:rubric_criterion][:description] = short_description
     end
-    self.context_code = "#{context_type.underscore}_#{context_id}" rescue nil
+    self.context_code = context_type && "#{context_type.underscore}_#{context_id}"
 
     # if we are changing the calculation_method but not the calculation_int, set the int to the default value
     if calculation_method_changed? && !calculation_int_changed?
@@ -287,7 +287,7 @@ class LearningOutcome < ActiveRecord::Base
 
   def cached_context_short_name
     @cached_context_name ||= Rails.cache.fetch(["short_name_lookup", context_code].cache_key) do
-      context.short_name rescue ""
+      context&.short_name.to_s
     end
   end
 
@@ -345,7 +345,7 @@ class LearningOutcome < ActiveRecord::Base
       end
       criterion[:ratings] = criterion[:ratings].sort_by { |r| r[:points] }.reverse
       criterion[:mastery_points] = (hash[:mastery_points] || criterion[:ratings][0][:points]).to_f
-      criterion[:points_possible] = criterion[:ratings][0][:points] rescue 0
+      criterion[:points_possible] = criterion.dig(:ratings, 0, :points)
     else
       criterion = self.class.default_rubric_criterion
     end
@@ -473,7 +473,7 @@ class LearningOutcome < ActiveRecord::Base
 
   def propagate_changes_to_rubrics
     # exclude new outcomes
-    return if saved_change_to_id?
+    return if previously_new_record?
     return if !saved_change_to_data? &&
               !saved_change_to_short_description? &&
               !saved_change_to_description?
@@ -547,7 +547,7 @@ class LearningOutcome < ActiveRecord::Base
       tag_type: "learning_outcome",
       context:
     ) do |_a|
-      InstStatsd::Statsd.increment("learning_outcome.align", tags: { type: asset.class.name })
+      InstStatsd::Statsd.distributed_increment("learning_outcome.align", tags: { type: asset.class.name })
     end
   end
 
@@ -630,36 +630,36 @@ class LearningOutcome < ActiveRecord::Base
     # apply appropriate defaults for each length if
     case length
     when 1
-      ratings[0][:color] ||= "0B874B"
+      ratings[0][:color] ||= "03893D"
 
     when 2
-      ratings[0][:color] ||= "0B874B"
+      ratings[0][:color] ||= "03893D"
       ratings[1][:color] ||= "555555"
 
     when 3
-      ratings[0][:color] ||= (mastery_index == 1) ? "0374B5" : "0B874B"
-      ratings[1][:color] ||= (mastery_index == 1) ? "0B874B" : "FAB901"
+      ratings[0][:color] ||= (mastery_index == 1) ? "2B7ABC" : "03893D"
+      ratings[1][:color] ||= (mastery_index == 1) ? "03893D" : "FAB901"
       ratings[2][:color] ||= "555555"
 
     when 4
-      ratings[0][:color] ||= (mastery_index == 1) ? "0374B5" : "0B874B"
-      ratings[1][:color] ||= (mastery_index == 1) ? "0B874B" : "FAB901"
-      ratings[2][:color] ||= (mastery_index == 1) ? "FAB901" : "E0061F"
+      ratings[0][:color] ||= (mastery_index == 1) ? "2B7ABC" : "03893D"
+      ratings[1][:color] ||= (mastery_index == 1) ? "03893D" : "FAB901"
+      ratings[2][:color] ||= (mastery_index == 1) ? "FAB901" : "E62429"
       ratings[3][:color] ||= "555555"
 
     when 5
-      ratings[0][:color] ||= "0374B5"
-      ratings[1][:color] ||= "0B874B"
+      ratings[0][:color] ||= "2B7ABC"
+      ratings[1][:color] ||= "03893D"
       ratings[2][:color] ||= "FAB901"
-      ratings[3][:color] ||= "E0061F"
+      ratings[3][:color] ||= "E62429"
       ratings[4][:color] ||= "555555"
 
     when 6
-      ratings[0][:color] ||= "0374B5"
-      ratings[1][:color] ||= "0B874B"
+      ratings[0][:color] ||= "2B7ABC"
+      ratings[1][:color] ||= "03893D"
       ratings[2][:color] ||= "FAB901"
       ratings[3][:color] ||= "D97900"
-      ratings[4][:color] ||= "E0061F"
+      ratings[4][:color] ||= "E62429"
       ratings[5][:color] ||= "555555"
     end
   end

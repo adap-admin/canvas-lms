@@ -26,7 +26,6 @@ describe('PublishIconButton', () => {
     defaultProps = {
       item: {
         id: '1',
-        uuid: '1',
         folder_id: '1',
         display_name: 'file',
         filename: 'file',
@@ -50,7 +49,7 @@ describe('PublishIconButton', () => {
         visibility_level: 'file',
         preview_url: 'https://example.com/file',
       },
-      userCanEditFilesForContext: true,
+      userCanRestrictFilesForContext: true,
     }
   })
 
@@ -68,7 +67,8 @@ describe('PublishIconButton', () => {
   it('renders restricted icon when item is published and restricted', () => {
     defaultProps.item.lock_at = '2024-12-31T23:59:59Z'
     render(<PublishIconButton {...defaultProps} />)
-    expect(screen.getByText('Available until Dec 31 at 11:59pm')).toBeInTheDocument()
+    const tooltip = screen.getByRole('tooltip')
+    expect(tooltip).toHaveTextContent(/Available until .* at \d{1,2}:\d{2}(am|pm)/i)
   })
 
   it('renders hidden icon when item is published and hidden', () => {
@@ -78,14 +78,16 @@ describe('PublishIconButton', () => {
   })
 
   it('renders restricted icon when user cannot edit and item is restricted', () => {
-    defaultProps.userCanEditFilesForContext = false
+    defaultProps.userCanRestrictFilesForContext = false
     defaultProps.item.lock_at = '2024-12-31T23:59:59Z'
     render(<PublishIconButton {...defaultProps} />)
-    expect(screen.getByText('Available until Dec 31 at 11:59pm')).toBeInTheDocument()
+    const tooltip = screen.getByRole('tooltip')
+    expect(tooltip).toHaveTextContent(/Available until .* at \d{1,2}:\d{2}(am|pm)/i)
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
 
   it('renders nothing when user cannot edit and item is not restricted', () => {
-    defaultProps.userCanEditFilesForContext = false
+    defaultProps.userCanRestrictFilesForContext = false
     const {container} = render(<PublishIconButton {...defaultProps} />)
     expect(container).toBeEmptyDOMElement()
   })

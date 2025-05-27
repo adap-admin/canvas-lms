@@ -16,6 +16,8 @@ assignments_2_teacher:
   applies_to: Course
   root_opt_in: true
   environments:
+    development:
+      state: disabled
     production:
       state: disabled
 
@@ -25,22 +27,14 @@ confetti_branding:
   description: Applies account branding to confetti splashes
   applies_to: SiteAdmin
 
-course_paces:
+course_paces_skip_selected_days:
   state: hidden
-  display_name: 'Course Pacing'
-  description:
-    wrapper: <a href="https://community.canvaslms.com/t5/Course-Pacing-Feature-Preview/gh-p/course_pacing">\1</a>
-    course_paces_description: |-
-      Course Pacing adds support for rolling enrollments to Canvas;
-      automatically distributing due dates for students with different
-      start dates based on an instructor's defined pace. Learn more and give
-      feedback by joining the *Course Pacing User Group*.
-  applies_to: Account
+  display_name: 'Course Pacing Skip Selected Days'
+  description: Course pacing removes support for exclude weekends field and add the ability to select specific days of the week.
+  applies_to: RootAccount
   beta: true
   environments:
     development:
-      state: allowed_on
-    beta:
       state: allowed_on
     ci:
       state: allowed_on
@@ -75,18 +69,6 @@ render_both_to_do_lists:
   description: |-
     Renders both To Do lists on the dashboard sidebar for teachers with student enrollments.
 
-course_paces_for_students:
-  state: hidden
-  display_name: 'Per Student Course Paces'
-  description: Enable unique course paces for students.
-  applies_to: SiteAdmin
-
-course_paces_redesign:
-  state: hidden
-  display_name: 'Course Pacing Redesign'
-  description: Enable the redesigned course pacing user experience.
-  applies_to: SiteAdmin
-
 blueprint_line_item_support:
   state: hidden
   display_name: 'Blueprint Resource ID Support'
@@ -105,54 +87,11 @@ instui_for_import_page:
   description: |-
     If enabled, the course import page will use InstUI components
   applies_to: SiteAdmin
-
-selective_release_backend:
-  state: hidden
-  display_name: Selective Release - Backend Changes
-  description: |-
-    Selective Release is a feature that allows modules and module items to
-    be assigned to specific individuals and groups. This is the first of two flags
-    that must be enabled to use this feature. When this flag is enabled, the
-    transparent backend changes that support assigning modules and module items will
-    be enabled. As long as no module-type AssignmentOverrides exist, enabling this
-    feature is backwards-compatible, and exists to ensure that the backend changes
-    are performant.
-  applies_to: SiteAdmin
   environments:
     ci:
-      state: allowed_on # enable for automated testings builds and local testing
+      state: allowed_on
     development:
-      state: allowed_on # enable for local development
-
-selective_release_ui_api:
-  state: hidden
-  display_name: Selective Release - UI/API Changes
-  description: |-
-    Selective Release is a feature that allows modules and module items to
-    be assigned to specific individuals and groups. The selective_release_backend
-    flag MUST be enabled before this flag can be enabled. When this flag is enabled,
-    the UI and API that allow users to create module-type AssignmentOverrides will be
-    enabled, and thus the feature will be fully functional.
-  applies_to: SiteAdmin
-  environments:
-    ci:
-      state: allowed_on # enable for automated testings builds and local testing
-    development:
-      state: allowed_on # enable for local development
-
-selective_release_edit_page:
-  state: hidden
-  display_name: Selective Release - Edit Page
-  description: |-
-    If enabled, with selective release the edit page for assignments, quizzes, pages,
-    and discussions will have the assign to functionality directly in the page instead
-    of in a tray.
-  applies_to: SiteAdmin
-  environments:
-    ci:
-      state: allowed_on # enable for automated testings builds and local testing
-    development:
-      state: allowed_on # enable for local development
+      state: allowed_on
 
 differentiated_files:
   state: hidden
@@ -212,9 +151,76 @@ modules_student_module_selection:
     If enabled, teachers will be able to a single module to show on the modules page for students.
   applies_to: Account
 
+modules_requirements_allow_percentage:
+  state: hidden
+  applies_to: RootAccount
+  display_name: Module Requirements Allow Set By Percentage
+  description: Allows for Module Requirements to be set by percentage.
+
 calendar_events_api_pagination_enhancements:
   state: hidden
   display_name: Calendar Events API Pagination Enhancements
   description: |-
     Improves API pagination handling for assignment events on user calendar.
   applies_to: RootAccount
+
+modules_page_rewrite:
+  state: hidden
+  display_name: Modules Page React Enhancement
+  description: |-
+    If enabled, the modules page will use the new modules page rewrite.
+  applies_to: RootAccount
+
+modules_perf:
+  state: hidden
+  display_name: Modules Performance Improvements
+  description: |-
+    Improves modules page performance on courses with a large number of modules or module items.
+  applies_to: Account
+
+modules_page_rewrite_student_view:
+  state: hidden
+  display_name: Modules Page Rewrite Student View
+  description: |-
+    If enabled, the modules page will use the new modules page rewrite on student view.
+  applies_to: Course
+
+create_wiki_page_mastery_path_overrides:
+  state: hidden
+  display_name: In MasteryPaths Create AssignmentOverrides on WikiPages Instead of Creating a Hidden Assignment
+  description: |-
+    In Mastery Paths create AssignmentOverrides directly onto WikiPages instead of creating a hidden Assignment.
+  applies_to: SiteAdmin
+
+create_external_apps_side_tray_overrides:
+  state: hidden
+  display_name: Enable External Apps Side Tray
+  description: |-
+    If enabled, an External Apps menu item will appear in the Module popover menu. When clicked, a side tray
+    displaying the external apps will appear
+  applies_to: SiteAdmin
+  environments:
+    ci:
+      state: allowed_on
+    development:
+      state: allowed_on
+
+use_dyslexic_font:
+  state: hidden
+  display_name: Use a dyslexia friendly font
+  description: |-
+    When enabled, this setting replaces the default font in Canvas with OpenDyslexic,
+    an open source font created to help increase readability for readers with dyslexia.
+  applies_to: User
+
+wiki_page_mastery_path_no_assignment_group:
+  state: hidden
+  display_name: In MasteryPaths WikiPages Hidden Assignment has not Assignment Group
+  description: |-
+    In WikiPage create/update annd assign to Mastery Path hidden Assignment has not an Assignment Group.
+  applies_to: SiteAdmin
+  environments:
+    ci:
+      state: allowed_on
+    development:
+      state: allowed_on

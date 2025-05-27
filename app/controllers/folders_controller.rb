@@ -166,15 +166,41 @@ class FoldersController < ApplicationController
 
     opts = lock_options(@folder.context, @current_user, session)
     opts = opts.merge(include: params[:include]) if params[:include].present?
-    descending = params[:order] == "desc"
 
-    folder_scope = folder_index_scope(opts[:can_view_hidden_files])
-    file_scope = file_index_scope(@folder, @current_user, session)
+    folder_column_map = {
+      "name" => Folder.best_unicode_collation_key("folders.name"),
+      "updated_at" => "updated_at",
+      "created_at" => "created_at"
+    }
 
-    folder_bookmarker = Plannable::Bookmarker.new(Folder, descending, :name, :id)
+    file_column_map = {
+      "name" => Attachment.best_unicode_collation_key("attachments.display_name"),
+      "updated_at" => "updated_at",
+      "created_at" => "created_at",
+      "size" => "size",
+      "modified_by" => { user: :sortable_name },
+      "rights" => { usage_rights: :use_justification }
+    }
+
+    folder_sort = folder_column_map[params[:sort]] || "name"
+    folder_desc = params[:order] == "desc" && folder_column_map.key?(params[:sort])
+    file_sort = file_column_map[params[:sort]] || "display_name"
+    file_desc = params[:order] == "desc"
+
+    folder_scope = folder_index_scope(opts[:can_view_hidden_files]).preload(:active_file_attachments, :active_sub_folders)
+    file_scope = file_index_scope(@folder, @current_user, session).preload(:attachment_upload_statuses, :root_attachment)
+
+    # Explicit LEFT JOIN for sorting by modified_by and rights
+    if params[:sort] == "modified_by"
+      file_scope = file_scope.left_outer_joins(:user).select("attachments.*, users.sortable_name AS sortable_name")
+    elsif params[:sort] == "rights"
+      file_scope = file_scope.left_outer_joins(:usage_rights).select("attachments.*, usage_rights.use_justification AS use_justification")
+    end
+
+    folder_bookmarker = Plannable::Bookmarker.new(Folder, folder_desc, folder_sort, :id)
     folders_collection = BookmarkedCollection.wrap(folder_bookmarker, folder_scope)
 
-    file_bookmarker = Plannable::Bookmarker.new(Attachment, descending, :display_name, :id)
+    file_bookmarker = Plannable::Bookmarker.new(Attachment, file_desc, file_sort, :id)
     files_collection = BookmarkedCollection.wrap(file_bookmarker, file_scope)
 
     collections = [
@@ -182,7 +208,19 @@ class FoldersController < ApplicationController
       ["files", files_collection]
     ]
 
-    combined = Api.paginate(BookmarkedCollection.concat(*collections), self, api_v1_list_folders_and_files_url)
+    per_page = Api.per_page_for(self, default: 25)
+
+    combined = Api.paginate(
+      BookmarkedCollection.concat(*collections),
+      self,
+      api_v1_list_folders_and_files_url,
+      { per_page: }
+    )
+
+    if opts[:can_view_hidden_files] && opts[:context]
+      opts[:master_course_status] = setup_master_course_restrictions(combined, opts[:context])
+    end
+
     render json: folders_or_files_json(combined, @current_user, session, opts)
   end
 
@@ -493,7 +531,7 @@ class FoldersController < ApplicationController
       end
       respond_to do |format|
         if @folder.save
-          flash[:notice] = t :folder_created, "Folder was successfully created."
+          flash.now[:notice] = t :folder_created, "Folder was successfully created."
           format.html { redirect_to named_context_url(@context, :context_files_url) }
           if api_request?
             format.json { render json: folder_json(@folder, @current_user, session) }

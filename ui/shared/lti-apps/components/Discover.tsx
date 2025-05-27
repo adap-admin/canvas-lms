@@ -16,58 +16,62 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React, {useMemo, useState} from 'react'
-import {useQuery} from '@tanstack/react-query'
-import {useScope as useI18nScope} from '@canvas/i18n'
-import LtiFilterTray from './apps/LtiFilterTray'
-import FilterTags from './apps/FilterTags'
-import {fetchLtiFilters, fetchProducts, fetchToolsByDisplayGroups} from '../queries/productsQuery'
+import getLiveRegion from '@canvas/instui-bindings/react/liveRegion'
+import {Alert} from '@instructure/ui-alerts'
+import {useQuery, QueryFunction} from '@tanstack/react-query'
+import {useMemo, useState} from 'react'
+import useCreateScreenReaderFilterMessage from '../hooks/useCreateScreenReaderFilterMessage'
 import useDiscoverQueryParams from '../hooks/useDiscoverQueryParams'
-import {useAppendBreadcrumbsToDefaults} from '@canvas/breadcrumbs/useAppendBreadcrumbsToDefaults'
-import {ZAccountId} from '../models/AccountId'
-import Disclaimer from './common/Disclaimer'
+import {fetchLtiFilters, fetchProducts, fetchToolsByDisplayGroups} from '../queries/productsQuery'
+import type {DiscoverParams} from '../hooks/useDiscoverQueryParams'
+import type {ProductResponse} from '../queries/productsQuery'
+import FilterTags from './apps/FilterTags'
+import LtiFilterTray from './apps/LtiFilterTray'
 import {Products} from './apps/Products'
 import {SearchAndFilter} from './apps/SearchAndFilter'
+import Disclaimer from './common/Disclaimer'
 
-const I18n = useI18nScope('lti_registrations')
+type ProductsQueryKey = readonly ['lti_product_info', DiscoverParams]
+
+const fetchProductsFromQueryKey: QueryFunction<ProductResponse, ProductsQueryKey> = async ({
+  queryKey,
+}) => {
+  const [, params] = queryKey
+  return fetchProducts(params)
+}
 
 export const Discover = () => {
-  const accountId = ZAccountId.parse(window.location.pathname.split('/')[2])
-  useAppendBreadcrumbsToDefaults(
-    [
-      {
-        name: I18n.t('Discover'),
-        url: `/accounts/${accountId}/apps`,
-      },
-    ],
-    !!window.ENV.FEATURES.lti_registrations_next
-  )
-
   const [isTrayOpen, setIsTrayOpen] = useState(false)
   const {queryParams, setQueryParams, updateQueryParams} = useDiscoverQueryParams()
   const isFilterApplied = useMemo(
     () => Object.values(queryParams.filters).flat().length > 0 || queryParams.search.length > 0,
-    [queryParams]
+    [queryParams],
   )
 
   const {
     data: {tools = [], meta = {total_count: 0, current_page: 1, num_pages: 1}} = {},
     isLoading,
   } = useQuery({
-    queryKey: ['lti_product_info', queryParams],
-    queryFn: () => fetchProducts(queryParams),
+    queryKey: ['lti_product_info', queryParams] as const,
+    queryFn: fetchProductsFromQueryKey,
     enabled: isFilterApplied,
+  })
+
+  const screenReaderFilterMessage = useCreateScreenReaderFilterMessage({
+    queryParams,
+    isFilterApplied,
+    isLoading,
   })
 
   const {data: displayGroups, isLoading: isLoadingDisplayGroups} = useQuery({
     queryKey: ['lti_tool_display_groups'],
-    queryFn: () => fetchToolsByDisplayGroups(),
+    queryFn: fetchToolsByDisplayGroups,
     enabled: !isFilterApplied,
   })
 
   const {data: filterData} = useQuery({
     queryKey: ['lti_filters'],
-    queryFn: () => fetchLtiFilters(),
+    queryFn: fetchLtiFilters,
   })
 
   return (
@@ -80,6 +84,15 @@ export const Discover = () => {
           updateQueryParams={updateQueryParams}
         />
       )}
+      <Alert
+        variant="info"
+        screenReaderOnly={true}
+        liveRegionPoliteness="polite"
+        isLiveRegionAtomic={true}
+        liveRegion={getLiveRegion}
+      >
+        {screenReaderFilterMessage}
+      </Alert>
 
       <Products
         displayGroups={displayGroups || []}
@@ -92,6 +105,7 @@ export const Discover = () => {
       <Disclaimer />
 
       {filterData && (
+        // @ts-expect-error
         <LtiFilterTray
           isTrayOpen={isTrayOpen}
           setIsTrayOpen={setIsTrayOpen}

@@ -21,7 +21,7 @@ require_relative "../../spec_helper"
 
 describe AuthenticationProvider::OpenIDConnect do
   subject do
-    described_class.new(account: Account.default)
+    described_class.new(account: Account.default, issuer: "issuer", client_id: "client", client_secret: "secret")
   end
 
   let(:keypair) { OpenSSL::PKey::RSA.new(2048) }
@@ -72,7 +72,7 @@ describe AuthenticationProvider::OpenIDConnect do
   describe "#download_discovery" do
     it "works" do
       subject.discovery_url = "https://somewhere/.well-known/openid-configuration"
-      response = instance_double("Net::HTTPOK", value: 200, body: { issuer: "me" }.to_json)
+      response = instance_double(Net::HTTPOK, value: 200, body: { issuer: "me" }.to_json)
       expect(CanvasHttp).to receive(:get).and_yield(response)
       subject.valid?
       expect(subject.issuer).to eql "me"
@@ -81,6 +81,7 @@ describe AuthenticationProvider::OpenIDConnect do
 
     it "ignores a (newly) blank issuer" do
       subject.issuer_will_change!
+      subject.issuer = nil
       expect(CanvasHttp).not_to receive(:get)
       subject.valid?
       expect(subject.issuer).to be_nil
@@ -94,9 +95,46 @@ describe AuthenticationProvider::OpenIDConnect do
       subject.valid?
     end
 
+    context "when an authentication provider is restored" do
+      let(:discovery_url) { "https://somewhere/.well-known/openid-configuration" }
+
+      before do
+        allow(subject.class).to receive(:restorable?).and_return true
+
+        subject.discovery_url = discovery_url
+        subject.workflow_state = "deleted"
+        subject.save(validate: false)
+      end
+
+      it "fetches the discovery document" do
+        expect(CanvasHttp).to receive(:get).with(discovery_url).and_return(
+          instance_double(Net::HTTPOK, value: 200, body: { issuer: "me" }.to_json)
+        )
+
+        subject.update!(workflow_state: "active")
+      end
+    end
+
+    context "when a restorable authentication provider is deleted" do
+      let(:discovery_url) { "https://somewhere/.well-known/openid-configuration" }
+
+      before do
+        allow(subject.class).to receive(:restorable?).and_return true
+
+        subject.discovery_url = discovery_url
+        subject.save(validate: false)
+      end
+
+      it "fetches the discovery document" do
+        expect(CanvasHttp).not_to receive(:get)
+
+        subject.destroy!
+      end
+    end
+
     it "infers the discovery URL from the issuer" do
       subject.issuer = "https://somewhere"
-      response = instance_double("Net::HTTPOK", value: 200, body: { issuer: "me" }.to_json)
+      response = instance_double(Net::HTTPOK, value: 200, body: { issuer: "me" }.to_json)
       expect(CanvasHttp).to receive(:get).with("https://somewhere/.well-known/openid-configuration").and_yield(response)
       subject.valid?
       expect(subject.issuer).to eql "me"
@@ -105,7 +143,7 @@ describe AuthenticationProvider::OpenIDConnect do
 
     it "infers the discovery URL from a multi-tenant issuer" do
       subject.issuer = "https://somewhere/multitenant/"
-      response = instance_double("Net::HTTPOK", value: 200, body: { issuer: "me" }.to_json)
+      response = instance_double(Net::HTTPOK, value: 200, body: { issuer: "me" }.to_json)
       expect(CanvasHttp).to receive(:get).with("https://somewhere/multitenant/.well-known/openid-configuration").and_yield(response)
       subject.valid?
       expect(subject.issuer).to eql "me"
@@ -114,7 +152,7 @@ describe AuthenticationProvider::OpenIDConnect do
 
     it "does not infer a discovery URL when the provider doesn't support discovery" do
       subject.issuer = "https://somewhere"
-      response = instance_double("Net::HTTPOK", value: 404, body: "NOT FOUND")
+      response = instance_double(Net::HTTPOK, value: 404, body: "NOT FOUND")
       expect(CanvasHttp).to receive(:get).with("https://somewhere/.well-known/openid-configuration").and_yield(response)
       subject.valid?
       expect(subject.issuer).to eql "https://somewhere"
@@ -131,7 +169,7 @@ describe AuthenticationProvider::OpenIDConnect do
     it "does not modify an explicit discovery URL with a non-matching issuer" do
       subject.issuer = "https://somewhere"
       subject.discovery_url = "https://somewhere/openid-configuration"
-      response = instance_double("Net::HTTPOK", value: 200, body: { issuer: "me" }.to_json)
+      response = instance_double(Net::HTTPOK, value: 200, body: { issuer: "me" }.to_json)
       expect(CanvasHttp).to receive(:get).with("https://somewhere/openid-configuration").and_yield(response)
       subject.valid?
       expect(subject.issuer).to eql "me"
@@ -148,83 +186,59 @@ describe AuthenticationProvider::OpenIDConnect do
   end
 
   describe "#unique_id" do
+    let(:nonce) { SecureRandom.hex(12) }
+
+    def id_token(claims)
+      claims = claims.reverse_merge(
+        iss: subject.issuer,
+        aud: subject.client_id,
+        iat: Time.zone.now.to_i,
+        exp: Time.zone.now.to_i + 5,
+        nonce:
+      )
+      jwt = JSON::JWT.new(claims)
+      jwt.sign(subject.client_secret).to_s
+    end
+
     it "decodes jwt and extracts subject attribute" do
-      payload = { sub: "some-login-attribute" }
-      id_token = Canvas::Security.create_jwt(payload, nil, :unsigned)
-      uid = subject.unique_id(double(params: { "id_token" => id_token }, options: {}))
+      uid = subject.unique_id(double(params: { "id_token" => id_token({ sub: "some-login-attribute" }) }, options: { nonce: }))
       expect(uid).to eq("some-login-attribute")
     end
 
     it "requests more attributes if necessary" do
       subject.userinfo_endpoint = "moar"
       subject.login_attribute = "not_in_id_token"
-      payload = { sub: "1" }
-      id_token = Canvas::Security.create_jwt(payload, nil, :unsigned)
-      token = double(options: {}, params: { "id_token" => id_token })
+      token = double(options: { nonce: }, params: { "id_token" => id_token({ sub: "1" }) })
       expect(token).to receive(:get).with("moar").and_return(double(parsed: { "not_in_id_token" => "myid", "sub" => "1" }))
+      expect(subject.unique_id(token)).to eq "myid"
+    end
+
+    it "does not request more attributes if unnecessary, even if userinfo_endpoint is present" do
+      subject.userinfo_endpoint = "moar"
+      subject.login_attribute = "in_id_token"
+      token = double(options: { nonce: }, params: { "id_token" => id_token({ sub: "1", in_id_token: "myid" }) })
+      expect(token).not_to receive(:get)
       expect(subject.unique_id(token)).to eq "myid"
     end
 
     it "ignores userinfo that doesn't match" do
       subject.userinfo_endpoint = "moar"
       subject.login_attribute = "not_in_id_token"
-      payload = { sub: "1" }
-      id_token = Canvas::Security.create_jwt(payload, nil, :unsigned)
-      token = double(options: {}, params: { "id_token" => id_token })
+      token = double(options: { nonce: }, params: { "id_token" => id_token({ sub: "1" }) })
       expect(token).to receive(:get).with("moar").and_return(double(parsed: { "not_in_id_token" => "myid", "sub" => "2" }))
       expect(subject.unique_id(token)).to be_nil
     end
 
     it "returns nil if the id_token is missing" do
-      uid = subject.unique_id(instance_double(OAuth2::AccessToken, params: { "id_token" => nil }, token: nil, options: {}))
-      expect(uid).to be_nil
+      expect do
+        subject.unique_id(instance_double(OAuth2::AccessToken, params: { "id_token" => nil }, token: nil, options: { nonce: }))
+      end.to raise_error(OAuthValidationError)
     end
 
-    it "validates the audience claim for subclasses" do
-      subject = AuthenticationProvider::Microsoft.new(client_id: "abc",
-                                                      client_secret: "secret",
-                                                      tenant: "microsoft",
-                                                      account: Account.default)
-      nonce = "123"
-      payload = { sub: "some-login-attribute",
-                  aud: "someone_else",
-                  iss: "microsoft",
-                  tid: AuthenticationProvider::Microsoft::MICROSOFT_TENANT,
-                  iat: Time.now.to_i,
-                  exp: Time.now.to_i + 1,
-                  nonce: }
-      id_token = Canvas::Security.create_jwt(payload, nil, subject.client_secret)
-      expect { subject.unique_id(double(params: { "id_token" => id_token }, options: { nonce: })) }.to raise_error(OAuthValidationError)
-      subject.client_id = "someone_else"
-      expect { subject.unique_id(double(params: { "id_token" => id_token }, options: { nonce: })) }.not_to raise_error
-    end
-
-    it "does not validate the audience claim for self" do
-      subject.client_id = "abc"
-      payload = { sub: "some-login-attribute", aud: "someone_else" }
-      id_token = Canvas::Security.create_jwt(payload, nil, :unsigned)
-      expect { subject.unique_id(double(params: { "id_token" => id_token }, options: {})) }.not_to raise_error
-    end
-
-    it "records the issuer(s)" do
-      subject.client_id = "abc"
-      payload = { sub: "some-login-attribute", aud: "abc", iss: "issuer" }
-      id_token = Canvas::Security.create_jwt(payload, nil, :unsigned)
-      subject.unique_id(double(params: { "id_token" => id_token }, options: {}))
-      expect(subject.settings["known_issuers"]).to eq ["issuer"]
-    end
-
-    context "with oidc_full_token_validation feature flag on" do
-      before do
-        Account.default.enable_feature!(:oidc_full_token_validation)
-        subject.issuer = "issuer"
-        subject.client_id = "abc"
-        subject.client_secret = "def"
-      end
-
+    describe "token validation" do
       base_payload = {
         sub: "some-login-attribute",
-        aud: "abc",
+        aud: "client",
         iat: Time.now.to_i,
         exp: Time.now.to_i + 30,
         iss: "issuer",
@@ -232,12 +246,12 @@ describe AuthenticationProvider::OpenIDConnect do
       }.freeze
 
       it "passes a valid token" do
-        id_token = Canvas::Security.create_jwt(base_payload.dup, nil, subject.client_secret)
+        id_token = Canvas::Security.create_jwt(base_payload, nil, subject.client_secret)
         expect { subject.unique_id(double(params: { "id_token" => id_token }, options: { nonce: "nonce" })) }.not_to raise_error
       end
 
       it "validates a multi-valued audience" do
-        id_token = Canvas::Security.create_jwt(base_payload.merge(aud: ["def", "abc"]), nil, subject.client_secret)
+        id_token = Canvas::Security.create_jwt(base_payload.merge(aud: ["def", "client"]), nil, subject.client_secret)
         expect { subject.unique_id(double(params: { "id_token" => id_token }, options: { nonce: "nonce" })) }.not_to raise_error
       end
 
@@ -256,12 +270,12 @@ describe AuthenticationProvider::OpenIDConnect do
       bad_token_spec("nonce is valid", base_payload.merge(nonce: "wrong"))
 
       it "validates the signature" do
-        id_token = Canvas::Security.create_jwt(base_payload.dup, nil, "wrong_key")
+        id_token = Canvas::Security.create_jwt(base_payload, nil, "wrong_key")
         expect { subject.unique_id(double(params: { "id_token" => id_token }, options: { nonce: "nonce" })) }.to raise_error(OAuthValidationError)
       end
 
       it "refreshes the keys if the kid is not found. once" do
-        id_token = Canvas::Security.create_jwt(base_payload.dup, nil, subject.client_secret)
+        id_token = Canvas::Security.create_jwt(base_payload, nil, subject.client_secret)
         tries = 1
         parsed_token = Canvas::Security.decode_jwt(id_token, [:skip_verification])
         allow(parsed_token).to receive(:verify!) do
@@ -277,7 +291,7 @@ describe AuthenticationProvider::OpenIDConnect do
       end
 
       it "fails if the key is still wrong" do
-        id_token = Canvas::Security.create_jwt(base_payload.dup, nil, subject.client_secret)
+        id_token = Canvas::Security.create_jwt(base_payload, nil, subject.client_secret)
         parsed_token = Canvas::Security.decode_jwt(id_token, [:skip_verification])
         allow(parsed_token).to receive(:verify!).and_raise(JSON::JWK::Set::KidNotFound)
         allow(Canvas::Security).to receive(:decode_jwt).and_return(parsed_token)
@@ -289,7 +303,7 @@ describe AuthenticationProvider::OpenIDConnect do
   end
 
   describe "#user_logout_url" do
-    let(:controller) { instance_double("ApplicationController", login_url: "http//www.example.com/login", session: {}) }
+    let(:controller) { instance_double(ApplicationController, login_url: "http//www.example.com/login", session: {}) }
 
     before do
       subject.account = Account.default
@@ -297,35 +311,25 @@ describe AuthenticationProvider::OpenIDConnect do
       subject.client_id = "abc"
     end
 
-    context "with the feature flag on" do
-      before do
-        Account.default.enable_feature!(:oidc_rp_initiated_logout_params)
-      end
-
-      it "returns the end_session_endpoint" do
-        expect(subject.user_logout_redirect(controller, nil)).to eql "http://somewhere/logout?client_id=abc&post_logout_redirect_uri=http%2F%2Fwww.example.com%2Flogin"
-      end
-
-      it "preserves other query parameters" do
-        subject.end_session_endpoint = "http://somewhere/logout?foo=bar"
-        expect(subject.user_logout_redirect(controller, nil)).to eql "http://somewhere/logout?client_id=abc&post_logout_redirect_uri=http%2F%2Fwww.example.com%2Flogin&foo=bar"
-      end
-
-      it "does not overwrite conflicting parameters" do
-        subject.end_session_endpoint = "http://somewhere/logout?post_logout_redirect_uri=elsewhere"
-        expect(subject.user_logout_redirect(controller, nil)).to eql "http://somewhere/logout?client_id=abc&post_logout_redirect_uri=elsewhere"
-      end
-
-      it "includes the full id_token" do
-        id_token = Canvas::Security.create_jwt({ sub: "1" }, nil, :unsigned)
-        session = { oidc_id_token: id_token }
-        allow(controller).to receive(:session).and_return(session)
-        expect(subject.user_logout_redirect(controller, nil)).to eql "http://somewhere/logout?client_id=abc&post_logout_redirect_uri=http%2F%2Fwww.example.com%2Flogin&id_token_hint=#{id_token}"
-      end
+    it "returns the end_session_endpoint" do
+      expect(subject.user_logout_redirect(controller, nil)).to eql "http://somewhere/logout?client_id=abc&post_logout_redirect_uri=http%2F%2Fwww.example.com%2Flogin"
     end
 
-    it "doesn't add anything with the feature flag off" do
-      expect(subject.user_logout_redirect(controller, nil)).to eql "http://somewhere/logout"
+    it "preserves other query parameters" do
+      subject.end_session_endpoint = "http://somewhere/logout?foo=bar"
+      expect(subject.user_logout_redirect(controller, nil)).to eql "http://somewhere/logout?client_id=abc&post_logout_redirect_uri=http%2F%2Fwww.example.com%2Flogin&foo=bar"
+    end
+
+    it "does not overwrite conflicting parameters" do
+      subject.end_session_endpoint = "http://somewhere/logout?post_logout_redirect_uri=elsewhere"
+      expect(subject.user_logout_redirect(controller, nil)).to eql "http://somewhere/logout?client_id=abc&post_logout_redirect_uri=elsewhere"
+    end
+
+    it "includes the full id_token" do
+      id_token = Canvas::Security.create_jwt({ sub: "1" }, nil, :unsigned)
+      session = { oidc_id_token: id_token }
+      allow(controller).to receive(:session).and_return(session)
+      expect(subject.user_logout_redirect(controller, nil)).to eql "http://somewhere/logout?client_id=abc&post_logout_redirect_uri=http%2F%2Fwww.example.com%2Flogin&id_token_hint=#{id_token}"
     end
   end
 
@@ -333,7 +337,7 @@ describe AuthenticationProvider::OpenIDConnect do
     it "downloads the jwks if jwks_uri is set" do
       subject.jwks_uri = "http://jwks"
       jwks = [jwk].to_json
-      expect(CanvasHttp).to receive(:get).with("http://jwks").and_return(instance_double("Net::HTTPOK", body: jwks))
+      expect(CanvasHttp).to receive(:get).with("http://jwks").and_return(instance_double(Net::HTTPOK, body: jwks))
       expect(subject.settings["jwks"]).to be_nil
       expect(subject.jwks[jwk[:kid]]).to eq jwk.as_json
       expect(subject.settings["jwks"]).to eq jwks
@@ -380,7 +384,7 @@ describe AuthenticationProvider::OpenIDConnect do
       keypair2 = OpenSSL::PKey::RSA.new(2048)
       jwk2 = JSON::JWK.new(keypair2.public_key)
 
-      expect(CanvasHttp).to receive(:get).with("http://new").and_return(instance_double("Net::HTTPOK", body: [jwk2].to_json))
+      expect(CanvasHttp).to receive(:get).with("http://new").and_return(instance_double(Net::HTTPOK, body: [jwk2].to_json))
 
       subject.jwks_uri = "http://new"
       subject.save!
@@ -388,13 +392,14 @@ describe AuthenticationProvider::OpenIDConnect do
     end
 
     it "updates if nothing changed, but was forced" do
+      subject.issuer = nil
       subject.jwks_uri = "http://jwks"
       subject.jwks = [jwk].to_json
 
       keypair2 = OpenSSL::PKey::RSA.new(2048)
       jwk2 = JSON::JWK.new(keypair2.public_key)
 
-      allow(CanvasHttp).to receive(:get).with("http://jwks").and_return(instance_double("Net::HTTPOK", body: [jwk2].to_json))
+      allow(CanvasHttp).to receive(:get).with("http://jwks").and_return(instance_double(Net::HTTPOK, body: [jwk2].to_json))
 
       subject.save!
       expect(subject.jwks[jwk2[:kid]]).to eq jwk2.as_json

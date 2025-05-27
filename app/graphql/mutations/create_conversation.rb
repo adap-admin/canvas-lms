@@ -39,7 +39,7 @@ class Mutations::CreateConversation < Mutations::BaseMutation
   field :conversations, [Types::ConversationParticipantType], null: true
   def resolve(input:)
     @current_user = current_user
-    recipients = get_recipients(input[:recipients], input[:context_code], input[:conversation_id])
+    recipients = get_recipients(input[:recipients], input[:context_code], input[:conversation_id], input[:group_conversation], input[:bulk_message])
     tags = infer_tags(tags: input[:tags], recipients: input[:recipients], context_code: input[:context_code])
 
     context = input[:context_code] ? Context.find_by_asset_string(input[:context_code]) : nil
@@ -94,21 +94,21 @@ class Mutations::CreateConversation < Mutations::BaseMutation
                                                .order("visible_last_authored_at DESC, last_message_at DESC, id DESC")
         Conversation.preload_participants(conversations.map(&:conversation))
         ConversationParticipant.preload_latest_messages(conversations, @current_user)
-        InstStatsd::Statsd.increment("inbox.message.sent.react")
+        InstStatsd::Statsd.distributed_increment("inbox.message.sent.react")
         InstStatsd::Statsd.count("inbox.conversation.created.react", conversations.count)
-        InstStatsd::Statsd.increment("inbox.conversation.sent.react")
+        InstStatsd::Statsd.distributed_increment("inbox.conversation.sent.react")
         InstStatsd::Statsd.count("inbox.message.sent.recipients.react", recipients.count)
         if context_type == "Account" || context_type.nil?
-          InstStatsd::Statsd.increment("inbox.conversation.sent.account_context.react")
+          InstStatsd::Statsd.distributed_increment("inbox.conversation.sent.account_context.react")
         end
         if message.has_media_objects || input[:media_comment_id]
-          InstStatsd::Statsd.increment("inbox.message.sent.media.react")
+          InstStatsd::Statsd.distributed_increment("inbox.message.sent.media.react")
         end
         if message[:attachment_ids].present?
-          InstStatsd::Statsd.increment("inbox.message.sent.attachment.react")
+          InstStatsd::Statsd.distributed_increment("inbox.message.sent.attachment.react")
         end
         if input[:bulk_message]
-          InstStatsd::Statsd.increment("inbox.conversation.sent.individual_message_option.react")
+          InstStatsd::Statsd.distributed_increment("inbox.conversation.sent.individual_message_option.react")
         end
         return { conversations: }
       else
@@ -125,21 +125,21 @@ class Mutations::CreateConversation < Mutations::BaseMutation
           update_for_sender: false,
           cc_author: true
         )
-        InstStatsd::Statsd.increment("inbox.conversation.created.react")
-        InstStatsd::Statsd.increment("inbox.message.sent.react")
-        InstStatsd::Statsd.increment("inbox.conversation.sent.react")
+        InstStatsd::Statsd.distributed_increment("inbox.conversation.created.react")
+        InstStatsd::Statsd.distributed_increment("inbox.message.sent.react")
+        InstStatsd::Statsd.distributed_increment("inbox.conversation.sent.react")
         InstStatsd::Statsd.count("inbox.message.sent.recipients.react", recipients.count)
         if message.has_media_objects || input[:media_comment_id]
-          InstStatsd::Statsd.increment("inbox.message.sent.media.react")
+          InstStatsd::Statsd.distributed_increment("inbox.message.sent.media.react")
         end
         if message[:attachment_ids].present?
-          InstStatsd::Statsd.increment("inbox.message.sent.attachment.react")
+          InstStatsd::Statsd.distributed_increment("inbox.message.sent.attachment.react")
         end
         if context_type == "Account" || context_type.nil?
-          InstStatsd::Statsd.increment("inbox.conversation.sent.account_context.react")
+          InstStatsd::Statsd.distributed_increment("inbox.conversation.sent.account_context.react")
         end
         if input[:bulk_message]
-          InstStatsd::Statsd.increment("inbox.conversation.sent.individual_message_option.react")
+          InstStatsd::Statsd.distributed_increment("inbox.conversation.sent.individual_message_option.react")
         end
         return { conversations: [conversation] }
       end
@@ -168,10 +168,14 @@ class Mutations::CreateConversation < Mutations::BaseMutation
     validation_error(I18n.t("Course concluded, unable to send messages"))
   rescue ConversationsHelper::InvalidRecipientsError
     validation_error(I18n.t("Invalid recipients"))
+  rescue ConversationsHelper::GroupConversationForDifferentiationTagsNotAllowedError
+    validation_error(I18n.t("Group conversation for differentiation tags not allowed"))
+  rescue ConversationsHelper::InsufficientPermissionsForDifferentiationTagsError
+    validation_error(I18n.t("Insufficient permissions for differentiation tags"))
   end
 
-  def get_recipients(recipient_ids, context_code, conversation_id)
-    recipients = normalize_recipients(recipients: recipient_ids, context_code:, conversation_id:)
+  def get_recipients(recipient_ids, context_code, conversation_id, group_conversation, bulk_message)
+    recipients = normalize_recipients(recipients: recipient_ids, context_code:, conversation_id:, group_conversation:, bulk_message:)
     raise ConversationsHelper::InvalidRecipientsError if recipients.blank?
 
     recipients

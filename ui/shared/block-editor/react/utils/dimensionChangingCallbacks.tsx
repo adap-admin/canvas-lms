@@ -18,13 +18,13 @@
 
 import React from 'react'
 import {type MenuItemProps, type MenuItem} from '@instructure/ui-menu'
-import {
+import type {
   ImageBlockProps,
   ImageConstraint,
 } from '@canvas/block-editor/react/components/user/blocks/ImageBlock/types'
 import {type ViewOwnProps} from '@instructure/ui-view'
 import {changeSizeVariant} from '@canvas/block-editor/react/utils'
-import {SizeVariant} from '@canvas/block-editor/react/components/editor/types'
+import type {SizeVariant} from '@canvas/block-editor/react/components/editor/types'
 
 type SetPropFn = (updateFn: (props: ImageBlockProps) => void) => void
 
@@ -33,7 +33,7 @@ export function handleConstraintChange(setProp: SetPropFn) {
     _e: React.MouseEvent<ViewOwnProps, MouseEvent>,
     value: MenuItemProps['value'] | MenuItemProps['value'][],
     _selected: MenuItemProps['selected'],
-    _args: MenuItem
+    _args: MenuItem,
   ) => {
     const constraint = value as ImageConstraint | 'aspect-ratio'
     if (constraint === 'aspect-ratio') {
@@ -55,7 +55,7 @@ export function handleChangeSzVariant(setProp: SetPropFn, node: {dom: HTMLElemen
     _e: React.MouseEvent<ViewOwnProps, MouseEvent>,
     value: MenuItemProps['value'] | MenuItemProps['value'][],
     _selected: MenuItemProps['selected'],
-    _args: MenuItem
+    _args: MenuItem,
   ) => {
     setProp((prps: ImageBlockProps) => {
       prps.sizeVariant = value as SizeVariant

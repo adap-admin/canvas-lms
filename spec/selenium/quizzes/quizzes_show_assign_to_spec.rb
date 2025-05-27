@@ -21,18 +21,14 @@ require_relative "../../spec_helper"
 require_relative "page_objects/quizzes_landing_page"
 require_relative "../helpers/items_assign_to_tray"
 require_relative "../helpers/context_modules_common"
-require_relative "../../helpers/selective_release_common"
 
 describe "quiz show page assign to" do
   include_context "in-process server selenium tests"
   include QuizzesLandingPage
   include ItemsAssignToTray
   include ContextModulesCommon
-  include SelectiveReleaseCommon
 
   before :once do
-    differentiated_modules_on
-
     course_with_teacher(active_all: true)
     @quiz_assignment = @course.assignments.create
     @quiz_assignment.quiz = @course.quizzes.create(title: "test quiz")
@@ -58,7 +54,22 @@ describe "quiz show page assign to" do
     expect(icon_type_exists?("Quiz")).to be true
   end
 
-  it "assigns student and saves override" do
+  it "closes the assign to tray on dismiss" do
+    get "/courses/#{@course.id}/quizzes/#{@classic_quiz.id}"
+
+    click_quiz_assign_to_button
+
+    wait_for_assign_to_tray_spinner
+    keep_trying_until { expect(item_tray_exists?).to be_truthy }
+
+    expect(tray_header.text).to eq("test quiz")
+    expect(icon_type_exists?("Quiz")).to be true
+
+    click_cancel_button
+    keep_trying_until { expect(element_exists?(module_item_edit_tray_selector)).to be_falsey }
+  end
+
+  it "assigns student and saves override", :ignore_js_errors do
     get "/courses/#{@course.id}/quizzes/#{@classic_quiz.id}"
 
     click_quiz_assign_to_button
@@ -97,7 +108,7 @@ describe "quiz show page assign to" do
     expect(assign_to_in_tray("Remove #{@student1.name}")[0]).to be_displayed
   end
 
-  it "saves and shows override updates when tray reaccessed" do
+  it "saves and shows override updates when tray reaccessed", :ignore_js_errors do
     get "/courses/#{@course.id}/quizzes/#{@classic_quiz.id}"
 
     click_quiz_assign_to_button
@@ -165,9 +176,9 @@ describe "quiz show page assign to" do
   end
 
   context "overrides table" do
-    let(:due_at) { Time.parse("2024-04-15") }
-    let(:unlock_at) { Time.parse("2024-04-10") }
-    let(:lock_at) { Time.parse("2024-04-20") }
+    let(:due_at) { Time.zone.parse("2024-04-15") }
+    let(:unlock_at) { Time.zone.parse("2024-04-10") }
+    let(:lock_at) { Time.zone.parse("2024-04-20") }
 
     before do
       @course_section1 = @course.course_sections.create!(name: "Section Alpha")
@@ -223,7 +234,7 @@ describe "quiz show page assign to" do
 
       expect(@classic_quiz.visible_to_everyone).to be_truthy
       validate_all_overrides([
-                               { due_at: "Apr 15 at 12am", due_for: "Everyone", unlock_at: "Apr 10 at 12am", lock_at: "Apr 20 at 12am" }
+                               { due_at: "Apr 15, 2024 at 12am", due_for: "Everyone", unlock_at: "Apr 10, 2024 at 12am", lock_at: "Apr 20, 2024 at 12am" }
                              ])
     end
 
@@ -256,10 +267,10 @@ describe "quiz show page assign to" do
       expect(@classic_quiz.visible_to_everyone).to be_truthy
 
       validate_all_overrides([
-                               { due_at: "Apr 15 at 12am", due_for: "Everyone else", unlock_at: "Apr 10 at 12am", lock_at: "Apr 20 at 12am" },
-                               { due_at: "Apr 16", due_for: "2 Students", unlock_at: "Apr 10 at 12am", lock_at: "Apr 20 at 11:59pm" },
-                               { due_at: "Apr 17", due_for: "2 Sections", unlock_at: "Apr 10 at 12am", lock_at: "Apr 20 at 11:59pm" },
-                               { due_at: "Apr 18", due_for: "2 Groups", unlock_at: "Apr 10 at 12am", lock_at: "Apr 20 at 11:59pm" }
+                               { due_at: "Apr 15, 2024 at 12am", due_for: "Everyone else", unlock_at: "Apr 10, 2024 at 12am", lock_at: "Apr 20, 2024 at 12am" },
+                               { due_at: "Apr 16, 2024", due_for: "2 Students", unlock_at: "Apr 10, 2024 at 12am", lock_at: "Apr 20, 2024 at 11:59pm" },
+                               { due_at: "Apr 17, 2024", due_for: "2 Sections", unlock_at: "Apr 10, 2024 at 12am", lock_at: "Apr 20, 2024 at 11:59pm" },
+                               { due_at: "Apr 18, 2024", due_for: "2 Groups", unlock_at: "Apr 10, 2024 at 12am", lock_at: "Apr 20, 2024 at 11:59pm" }
                              ])
     end
 
@@ -305,9 +316,9 @@ describe "quiz show page assign to" do
 
       expect(@classic_quiz.visible_to_everyone).to be_falsey
       validate_all_overrides([
-                               { due_at: "Apr 15", due_for: "2 Students", unlock_at: "Apr 10 at 12am", lock_at: "Apr 20 at 11:59pm" },
-                               { due_at: "Apr 16", due_for: "2 Sections", unlock_at: "Apr 10 at 12am", lock_at: "Apr 20 at 11:59pm" },
-                               { due_at: "Apr 17", due_for: "2 Groups", unlock_at: "Apr 10 at 12am", lock_at: "Apr 20 at 11:59pm" }
+                               { due_at: "Apr 15, 2024", due_for: "2 Students", unlock_at: "Apr 10, 2024 at 12am", lock_at: "Apr 20, 2024 at 11:59pm" },
+                               { due_at: "Apr 16, 2024", due_for: "2 Sections", unlock_at: "Apr 10, 2024 at 12am", lock_at: "Apr 20, 2024 at 11:59pm" },
+                               { due_at: "Apr 17, 2024", due_for: "2 Groups", unlock_at: "Apr 10, 2024 at 12am", lock_at: "Apr 20, 2024 at 11:59pm" }
                              ])
     end
 
@@ -318,7 +329,7 @@ describe "quiz show page assign to" do
 
       expect(@quiz_assignment.visible_to_everyone).to be_truthy
       validate_all_overrides([
-                               { due_at: "Apr 15", due_for: "Everyone", unlock_at: "Apr 10 at 12am", lock_at: "Apr 20 at 11:59pm" }
+                               { due_at: "Apr 15, 2024", due_for: "Everyone", unlock_at: "Apr 10, 2024 at 12am", lock_at: "Apr 20, 2024 at 11:59pm" }
                              ])
     end
 
@@ -345,7 +356,7 @@ describe "quiz show page assign to" do
 
       expect(@classic_quiz.visible_to_everyone).to be_falsey
       validate_all_overrides([
-                               { due_at: "Apr 15", due_for: "1 Section", unlock_at: "Apr 10 at 12am", lock_at: "Apr 20 at 11:59pm" }
+                               { due_at: "Apr 15, 2024", due_for: "1 Section", unlock_at: "Apr 10, 2024 at 12am", lock_at: "Apr 20, 2024 at 11:59pm" }
                              ])
     end
 
@@ -374,7 +385,7 @@ describe "quiz show page assign to" do
 
       expect(@classic_quiz.visible_to_everyone).to be_truthy
       validate_all_overrides([
-                               { due_at: "Apr 15 at 12am", due_for: "Everyone", unlock_at: "Apr 10 at 12am", lock_at: "Apr 20 at 12am" }
+                               { due_at: "Apr 15, 2024 at 12am", due_for: "Everyone", unlock_at: "Apr 10, 2024 at 12am", lock_at: "Apr 20, 2024 at 12am" }
                              ])
     end
 
@@ -403,7 +414,7 @@ describe "quiz show page assign to" do
 
       expect(@classic_quiz.visible_to_everyone).to be_truthy
       validate_all_overrides([
-                               { due_at: "Apr 15 at 12am", due_for: "Everyone", unlock_at: "Apr 10 at 12am", lock_at: "Apr 20 at 12am" }
+                               { due_at: "Apr 15, 2024 at 12am", due_for: "Everyone", unlock_at: "Apr 10, 2024 at 12am", lock_at: "Apr 20, 2024 at 12am" }
                              ])
     end
 
@@ -455,7 +466,7 @@ describe "quiz show page assign to" do
 
         # Doesn't show 'Everyone' when there are module overrides even if only_visible_to_overrides is false
         validate_all_overrides([
-                                 { due_at: "Apr 15", due_for: "2 Sections, 2 Groups, 2 Students", unlock_at: "Apr 10 at 12am", lock_at: "Apr 20 at 11:59pm" }
+                                 { due_at: "Apr 15, 2024", due_for: "2 Sections, 2 Groups, 2 Students", unlock_at: "Apr 10, 2024 at 12am", lock_at: "Apr 20, 2024 at 11:59pm" }
                                ])
       end
 
@@ -500,7 +511,7 @@ describe "quiz show page assign to" do
 
         # Doesn't show 'Everyone' when there are module overrides even if only_visible_to_overrides is false
         validate_all_overrides([
-                                 { due_at: "Apr 15", due_for: "2 Groups, 2 Students", unlock_at: "Apr 10 at 12am", lock_at: "Apr 20 at 11:59pm" },
+                                 { due_at: "Apr 15, 2024", due_for: "2 Groups, 2 Students", unlock_at: "Apr 10, 2024 at 12am", lock_at: "Apr 20, 2024 at 11:59pm" },
                                  { due_at: "-", due_for: "2 Sections", unlock_at: "-", lock_at: "-" }
                                ])
       end

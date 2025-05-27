@@ -74,6 +74,7 @@ module Lti::Messages
       add_names_and_roles_service_claims! if include_names_and_roles_service_claims?
       add_lti11_legacy_user_id! if include_claims?(:lti11_legacy_user_id)
       add_lti1p1_claims! if include_lti1p1_claims?
+      add_eulaservice_claims! if include_eulaservice_claims?
       add_extension("placement", @opts[:resource_type])
       add_extension("lti_student_id", @opts[:student_id].to_s) if @opts[:student_id].present?
       add_extension("student_context", { "id" => @opts[:student_lti_id] }) if @opts[:student_lti_id].present?
@@ -129,7 +130,7 @@ module Lti::Messages
     end
 
     def add_context_claims!
-      @message.context.id = Lti::Asset.opaque_identifier_for(@context)
+      @message.context.id = Lti::V1p1::Asset.opaque_identifier_for(@context)
       @message.context.label = @context.course_code if @context.respond_to?(:course_code)
       @message.context.title = @context.name
       @message.context.type = [Lti::SubstitutionsHelper::LIS_V2_ROLE_MAP[@context.class] || @context.class.to_s]
@@ -219,11 +220,15 @@ module Lti::Messages
         @tool.developer_key.scopes.intersect?(TokenScopes::LTI_AGS_SCOPES)
     end
 
-    # Follows 1EdTech Platform Notification Spec (not final/public as of Oct 2024)
+    # Follows 1EdTech Platform Notification Spec at https://www.imsglobal.org/spec/lti-pns/v1p0/main
     def include_platform_notification_service_claims?
       include_claims?(:platform_notification_service) &&
-        @tool.developer_key.scopes.include?(TokenScopes::LTI_PNS_SCOPE) &&
-        @tool.root_account.feature_enabled?(:platform_notification_service)
+        @tool.developer_key.scopes.include?(TokenScopes::LTI_PNS_SCOPE)
+    end
+
+    def include_eulaservice_claims?
+      include_claims?(:eulaservice) &&
+        @tool.root_account.feature_enabled?(:lti_asset_processor)
     end
 
     # Follows the spec at https://www.imsglobal.org/spec/lti-ags/v2p0/#assignment-and-grade-service-claim
@@ -232,7 +237,7 @@ module Lti::Messages
       @message.assignment_and_grade_service.scope = @tool.developer_key.scopes & TokenScopes::LTI_AGS_SCOPES
 
       @message.assignment_and_grade_service.lineitems =
-        @expander.controller.lti_line_item_index_url(
+        Rails.application.routes.url_helpers.lti_line_item_index_url(
           host: @context.root_account.environment_specific_domain, course_id: course_id_for_ags_url
         )
     end
@@ -259,8 +264,13 @@ module Lti::Messages
       end
     end
 
+    def add_eulaservice_claims!
+      @message.eulaservice.url = @tool.asset_processor_eula_url
+      @message.eulaservice.scope = [TokenScopes::LTI_EULA_SCOPE]
+    end
+
     def associated_1_1_tool
-      @associated_1_1_tool ||= @tool&.associated_1_1_tool(@context, target_link_uri)
+      @associated_1_1_tool ||= Lti::ToolFinder.associated_1_1_tool(@tool, @context, target_link_uri)
     end
 
     # Used to construct URLs for AGS endpoints like line item index, or line item show
@@ -272,7 +282,8 @@ module Lti::Messages
     def include_names_and_roles_service_claims?
       include_claims?(:names_and_roles_service) &&
         (@context.is_a?(Course) || @context.is_a?(Group)) &&
-        @tool.developer_key&.scopes&.include?(TokenScopes::LTI_NRPS_V2_SCOPE)
+        @tool.developer_key&.scopes&.include?(TokenScopes::LTI_NRPS_V2_SCOPE) &&
+        @expander.controller.present?
     end
 
     def add_names_and_roles_service_claims!

@@ -17,7 +17,7 @@
  */
 
 import React, {useCallback, useEffect, useRef, useState} from 'react'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {ScreenReaderContent} from '@instructure/ui-a11y-content'
 import {Modal} from '@instructure/ui-modal'
 import {Button, CloseButton} from '@instructure/ui-buttons'
@@ -38,7 +38,7 @@ import {Spinner} from '@instructure/ui-spinner'
 import {showFlashError} from '@canvas/alerts/react/FlashAlert'
 import {Text} from '@instructure/ui-text'
 
-const I18n = useI18nScope('UsedLocationsModal')
+const I18n = createI18nScope('UsedLocationsModal')
 
 export type FetchUsedLocationResponse = {
   usedLocations: UsedLocation[]
@@ -63,7 +63,7 @@ type UsedLocationsModalProps = {
   fetchUsedLocations: () => Promise<FetchUsedLocationResponse>
   fetchAssignmentUsedLocations: (
     courseId: string,
-    nextPagePath?: string
+    nextPagePath?: string,
   ) => Promise<FetchAssignmentUsedLocationResponse>
   fetchAccountUsedLocations: () => Promise<FetchAccountUsedLocationResponse>
   onClose: () => void
@@ -78,7 +78,10 @@ export const UsedLocationsModal = ({
   onClose,
 }: UsedLocationsModalProps) => {
   const [usedLocations, setUsedLocations] = useState<UsedLocation[]>([])
-  const [accountUsedLocations, setAccountUsedLocations] = useState<AccountUsedLocation[]>([])
+  const [accountUsedLocations, setAccountUsedLocations] = useState<AccountUsedLocation[] | null>(
+    null,
+  )
+
   const [filter, setFilter] = useState<string>('')
   const [loadingAssignments, setLoadingAssignments] = useState<{[key: string]: boolean}>({})
   const sentinelRef = useRef(null)
@@ -117,7 +120,7 @@ export const UsedLocationsModal = ({
       try {
         const newLocations = await fetchAssignmentUsedLocations(
           currentCourse.id,
-          currentCourse.assignments_next_page
+          currentCourse.assignments_next_page,
         )
 
         if (newLocations.assignmentUsedLocations.length) {
@@ -143,7 +146,7 @@ export const UsedLocationsModal = ({
         setLoadingAssignments(prev => ({...prev, [currentCourse.id]: false}))
       }
     },
-    [fetchAssignmentUsedLocations, itemId]
+    [fetchAssignmentUsedLocations, itemId],
   )
 
   const loadAccountLocations = useCallback(async () => {
@@ -154,7 +157,7 @@ export const UsedLocationsModal = ({
     try {
       const newLocations = await fetchAccountUsedLocations()
 
-      if (newLocations.accountUsedLocations.length) {
+      if (newLocations.accountUsedLocations) {
         setAccountUsedLocations(newLocations.accountUsedLocations)
       }
 
@@ -166,7 +169,7 @@ export const UsedLocationsModal = ({
 
   const reset = () => {
     setUsedLocations([])
-    setAccountUsedLocations([])
+    setAccountUsedLocations(null)
     moreLocationsLeft.current = true
     onClose()
   }
@@ -193,7 +196,7 @@ export const UsedLocationsModal = ({
           root: null,
           rootMargin: '0px',
           threshold: 0.4,
-        }
+        },
       )
 
       observer.observe(sentinelRef.current)
@@ -205,7 +208,7 @@ export const UsedLocationsModal = ({
   }, [isLoading, loadMoreCourseLocations, moreLocationsLeft, isOpen])
 
   useEffect(() => {
-    if (isOpen && accountUsedLocations.length === 0) {
+    if (isOpen && !accountUsedLocations) {
       loadAccountLocations()
     }
   }, [accountUsedLocations, isOpen, loadAccountLocations])
@@ -298,7 +301,7 @@ export const UsedLocationsModal = ({
                 filteredAssignments = course.assignments
               } else {
                 filteredAssignments = course.assignments.filter(assignment =>
-                  assignment.title.toLowerCase().includes(filter.toLowerCase())
+                  assignment.title.toLowerCase().includes(filter.toLowerCase()),
                 )
                 // if no assignments match the filter nor the course name,
                 // don't render the course in the list

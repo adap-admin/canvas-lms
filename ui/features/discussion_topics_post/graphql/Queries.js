@@ -20,7 +20,7 @@ import {AnonymousUser} from './AnonymousUser'
 import {Discussion} from './Discussion'
 import {Course} from './Course'
 import {DiscussionEntry} from './DiscussionEntry'
-import gql from 'graphql-tag'
+import {gql} from '@apollo/client'
 import {PageInfo} from './PageInfo'
 import {GroupSet} from './GroupSet'
 import {Group} from './Group'
@@ -34,7 +34,6 @@ export const DISCUSSION_QUERY = gql`
     $rootEntries: Boolean
     $userSearchId: String
     $filter: DiscussionFilterType
-    $sort: DiscussionSortOrderType
     $unreadBefore: String
   ) {
     legacyNode(_id: $discussionID, type: Discussion) {
@@ -43,14 +42,12 @@ export const DISCUSSION_QUERY = gql`
         anonymousAuthor {
           ...AnonymousUser
         }
-        sortOrder(sort: $sort)
         discussionEntriesConnection(
           after: $page
           first: $perPage
           searchTerm: $searchTerm
           rootEntries: $rootEntries
           filter: $filter
-          sortOrder: $sort
           userSearchId: $userSearchId
           unreadBefore: $unreadBefore
         ) {
@@ -93,22 +90,13 @@ export const STUDENT_DISCUSSION_QUERY = gql`
     $discussionID: ID!
     $perPage: Int!
     $userSearchId: String
-    $sort: DiscussionSortOrderType
   ) {
     legacyNode(_id: $discussionID, type: Discussion) {
       ... on Discussion {
-        ...Discussion
-        anonymousAuthor {
-          ...AnonymousUser
-        }
-        sortOrder(sort: $sort)
-        discussionEntriesConnection(sortOrder: $sort, userSearchId: $userSearchId) {
+        discussionEntriesConnection(userSearchId: $userSearchId) {
           nodes {
             _id
             rootEntryId
-            anonymousAuthor {
-              ...AnonymousUser
-            }
             rootEntryPageNumber(perPage: $perPage)
           }
           pageInfo {
@@ -118,8 +106,6 @@ export const STUDENT_DISCUSSION_QUERY = gql`
       }
     }
   }
-  ${AnonymousUser.fragment}
-  ${Discussion.fragment}
   ${PageInfo.fragment}
 `
 
@@ -151,7 +137,6 @@ export const DISCUSSION_SUBENTRIES_QUERY = gql`
     $before: String
     $first: Int
     $last: Int
-    $sort: DiscussionSortOrderType
     $relativeEntryId: ID
     $includeRelativeEntry: Boolean
     $beforeRelativeEntry: Boolean
@@ -167,7 +152,6 @@ export const DISCUSSION_SUBENTRIES_QUERY = gql`
           before: $before
           first: $first
           last: $last
-          sortOrder: $sort
           relativeEntryId: $relativeEntryId
           includeRelativeEntry: $includeRelativeEntry
           beforeRelativeEntry: $beforeRelativeEntry
@@ -201,6 +185,11 @@ export const DISCUSSION_ENTRY_ALL_ROOT_ENTRIES_QUERY = gql`
           anonymousAuthor {
             ...AnonymousUser
           }
+        }
+        subentriesCount
+        rootEntryParticipantCounts {
+          repliesCount
+          unreadCount
         }
       }
     }

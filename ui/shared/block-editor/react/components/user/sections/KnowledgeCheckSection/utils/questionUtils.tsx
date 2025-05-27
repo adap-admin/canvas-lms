@@ -21,17 +21,18 @@ import {TrueFalseQuestion} from '../questions/TrueFalseQuestion'
 import {MultipleChoiceQuestion} from '../questions/MultipleChoiceQuestion'
 import {MatchingQuestion} from '../questions/MatchingQuestion'
 import {Alert} from '@instructure/ui-alerts'
-import {useScope as useI18nScope} from '@canvas/i18n'
-import {QuestionProps} from '../types'
+import {useScope as createI18nScope} from '@canvas/i18n'
+import type {QuestionProps} from '../types'
 
-const I18n = useI18nScope('block-editor')
+const I18n = createI18nScope('block-editor')
 
 const defaultHandleCheckAnswer = (_result: boolean) => true
 
 export const renderQuestion = (
   question: QuestionProps,
-  handleCheckAnswer: (result: boolean) => void = defaultHandleCheckAnswer
+  handleCheckAnswer: (result: boolean) => void = defaultHandleCheckAnswer,
 ) => {
+  // @ts-expect-error
   switch (question.interaction_type_slug) {
     case 'true-false':
       return <TrueFalseQuestion question={question} onAnswerChange={handleCheckAnswer} />

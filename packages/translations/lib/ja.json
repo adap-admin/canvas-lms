@@ -32,6 +32,12 @@
     "additional_considerations_f3801683": {
         "message": "さらなる考慮事項"
     },
+    "address_applied_64269b0b": {
+        "message": "アドレスを適用した"
+    },
+    "address_removed_fcb496e0": {
+        "message": "アドレスを削除した"
+    },
     "adjacent_links_with_the_same_url_should_be_a_singl_7a1f7f6c": {
         "message": "同じURLを持つ隣接リンクは1つのリンクでなければなりません。"
     },
@@ -167,6 +173,9 @@
     "available_folders_694d0436": {
         "message": "使用可能なフォルダ"
     },
+    "background_1bc88842": {
+        "message": "背景"
+    },
     "backslash_b2d5442d": {
         "message": "バックスラッシュ"
     },
@@ -199,6 +208,15 @@
     },
     "blue_daf8fea9": {
         "message": "ブルー"
+    },
+    "bold_applied_42d547b7": {
+        "message": "太字を適用した"
+    },
+    "bold_removed_da474a5c": {
+        "message": "太字を削除した"
+    },
+    "border_5b08b06d": {
+        "message": "ボーダー"
     },
     "bottom_15a2a9be": {
         "message": "下"
@@ -341,11 +359,23 @@
     "collapse_to_hide_types_1ab46d2e": {
         "message": "{ types } を非表示にするには破損する"
     },
+    "color_a363e1b0": {
+        "message": "カラー"
+    },
+    "color_contrast_4c418add": {
+        "message": "色のコントラスト"
+    },
+    "color_contrast_ratio_687782f0": {
+        "message": "色のコントラスト比"
+    },
     "color_picker_6b359edf": {
         "message": "色を選択"
     },
     "color_picker_colorname_selected_ad4cf400": {
         "message": "色を選択（{ colorName }が現在選択されている）"
+    },
+    "color_popup_af39810f": {
+        "message": "色のポップアップ"
     },
     "column_e1ae5c64": {
         "message": "列"
@@ -494,6 +524,9 @@
     "deep_purple_bb3e2907": {
         "message": "ディープパープル"
     },
+    "default_9db103d": {
+        "message": "デフォルト"
+    },
     "default_bulleted_unordered_list_47079da8": {
         "message": "デフォルトの箇条書きの番号無しリスト"
     },
@@ -574,6 +607,12 @@
     },
     "display_text_link_opens_in_a_new_tab_75e9afc9": {
         "message": "テキストリンクを表示する (新しいタブが開きます)"
+    },
+    "div_applied_49ad83fc": {
+        "message": "Divを適用した"
+    },
+    "div_removed_d13f8e17": {
+        "message": "Divを削除した"
     },
     "division_sign_72190870": {
         "message": "分割サイン"
@@ -779,6 +818,9 @@
     "f_function_fe422d65": {
         "message": "F (関数)"
     },
+    "fail_544e5dde": {
+        "message": "不合格"
+    },
     "failed_getting_file_contents_e9ea19f4": {
         "message": "ファイルのコンテンツ取得に失敗しました"
     },
@@ -896,6 +938,9 @@
     "grades_a61eba0a": {
         "message": "評定"
     },
+    "graphics_text_bc9568bc": {
+        "message": "グラフィックテキスト"
+    },
     "greater_than_e98af662": {
         "message": "＞"
     },
@@ -964,6 +1009,12 @@
     },
     "heading_4_b2e74be7": {
         "message": "見出し4"
+    },
+    "heading_h_applied_eccd294d": {
+        "message": "{ h }見出しを適用した"
+    },
+    "heading_h_removed_745f24a6": {
+        "message": "{ h }見出しを削除した"
     },
     "heading_levels_should_not_be_skipped_3947c0e0": {
         "message": "見出しレベルはスキップしないでください。"
@@ -1121,6 +1172,18 @@
     "infinity_7a10f206": {
         "message": "無限"
     },
+    "input_field_for_alpha_678265fd": {
+        "message": "アルファ入力欄"
+    },
+    "input_field_for_blue_561e020a": {
+        "message": "青の入力欄"
+    },
+    "input_field_for_green_67f8b2b6": {
+        "message": "緑色の入力欄"
+    },
+    "input_field_for_red_86a84615": {
+        "message": "赤の入力欄"
+    },
     "insert_593145ef": {
         "message": "挿入"
     },
@@ -1135,6 +1198,9 @@
     },
     "intersection_cd4590e4": {
         "message": "交差点"
+    },
+    "invalid_description_991e23bb": {
+        "message": "無効な記述"
     },
     "invalid_entry_f7d2a0f5": {
         "message": "無効な入力。"
@@ -1159,6 +1225,12 @@
     },
     "italian_bd3c792d": {
         "message": "イタリア語"
+    },
+    "italic_applied_8f59a684": {
+        "message": "イタリックを適用した"
+    },
+    "italic_removed_17cbab6f": {
+        "message": "イタリックを削除した"
     },
     "japanese_b5721ca7": {
         "message": "日本語"
@@ -1189,6 +1261,9 @@
     },
     "large_9c5e80e7": {
         "message": "大"
+    },
+    "large_text_e7ba08cd": {
+        "message": "大きな文字"
     },
     "latvian_2bbb6aab": {
         "message": "ラトビア語"
@@ -1442,12 +1517,6 @@
     "music_icon_4db5c972": {
         "message": "音楽のアイコン"
     },
-    "must_be_at_least_percentage_22e373b6": {
-        "message": "{ percentage }%以上でなければなりません"
-    },
-    "must_be_at_least_width_x_height_px_41dc825e": {
-        "message": "少なくとも { width } x { height }px でなければなりません"
-    },
     "my_files_2f621040": {
         "message": "マイ ファイル"
     },
@@ -1562,6 +1631,9 @@
     "none_selected_b93d56d2": {
         "message": "選択されたものなし"
     },
+    "normal_text_7b03da48": {
+        "message": "通常のテキスト"
+    },
     "norwegian_53f391ec": {
         "message": "ノルウェー語"
     },
@@ -1640,8 +1712,8 @@
     "outline_size_a6059a21": {
         "message": "外形寸法"
     },
-    "p_is_not_a_valid_protocol_which_must_be_ftp_http_h_adf13fc2": {
-        "message": "{ p }は、ftp, http, https, mailto, skype, telであるか、省略可能である有効なプロトコルではありません。"
+    "p_is_not_a_valid_protocol_b1c4efaa": {
+        "message": "{ p }は有効なプロトコルではありません。"
     },
     "page_50c4823d": {
         "message": "ページ"
@@ -1652,6 +1724,12 @@
     "paragraph_5e5ad8eb": {
         "message": "段落"
     },
+    "paragraph_applied_959b3fe5": {
+        "message": "段落を適用した"
+    },
+    "paragraph_removed_d09320e": {
+        "message": "段落を削除した"
+    },
     "paragraph_starting_with_start_a59923f8": {
         "message": "{ start } で始まる段落"
     },
@@ -1660,6 +1738,9 @@
     },
     "partial_derivative_4a9159df": {
         "message": "部分(微分)"
+    },
+    "pass_1c19a2b3": {
+        "message": "合格"
     },
     "paste_5963d1c1": {
         "message": "貼り付け"
@@ -1678,6 +1759,9 @@
     },
     "percentage_must_be_a_number_8033c341": {
         "message": "パーセンテージは数字でなければなりません"
+    },
+    "percentage_must_be_at_least_percentage_a98ca8fc": {
+        "message": "パーセンテージは{ percentage }%以上でなければなりません"
     },
     "performing_arts_icon_f3497486": {
         "message": "パフォーミングアーツのアイコン"
@@ -1703,11 +1787,17 @@
     "pi_variant_10f5f520": {
         "message": "パイ(変形)"
     },
+    "pick_a_color_557abfb0": {
+        "message": "色を選択する"
+    },
     "pink_68ad45cb": {
         "message": "ピンク"
     },
     "pixels_52ece7d1": {
         "message": "ピクセル"
+    },
+    "pixels_must_be_at_least_width_x_height_px_e965edd5": {
+        "message": "ピクセルは{ width } x { height }ピクセル以上でなければなりません。"
     },
     "play_1a47eaa7": {
         "message": "再生"
@@ -1721,8 +1811,17 @@
     "please_allow_canvas_to_access_your_microphone_and__dc2c3079": {
         "message": "Canvas があなたのマイクとウェブカメラにアクセスできるようにしてください。"
     },
+    "please_choose_a_file_c2449cc": {
+        "message": "ファイルを選択してください"
+    },
     "please_decribe_what_you_would_like_to_compose_27a51be5": {
         "message": "構成したい内容を記入してください。"
+    },
+    "please_enter_a_file_name_f159edc1": {
+        "message": "ファイル名を入力してください"
+    },
+    "please_select_a_file_of_a_supported_type_1fc578f2": {
+        "message": "サポートされているタイプのファイルを選択してください"
     },
     "plus_d43cd4ec": {
         "message": "プラス"
@@ -1774,6 +1873,9 @@
     },
     "previous_findtext_8dfbfd30": {
         "message": "前{ findText }"
+    },
+    "previously_chosen_colors_f1338315": {
+        "message": "以前に選択した色"
     },
     "prime_917ea60e": {
         "message": "素数"
@@ -2306,9 +2408,6 @@
     "the_first_heading_on_a_page_should_be_an_h2_859089f2": {
         "message": "ページの最初のヘッダーはH2であるべきです。"
     },
-    "the_following_content_is_partner_provided_ed1da756": {
-        "message": "以下のコンテンツはパートナーが提供しています"
-    },
     "the_material_is_in_the_public_domain_279c39a3": {
         "message": "この資料はパブリック ドメインです"
     },
@@ -2317,9 +2416,6 @@
     },
     "the_material_is_subject_to_an_exception_e_g_fair_u_a39c8ca2": {
         "message": "素材には例外があります。例：公正使用、引用権、または適用される著作権法に基づくその他"
-    },
-    "the_preceding_content_is_partner_provided_d753928c": {
-        "message": "上記のコンテンツはパートナーが提供しています"
     },
     "the_pretty_html_editor_is_not_keyboard_accessible__d6d5d2b": {
         "message": "pretty HTMLエディタはキーボードからはアクセスできません。ShiftOを押してpretty HTMLエディタを開きます。"
@@ -2416,6 +2512,12 @@
     },
     "unable_to_determine_resource_selection_url_7867e060": {
         "message": "リソースURL選択を決定するために利用可能"
+    },
+    "underline_applied_ae01ec97": {
+        "message": "下線を適用した"
+    },
+    "underline_removed_3693e17c": {
+        "message": "下線を削除した"
     },
     "union_e6b57a53": {
         "message": "ユニオン"
@@ -2674,6 +2776,15 @@
     },
     "yiddish_f96986df": {
         "message": "イディッシュ語"
+    },
+    "you_are_on_a_color_palette_to_navigate_on_the_pale_227fc3a6": {
+        "message": "現在カラーパレット上にいます。パレット上で上、左、下、右に移動するには、それぞれ「W」、「A」、「S」、「D」ボタンを使用します"
+    },
+    "you_are_on_a_color_slider_to_navigate_the_slider_l_e800f68a": {
+        "message": "現在カラースライダーの上にいます。スライダー上で左または右に移動するには、それぞれ「A」と「D」ボタンを使用します"
+    },
+    "you_are_on_an_alpha_slider_to_navigate_the_slider__3a014dc5": {
+        "message": "現在アルファスライダーにいます。スライダー上で左または右に移動するには、それぞれ「A」と「D」ボタンを使用します"
     },
     "you_can_replace_by_uploading_a_new_caption_file_6c88ce00": {
         "message": "新しいキャプションファイルをアップロードすることで置換することができます。"

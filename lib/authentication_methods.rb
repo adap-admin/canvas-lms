@@ -67,12 +67,12 @@ module AuthenticationMethods
     @authenticated_with_jwt = true
   end
 
-  def services_jwt_auth_allowed
+  def token_auth_allowed?
     false
   end
 
   def load_pseudonym_from_jwt
-    return unless api_request? || services_jwt_auth_allowed
+    return unless api_request? || token_auth_allowed?
 
     token_string = AuthenticationMethods.access_token(request)
     return unless token_string.present?
@@ -141,7 +141,8 @@ module AuthenticationMethods
   end
 
   def load_pseudonym_from_access_token
-    return unless api_request? ||
+    tokens_allowed = token_auth_allowed? if Account.site_admin.feature_enabled?(:enable_file_access_with_api_tokens)
+    return unless api_request? || tokens_allowed ||
                   (params[:controller] == "oauth2_provider" && params[:action] == "destroy") ||
                   (params[:controller] == "login" && params[:action] == "session_token")
 
@@ -268,7 +269,7 @@ module AuthenticationMethods
       elsif params.key?("me")
         request_become_user = @current_user
       elsif params.key?("become_teacher")
-        course = Course.find(params[:course_id] || params[:id]) rescue nil
+        course = Course.find_by(id: params[:course_id] || params[:id])
         teacher = course.teachers.first if course
         if teacher
           request_become_user = teacher
@@ -276,7 +277,7 @@ module AuthenticationMethods
           flash[:error] = I18n.t("lib.auth.errors.teacher_not_found", "No teacher found")
         end
       elsif params.key?("become_student")
-        course = Course.find(params[:course_id] || params[:id]) rescue nil
+        course = Course.find_by(id: params[:course_id] || params[:id])
         student = course.students.first if course
         if student
           request_become_user = student
@@ -430,8 +431,9 @@ module AuthenticationMethods
     # can't use slice, because session has a different ctor than a normal hash
     saved = {}
     keys.each { |k| saved[k] = session[k] if session[k] }
-    reset_session
+    r = block_given? ? yield : reset_session
     saved.each_pair { |k, v| session[k] = v }
+    r
   end
 
   def invalidate_session

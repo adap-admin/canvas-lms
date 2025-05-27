@@ -28,13 +28,16 @@ import {
 import {ToolbarColor, type ColorSpec} from '../../common/ToolbarColor'
 import {ToolbarAlignment} from './toolbar/ToolbarAlignment'
 import {ToolbarCorners} from './toolbar/ToolbarCorners'
+import {getEffectiveBackgroundColor} from '@canvas/block-editor/react/utils'
 
 export const GroupBlockToolbar = () => {
   const {
     actions: {setProp},
+    node,
     props,
-  } = useNode((node: Node) => ({
-    props: node.data.props,
+  } = useNode((n: Node) => ({
+    node: n,
+    props: n.data.props,
   }))
 
   const handleChangeColors = useCallback(
@@ -44,14 +47,14 @@ export const GroupBlockToolbar = () => {
         prps.borderColor = bordercolor
       })
     },
-    [setProp]
+    [setProp],
   )
 
   const handleSaveAlignment = useCallback(
     (
       layout: GroupLayout,
       alignment: GroupHorizontalAlignment,
-      verticalAlignment: GroupAlignment
+      verticalAlignment: GroupAlignment,
     ) => {
       setProp((prps: GroupBlockProps) => {
         prps.layout = layout
@@ -59,7 +62,7 @@ export const GroupBlockToolbar = () => {
         prps.verticalAlignment = verticalAlignment
       })
     },
-    [setProp]
+    [setProp],
   )
 
   const handleSaveCorners = useCallback(
@@ -68,7 +71,7 @@ export const GroupBlockToolbar = () => {
         prps.roundedCorners = rounded
       })
     },
-    [setProp]
+    [setProp],
   )
 
   const getCurrentBorderColor = () => {
@@ -83,8 +86,15 @@ export const GroupBlockToolbar = () => {
     <Flex gap="small">
       <ToolbarColor
         tabs={{
-          background: getCurrentBackgroundColor(),
-          border: getCurrentBorderColor(),
+          background: {
+            color: getCurrentBackgroundColor(),
+            default: '#00000000',
+          },
+          border: {
+            color: getCurrentBorderColor(),
+            default: '#00000000',
+          },
+          effectiveBgColor: getEffectiveBackgroundColor(node.dom),
         }}
         onChange={handleChangeColors}
       />

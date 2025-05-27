@@ -32,6 +32,12 @@
     "additional_considerations_f3801683": {
         "message": "Consideraciones adicionales"
     },
+    "address_applied_64269b0b": {
+        "message": "Dirección aplicada"
+    },
+    "address_removed_fcb496e0": {
+        "message": "Dirección eliminada"
+    },
     "adjacent_links_with_the_same_url_should_be_a_singl_7a1f7f6c": {
         "message": "Los enlaces adyacentes con la misma URL deben ser un solo enlace."
     },
@@ -167,6 +173,9 @@
     "available_folders_694d0436": {
         "message": "Carpetas disponibles"
     },
+    "background_1bc88842": {
+        "message": "Fondo"
+    },
     "backslash_b2d5442d": {
         "message": "Barra invertida"
     },
@@ -199,6 +208,15 @@
     },
     "blue_daf8fea9": {
         "message": "Azul"
+    },
+    "bold_applied_42d547b7": {
+        "message": "Negrita aplicada"
+    },
+    "bold_removed_da474a5c": {
+        "message": "Negrita eliminada"
+    },
+    "border_5b08b06d": {
+        "message": "Borde"
     },
     "bottom_15a2a9be": {
         "message": "Abajo"
@@ -341,11 +359,23 @@
     "collapse_to_hide_types_1ab46d2e": {
         "message": "Colapsar para ocultar { types }"
     },
+    "color_a363e1b0": {
+        "message": "Color"
+    },
+    "color_contrast_4c418add": {
+        "message": "Contraste de color"
+    },
+    "color_contrast_ratio_687782f0": {
+        "message": "Ratio de contraste de color"
+    },
     "color_picker_6b359edf": {
         "message": "Selector de color"
     },
     "color_picker_colorname_selected_ad4cf400": {
         "message": "Selector de color ({ colorName } seleccionado)"
+    },
+    "color_popup_af39810f": {
+        "message": "Ventana emergente de color"
     },
     "column_e1ae5c64": {
         "message": "Columna"
@@ -494,6 +524,9 @@
     "deep_purple_bb3e2907": {
         "message": "Morado oscuro"
     },
+    "default_9db103d": {
+        "message": "Por defecto"
+    },
     "default_bulleted_unordered_list_47079da8": {
         "message": "lista no ordenada con viñetas predeterminada"
     },
@@ -574,6 +607,12 @@
     },
     "display_text_link_opens_in_a_new_tab_75e9afc9": {
         "message": "Mostrar enlace de texto (se abre en una nueva pestaña)"
+    },
+    "div_applied_49ad83fc": {
+        "message": "Div aplicado"
+    },
+    "div_removed_d13f8e17": {
+        "message": "Div eliminado"
     },
     "division_sign_72190870": {
         "message": "Signo de dividir"
@@ -779,6 +818,9 @@
     "f_function_fe422d65": {
         "message": "F (función)"
     },
+    "fail_544e5dde": {
+        "message": "FALLA"
+    },
     "failed_getting_file_contents_e9ea19f4": {
         "message": "Error al obtener el contenido del archivo"
     },
@@ -896,6 +938,9 @@
     "grades_a61eba0a": {
         "message": "Calificaciones"
     },
+    "graphics_text_bc9568bc": {
+        "message": "Texto gráfico"
+    },
     "greater_than_e98af662": {
         "message": "Mayor a"
     },
@@ -964,6 +1009,12 @@
     },
     "heading_4_b2e74be7": {
         "message": "Encabezado 4"
+    },
+    "heading_h_applied_eccd294d": {
+        "message": "Título { h } aplicado"
+    },
+    "heading_h_removed_745f24a6": {
+        "message": "Título { h } eliminado"
     },
     "heading_levels_should_not_be_skipped_3947c0e0": {
         "message": "Los niveles de los títulos no deben omitirse."
@@ -1121,6 +1172,18 @@
     "infinity_7a10f206": {
         "message": "Infinito"
     },
+    "input_field_for_alpha_678265fd": {
+        "message": "Campo de entrada para alfa"
+    },
+    "input_field_for_blue_561e020a": {
+        "message": "Campo de entrada para azul"
+    },
+    "input_field_for_green_67f8b2b6": {
+        "message": "Campo de entrada para verde"
+    },
+    "input_field_for_red_86a84615": {
+        "message": "Campo de entrada para rojo"
+    },
     "insert_593145ef": {
         "message": "Insertar"
     },
@@ -1135,6 +1198,9 @@
     },
     "intersection_cd4590e4": {
         "message": "Intersección"
+    },
+    "invalid_description_991e23bb": {
+        "message": "Descripción no válida"
     },
     "invalid_entry_f7d2a0f5": {
         "message": "Ingreso no válido."
@@ -1159,6 +1225,12 @@
     },
     "italian_bd3c792d": {
         "message": "Italiano"
+    },
+    "italic_applied_8f59a684": {
+        "message": "Cursiva aplicada"
+    },
+    "italic_removed_17cbab6f": {
+        "message": "Cursiva eliminada"
     },
     "japanese_b5721ca7": {
         "message": "Japonés"
@@ -1189,6 +1261,9 @@
     },
     "large_9c5e80e7": {
         "message": "Grande"
+    },
+    "large_text_e7ba08cd": {
+        "message": "Texto grande"
     },
     "latvian_2bbb6aab": {
         "message": "Letón"
@@ -1442,12 +1517,6 @@
     "music_icon_4db5c972": {
         "message": "Ícono de música"
     },
-    "must_be_at_least_percentage_22e373b6": {
-        "message": "Debe ser al menos { percentage }%"
-    },
-    "must_be_at_least_width_x_height_px_41dc825e": {
-        "message": "Debe ser al menos { width } x { height } px"
-    },
     "my_files_2f621040": {
         "message": "Mis archivos"
     },
@@ -1562,6 +1631,9 @@
     "none_selected_b93d56d2": {
         "message": "Nada seleccionado"
     },
+    "normal_text_7b03da48": {
+        "message": "Texto normal"
+    },
     "norwegian_53f391ec": {
         "message": "Noruego"
     },
@@ -1640,8 +1712,8 @@
     "outline_size_a6059a21": {
         "message": "Tamaño de contorno"
     },
-    "p_is_not_a_valid_protocol_which_must_be_ftp_http_h_adf13fc2": {
-        "message": "{ p } no es un protocolo válido, que debe ser ftp, http, https, mailto, skype, tel, o puede omitirse"
+    "p_is_not_a_valid_protocol_b1c4efaa": {
+        "message": "{ p } no es un protocolo válido."
     },
     "page_50c4823d": {
         "message": "Página"
@@ -1652,6 +1724,12 @@
     "paragraph_5e5ad8eb": {
         "message": "Párrafo"
     },
+    "paragraph_applied_959b3fe5": {
+        "message": "Párrafo aplicado"
+    },
+    "paragraph_removed_d09320e": {
+        "message": "Párrafo eliminado"
+    },
     "paragraph_starting_with_start_a59923f8": {
         "message": "Párrafo que comienza con { start }"
     },
@@ -1660,6 +1738,9 @@
     },
     "partial_derivative_4a9159df": {
         "message": "Parcial (derivada)"
+    },
+    "pass_1c19a2b3": {
+        "message": "APROBADO"
     },
     "paste_5963d1c1": {
         "message": "Pegar"
@@ -1678,6 +1759,9 @@
     },
     "percentage_must_be_a_number_8033c341": {
         "message": "El porcentaje debe ser un número"
+    },
+    "percentage_must_be_at_least_percentage_a98ca8fc": {
+        "message": "El porcentaje debe ser de al menos { percentage }%"
     },
     "performing_arts_icon_f3497486": {
         "message": "Ícono de artes escénicas"
@@ -1703,11 +1787,17 @@
     "pi_variant_10f5f520": {
         "message": "Pi (variante)"
     },
+    "pick_a_color_557abfb0": {
+        "message": "Elija un color"
+    },
     "pink_68ad45cb": {
         "message": "Rosado"
     },
     "pixels_52ece7d1": {
         "message": "Pixeles"
+    },
+    "pixels_must_be_at_least_width_x_height_px_e965edd5": {
+        "message": "Los píxeles deben ser al menos { width } x { height }px"
     },
     "play_1a47eaa7": {
         "message": "Reproducir"
@@ -1721,8 +1811,17 @@
     "please_allow_canvas_to_access_your_microphone_and__dc2c3079": {
         "message": "Deje que Canvas acceda a su micrófono y cámara web."
     },
+    "please_choose_a_file_c2449cc": {
+        "message": "Elija un archivo"
+    },
     "please_decribe_what_you_would_like_to_compose_27a51be5": {
         "message": "Describa lo que le gustaría componer."
+    },
+    "please_enter_a_file_name_f159edc1": {
+        "message": "Ingrese el nombre del archivo"
+    },
+    "please_select_a_file_of_a_supported_type_1fc578f2": {
+        "message": "Seleccione un archivo compatible"
     },
     "plus_d43cd4ec": {
         "message": "Más"
@@ -1774,6 +1873,9 @@
     },
     "previous_findtext_8dfbfd30": {
         "message": "Anterior { findText }"
+    },
+    "previously_chosen_colors_f1338315": {
+        "message": "Colores seleccionados previamente"
     },
     "prime_917ea60e": {
         "message": "Primo"
@@ -2306,9 +2408,6 @@
     "the_first_heading_on_a_page_should_be_an_h2_859089f2": {
         "message": "El primer título de una página debe ser un H2."
     },
-    "the_following_content_is_partner_provided_ed1da756": {
-        "message": "El siguiente contenido está proporcionado por un socio"
-    },
     "the_material_is_in_the_public_domain_279c39a3": {
         "message": "El material es de dominio público"
     },
@@ -2317,9 +2416,6 @@
     },
     "the_material_is_subject_to_an_exception_e_g_fair_u_a39c8ca2": {
         "message": "El material está sujeto a una excepción, como el uso legítimo, el derecho de cita u otros en virtud de las leyes aplicables de derechos de autor."
-    },
-    "the_preceding_content_is_partner_provided_d753928c": {
-        "message": "El contenido anterior está proporcionado por un socio"
     },
     "the_pretty_html_editor_is_not_keyboard_accessible__d6d5d2b": {
         "message": "No se puede acceder al editor html agradable desde el teclado. Presione Mayúsc O para abrir el editor HTML sin formato."
@@ -2416,6 +2512,12 @@
     },
     "unable_to_determine_resource_selection_url_7867e060": {
         "message": "No se pudo determinar la url de selección de recursos"
+    },
+    "underline_applied_ae01ec97": {
+        "message": "Subrayado aplicado"
+    },
+    "underline_removed_3693e17c": {
+        "message": "Subrayado eliminado"
     },
     "union_e6b57a53": {
         "message": "Unión"
@@ -2674,6 +2776,15 @@
     },
     "yiddish_f96986df": {
         "message": "Yidis"
+    },
+    "you_are_on_a_color_palette_to_navigate_on_the_pale_227fc3a6": {
+        "message": "Se encuentra en una paleta de colores. Para navegar en la paleta hacia arriba, a la izquierda, hacia abajo o a la ''W'', ''A'', ''S'' y ''D'', respectivamente"
+    },
+    "you_are_on_a_color_slider_to_navigate_the_slider_l_e800f68a": {
+        "message": "Está en un deslizador de color. Para navegar el deslizador a la izquierda o a la derecha, use los botones ''A'', y ''D'', respectivamente"
+    },
+    "you_are_on_an_alpha_slider_to_navigate_the_slider__3a014dc5": {
+        "message": "Está en un deslizador alfa. Para navegar el deslizador a la izquierda o a la derecha, use los botones ''A'', y ''D'', respectivamente"
     },
     "you_can_replace_by_uploading_a_new_caption_file_6c88ce00": {
         "message": "Puede reemplazarlo cargando un nuevo archivo de subtítulos."

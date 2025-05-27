@@ -17,14 +17,14 @@
  */
 
 import React from 'react'
-import type {RegistrationOverlayStore} from '../../registration_wizard/registration_settings/RegistrationOverlayState'
+import type {DynamicRegistrationOverlayStore} from '../DynamicRegistrationOverlayState'
 import {useOverlayStore} from '../hooks/useOverlayStore'
 import {PrivacyConfirmation} from '../../registration_wizard_forms/PrivacyConfirmation'
 import {LtiPrivacyLevels} from '../../model/LtiPrivacyLevel'
 
 export type PrivacyConfirmationWrapperProps = {
   toolName: string
-  overlayStore: RegistrationOverlayStore
+  overlayStore: DynamicRegistrationOverlayStore
 }
 
 export const PrivacyConfirmationWrapper = ({
@@ -37,7 +37,7 @@ export const PrivacyConfirmationWrapper = ({
     <PrivacyConfirmation
       appName={toolName}
       privacyLevelOnChange={level => actions.updatePrivacyLevel(level)}
-      selectedPrivacyLevel={state.registration.privacy_level || LtiPrivacyLevels.Anonymous}
+      selectedPrivacyLevel={state.overlay.privacy_level || LtiPrivacyLevels.Anonymous}
     />
   )
 }

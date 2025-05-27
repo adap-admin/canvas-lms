@@ -46,7 +46,7 @@ class Checkpoints::SubmissionAggregatorService < Checkpoints::AggregatorService
   def call
     return false unless checkpoint_aggregation_supported?(@assignment)
 
-    parent_submission = @assignment.submissions.find_by(user: @student)
+    parent_submission = @assignment.find_or_create_submission(@student)
     submissions = @assignment.sub_assignment_submissions.where(user: @student).order(updated_at: :desc).to_a
     return false if parent_submission.nil? || submissions.empty?
 
@@ -112,12 +112,16 @@ class Checkpoints::SubmissionAggregatorService < Checkpoints::AggregatorService
 
   def calculate_late_policy_status(submissions)
     values = submissions.pluck(:late_policy_status)
-    return "late" if values.include?("late")
-    return "missing" if values.include?("missing")
-    return "extended" if values.include?("extended")
+    return "late" if any_submission_attribute?(submissions, :late?)
+    return "missing" if any_submission_attribute?(submissions, :missing?)
+    return "extended" if any_submission_attribute?(submissions, :extended?)
     return "none" if values.include?("none")
 
     nil
+  end
+
+  def any_submission_attribute?(submissions, attribute)
+    submissions.any? { |submission| submission.send(attribute) }
   end
 
   def shared_attribute(submissions, field_name, default)

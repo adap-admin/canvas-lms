@@ -74,7 +74,7 @@ class Attachment < ActiveRecord::Base
   restrict_columns :settings, %i[folder_id locked lock_at unlock_at usage_rights_id]
   restrict_columns :state, [:locked, :file_state]
 
-  attr_accessor :podcast_associated_asset, :export_id, :instfs_tenant_auth
+  attr_accessor :podcast_associated_asset, :export_id, :instfs_tenant_auth, :avoid_linking_to_root_attachment
 
   # this is a gross hack to work around freaking SubmissionComment#attachments=
   attr_accessor :ok_for_submission_comment
@@ -87,6 +87,7 @@ class Attachment < ActiveRecord::Base
        :content_export,
        :content_migration,
        :course,
+       :course_report,
        :eportfolio,
        :epub_export,
        :gradebook_upload,
@@ -100,10 +101,12 @@ class Attachment < ActiveRecord::Base
          quiz: "Quizzes::Quiz",
          quiz_statistics: "Quizzes::QuizStatistics",
          quiz_submission: "Quizzes::QuizSubmission" }]
+  belongs_to :root_account, class_name: "Account"
   belongs_to :cloned_item
   belongs_to :folder
   belongs_to :user
   has_one :account_report, inverse_of: :attachment
+  has_one :course_report, inverse_of: :attachment
   has_one :group_and_membership_importer, inverse_of: :attachment
   has_one :media_object
   belongs_to :media_object_by_media_id, class_name: "MediaObject", primary_key: :media_id, foreign_key: :media_entry_id, inverse_of: :attachments_by_media_id
@@ -127,8 +130,10 @@ class Attachment < ActiveRecord::Base
   has_many :canvadocs_annotation_contexts, inverse_of: :attachment
   has_many :discussion_entry_drafts, inverse_of: :attachment
   has_one :master_content_tag, class_name: "MasterCourses::MasterContentTag", inverse_of: :attachment
+  has_one :estimated_duration, dependent: :destroy, inverse_of: :attachment
+  has_many :lti_assets, class_name: "Lti::Asset", inverse_of: :attachment, dependent: :destroy
 
-  before_save :set_root_account_id
+  before_save :set_root_account
   before_save :infer_display_name
   before_save :truncate_display_name
   before_save :default_values
@@ -136,6 +141,8 @@ class Attachment < ActiveRecord::Base
 
   before_validation :assert_attachment
   acts_as_list scope: :folder
+
+  accepts_nested_attributes_for :estimated_duration, allow_destroy: true
 
   def self.file_store_config
     # Return existing value, even if nil, as long as it's defined
@@ -154,7 +161,7 @@ class Attachment < ActiveRecord::Base
   end
 
   def self.s3_storage?
-    (file_store_config["storage"] rescue nil) == "s3" && s3_config
+    file_store_config["storage"] == "s3" && s3_config
   end
 
   def self.local_storage?
@@ -231,13 +238,14 @@ class Attachment < ActiveRecord::Base
         owner = proxy_association.owner
       end
 
-      if att.deleted? && owner
-        new_att = owner.attachments.active.where(id: att.replacement_attachment_id).first if att.replacement_attachment_id
-        new_att ||= Folder.find_attachment_in_context_with_path(owner, att.full_display_path)
-        new_att || att
-      else
-        att
-      end
+      return att unless att.deleted? && owner
+
+      include_hidden_files = Account.site_admin.feature_enabled?(:hidden_attachments_replacement_chain)
+      file_states = include_hidden_files ? %w[available hidden] : "available"
+
+      new_att = owner.attachments.where(id: att.replacement_attachment_id, file_state: file_states).first if att.replacement_attachment_id
+      new_att ||= Folder.find_attachment_in_context_with_path(owner, att.full_display_path)
+      new_att || att
     end
   end
 
@@ -450,7 +458,7 @@ class Attachment < ActiveRecord::Base
 
     in_the_right_state = file_state == "available" && workflow_state !~ /^unattached/
     if in_the_right_state && media_entry_id == "maybe" &&
-       content_type && content_type.match(/\A(video|audio)/)
+       content_type&.match(/\A(video|audio)/)
       build_media_object
     end
   end
@@ -534,7 +542,7 @@ class Attachment < ActiveRecord::Base
   end
 
   def after_extension
-    res = extension[1..] rescue nil
+    res = extension[1..]
     res = nil if res == "" || res == "unknown"
     res
   end
@@ -587,8 +595,16 @@ class Attachment < ActiveRecord::Base
   end
   protected :default_values
 
-  def set_root_account_id
-    self.root_account_id = infer_root_account_id if namespace_changed? || new_record?
+  def set_root_account
+    if root_account_id.nil?
+      # If we don't have root_account set, use Attachment.current_root_account which should be set by the load account
+      # middlewear. If for some reason, we don't have that, first see if we a child attachment and get the root from
+      # that, otherwise, try to use the context to get to the root account.
+      self.root_account = Attachment.current_root_account
+      self.root_account ||= root_attachment.try(:root_account)
+      self.root_account ||= context.try(:root_account)
+      self.root_account ||= context.try(:account)&.root_account
+    end
   end
 
   def set_word_count
@@ -605,24 +621,6 @@ class Attachment < ActiveRecord::Base
     update_column(:word_count, calculate_words)
   end
 
-  def infer_root_account_id
-    # see note in infer_namespace below
-    splits = namespace.try(:split, /_/)
-    return nil if splits.blank?
-
-    if splits[1] == "localstorage"
-      splits[3].to_i
-    else
-      splits[1].to_i
-    end
-  end
-
-  def root_account
-    root_account_id && Account.find_cached(root_account_id)
-  rescue ::Canvas::AccountCacheError
-    nil
-  end
-
   def namespace
     super || (new_record? ? self.namespace = infer_namespace : nil)
   end
@@ -633,13 +631,10 @@ class Attachment < ActiveRecord::Base
       # code relies on the namespace as a hacky way to efficiently get the
       # attachment's account id. Look for anybody who is accessing namespace and
       # splitting the string, etc.
-      #
-      # The infer_root_account_id accessor is still present above, but I didn't verify there
-      # isn't any code still accessing the namespace for the account id directly.
       ns = root_attachment.try(:namespace) if root_attachment_id
       ns ||= Attachment.current_namespace
-      ns ||= context.root_account.file_namespace rescue nil
-      ns ||= context.account.file_namespace rescue nil
+      ns ||= context.try(:root_account)&.file_namespace
+      ns ||= context.try(:account)&.file_namespace
       if Rails.env.development? && Attachment.local_storage?
         ns ||= ""
         ns = "_localstorage_/#{ns}" unless ns.start_with?("_localstorage_/")
@@ -677,7 +672,11 @@ class Attachment < ActiveRecord::Base
           # deduplicate. the existing attachment's s3object should be the same as
           # that just uploaded ('cuz md5 match). delete the new copy and just
           # have this attachment inherit from the existing attachment.
-          s3object.delete rescue nil
+          begin
+            s3object.delete
+          rescue
+            # ignore
+          end
           self.root_attachment = existing_attachment
           self["filename"] = nil
         else
@@ -764,7 +763,7 @@ class Attachment < ActiveRecord::Base
     return nil if OpenSSL::HMAC.digest(OpenSSL::Digest.new("sha1"), shared_secret, policy_str) != signature
 
     policy = JSON.parse(Base64.decode64(policy_str))
-    return nil unless Time.zone.parse(policy["expiration"]) >= Time.now
+    return nil unless Time.zone.parse(policy["expiration"]) >= Time.zone.now
 
     attachment = Attachment.find(policy["attachment_id"])
     return nil unless [:unattached, :unattached_temporary].include?(attachment.try(:state))
@@ -799,15 +798,9 @@ class Attachment < ActiveRecord::Base
           quota = context.quota if context.respond_to?(:quota) && context.quota
 
           attachment_scope = context.attachments.active.where(root_attachment_id: nil)
+          excluded_attachment_ids = excluded_ids_for_context(context)
 
-          if context.is_a?(User) || context.is_a?(Group)
-            excluded_attachment_ids = []
-            if context.is_a?(User)
-              excluded_attachment_ids += context.attachments.joins(:attachment_associations).where(attachment_associations: { context_type: "Submission" }).pluck(:id)
-            end
-            excluded_attachment_ids += context.attachments.where(folder_id: context.submissions_folders).pluck(:id)
-            attachment_scope = attachment_scope.where.not(id: excluded_attachment_ids) if excluded_attachment_ids.any?
-          end
+          attachment_scope = attachment_scope.where.not(id: excluded_attachment_ids) if excluded_attachment_ids.present?
 
           min = MINIMUM_SIZE_FOR_QUOTA
           # translated to ruby this is [size, min].max || 0
@@ -816,6 +809,27 @@ class Attachment < ActiveRecord::Base
       end
     end
     { quota:, quota_used: }
+  end
+
+  def self.excluded_ids_for_context(context)
+    excluded_attachment_ids = []
+
+    case context
+    when Account
+      if context.root_account? && (root_folder = Folder.root_folders(context).first)
+        root_attachment_ids = Attachment.where(folder_id: Array(root_folder.id) + root_folder.sub_folders.ids).ids
+        excluded_attachment_ids.concat(root_attachment_ids) if root_attachment_ids
+      end
+    when User
+      excluded_attachment_ids.concat(context.attachments
+                                            .joins(:attachment_associations)
+                                            .where(attachment_associations: { context_type: "Submission" }).ids)
+      excluded_attachment_ids.concat(context.attachments.where(folder_id: context.submissions_folders).ids)
+    when Group
+      excluded_attachment_ids.concat(context.attachments.where(folder_id: context.submissions_folders).ids)
+    end
+
+    excluded_attachment_ids
   end
 
   # Returns a boolean indicating whether the given context is over quota
@@ -943,7 +957,9 @@ class Attachment < ActiveRecord::Base
   end
 
   def downloadable?
-    instfs_hosted? || !!(authenticated_s3_url rescue false)
+    instfs_hosted? || !!authenticated_s3_url
+  rescue
+    false
   end
 
   def public_url(**options)
@@ -1054,54 +1070,6 @@ class Attachment < ActiveRecord::Base
   STREAMING_DOWNLOAD_RETRIES = 5
   CORRUPT_DOWNLOAD_RETRIES = 2
 
-  # GETs this attachment's public_url and streams the response to the
-  # passed block; this is a helper function for #open
-  # (you should call #open instead of this)
-  private def streaming_download(dest = nil, integrity_check: false, &block)
-    retries ||= 0
-    corrupt_retries ||= 0
-    bytes_read ||= 0
-
-    # avoid corrupting the output stream if we retry after data has been received
-    can_retry = -> { bytes_read == 0 || (!block && dest.respond_to?(:rewind) && dest.respond_to?(:truncate)) }
-    prep_retry = lambda do
-      if bytes_read > 0
-        dest.rewind
-        dest.truncate(0)
-        bytes_read = 0
-      end
-    end
-
-    validate_hash(enable: integrity_check) do |hash_context|
-      CanvasHttp.get(public_url(internal: true)) do |response|
-        raise FailedResponse, "Expected 200, got #{response.code}: #{response.body}" unless response.code.to_i == 200
-
-        response.read_body do |data|
-          bytes_read += data.size
-          dest << data if dest
-          yield(data) if block
-          hash_context.update(data) if hash_context
-        end
-      end
-    end
-  rescue FailedResponse, Net::ReadTimeout, Net::OpenTimeout, IOError, Errno::ECONNRESET, Errno::ECONNABORTED, Errno::ETIMEDOUT => e
-    if can_retry.call && (retries += 1) < STREAMING_DOWNLOAD_RETRIES
-      Canvas::Errors.capture_exception(:attachment, e, :info)
-      prep_retry.call
-      retry
-    else
-      raise e
-    end
-  rescue CorruptedDownload => e
-    if can_retry.call && (corrupt_retries += 1) < CORRUPT_DOWNLOAD_RETRIES
-      Canvas::Errors.capture_exception(:attachment, e, :info)
-      prep_retry.call
-      retry
-    else
-      raise e
-    end
-  end
-
   # used by #open or its dependencies with integrity_check: true
   def validate_hash(enable: true)
     # the md5 column is probably actually a SHA512 unless this file is old, in which case it
@@ -1206,7 +1174,7 @@ class Attachment < ActiveRecord::Base
                                file_state_changed? &&
                                file_state == "available" &&
                                context.respond_to?(:state) && context.state == :available &&
-                               folder && folder.visible?
+                               folder&.visible?
   end
 
   def notify_only_admins?
@@ -1272,7 +1240,7 @@ class Attachment < ActiveRecord::Base
   protected :truncate_display_name
 
   def readable_size
-    ActiveSupport::NumberHelper.number_to_human_size(size) rescue "size unknown"
+    ActiveSupport::NumberHelper.number_to_human_size(size) || "size unknown"
   end
 
   def disposition_filename
@@ -1432,19 +1400,23 @@ class Attachment < ActiveRecord::Base
     # grader
     return true if assignment.grants_right?(user, session, :grade)
 
-    # submitter
+    # submitter (or observer of submitter)
     assignment.shard.activate do
-      student_submission = assignment.submissions.active.where(user_id: user)
-      student_submission.where("#{id}=any(regexp_split_to_array(nullif(submissions.attachment_ids,''), ',')::INT8[])")
-                        .union(
-                          student_submission.joins(:versions)
-                            .where(%(#{id}=any(regexp_split_to_array((regexp_match(versions.yaml,'attachment_ids: [''"]([0-9,]+)[''"]'))[1], ',')::INT8[])))
-                        )
-                        .union(
-                          student_submission.joins(:submission_comments)
-                            .merge(SubmissionComment.published.visible)
-                            .where("#{id}=any(regexp_split_to_array(nullif(submission_comments.attachment_ids,''), ',')::INT8[])")
-                        ).exists?
+      # Search submissions for the user, or any user they are observing
+      search_users = [user].concat(
+        ObserverEnrollment.observed_students(assignment.context, user, grade_summary: true).keys
+      )
+      student_submissions = assignment.submissions.active.where(user_id: search_users)
+      student_submissions.where("#{id}=any(regexp_split_to_array(nullif(submissions.attachment_ids,''), ',')::INT8[])")
+                         .union(
+                           student_submissions.joins(:versions)
+                             .where(%(#{id}=any(regexp_split_to_array((regexp_match(versions.yaml,'attachment_ids: [''"]([0-9,]+)[''"]'))[1], ',')::INT8[])))
+                         )
+                         .union(
+                           student_submissions.joins(:submission_comments)
+                             .merge(SubmissionComment.published.visible)
+                             .where("#{id}=any(regexp_split_to_array(nullif(submission_comments.attachment_ids,''), ',')::INT8[])")
+                         ).exists?
     end
   end
 
@@ -1537,27 +1509,13 @@ class Attachment < ActiveRecord::Base
     end
     can :manage_assign_to
 
-    #################### Begin legacy permission block #########################
     given do |user|
-      !root_account.feature_enabled?(:granular_permissions_manage_course_content) &&
-        ((self.user && self.user == user) || context&.grants_right?(user, :manage_content))
-    end
-    can :add_captions and can :delete_captions
-
-    given do |user|
-      !root_account.feature_enabled?(:granular_permissions_manage_course_content) &&
-        Account.site_admin.feature_enabled?(:media_links_use_attachment_id) && grants_right?(user, :update)
-    end
-    can :add_captions and can :delete_captions
-    ##################### End legacy permission block ##########################
-
-    given do |user|
-      root_account.feature_enabled?(:granular_permissions_manage_course_content) && grants_right?(user, :update)
+      grants_right?(user, :update)
     end
     can :add_captions
 
     given do |user|
-      root_account.feature_enabled?(:granular_permissions_manage_course_content) && grants_right?(user, :update)
+      grants_right?(user, :update)
     end
     can :delete_captions
   end
@@ -1600,7 +1558,7 @@ class Attachment < ActiveRecord::Base
       end
       if unlock_at && Time.zone.now < unlock_at
         locked = { asset_string:, unlock_at: }
-      elsif lock_at && Time.now > lock_at
+      elsif lock_at && Time.zone.now > lock_at
         locked = { asset_string:, lock_at: }
       elsif could_be_locked && (item = locked_by_module_item?(user, opts))
         locked = { asset_string:, context_module: item.context_module.attributes.slice(*LockedFor::MODULE_ATTRIBUTES) }
@@ -1764,6 +1722,7 @@ class Attachment < ActiveRecord::Base
               .union(ContentTag.not_deleted.where(context_type: "Attachment", context_id: attachments))
               .find_each(&:destroy)
     while MediaObject.where(attachment_id: attachments).limit(1000).update_all(attachment_id: nil, updated_at: Time.now.utc) > 0 do end
+    Lti::Asset.where(attachment_id: attachments).in_batches(of: 1000).destroy_all
     # if the attachment being deleted belongs to a user and the uuid (hash of file) matches the avatar_image_url
     # then clear the avatar_image_url value.
     User.joins("INNER JOIN #{Attachment.quoted_table_name} ON attachments.context_id = users.id
@@ -1799,29 +1758,43 @@ class Attachment < ActiveRecord::Base
   def destroy_content_and_replace(deleted_by_user = nil)
     shard.activate do
       file_removed_path = self.class.file_removed_path
-      new_name = File.basename(file_removed_path)
+      placeholder_filename = File.basename(file_removed_path)
       att = root_attachment_id? ? root_attachment : self
-      return true if att.display_name == new_name
+      content_already_replaced = att.display_name == placeholder_filename
+      return true if content_already_replaced
 
       att.send_to_purgatory(deleted_by_user) unless Purgatory.where(attachment_id: att).active.exists?
       att.destroy_content
       att.thumbnail&.destroy
 
-      if att.instfs_hosted? && InstFS.enabled?
+      if InstFS.enabled?
         # duplicate the base file_removed file to a unique uuid
         att.instfs_uuid = InstFS.duplicate_file(Attachment.file_removed_base_instfs_uuid)
       else
         Attachments::Storage.store_for_attachment(att, File.open(file_removed_path))
       end
-      att.filename = new_name
-      att.display_name = new_name
-      att.content_type = "application/pdf"
-      CrocodocDocument.where(attachment_id: att.children_and_self.select(:id)).delete_all
-      canvadoc_scope = Canvadoc.where(attachment_id: att.children_and_self.select(:id))
+      attachment_ids = att.children_and_self.select(:id)
+      CrocodocDocument.where(attachment_id: attachment_ids).delete_all
+      canvadoc_scope = Canvadoc.where(attachment_id: attachment_ids)
       CanvadocsSubmission.where(canvadoc_id: canvadoc_scope.select(:id)).delete_all
       AnonymousOrModerationEvent.where(canvadoc_id: canvadoc_scope.select(:id)).delete_all
       canvadoc_scope.delete_all
+
+      att.filename = placeholder_filename
+      att.display_name = placeholder_filename
+      att.content_type = "application/pdf"
       att.save!
+
+      # update copies as well to avoid broken file references.
+      att.children.find_each do |copy_attachment|
+        copy_attachment.filename = placeholder_filename
+        copy_attachment.display_name = placeholder_filename
+        copy_attachment.content_type = "application/pdf"
+        copy_attachment.instfs_uuid = att.instfs_uuid
+        copy_attachment.md5 = att.md5
+        copy_attachment.size = att.size
+        copy_attachment.save!
+      end
     end
   end
 
@@ -1964,7 +1937,11 @@ class Attachment < ActiveRecord::Base
     return unless filename
 
     if instfs_hosted?
-      InstFS.delete_file(instfs_uuid)
+      begin
+        InstFS.delete_file(instfs_uuid)
+      rescue InstFS::DeletionError => e
+        Rails.logger.warn("InstFS file deletion failed for attachment #{id}: #{e.message}")
+      end
       self.instfs_uuid = nil
     elsif Attachment.s3_storage?
       s3object.delete unless ApplicationController.test_cluster?
@@ -2006,25 +1983,6 @@ class Attachment < ActiveRecord::Base
     Attachment.where(root_attachment_id: self).where.not(id: child).in_batches.update_all(root_attachment_id: child.id)
   end
 
-  private def service_side_clone(destination)
-    return false unless shard.region == destination.shard.region
-
-    if Attachment.s3_storage? && filename && s3object.exists?
-      if destination.new_record? # the attachment id is part of the s3 object name
-        destination.content_type ||= content_type # needed for the validation
-        destination.save_without_broadcasting!
-      end
-      s3object.copy_to(destination.s3object) unless destination.s3object.exists?
-      destination.run_after_attachment_saved
-      true
-    elsif instfs_hosted?
-      destination.instfs_uuid = InstFS.duplicate_file(instfs_uuid)
-      true
-    else
-      false
-    end
-  end
-
   def copy_attachment_content(destination, split_root_attachment: false)
     # parent is broken; if child is probably broken too, make sure it gets marked as broken
     if file_state == "broken" && destination.md5.nil?
@@ -2038,24 +1996,8 @@ class Attachment < ActiveRecord::Base
       destination.md5 = md5
       destination.workflow_state = "processed"
     else
-      begin
-        if split_root_attachment
-          old_content_type = content_type
-          scope = Attachment.where(md5:, namespace:, root_attachment_id: nil)
-          # prevents find_existing_attachment_for_md5 from reattaching the child to the old root
-          scope.where.not(content_type: "invalid/invalid")
-               .in_batches
-               .update_all(content_type: "invalid/invalid")
-        end
-        Attachments::Storage.store_for_attachment(destination, open)
-      ensure
-        if split_root_attachment
-          scope.where.not(id: destination)
-               .where.not(content_type: old_content_type)
-               .in_batches
-               .update_all(content_type: old_content_type)
-        end
-      end
+      destination.avoid_linking_to_root_attachment = true if split_root_attachment
+      Attachments::Storage.store_for_attachment(destination, open)
     end
   end
 
@@ -2224,6 +2166,15 @@ class Attachment < ActiveRecord::Base
     "#{folder_path}/#{display_name}"
   end
 
+  def sanitized_full_display_path
+    # Produce a path that is cross-platform compatible by removing
+    # chars considered invalid by some OSes, e.g. colon in Windows
+    full_display_path
+      .split("/")
+      .map { |segment| segment.gsub(/[^a-zA-Z0-9\-_.]/, "_") }
+      .join("/")
+  end
+
   def matches_full_display_path?(path)
     fd_path = full_display_path
     fd_path == path || URI::DEFAULT_PARSER.unescape(fd_path) == path || fd_path.casecmp?(path) || URI::DEFAULT_PARSER.unescape(fd_path).casecmp?(path)
@@ -2257,10 +2208,10 @@ class Attachment < ActiveRecord::Base
       list.unshift(Folder.root_folders(context).first.name)
     end
     filename = list.pop
-    folder = context.folder_name_lookups[list.join("/")] rescue nil
-    folder ||= context.folders.active.where(full_name: list.join("/")).first
+    full_name = list.join("/")
     context.folder_name_lookups ||= {}
-    context.folder_name_lookups[list.join("/")] = folder
+    folder = context.folder_name_lookups[full_name] ||=
+      context.folders.active.where(full_name:).first
     file = nil
     if folder
       file = folder.file_attachments.where(filename:).first
@@ -2373,7 +2324,11 @@ class Attachment < ActiveRecord::Base
     Canvas::Reloader.on_reload { Attachment.reset_clone_url_strand_overrides }
 
     def clone_url_strand(url)
-      _, uri = CanvasHttp.validate_url(url) rescue nil
+      begin
+        _, uri = CanvasHttp.validate_url(url)
+      rescue URI::InvalidURIError, ArgumentError, CanvasHttp::RelativeUriError, CanvasHttp::InsecureUriError
+        # ignore
+      end
       return "file_download" unless uri&.host
       return ["file_download", clone_url_strand_overrides[uri.host]] if clone_url_strand_overrides[uri.host]
 
@@ -2591,7 +2546,7 @@ class Attachment < ActiveRecord::Base
 
       from_attachments.each do |attachment|
         match = to_attachments.detect { |a| attachment.matches_full_display_path?(a.full_display_path) }
-        next if match && (match.md5&.== attachment.md5)
+        next if match&.md5&.== attachment.md5
 
         if to_context.is_a? User
           attachment.user_id = to_context.id
@@ -2609,7 +2564,12 @@ class Attachment < ActiveRecord::Base
                               if (existing_attachment = new_attachment.find_existing_attachment_for_md5)
                                 new_attachment.root_attachment = existing_attachment
                               else
-                                attachment.copy_attachment_content(new_attachment)
+                                begin
+                                  attachment.copy_attachment_content(new_attachment)
+                                rescue Aws::S3::Errors::NoSuchKey => e
+                                  Canvas::Errors.capture_exception(:attachment, e, :warn)
+                                  next
+                                end
                               end
                               new_attachment
                             end
@@ -2697,5 +2657,79 @@ class Attachment < ActiveRecord::Base
     vl = context.files_visibility_option if vl == "inherit"
     vl = "context" if vl == context.class.name.downcase
     vl
+  end
+
+  private
+
+  # GETs this attachment's public_url and streams the response to the
+  # passed block; this is a helper function for #open
+  # (you should call #open instead of this)
+  def streaming_download(dest = nil, integrity_check: false, &block)
+    retries ||= 0
+    corrupt_retries ||= 0
+    bytes_read ||= 0
+
+    # avoid corrupting the output stream if we retry after data has been received
+    can_retry = -> { bytes_read == 0 || (!block && dest.respond_to?(:rewind) && dest.respond_to?(:truncate)) }
+    prep_retry = lambda do
+      if bytes_read > 0
+        dest.rewind
+        dest.truncate(0)
+        bytes_read = 0
+      end
+    end
+
+    validate_hash(enable: integrity_check) do |hash_context|
+      CanvasHttp.get(public_url(internal: true)) do |response|
+        raise FailedResponse, "Expected 200, got #{response.code}: #{response.body}" unless response.code.to_i == 200
+
+        response.read_body do |data|
+          bytes_read += data.size
+          dest << data if dest
+          yield(data) if block
+          hash_context&.update(data)
+        end
+      end
+    end
+  rescue FailedResponse, Net::ReadTimeout, Net::OpenTimeout, IOError, Errno::ECONNRESET, Errno::ECONNABORTED, Errno::ETIMEDOUT => e
+    if can_retry.call && (retries += 1) < STREAMING_DOWNLOAD_RETRIES
+      Canvas::Errors.capture_exception(:attachment, e, :info)
+      prep_retry.call
+      retry
+    else
+      raise e
+    end
+  rescue CorruptedDownload => e
+    if can_retry.call && (corrupt_retries += 1) < CORRUPT_DOWNLOAD_RETRIES
+      Canvas::Errors.capture_exception(:attachment, e, :info)
+      prep_retry.call
+      retry
+    else
+      raise e
+    end
+  end
+
+  def service_side_clone(destination)
+    return false unless shard.region == destination.shard.region
+
+    if instfs_hosted?
+      begin
+        destination.instfs_uuid = InstFS.duplicate_file(instfs_uuid)
+        true
+      rescue InstFS::DuplicationError => e
+        Canvas::Errors.capture_exception(:attachment, e, :warn)
+        false
+      end
+    elsif Attachment.s3_storage? && filename && s3object.exists?
+      if destination.new_record? # the attachment id is part of the s3 object name
+        destination.content_type ||= content_type # needed for the validation
+        destination.save_without_broadcasting!
+      end
+      s3object.copy_to(destination.s3object) unless destination.s3object.exists?
+      destination.run_after_attachment_saved
+      true
+    else
+      false
+    end
   end
 end

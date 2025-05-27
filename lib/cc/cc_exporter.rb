@@ -183,22 +183,18 @@ module CC
       @content_export && !(@qti_only_export || epub_export?)
     end
 
-    def include_new_quizzes_in_export?
-      @content_export.include_new_quizzes_in_export?
-    end
+    delegate :include_new_quizzes_in_export?, to: :@content_export
 
     def new_quizzes_export_url
       @content_export.settings[:new_quizzes_export_url]
     end
 
-    def common_cartridge?
-      @content_export.common_cartridge?
-    end
+    delegate :common_cartridge?, to: :@content_export
 
     private
 
     def discussion_checkpoints_enabled?
-      @content_export&.context&.root_account&.feature_enabled?(:discussion_checkpoints) || false
+      @content_export&.context&.discussion_checkpoints_enabled? || false
     end
 
     def copy_all_to_zip
@@ -206,7 +202,9 @@ module CC
         file_path = file.sub(@export_dir + "/", "")
         next if file_path.starts_with? ZIP_DIR
 
-        @zip_file.add(file_path, file)
+        unless @zip_file.find_entry(file_path)
+          @zip_file.add(file_path, file)
+        end
       end
     end
 

@@ -82,6 +82,23 @@ describe Api::V1::Submission do
   end
 
   describe "#submission_json" do
+    context "when file_association_access feature flag is enabled" do
+      let(:attachment) { attachment_model(content_type: "application/pdf", context: teacher) }
+
+      before do
+        attachment.root_account.enable_feature!(:file_association_access)
+        fake_controller.instance_variable_set(:@domain_root_account, attachment.root_account)
+      end
+
+      it "should add asset location tag to the submission json body" do
+        student = course_with_user("StudentEnrollment", course:, active_all: true, name: "Student").user
+        submission = assignment.submit_homework(student, submission_type: "online_upload", body: "<img src='/users/#{teacher.id}/files/#{attachment.id}'>", attachments: [attachment])
+        json = fake_controller.submission_json(submission, assignment, teacher, session, context)
+
+        expect(json["body"]).to include("location=#{submission.asset_string}")
+      end
+    end
+
     context "when discussion_checkpoints feature flag is enabled" do
       let(:field) { "sub_assignment_submissions" }
 
@@ -133,6 +150,29 @@ describe Api::V1::Submission do
         json = fake_controller.submission_json(submission, assignment, teacher, session, assignment.context, field, params)
         expect(json["has_sub_assignment_submissions"]).to be false
         expect(json["sub_assignment_submissions"]).to be_empty
+      end
+
+      it "sets needs grading fields if a submission checkpoint needs grading" do
+        student = course_with_user("StudentEnrollment", course:, active_all: true, name: "Student").user
+        parent_assignment = course.assignments.create!(title: "Assignment 1", has_sub_assignments: true, submission_types: "discussion_topics")
+        parent_submission = parent_assignment.submissions.find_by(user_id: student.id)
+        topic_sub_assignment = parent_assignment.sub_assignments.create!(context: parent_assignment.context, sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC, points_possible: 5, due_at: 3.days.from_now, submission_types: "discussion_topics")
+        parent_assignment.sub_assignments.create!(context: parent_assignment.context, sub_assignment_tag: CheckpointLabels::REPLY_TO_ENTRY, points_possible: 10, due_at: 5.days.from_now, submission_types: "discussion_topics")
+        topic_sub_assignment.submit_homework(student, submission_type: "discussion_topics")
+
+        json = fake_controller.submission_json(parent_submission, parent_assignment, teacher, session, parent_assignment.context, field, params)
+        # gradebook uses these fields to determine a submission needs grading
+        expect(json["workflow_state"]).to  eq("pending_review")
+        expect(json["submission_type"]).to eq("discussion_topics")
+      end
+
+      it "respects submission_type if submission.needs_grading" do
+        student = course_with_user("StudentEnrollment", course:, active_all: true, name: "Student").user
+        assignment = course.assignments.create!(title: "Assignment 1", has_sub_assignments: true)
+        submission = assignment.submit_homework(student, submission_type: "online_text_entry", body: "pay attention to me")
+
+        json = fake_controller.submission_json(submission, assignment, teacher, session, assignment.context, field, params)
+        expect(json["submission_type"]).to eq("online_text_entry")
       end
     end
 

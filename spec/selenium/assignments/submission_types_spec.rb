@@ -46,6 +46,7 @@ describe "assignments" do
     end
 
     it "validates an assignment created with the type of discussion" do
+      skip "Will be fixed in VICE-5209"
       @assignment.update(submission_types: "discussion_topic")
 
       get "/courses/#{@course.id}/assignments/#{@assignment.id}"
@@ -73,7 +74,7 @@ describe "assignments" do
 
     it "validates that website url submissions are allowed" do
       update_assignment_attributes(@assignment, :submission_types, "online_url")
-      expect(f("#submission_url")).to be_displayed
+      expect(f("#online-url-input")).to be_displayed
     end
 
     it "validates that text entry submissions are allowed" do

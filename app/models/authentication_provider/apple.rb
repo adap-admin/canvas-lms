@@ -24,13 +24,7 @@ class AuthenticationProvider::Apple < AuthenticationProvider::OpenIDConnect
   self.plugin = :apple
   plugin_settings :client_id, client_secret: :client_secret_dec
 
-  SENSITIVE_PARAMS = [:client_secret].freeze
-
   class << self
-    def display_name
-      "Sign in with Apple"
-    end
-
     def login_message
       display_name
     end
@@ -51,6 +45,10 @@ class AuthenticationProvider::Apple < AuthenticationProvider::OpenIDConnect
       [*(super - open_id_connect_params), :login_attribute, :jit_provisioning].freeze
     end
 
+    def sensitive_params
+      [*super, :client_secret].freeze
+    end
+
     def recognized_federated_attributes
       %w[
         email
@@ -67,10 +65,6 @@ class AuthenticationProvider::Apple < AuthenticationProvider::OpenIDConnect
     # few enough schools use Apple auth, that we can just use the regular cache
     def jwks_cache
       Rails.cache
-    end
-
-    def always_validate?
-      true
     end
   end
   validates :login_attribute, inclusion: login_attributes
@@ -99,7 +93,7 @@ class AuthenticationProvider::Apple < AuthenticationProvider::OpenIDConnect
     "https://appleid.apple.com/auth/keys"
   end
 
-  def persist_to_session(_session, _token)
+  def persist_to_session(_request, _session, _pseudonym, _domain_root_account, _token)
     # Apple doesn't support single log out of any kind;
     # don't waste space in the session supporting it
   end

@@ -17,13 +17,13 @@
  */
 
 import React from 'react'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {Button, CloseButton} from '@instructure/ui-buttons'
 import {Heading} from '@instructure/ui-heading'
 import {Modal} from '@instructure/ui-modal'
 import type {Rubric} from '../../types/rubric'
 
-const I18n = useI18nScope('enhanced-rubrics-copy-edit-modal')
+const I18n = createI18nScope('enhanced-rubrics-copy-edit-modal')
 
 type CopyEditConfirmModalProps = {
   accountMasterScalesEnabled: boolean
@@ -47,7 +47,7 @@ export const CopyEditConfirmModal = ({
         "You can't edit this " +
           "rubric, either because you don't have permission " +
           "or it's being used in more than one place. Any " +
-          'changes you make will result in a new rubric based on the old rubric. Continue anyway?'
+          'changes you make will result in a new rubric based on the old rubric. Continue anyway?',
       )
     }
     if (contextAssetString.includes('course')) {
@@ -55,14 +55,14 @@ export const CopyEditConfirmModal = ({
         "You can't edit this " +
           "rubric, either because you don't have permission " +
           "or it's being used in more than one place. Any " +
-          'changes you make will result in a new rubric. Any associated outcome criteria will use the course mastery scale. Continue anyway?'
+          'changes you make will result in a new rubric. Any associated outcome criteria will use the course mastery scale. Continue anyway?',
       )
     } else {
       return I18n.t(
         "You can't edit this " +
           "rubric, either because you don't have permission " +
           "or it's being used in more than one place. Any " +
-          'changes you make will result in a new rubric. Any associated outcome criteria will use the account mastery scale. Continue anyway?'
+          'changes you make will result in a new rubric. Any associated outcome criteria will use the account mastery scale. Continue anyway?',
       )
     }
   }

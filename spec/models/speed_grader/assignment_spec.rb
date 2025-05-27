@@ -247,6 +247,56 @@ describe SpeedGrader::Assignment do
     end
   end
 
+  context "discussions assignment" do
+    before do
+      Account.site_admin.enable_feature! :discussion_checkpoints
+      Account.site_admin.enable_feature!(:react_discussions_post)
+
+      @teacher = teacher_in_course(active_all: true, name: "teacher").user
+      @student1 = student_in_course(course: @course, name: "student", active_all: true).user
+      @student2 = student_in_course(course: @course, name: "student2", active_all: true).user
+      @course.root_account.enable_feature!(:discussion_checkpoints)
+
+      @checkpointed_discussion = DiscussionTopic.create_graded_topic!(course: @course, title: "Checkpointed Discussion")
+      @assignment = @checkpointed_assignment = @checkpointed_discussion.assignment
+
+      Checkpoints::DiscussionCheckpointCreatorService.call(
+        discussion_topic: @checkpointed_discussion,
+        checkpoint_label: CheckpointLabels::REPLY_TO_TOPIC,
+        dates: [{ type: "everyone", due_at: 2.days.from_now }],
+        points_possible: 5
+      )
+
+      Checkpoints::DiscussionCheckpointCreatorService.call(
+        discussion_topic: @checkpointed_discussion,
+        checkpoint_label: CheckpointLabels::REPLY_TO_ENTRY,
+        dates: [{ type: "everyone", due_at: 5.days.from_now }],
+        points_possible: 15,
+        replies_required: 3
+      )
+
+      3.times do |i|
+        entry = @checkpointed_discussion.discussion_entries.create!(user: @student1, message: " reply to topic i#{i} ")
+        @checkpointed_discussion.discussion_entries.create!(user: @student2, message: " reply to entry i#{i} ", root_entry_id: entry.id, parent_id: entry.id)
+      end
+
+      3.times do |j|
+        entry = @checkpointed_discussion.discussion_entries.create!(user: @student2, message: " reply to topic j#{j} ")
+        @checkpointed_discussion.discussion_entries.create!(user: @student1, message: " reply to entry j#{j} ", root_entry_id: entry.id, parent_id: entry.id)
+      end
+    end
+
+    let(:json) { SpeedGrader::Assignment.new(@checkpointed_assignment, @teacher).json }
+
+    it "returns the students entries ids in asc order" do
+      expect(json["student_entries"][@student1.id].last).to eq(DiscussionEntry.where(message: " reply to entry j2 ").first.id)
+      expect(json["student_entries"][@student1.id].first).to eq(DiscussionEntry.where(message: " reply to topic i0 ").first.id)
+
+      expect(json["student_entries"][@student2.id].last).to eq(DiscussionEntry.where(message: " reply to topic j2 ").first.id)
+      expect(json["student_entries"][@student2.id].first).to eq(DiscussionEntry.where(message: " reply to entry i0 ").first.id)
+    end
+  end
+
   context "students and active course sections" do
     before(:once) do
       @course = course_factory(active_course: true)
@@ -683,7 +733,7 @@ describe SpeedGrader::Assignment do
         expect(json["GROUP_GRADING_MODE"]).to be false
       end
 
-      context "when a course has new gradeook and filter by student group enabled" do
+      context "when a course has new gradebook and filter by student group enabled" do
         before(:once) do
           @course.root_account.enable_feature!(:filter_speed_grader_by_student_group)
           @course.update!(filter_speed_grader_by_student_group: true)
@@ -692,7 +742,7 @@ describe SpeedGrader::Assignment do
         context "when no group filter is present" do
           it "returns all students" do
             @teacher.preferences.deep_merge!(gradebook_settings: {
-                                               @course.id => { "filter_rows_by" => { "student_group_id" => nil } }
+                                               @course.id => { "filter_rows_by" => { "student_group_ids" => [] } }
                                              })
             json = SpeedGrader::Assignment.new(@assignment, @teacher).json
             json_students = json.fetch(:context).fetch(:students).map { |s| s.except(:rubric_assessments, :fake_student) }
@@ -707,7 +757,7 @@ describe SpeedGrader::Assignment do
 
           before(:once) do
             @teacher.preferences.deep_merge!(gradebook_settings: {
-                                               @course.global_id => { "filter_rows_by" => { "student_group_id" => group.id.to_s } }
+                                               @course.global_id => { "filter_rows_by" => { "student_group_ids" => [group.id.to_s] } }
                                              })
           end
 
@@ -737,9 +787,20 @@ describe SpeedGrader::Assignment do
           context "when the second group filter is present" do
             let(:group) { @second_group }
 
-            it "returns only students that belong to the second group" do
+            it "returns only students that belong to the second group when only the second group is selected" do
               @teacher.preferences.deep_merge!(gradebook_settings: {
-                                                 @course.global_id => { "filter_rows_by" => { "student_group_id" => group.id.to_s } }
+                                                 @course.global_id => { "filter_rows_by" => { "student_group_ids" => [group.id.to_s] } }
+                                               })
+              json = SpeedGrader::Assignment.new(@assignment, @teacher).json
+              json_students = json.fetch(:context).fetch(:students).map { |s| s.except(:rubric_assessments, :fake_student) }
+              group_students = group.users.as_json(include_root: false, only: %i[id name sortable_name])
+              StringifyIds.recursively_stringify_ids(group_students)
+              expect(json_students).to match_array(group_students)
+            end
+
+            it "returns only students from the second group/most recently selected group when both groups are selected" do
+              @teacher.preferences.deep_merge!(gradebook_settings: {
+                                                 @course.global_id => { "filter_rows_by" => { "student_group_ids" => [@first_group.id.to_s, group.id.to_s] } }
                                                })
               json = SpeedGrader::Assignment.new(@assignment, @teacher).json
               json_students = json.fetch(:context).fetch(:students).map { |s| s.except(:rubric_assessments, :fake_student) }
@@ -754,7 +815,7 @@ describe SpeedGrader::Assignment do
 
             it "returns all students rather than attempting to filter by the deleted group" do
               @teacher.preferences.deep_merge!(gradebook_settings: {
-                                                 @course.global_id => { "filter_rows_by" => { "student_group_id" => group.id.to_s } }
+                                                 @course.global_id => { "filter_rows_by" => { "student_group_ids" => [group.id.to_s] } }
                                                })
               group.destroy!
 
@@ -1753,6 +1814,68 @@ describe SpeedGrader::Assignment do
       json = SpeedGrader::Assignment.new(assignment, test_teacher).json
       keys = json["submissions"].first["submission_history"].first["submission"]["turnitin_data"].keys
       expect(keys).to include "test_key"
+    end
+  end
+
+  describe "asset reports" do
+    let(:assignment) do
+      @assignment = Assignment.create!(
+        title: "title",
+        context: @course,
+        submission_types: ["online_upload"]
+      )
+    end
+    let(:ap1) { lti_asset_processor_model(title: "ap 1", assignment:) }
+    let(:ap2) { lti_asset_processor_model(title: "ap 2", assignment:) }
+
+    before do
+      [ap1, ap2]
+      @teacher = teacher_in_course(course: assignment.course, active_all: true).user
+      @student1 = student_in_course(course: assignment.course, active_all: true).user
+      @student2 = student_in_course(course: assignment.course, active_all: true).user
+      @submission1 = assignment.submit_homework(@student1, submission_type: "online_upload", attachments: [attachment_model])
+      @submission2 = assignment.submit_homework(@student2, submission_type: "online_upload", attachments: [attachment_model])
+    end
+
+    it "returns reports' info_for_display_by_submission and processors' info_for_display" do
+      rep1 = { "processing_progress" => "Processing" }
+      rep2 = { "processing_progress" => "Failed", "error_code" => "EULA_NOT_ACCEPTED" }
+
+      expect(Lti::AssetReport).to receive(:info_for_display_by_submission) do |submission_ids:|
+        expect(submission_ids).to include(@submission1.id, @submission2.id)
+        {
+          @submission1.id => { by_attachment: { 123 => { ap1.id => [rep1] } } },
+          @submission2.id => { by_attachment: { 67 => { ap2.id => [rep2] } } }
+        }
+      end
+
+      json = SpeedGrader::Assignment.new(@assignment, @teacher).json
+      json = JSON.parse(json.to_json)
+
+      aps_json = json["lti_asset_processors"]
+      expect(aps_json).to match([
+                                  a_hash_including("id" => ap1.id.to_s, "title" => "ap 1", "tool_name" => ap1.context_external_tool.name),
+                                  a_hash_including("id" => ap2.id.to_s, "title" => "ap 2", "tool_name" => ap2.context_external_tool.name)
+                                ])
+
+      sub1 = json["submissions"].find { _1["id"] == @submission1.id.to_s }
+      sub2 = json["submissions"].find { _1["id"] == @submission2.id.to_s }
+      expect(sub1["lti_asset_reports"]).to eq({
+                                                "by_attachment" => { "123" => { ap1.id.to_s => [rep1] } }
+                                              })
+      expect(sub2["lti_asset_reports"]).to eq({
+                                                "by_attachment" => { "67" => { ap2.id.to_s => [rep2] } }
+                                              })
+    end
+
+    context "when info_for_display_by_submission returns no reports" do
+      it "doesn't not include lti_asset_reports or lti_asset_processors" do
+        expect(Lti::AssetReport).to receive(:info_for_display_by_submission).and_return({})
+        json = SpeedGrader::Assignment.new(@assignment, @teacher).json
+        expect(json).not_to have_key("lti_asset_reports")
+        expect(json["submissions"].first).not_to have_key("lti_asset_reports")
+        expect(json["submissions"].last).not_to have_key("lti_asset_reports")
+      end
     end
   end
 

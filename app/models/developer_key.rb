@@ -23,12 +23,17 @@ require "aws-sdk-sns"
 class DeveloperKey < ActiveRecord::Base
   class CacheOnAssociation < ActiveRecord::Associations::BelongsToAssociation
     def find_target
-      DeveloperKey.find_cached(owner.attribute(reflection.foreign_key))
+      if owner.instance_variable_get(:@skip_dev_key_cache)
+        super
+      else
+        DeveloperKey.find_cached(owner.attribute(reflection.foreign_key))
+      end
     end
   end
 
   CONFIDENTIAL_CLIENT_TYPE = "confidential"
   PUBLIC_CLIENT_TYPE = "public"
+  ALLOWED_AUTHORIZED_FLOWS = ["service_user_client_credentials"].freeze
 
   include CustomValidations
   include Workflow
@@ -37,16 +42,22 @@ class DeveloperKey < ActiveRecord::Base
   belongs_to :account
   belongs_to :root_account, class_name: "Account"
   belongs_to :service_user, class_name: "User"
-  belongs_to :lti_registration, class_name: "Lti::Registration", inverse_of: :developer_key, dependent: :destroy
-
+  belongs_to :lti_registration, class_name: "Lti::Registration", inverse_of: :developer_key
   has_many :page_views
   has_many :access_tokens, -> { where(workflow_state: "active") }
-  has_many :developer_key_account_bindings, inverse_of: :developer_key, dependent: :destroy
+  has_many :developer_key_account_bindings, inverse_of: :developer_key
   has_many :context_external_tools
 
   has_one :tool_consumer_profile, class_name: "Lti::ToolConsumerProfile", inverse_of: :developer_key
-  has_one :tool_configuration, class_name: "Lti::ToolConfiguration", dependent: :destroy, inverse_of: :developer_key
-  has_one :ims_registration, class_name: "Lti::IMS::Registration", dependent: :destroy, inverse_of: :developer_key
+  has_one :tool_configuration, class_name: "Lti::ToolConfiguration", inverse_of: :developer_key
+  # This *cannot* be dependent: :destroy. Lti::IMS::Registration includes Canvas::SoftDeletable, which overrides
+  # what it means to destroy a record. If we set this to dependent: :destroy, it will try to destroy the
+  # Lti::IMS::Registration, which will only set the workflow_state to deleted. Rails will then
+  # check to see if the record was actually deleted from the database, and if it wasn't,
+  # will abort the callback. This leaves us in a weird state where the developer key doesn't get "destroyed",
+  # but the IMS Registration does. Thus, we let the lti_registration take care of deleting
+  # all LTI associated records.
+  has_one :ims_registration, class_name: "Lti::IMS::Registration", inverse_of: :developer_key
   serialize :scopes, type: Array
 
   before_validation :normalize_public_jwk_url
@@ -64,7 +75,9 @@ class DeveloperKey < ActiveRecord::Base
   after_save :clear_cache
   after_update :invalidate_access_tokens_if_scopes_removed!
   after_update :destroy_external_tools!, if: :destroy_external_tools?
-  after_update :update_lti_registration
+  # See comment on destroy_associated_records! for why we don't use
+  # lifecycle callbacks here.
+  before_destroy :destroy_associated_records!
 
   validates :client_type, inclusion: { in: [PUBLIC_CLIENT_TYPE, CONFIDENTIAL_CLIENT_TYPE] }
   validates_as_url :redirect_uri, :oidc_initiation_url, :public_jwk_url, allowed_schemes: nil
@@ -72,6 +85,7 @@ class DeveloperKey < ActiveRecord::Base
   validate :validate_public_jwk
   validate :validate_lti_fields
   validate :validate_flag_combinations
+  validate :validate_authorized_flows
 
   attr_reader :private_jwk
   attr_accessor :skip_lti_sync, :current_user
@@ -111,8 +125,11 @@ class DeveloperKey < ActiveRecord::Base
 
   alias_method :destroy_permanently!, :destroy
   def destroy
+    return true if deleted?
+
     self.workflow_state = "deleted"
-    save
+    destroy_associated_records!
+    save!
   end
 
   def confidential_client?
@@ -186,6 +203,22 @@ class DeveloperKey < ActiveRecord::Base
 
   def set_visible
     self.visible = !site_admin?
+  end
+
+  def destroy_associated_records!
+    # You might wonder why we aren't using lifecycle callbacks here.
+    # The answer is that if we do, Rails will also try to destroy the IMS Registration.
+    # However, Lti::IMS::Registration includes Canvas::SoftDeletable,
+    # which means that `destroy` only sets the workflow_state to deleted. Rails will then
+    # go "Hey, I called destroy but you didn't get actually get deleted from the database! Abort!"
+    # and then we'll be left in a weird state where the developer key doesn't get "destroyed",
+    # but the IMS Registration does. Additionally, the order here is important, as we need to
+    # destroy the tool configuration before the LTI registration and IMS registration.
+    tool_configuration&.destroy
+    lti_registration&.destroy
+    ims_registration&.destroy
+    lti_registration&.destroy
+    developer_key_account_bindings&.find_each(&:destroy)
   end
 
   class << self
@@ -306,6 +339,21 @@ class DeveloperKey < ActiveRecord::Base
     false
   end
 
+  # Verify that the given uri has the same scheme, domain and port as this key's
+  # redirect_uri's.
+  def redirect_uri_matches?(redirect_uri)
+    return false if redirect_uri.blank?
+
+    normalized_redirect_uri = Addressable::URI.parse(redirect_uri).normalized_site
+    return false if normalized_redirect_uri.blank?
+    return true if redirect_uris.include?(redirect_uri)
+
+    redirect_uris.map { |uri| Addressable::URI.parse(uri).normalized_site }
+                 .include?(normalized_redirect_uri)
+  rescue Addressable::URI::InvalidURIError
+    false
+  end
+
   def account_binding_for(binding_account)
     # If no account was specified return nil to prevent unneeded searching
     return if binding_account.blank?
@@ -387,11 +435,18 @@ class DeveloperKey < ActiveRecord::Base
   def tokens_expire_in
     return nil unless mobile_app? || public_client?
 
-    # By default, public clients have a two-hour rolling refresh window
-    return Setting.get("public_client_token_ttl", "120").to_f.minutes if public_client?
+    # By default, non-mobile public clients have a two-hour rolling refresh window
+    return Setting.get("public_client_token_ttl", "120").to_f.minutes if public_client? && !mobile_app?
 
+    # Public client mobile apps expiration is configurable by the sessions plugin
+    # and falls back to a globally-configurable default, so these tokens always expire
     sessions_settings = Canvas::Plugin.find("sessions").settings || {}
-    sessions_settings[:mobile_timeout]&.to_f&.minutes
+    configured_timeout = sessions_settings[:mobile_timeout]&.to_f&.minutes
+    return configured_timeout || Setting.get("mobile_public_client_token_ttl_days", "90").to_f.days if public_client?
+
+    # Confidential client mobile apps expiration is configurable by the sessions plugin
+    # and might be nil (meaning no expiration)
+    configured_timeout
   end
 
   # In an OAuth context, setting this field to true means that access tokens
@@ -410,13 +465,10 @@ class DeveloperKey < ActiveRecord::Base
   # If true, this key can be used for "service authentication" (a token request
   # using a client_credentials grant type and a pre-determined service user).
   #
-  # For now we will only allow this pattern for internal services in the
-  # site admin account.
+  # This pattern is only supported for keys with
+  # "service_user_client_credentials" in authorized_flows.
   def site_admin_service_auth?
-    Account.site_admin.feature_enabled?(:site_admin_service_auth) &&
-      service_user.present? &&
-      internal_service? &&
-      site_admin?
+    authorized_flows.include?("service_user_client_credentials") && service_user.present?
   end
 
   def tool_configuration
@@ -435,29 +487,15 @@ class DeveloperKey < ActiveRecord::Base
                                              created_by: current_user,
                                              updated_by: current_user,
                                              admin_nickname: name,
-                                             name: tool_configuration&.settings&.dig("title") || "Unnamed tool",
+                                             name: tool_configuration_name,
                                              workflow_state:,
                                              ims_registration:,
-                                             skip_lti_sync: true,
                                              manual_configuration: referenced_tool_configuration)
     lti_registration.save!
   end
 
-  def update_lti_registration
-    return unless is_lti_key?
-    return if skip_lti_sync
-
-    if lti_registration.blank?
-      create_lti_registration
-      return
-    end
-
-    lti_registration.update!(name: tool_configuration&.settings&.dig("title") || "Unnamed tool",
-                             admin_nickname: name,
-                             updated_by: current_user,
-                             workflow_state:,
-                             skip_lti_sync: true,
-                             manual_configuration: referenced_tool_configuration)
+  def tool_configuration_name
+    tool_configuration&.internal_lti_configuration&.dig(:title) || "Unnamed tool"
   end
 
   def validate_lti_fields
@@ -531,7 +569,7 @@ class DeveloperKey < ActiveRecord::Base
     tags = { method: }
     latency = (Time.zone.now.to_i - start_time) * 1000 # ms for DD
 
-    InstStatsd::Statsd.increment("#{stat_prefix}.count", tags:)
+    InstStatsd::Statsd.distributed_increment("#{stat_prefix}.count", tags:)
     InstStatsd::Statsd.timing("#{stat_prefix}.latency", latency, tags:)
 
     if exception
@@ -596,7 +634,7 @@ class DeveloperKey < ActiveRecord::Base
         lti_registration.new_external_tool(
           tool.context,
           existing_tool: tool
-        ).save
+        )
       end
     end
   end
@@ -645,17 +683,10 @@ class DeveloperKey < ActiveRecord::Base
   def validate_public_jwk
     return if public_jwk.blank?
 
-    if Account.site_admin.feature_enabled?(:lti_report_multiple_schema_validation_errors)
-      jwk_errors = Schemas::Lti::PublicJwk.simple_validation_errors(public_jwk)
-      return if jwk_errors.nil?
+    jwk_errors = Schemas::Lti::PublicJwk.simple_validation_errors(public_jwk)
+    return if jwk_errors.nil?
 
-      jwk_errors.each { |error| errors.add :public_jwk, error }
-    else
-      jwk_errors = Schemas::Lti::PublicJwk.simple_validation_first_error(public_jwk)
-      return if jwk_errors.blank?
-
-      errors.add :public_jwk, jwk_errors
-    end
+    jwk_errors.each { |error| errors.add :public_jwk, error }
   end
 
   def invalidate_access_tokens_if_scopes_removed!
@@ -689,5 +720,13 @@ class DeveloperKey < ActiveRecord::Base
 
   def site_admin?
     account_id.nil?
+  end
+
+  def validate_authorized_flows
+    return if authorized_flows.blank?
+
+    invalid_flows = authorized_flows.reject { |af| ALLOWED_AUTHORIZED_FLOWS.include?(af) }
+    errors.add(:authorized_flows, "contains invalid values: #{invalid_flows.join(", ")}") if invalid_flows.present?
+    errors.add(:authorized_flows, "contains duplicate values") if authorized_flows.uniq.length != authorized_flows.length
   end
 end

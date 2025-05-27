@@ -19,13 +19,15 @@
 import React from 'react'
 import {Flex} from '@instructure/ui-flex'
 import {Button} from '@instructure/ui-buttons'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 
-const I18n = useI18nScope('SpeedGraderDiscussionsNavigation')
+const I18n = createI18nScope('SpeedGraderDiscussionsNavigation')
 
 export const SpeedGraderDiscussionsNavigation = () => {
+  // @ts-expect-error
   function sendPostMessage(message) {
     const iframe = document.getElementById('speedgrader_iframe')
+    // @ts-expect-error
     const iframeDoc = iframe.contentDocument || iframe.contentWindow.document
     const discussion_iframe = iframeDoc?.getElementById('discussion_preview_iframe')
     const contentWindow = discussion_iframe?.contentWindow

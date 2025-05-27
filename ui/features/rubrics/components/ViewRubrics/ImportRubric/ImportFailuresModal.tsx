@@ -18,16 +18,17 @@
 
 import React from 'react'
 import _ from 'lodash'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {Modal} from '@instructure/ui-modal'
 import {Heading} from '@instructure/ui-heading'
 import {Button, CloseButton} from '@instructure/ui-buttons'
 import {List} from '@instructure/ui-list'
 import {Text} from '@instructure/ui-text'
 import {View} from '@instructure/ui-view'
+// @ts-expect-error
 import type {RubricImport} from '../../../types/Rubric'
 
-const I18n = useI18nScope('rubrics-import-failure-modal')
+const I18n = createI18nScope('rubrics-import-failure-modal')
 
 type ImportFailuresModalProps = {
   isOpen: boolean
@@ -42,11 +43,12 @@ export const ImportFailuresModal = ({
   const {fileNames, messages} = rubricImports.reduce(
     (prev, curr) => {
       prev.fileNames.push(curr.attachment.filename)
+      // @ts-expect-error
       prev.messages.push(...curr.errorData.map(x => x.message))
 
       return prev
     },
-    {fileNames: [] as string[], messages: [] as string[]}
+    {fileNames: [] as string[], messages: [] as string[]},
   )
 
   return (
@@ -65,8 +67,8 @@ export const ImportFailuresModal = ({
         <View as="div" data-testid="import-rubric-failure-header">
           {I18n.t('The import failed for the following file(s):')}
         </View>
+        {/* @ts-expect-error */}
         {fileNames.map((fileName, i) => (
-          /* eslint-disable-next-line react/no-array-index-key */
           <View as="div" margin="x-small 0 0" key={`${fileName}-${i}`}>
             <Text weight="bold">{fileName}</Text>
           </View>
@@ -78,6 +80,7 @@ export const ImportFailuresModal = ({
           <List margin="0 0 medium">
             {_.uniq(messages).map(message => (
               <List.Item data-testid="import-failure-message" key={`${message}`}>
+                {/* @ts-expect-error */}
                 {message}
               </List.Item>
             ))}

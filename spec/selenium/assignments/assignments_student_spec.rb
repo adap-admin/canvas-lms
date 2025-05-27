@@ -178,7 +178,7 @@ describe "assignments" do
 
       get "/courses/#{@course.id}/assignments/#{locked_assignment.id}"
       expect(f("#content")).to include_text(format_date_for_view(unlock_time))
-      locked_assignment.update(unlock_at: Time.now)
+      locked_assignment.update(unlock_at: Time.zone.now)
       refresh_page # to show the updated assignment
       expect(f("#content")).not_to include_text("This assignment is locked until")
     end
@@ -269,23 +269,37 @@ describe "assignments" do
       end
 
       it "validates file upload restrictions" do
-        _filename_txt, fullpath_txt, _data_txt, _tempfile_txt = get_file("testfile4.txt")
         _filename_zip, fullpath_zip, _data_zip, _tempfile_zip = get_file("testfile5.zip")
         @assignment.update(submission_types: "online_upload", allowed_extensions: ".txt")
         get "/courses/#{@course.id}/assignments/#{@assignment.id}"
         f(".submit_assignment_link").click
-
-        submit_file_button = f("#submit_file_button")
         submission_input = f(".submission_attachment input")
-        ext_error = f(".bad_ext_msg")
-
-        submission_input.send_keys(fullpath_txt)
-        expect(ext_error).not_to be_displayed
-        expect(submit_file_button["disabled"]).to be_nil
         submission_input.send_keys(fullpath_zip)
-        expect(ext_error).to be_displayed
-        expect(submit_file_button).to be_disabled
+        expect(f(".submission_attachment")).to include_text("This file type is not allowed.")
       end
+
+      it "accepts valid file upload extensions" do
+        _filename_txt, fullpath_txt, _data_txt, _tempfile_txt = get_file("testfile4.txt")
+        @assignment.update(submission_types: "online_upload", allowed_extensions: ".txt")
+        get "/courses/#{@course.id}/assignments/#{@assignment.id}"
+        f(".submit_assignment_link").click
+        submission_input = f(".submission_attachment input")
+        submission_input.send_keys(fullpath_txt)
+        expect(f(".submission_attachment")).not_to include_text("This file type is not allowed.")
+      end
+    end
+
+    it "allows student to submit valid file upload" do
+      _filename_txt, fullpath_txt, _data_txt, _tempfile_txt = get_file("testfile4.txt")
+      @assignment.update(submission_types: "online_upload", allowed_extensions: ".txt")
+      get "/courses/#{@course.id}/assignments/#{@assignment.id}"
+      f(".submit_assignment_link").click
+      submission_input = f(".submission_attachment input")
+      submission_input.send_keys(fullpath_txt)
+      assignment_form = f("#submit_online_upload_form")
+      submit_form(assignment_form)
+      wait_for_ajax_requests
+      expect(f("#right-side-wrapper")).to include_text("Submitted!")
     end
 
     # EVAL-3711 Remove this test when instui_nav feature flag is removed
@@ -584,7 +598,7 @@ describe "assignments" do
       before do
         @teacher = teacher_in_course(name: "teacher", course: @course, enrollment_state: :active).user
         Account.site_admin.enable_feature!(:discussion_checkpoints)
-        @course.root_account.enable_feature!(:discussion_checkpoints)
+        @course.account.enable_feature!(:discussion_checkpoints)
 
         @date_in_past = 2.days.ago
         @date_in_future = 2.days.from_now

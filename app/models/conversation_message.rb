@@ -96,15 +96,15 @@ class ConversationMessage < ActiveRecord::Base
   set_broadcast_policy do |p|
     p.dispatch :conversation_message
     p.to { recipients }
-    p.whenever { |record| (record.just_created || @re_send_message) && !record.generated && !record.submission }
+    p.whenever { |record| (record.previously_new_record? || @re_send_message) && !record.generated && !record.submission }
 
     p.dispatch :added_to_conversation
     p.to { new_recipients }
-    p.whenever { |record| (record.just_created || @re_send_message) && record.generated && record.event_data[:event_type] == :users_added }
+    p.whenever { |record| (record.previously_new_record? || @re_send_message) && record.generated && record.event_data[:event_type] == :users_added }
 
     p.dispatch :conversation_created
     p.to { [author] }
-    p.whenever { |record| record.cc_author && ((record.just_created || @re_send_message) && !record.generated && !record.submission) }
+    p.whenever { |record| record.cc_author && (record.previously_new_record? || @re_send_message) && !record.generated && !record.submission }
   end
 
   on_create_send_to_streams do
@@ -227,7 +227,7 @@ class ConversationMessage < ActiveRecord::Base
 
   def log_conversation_message_metrics
     stat = "inbox.message.created.react"
-    InstStatsd::Statsd.increment(stat)
+    InstStatsd::Statsd.distributed_increment(stat)
   end
 
   def check_for_out_of_office_participants

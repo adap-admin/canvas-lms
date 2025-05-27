@@ -18,9 +18,9 @@
 
 import {type LtiPlacement} from './LtiPlacement'
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 
-const I18n = useI18nScope('external_tools')
+const I18n = createI18nScope('external_tools')
 
 export const LtiPlacementTranslations: Record<LtiPlacement, string> = {
   account_navigation: I18n.t('Account Navigation'),
@@ -62,6 +62,7 @@ export const LtiPlacementTranslations: Record<LtiPlacement, string> = {
   user_navigation: I18n.t('User Navigation'),
   wiki_page_menu: I18n.t('Page Menu'),
   wiki_index_menu: I18n.t('Pages Index Menu'),
+  ActivityAssetProcessor: I18n.t('Activity Asset Processor'),
 }
 export const i18nLtiPlacement = (placement: LtiPlacement): string =>
   LtiPlacementTranslations[placement]

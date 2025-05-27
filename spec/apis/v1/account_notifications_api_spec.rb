@@ -39,9 +39,11 @@ describe "Account Notification API", type: :request do
     end
 
     let(:second_announcement) { account_notification(message: "second") }
+    let(:third_announcement) { account_notification(message: "future", start_at: 1.day.from_now, end_at: 3.days.from_now) }
 
     it "lists notifications" do
       second_announcement
+      third_announcement
       json = api_call(:get, @path, @api_params)
       expect(json.length).to eq 2
       expect(json.pluck("message")).to match_array(%w[default second])
@@ -81,14 +83,15 @@ describe "Account Notification API", type: :request do
 
     describe "include_all param" do
       it "includes all announcements for an admin" do
+        third_announcement
         student_role = @account.get_role_by_name("StudentEnrollment")
         @user.close_announcement(second_announcement)
         account_notification(message: "student_only", role_ids: [student_role.id])
         json = api_call(:get, @path, @api_params.merge(include_all: true))
 
-        expect(json.length).to eq 3
+        expect(json.length).to eq 4
         messages = json.pluck("message")
-        expect(messages).to match_array(%w[default second student_only])
+        expect(messages).to match_array(%w[default second student_only future])
       end
 
       it "returns bad request if non admin user tries to call with include_all" do
@@ -103,6 +106,36 @@ describe "Account Notification API", type: :request do
       @user.close_announcement(second_announcement)
       json = api_call(:get, @path, @api_params)
       expect(json.length).to eq 1
+    end
+
+    describe "show_is_closed param" do
+      before do
+        @api_params = { controller: "account_notifications",
+                        action: "user_index",
+                        format: "json",
+                        account_id: @user.account.id.to_s,
+                        include_all: true,
+                        show_is_closed: true }
+        @notification = account_notification(message: "show_is_closed")
+      end
+
+      it "includes closed flag for notifications when show_is_closed is true" do
+        @user.close_announcement(@notification)
+        json = api_call(:get, @path, @api_params)
+
+        expect(json.length).to eq 2
+        expect(json.first["closed"]).to be true
+        expect(json.second["closed"]).to be false
+      end
+
+      it "does not include closed flag for notifications when show_is_closed is false" do
+        @user.close_announcement(@notification)
+        json = api_call(:get, @path, @api_params.merge(show_is_closed: false))
+
+        expect(json.length).to eq 2
+        expect(json.first["closed"]).to be_nil
+        expect(json.second["closed"]).to be_nil
+      end
     end
   end
 
@@ -141,7 +174,8 @@ describe "Account Notification API", type: :request do
   describe "user_close_notification" do
     before do
       @a = account_notification(message: "default")
-      @path = "/api/v1/accounts/#{@admin.account.id}/account_notifications/#{@a.id}"
+      @account = @admin.account
+      @path = "/api/v1/accounts/#{@account.id}/account_notifications/#{@a.id}"
       @api_params = { controller: "account_notifications",
                       action: "user_close_notification",
                       format: "json",
@@ -149,13 +183,58 @@ describe "Account Notification API", type: :request do
                       account_id: @admin.account.id.to_s }
     end
 
-    it "closes notifications" do
-      api_call(:delete, @path, @api_params)
-      @admin.reload
-      expect(@admin.get_preference(:closed_notifications)).to eq [@a.id]
+    context "as an admin" do
+      it "closes notification" do
+        api_call(:delete, @path, @api_params)
+        expect(response).to have_http_status :ok
 
-      json = api_call(:get, "/api/v1/accounts/#{@admin.account.id}/account_notifications", @api_params.merge(action: "user_index"))
-      expect(json.length).to eq 0
+        @admin.reload
+        expect(@admin.get_preference(:closed_notifications)).to eq [@a.id]
+
+        json = api_call(:get, "/api/v1/accounts/#{@account.id}/account_notifications", @api_params.merge(action: "user_index"))
+        expect(json.length).to eq 0
+      end
+
+      it "does not soft-delete the notification unless the remove parameter has the value true" do
+        expect(AccountNotification.find_by(id: @a.id)).not_to be_nil
+
+        api_call(:delete, @path, @api_params.merge(remove: ""))
+        expect(response).to have_http_status :ok
+        expect(AccountNotification.find_by(id: @a.id).active?).to be true
+      end
+
+      it "soft-deletes the notification if a remove=true parameter is passed" do
+        expect(AccountNotification.find_by(id: @a.id)).not_to be_nil
+
+        api_call(:delete, @path, @api_params.merge(remove: "true"))
+        expect(response).to have_http_status :ok
+        expect(AccountNotification.find_by(id: @a.id).deleted?).to be true
+      end
+    end
+
+    context "as a non-admin" do
+      before do
+        @non_admin = user_with_managed_pseudonym(account: @account)
+      end
+
+      it "closes notification" do
+        expect(@non_admin.get_preference(:closed_notifications)).to be_nil
+
+        api_call_as_user(@non_admin, :delete, @path, @api_params)
+        expect(response).to have_http_status :ok
+
+        @non_admin.reload
+        expect(@non_admin.get_preference(:closed_notifications)).to eq [@a.id]
+
+        json = api_call(:get, "/api/v1/accounts/#{@account.id}/account_notifications", @api_params.merge(action: "user_index"))
+        expect(json.length).to eq 0
+      end
+
+      it "does not delete notification" do
+        api_call_as_user(@non_admin, :delete, @path, @api_params.merge(remove: "true"))
+
+        expect(response).to have_http_status :forbidden
+      end
     end
   end
 
@@ -166,7 +245,7 @@ describe "Account Notification API", type: :request do
                       action: "create",
                       format: "json",
                       account_id: @admin.account.id.to_s }
-      @start_at = DateTime.now.utc
+      @start_at = Time.zone.now.utc
       @end_at = 1.day.from_now.utc
     end
 

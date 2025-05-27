@@ -20,8 +20,12 @@ import React from 'react'
 import type {PaginatedList} from '../../api/PaginatedList'
 import type {LtiRegistration} from '../../model/LtiRegistration'
 import type {ManageSearchParams} from './ManageSearchParams'
-import type {FetchRegistrations, DeleteRegistration} from '../../api/registrations'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import type {
+  FetchRegistrations,
+  DeleteRegistration,
+  unbindGlobalLtiRegistration,
+} from '../../api/registrations'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {
   genericError,
   formatApiResultError,
@@ -31,7 +35,7 @@ import type {AccountId} from '../../model/AccountId'
 
 export const MANAGE_APPS_PAGE_LIMIT = 15
 
-const I18n = useI18nScope('lti_registrations')
+const I18n = createI18nScope('lti_registrations')
 
 export const refreshRegistrations = () => {
   window.dispatchEvent(new Event(REFRESH_LTI_REGISTRATIONS_EVENT_TYPE))
@@ -90,7 +94,11 @@ const LIMIT = 15
  * @returns
  */
 export const mkUseManagePageState =
-  (apiFetchRegistrations: FetchRegistrations, apiDeleteRegistration: DeleteRegistration) =>
+  (
+    apiFetchRegistrations: FetchRegistrations,
+    apiDeleteRegistration: DeleteRegistration,
+    apiUnbindGlobalRegistration: typeof unbindGlobalLtiRegistration,
+  ) =>
   (params: ManageSearchParams & {accountId: AccountId}) => {
     const {accountId, q, sort, dir, page} = params
     const [state, setState] = React.useState<ManagePageLoadingState>({
@@ -185,21 +193,28 @@ export const mkUseManagePageState =
      * @returns Promise On error, the promise will resolve to an error result.
      */
     const deleteRegistration = React.useCallback(
-      (registration: LtiRegistration) => {
+      (registration: LtiRegistration, accountId: AccountId) => {
         setStale()
+        const isInheritedKey = registration.account_binding
+          ? registration.account_binding.account_id !== registration.account_id
+          : false
 
-        return apiDeleteRegistration(registration.account_id, registration.id)
+        return (
+          isInheritedKey
+            ? apiUnbindGlobalRegistration(accountId, registration.id)
+            : apiDeleteRegistration(accountId, registration.id)
+        )
           .catch(() =>
             genericError(
               // TODO: log more info about the error? send to Sentry?
               // we could also consider returning the Error object, which
               // FlashAlert.findDetailMessage() expounds upon
-              I18n.t('Error deleting app “%{appName}”', {appName: registration.name})
-            )
+              I18n.t('Error deleting app “%{appName}”', {appName: registration.name}),
+            ),
           )
           .finally(() => refreshRef.current?.())
       },
-      [setStale]
+      [setStale],
     )
 
     return [state, {setStale, deleteRegistration}] as const

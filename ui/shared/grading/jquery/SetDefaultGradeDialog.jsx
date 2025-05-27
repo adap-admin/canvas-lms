@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
 import setDefaultGradeDialogTemplate from '../jst/SetDefaultGradeDialog.handlebars'
 import {isString, values, filter, chain, includes} from 'lodash'
@@ -28,6 +28,7 @@ import 'jquery-tinypubsub'
 import '@canvas/util/jquery/fixDialogButtons'
 import React from 'react'
 import {createRoot} from 'react-dom/client'
+import {windowAlert} from '@canvas/util/globalUtils'
 
 // # this is a partial needed by the 'SetDefaultGradeDialog' template
 // # since you cant declare a dependency in a handlebars file, we need to do it here
@@ -35,7 +36,7 @@ import '../jst/_grading_box.handlebars'
 import CheckpointsGradeInputs from '@canvas/grading/react/CheckpointsGradeInputs'
 import {CheckpointsDefaultGradeInfo} from '@canvas/grading/react/CheckpointsDefaultGradeInfo'
 
-const I18n = useI18nScope('sharedSetDefaultGradeDialog')
+const I18n = createI18nScope('sharedSetDefaultGradeDialog')
 
 const REPLY_TO_TOPIC = 'reply_to_topic'
 const REPLY_TO_ENTRY = 'reply_to_entry'
@@ -46,11 +47,6 @@ const DEFAULT_GRADE_WITH_CHECKPOINTS_INFO_MOUNT_POINT =
 const noop = function () {}
 const slice = [].slice
 
-const alertProxy = function (message) {
-  // eslint-disable-next-line no-alert
-  return window.alert(message)
-}
-
 function SetDefaultGradeDialog(arg) {
   let ref, ref1, ref2
   this.assignment = arg.assignment
@@ -60,7 +56,7 @@ function SetDefaultGradeDialog(arg) {
   this.selected_section = arg.selected_section
   this.onClose = (ref = arg.onClose) != null ? ref : noop
   this.page_size = (ref1 = arg.page_size) != null ? ref1 : 50
-  this.alert = (ref2 = arg.alert) != null ? ref2 : alertProxy
+  this.alert = (ref2 = arg.alert) != null ? ref2 : windowAlert
   this.show = this.show.bind(this)
 }
 
@@ -97,7 +93,7 @@ SetDefaultGradeDialog.prototype.show = function (onClose) {
         onClose()
         return _this.$dialog.remove()
       }
-    })(this)
+    })(this),
   )
   const $form = this.$dialog
   $('.ui-dialog-titlebar-close').focus()
@@ -112,7 +108,7 @@ SetDefaultGradeDialog.prototype.show = function (onClose) {
           return $.flashError(
             I18n.t('Default grade cannot be set to %{ex}', {
               ex: 'EX',
-            })
+            }),
           )
         } else {
           submittingDfd = $.Deferred()
@@ -155,7 +151,6 @@ SetDefaultGradeDialog.prototype.show = function (onClose) {
             postDfds = makeRequests(defaultGrade)
           }
 
-          // eslint-disable-next-line prefer-spread
           return $.when.apply($, postDfds).then(function () {
             let responses = arguments.length >= 1 ? slice.call(arguments, 0) : []
             if (postDfds.length === 1) {
@@ -172,8 +167,8 @@ SetDefaultGradeDialog.prototype.show = function (onClose) {
                   },
                   {
                     count: submissions.length,
-                  }
-                )
+                  },
+                ),
               )
             } else {
               _this.alert(
@@ -184,8 +179,8 @@ SetDefaultGradeDialog.prototype.show = function (onClose) {
                   },
                   {
                     count: submissions.length,
-                  }
-                )
+                  },
+                ),
               )
             }
             submittingDfd.resolve()
@@ -193,7 +188,7 @@ SetDefaultGradeDialog.prototype.show = function (onClose) {
           })
         }
       }
-    })(this)
+    })(this),
   )
   getStudents = (function (_this) {
     return function () {
@@ -233,7 +228,7 @@ SetDefaultGradeDialog.prototype.show = function (onClose) {
 
   if (mountPoint) {
     const root = createRoot(mountPoint)
-    root.render(<CheckpointsGradeInputs assignment={this.assignment} />)
+    root.render(<CheckpointsGradeInputs assignment={this.assignment} canEdit={true} />)
   }
 
   const overwriteExitingGrades = document.getElementsByName('overwrite_existing_grades')[0]
@@ -249,7 +244,7 @@ SetDefaultGradeDialog.prototype.show = function (onClose) {
 
       infoRoot.render(overwriteExitingGrades.checked ? <CheckpointsDefaultGradeInfo /> : <span />)
     },
-    false
+    false,
   )
 
   // # uniq on id is required because for group assignments the api will
@@ -284,7 +279,6 @@ SetDefaultGradeDialog.prototype.gradeIsExcused = function (grade) {
 }
 
 SetDefaultGradeDialog.prototype.gradeIsMissingShortcut = function (grade) {
-  // eslint-disable-next-line no-void
   return this.missing_shortcut_enabled && (grade != null ? grade.toUpperCase() : void 0) === 'MI'
 }
 

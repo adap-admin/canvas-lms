@@ -16,6 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+import {Alert} from '@instructure/ui-alerts'
 import {Avatar} from '@instructure/ui-avatar'
 import DateHelper from '@canvas/datetime/dateHelper'
 import {Flex} from '@instructure/ui-flex'
@@ -32,51 +33,29 @@ import {Text} from '@instructure/ui-text'
 import {ConversationContext} from '../../../util/constants'
 import {MediaAttachment} from '@canvas/message-attachments'
 import {formatMessage, containsHtmlTags} from '@canvas/util/TextHelper'
-import {useScope as useI18nScope} from '@canvas/i18n'
-import { Spinner } from '@instructure/ui-spinner'
-import { translationSeparator } from '../../utils/constants'
-import { translateInboxMessage } from '../../utils/inbox_translator'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import sanitizeHtml from 'sanitize-html-with-tinymce'
+import MediaPlayer from './MediaPlayer'
 
-const I18n = useI18nScope('conversations_2')
+const I18n = createI18nScope('conversations_2')
 
 export const MessageDetailItem = ({...props}) => {
   const createdAt = DateHelper.formatDatetimeForDisplay(props.conversationMessage.createdAt)
   const pronouns = props.conversationMessage?.author?.pronouns
   const {isSubmissionCommentsType} = useContext(ConversationContext)
-  const {conversationMessage: {mediaComment} = {}} = props
-  const [translatedMessage, setTranslatedMessage] = useState('')
-  const [isTranslating, setIsTranslating] = useState(false)
-  const translateInboundMessage = ENV?.inbox_translation_enabled
+  const {
+    conversationMessage: {mediaComment} = {},
+  } = props
   const isMessageHtml = containsHtmlTags(props.conversationMessage?.htmlBody)
 
-  useEffect(() => {
-    if (translateInboundMessage == null || !translateInboundMessage) {
-      return
-    }
+  const messageBody = isMessageHtml
+    ? sanitizeHtml(props.conversationMessage?.htmlBody)
+    : formatMessage(props.conversationMessage?.body)
 
-    // We've already translated
-    if (translatedMessage !== '') {
-      return
-    }
+  const elementId = mediaComment?._id
+    ? `media-player-${props.conversationMessage?._id}-${mediaComment._id}`
+    : ''
 
-    // Should translate here, check the body for the separator.
-    // If we have the separator in the message, don't translate.
-    if (props.conversationMessage?.body.includes(translationSeparator)) {
-      return
-    }
-
-    setIsTranslating(true)
-    // Send the translation call to the backend.
-    translateInboxMessage(props.conversationMessage?.body, (result) => {
-      if (result.translated_text) {
-        setTranslatedMessage(translationSeparator.concat(result.translated_text))
-      }
-      setIsTranslating(false)
-    })
-  }, [translatedMessage])
-
-  const messageBody = (isMessageHtml ? sanitizeHtml(props.conversationMessage?.htmlBody) : formatMessage(props.conversationMessage?.body)).concat(translatedMessage)
   return (
     <Responsive
       match="media"
@@ -158,16 +137,6 @@ export const MessageDetailItem = ({...props}) => {
               </Flex.Item>
             )}
           </Flex>
-          {isTranslating && (
-            <Flex justifyItems="start">
-              <Flex.Item>
-                <Spinner renderTitle={I18n.t('Translating')} size="x-small" />
-              </Flex.Item>
-              <Flex.Item margin="0 0 0 x-small">
-                <Text>{I18n.t('Checking for Translation')}</Text>
-              </Flex.Item>
-            </Flex>
-          )}
           <Text
             wrap="break-word"
             size={responsiveProps.messageBody}
@@ -186,16 +155,22 @@ export const MessageDetailItem = ({...props}) => {
               })}
             </List>
           )}
-          {mediaComment && (
-            <MediaAttachment
-              file={{
-                mediaID: mediaComment._id,
-                title: mediaComment.title,
-                mediaTracks: mediaComment.media_tracks,
-                mediaSources: mediaComment.mediaSources,
-              }}
-            />
-          )}
+          {mediaComment &&
+            (ENV.FEATURES?.consolidated_media_player ? (
+              <>
+                <div id={elementId} />
+                <MediaPlayer elementId={elementId} mediaId={mediaComment._id} />
+              </>
+            ) : (
+              <MediaAttachment
+                file={{
+                  mediaID: mediaComment._id,
+                  title: mediaComment.title,
+                  mediaTracks: mediaComment.media_tracks,
+                  mediaSources: mediaComment.mediaSources,
+                }}
+              />
+            ))}
         </>
       )}
     />

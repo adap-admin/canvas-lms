@@ -127,60 +127,24 @@ Running tests in Canvas works best after `inst canvas setup`.
 docker compose exec web bundle exec rspec spec
 ```
 
-### Running javascript tests
-
-First add `docker-compose/js-tests.override.yml` to your `COMPOSE_FILE` var in `.env`. Then prepare that container with:
-
-```bash
-docker compose run --rm js-tests yarn install
-```
-
-If you run into issues with `yarn install`, either during initial setup or after updating master, try to fix it with a `nuke_node`:
-
-```bash
-docker compose run --rm js-tests ./script/nuke_node.sh
-docker compose run --rm js-tests yarn install
-```
-
-#### QUnit Karma Tests in Headless Chrome
-
-Run all QUnit tests in watch mode with:
-
-```bash
-docker compose up js-tests
-```
-
-Or, if you're iterating on something and want to just run a targeted test file in watch mode, set the `JSPEC_PATH` env var, e.g.:
-
-```bash
-export JSPEC_PATH=spec/coffeescripts/util/deparamSpec.js
-docker compose up js-tests
-```
-
-To run a targeted test without watch mode:
-
-```bash
-docker compose run --rm -e JSPEC_PATH=spec/coffeescripts/util/deparamSpec.js js-tests yarn test:karma:headless
-```
-
 #### Jest Tests
 
 Run all Jest tests with:
 
 ```bash
-docker compose run --rm js-tests yarn test:jest
+docker compose run --rm web yarn test:jest
 ```
 
 Or run a targeted subset of tests:
 
 ```bash
-docker compose run --rm js-tests yarn test:jest ui/features/speed_grader/react/__tests__/CommentArea.test.js
+docker compose run --rm web yarn test:jest ui/features/speed_grader/react/__tests__/CommentArea.test.js
 ```
 
 To run a targeted subset of tests in watch mode, use `test:jest:watch` and specify the paths to the test files as one or more arguments, e.g.:
 
 ```bash
-docker compose run --rm js-tests yarn test:jest:watch ui/features/speed_grader/react/__tests__/CommentArea.test.js
+docker compose run --rm web yarn test:jest:watch ui/features/speed_grader/react/__tests__/CommentArea.test.js
 ```
 
 ### Selenium
@@ -242,6 +206,19 @@ To enable Mail Catcher: Add `docker-compose/mailcatcher.override.yml` to your `C
 
 Email is often sent through background jobs in the jobs container. If you would like to test or preview any notifications, simply trigger the email through its normal actions, and it should immediately show up in the emulated webmail inbox available here: <http://mailcatcher.inseng.test>
 
+### MinIO (S3)
+
+MinIO is a storage solution that is perfect for mocking S3 during local development. The override file contains two services:
+- `s3` is based on `minio/minio` image. It is for hosting the storage solution and provides an admin ui and an API to manage files, buckets and much more.
+- `createbuckets` is based on `minio/mc` image. It is for creating a public bucket (`development-bucket`) that will be used by Canvas.
+
+For more details on [MinIO](https://min.io/docs/minio/linux/index.html) and its [client](https://min.io/docs/minio/linux/reference/minio-mc.html) visit the official documentation.
+
+Setup: Add `inst-cli/docker-compose/s3.override.yml` to you `COMPOSE_FILE` var in `.env`. Follow the setup steps that can be found as comments inside `s3.override.yml`.
+Once done with the configuration don't forget to spin up the new containers using `docker compose up -d`.
+
+Purpose: It comes handy when you are dealing with attachments in Canvas and want to verify if your change works with all supported storage solution.
+
 ### Canvas RCE API
 
 Edit `.env`
@@ -276,16 +253,6 @@ inst canvas setup
 # or, if you already ran `inst canvas setup` prior, restart canvas to make it read the new RCS app-host config
 docker compose restart web
 ```
-
-## Storybook
-
-Edit `.env`
-
-```
-COMPOSE_FILE=<CURRENT_VALUE>:inst-cli/docker-compose/storybook.override.yml
-```
-
-`inst proxy up` if you haven't already, then `docker compose up storybook` and open <http://canvas-storybook.inseng.test> in your browser.
 
 ## Tips
 

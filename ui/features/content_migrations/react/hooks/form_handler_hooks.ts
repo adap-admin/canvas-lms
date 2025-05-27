@@ -23,7 +23,8 @@ const submit = (
   formData: any,
   setFileError: React.Dispatch<React.SetStateAction<boolean>>,
   onSubmit: onSubmitMigrationFormCallback,
-  file: File | null
+  file: File | null,
+  fileInputRef: React.RefObject<HTMLInputElement | null> | null = null,
 ) => {
   if (file) {
     setFileError(false)
@@ -34,45 +35,37 @@ const submit = (
     }
     onSubmit(formData, file)
   } else {
+    fileInputRef?.current?.focus()
     setFileError(true)
   }
 }
 
-const isFormInvalid = (
-  formData: any,
-  setFileError: Dispatch<SetStateAction<boolean>>,
-  questionBankSettings?: QuestionBankSettings | null,
-  setQuestionBankError?: Dispatch<SetStateAction<boolean>>
-): boolean => {
+const isFormInvalid = (formData: any, setFileError: Dispatch<SetStateAction<boolean>>): boolean => {
   if (!formData) {
     setFileError(true)
-    if (questionBankSettings && setQuestionBankError) {
-      setQuestionBankError(true)
-    }
-    return true
-  }
-
-  if (questionBankSettings?.question_bank_name === '') {
-    setQuestionBankError && setQuestionBankError(true)
     return true
   }
 
   return false
 }
 
-const useSubmitHandler = (onSubmit: onSubmitMigrationFormCallback) => {
+const useSubmitHandler = (
+  onSubmit: onSubmitMigrationFormCallback,
+  fileInputRef: React.RefObject<HTMLInputElement | null> | null = null,
+) => {
   const [file, setFile] = useState<File | null>(null)
   const [fileError, setFileError] = useState<boolean>(false)
 
   const handleSubmit = useCallback(
+    // @ts-expect-error
     formData => {
       if (isFormInvalid(formData, setFileError)) {
         return
       }
 
-      submit(formData, setFileError, onSubmit, file)
+      submit(formData, setFileError, onSubmit, file, fileInputRef)
     },
-    [onSubmit, file]
+    [onSubmit, file, fileInputRef],
   )
 
   return {
@@ -83,17 +76,20 @@ const useSubmitHandler = (onSubmit: onSubmitMigrationFormCallback) => {
   }
 }
 
-const useSubmitHandlerWithQuestionBank = (onSubmit: onSubmitMigrationFormCallback) => {
+const useSubmitHandlerWithQuestionBank = (
+  onSubmit: onSubmitMigrationFormCallback,
+  fileInputRef: React.RefObject<HTMLInputElement | null> | null = null,
+) => {
   const [file, setFile] = useState<File | null>(null)
   const [fileError, setFileError] = useState<boolean>(false)
   const [questionBankSettings, setQuestionBankSettings] = useState<QuestionBankSettings | null>(
-    null
+    null,
   )
-  const [questionBankError, setQuestionBankError] = useState<boolean>(false)
 
   const handleSubmit = useCallback(
+    // @ts-expect-error
     formData => {
-      if (isFormInvalid(formData, setFileError, questionBankSettings, setQuestionBankError)) {
+      if (isFormInvalid(formData, setFileError)) {
         return
       }
 
@@ -101,9 +97,9 @@ const useSubmitHandlerWithQuestionBank = (onSubmit: onSubmitMigrationFormCallbac
         formData.settings = {...formData.settings, ...(questionBankSettings || {})}
       }
 
-      submit(formData, setFileError, onSubmit, file)
+      submit(formData, setFileError, onSubmit, file, fileInputRef)
     },
-    [onSubmit, file, questionBankSettings]
+    [onSubmit, file, questionBankSettings, fileInputRef],
   )
 
   return {
@@ -112,7 +108,6 @@ const useSubmitHandlerWithQuestionBank = (onSubmit: onSubmitMigrationFormCallbac
     fileError,
     questionBankSettings,
     setQuestionBankSettings,
-    questionBankError,
     handleSubmit,
   }
 }

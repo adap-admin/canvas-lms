@@ -74,7 +74,7 @@ module CC
         end
         add_file_to_manifest(file, path, migration_id)
       rescue
-        title = file.unencoded_filename rescue I18n.t("course_exports.unknown_titles.file", "Unknown file")
+        title = file.try(:unencoded_filename) || I18n.t("course_exports.unknown_titles.file", "Unknown file")
         add_error(I18n.t("course_exports.errors.file", "The file \"%{file_name}\" failed to export", file_name: title), $!)
       end
 
@@ -216,20 +216,12 @@ module CC
           root_node.media(identifierref: file_id) do |media_node|
             track_list.each do |track|
               # <track identifierref='(srt resource id)' kind='subtitles' locale='en'/>
-              media_node_creation(media_node, track)
+              media_node.track(track[:content], track.slice(:kind, :locale, :identifierref))
             end
           end
         end
       end
       tracks_file.close
-    end
-
-    def media_node_creation(media_node, track)
-      if Account.site_admin.feature_enabled?(:media_links_use_attachment_id)
-        media_node.track(track[:content], track.slice(:kind, :locale, :identifierref))
-      else
-        media_node.track(track)
-      end
     end
 
     def add_media_tracks

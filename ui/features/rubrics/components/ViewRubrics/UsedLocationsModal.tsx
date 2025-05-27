@@ -17,7 +17,7 @@
  */
 
 import React, {useCallback, useEffect, useRef, useState} from 'react'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {ScreenReaderContent} from '@instructure/ui-a11y-content'
 import {Modal} from '@instructure/ui-modal'
 import {Button, CloseButton} from '@instructure/ui-buttons'
@@ -33,7 +33,7 @@ import {Pill} from '@instructure/ui-pill'
 import {Spinner} from '@instructure/ui-spinner'
 import {showFlashError} from '@canvas/alerts/react/FlashAlert'
 
-const I18n = useI18nScope('UsedLocationsModal')
+const I18n = createI18nScope('UsedLocationsModal')
 
 export type FetchUsedLocationResponse = {
   usedLocations: UsedLocation[]
@@ -74,7 +74,7 @@ export const UsedLocationsModal = ({
         setUsedLocations(prevLocations => {
           if (newLocations.usedLocations[0]?.id === prevLocations[prevLocations.length - 1]?.id) {
             prevLocations[prevLocations.length - 1].assignments.push(
-              ...newLocations.usedLocations[0].assignments
+              ...newLocations.usedLocations[0].assignments,
             )
             newLocations.usedLocations.shift()
           }
@@ -117,7 +117,7 @@ export const UsedLocationsModal = ({
           root: null,
           rootMargin: '0px',
           threshold: 0.4,
-        }
+        },
       )
 
       observer.observe(sentinelRef.current)
@@ -170,7 +170,7 @@ export const UsedLocationsModal = ({
               filteredAssignments = course.assignments
             } else {
               filteredAssignments = course.assignments.filter(assignment =>
-                assignment.title.toLowerCase().includes(filter.toLowerCase())
+                assignment.title.toLowerCase().includes(filter.toLowerCase()),
               )
               // if no assignments match the filter nor the course name,
               // don't render the course in the list

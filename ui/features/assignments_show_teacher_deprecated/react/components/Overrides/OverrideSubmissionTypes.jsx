@@ -18,7 +18,7 @@
 
 import React from 'react'
 import {bool, oneOf} from 'prop-types'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {OverrideShape, requiredIfDetail} from '../../assignmentData'
 import TeacherViewContext from '../TeacherViewContext'
 import ExternalToolType from './ExternalToolType'
@@ -42,7 +42,7 @@ import {
   IconUnpublishedLine,
 } from '@instructure/ui-icons'
 
-const I18n = useI18nScope('assignments_2')
+const I18n = createI18nScope('assignments_2')
 
 export default class OverrideSubmissionTypes extends React.Component {
   static contextType = TeacherViewContext
@@ -207,7 +207,7 @@ export default class OverrideSubmissionTypes extends React.Component {
         {this.props.override.submissionTypes
           .map(typeSelection => {
             const nonCanvasType = OverrideSubmissionTypes.nonCanvasType.options.find(
-              opt => opt.key === typeSelection
+              opt => opt.key === typeSelection,
             )
             if (nonCanvasType) {
               return nonCanvasType.display
@@ -277,7 +277,7 @@ export default class OverrideSubmissionTypes extends React.Component {
         }
       } else if (type === OverrideSubmissionTypes.nonCanvasType) {
         selectedOptions = OverrideSubmissionTypes.nonCanvasType.options.find(
-          opt => opt.key === this.props.override.submissionTypes[0]
+          opt => opt.key === this.props.override.submissionTypes[0],
         )
         selectedOptions = selectedOptions ? selectedOptions.key : null
       }
@@ -295,7 +295,7 @@ export default class OverrideSubmissionTypes extends React.Component {
             options={type.options}
             initialSelection={selectedOptions}
           />
-        </View>
+        </View>,
       )
     }
     return slots

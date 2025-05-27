@@ -284,7 +284,7 @@ describe Login::SamlController do
     account.save!
     controller.instance_variable_set(:@aac, nil)
     post :create, params: { SAMLResponse: "foo" }
-    expect(response).to redirect_to(unknown_user_url)
+    expect(response).to redirect_to(/^#{unknown_user_url}\?message=Canvas/)
     expect(session[:saml_unique_id]).to be_nil
   end
 
@@ -421,6 +421,42 @@ describe Login::SamlController do
       assertion.subject.name_id = SAML2::NameID.new(@pseudonym.unique_id)
       assertion.statements << SAML2::AttributeStatement.new([SAML2::Attribute.create("eduPersonNickname", "Cody Cutrer")])
       saml_response
+    end
+
+    it "works for the local account" do
+      allow(SAML2::Bindings::HTTP_POST).to receive(:decode).and_return(
+        [saml_response, "http://test.host/courses/2"]
+      )
+
+      expect(Account).to receive(:find_by_domain).and_return(@pseudonym.account)
+
+      post :create, params: { SAMLResponse: "foo", RelayState: "http://test.host/courses/2" }
+      expect(response).to be_redirect
+      expect(response.location).to eql "http://test.host/courses/2"
+    end
+
+    it "ignores it if it's going to cause a login loop" do
+      allow(SAML2::Bindings::HTTP_POST).to receive(:decode).and_return(
+        [saml_response, "http://test.host/login/saml"]
+      )
+
+      expect(Account).not_to receive(:find_by_domain)
+
+      post :create, params: { SAMLResponse: "foo", RelayState: "http://test.host/login/saml" }
+      expect(response).to be_redirect
+      expect(response.location).to eql "http://test.host/courses/1"
+    end
+
+    it "appends a session token if we're redirecting to a different domain for the same account" do
+      allow(SAML2::Bindings::HTTP_POST).to receive(:decode).and_return(
+        [saml_response, "https://sameaccount/courses/2"]
+      )
+
+      expect(Account).to receive(:find_by_domain).and_return(@pseudonym.account)
+
+      post :create, params: { SAMLResponse: "foo", RelayState: "https://sameaccount/courses/2" }
+      expect(response).to be_redirect
+      expect(response.location).to match(%r{^https://sameaccount/courses/2\?session_token=})
     end
 
     it "appends a session token if we're redirecting to a trusted account" do
@@ -652,10 +688,10 @@ describe Login::SamlController do
           expect(response).to redirect_to(saml_login_url(@aac2))
         end
 
-        it "redirects a response to idp on logout with a SAMLRequest parameter" do
-          expect(controller).to receive(:logout_current_user)
+        it "redirects an error response to idp if no user is logged in" do
           logout_request = SAML2::LogoutRequest.new
           logout_request.issuer = SAML2::NameID.new(@aac2.idp_entity_id)
+          logout_request.name_id = SAML2::NameID.new("bogus user")
           expect(SAML2::Bindings::HTTPRedirect).to receive(:decode).and_return(logout_request)
 
           controller.request.env["canvas.domain_root_account"] = @account
@@ -663,6 +699,79 @@ describe Login::SamlController do
 
           expect(response).to be_redirect
           expect(response.location).to match %r{^https://example.com/idp2/slo\?SAMLResponse=}
+          allow(SAML2::Bindings::HTTPRedirect).to receive(:decode).and_call_original
+          message, = SAML2::Bindings::HTTPRedirect.decode(response.location)
+          expect(message).to be_a(SAML2::LogoutResponse)
+          expect(message.status).not_to be_a_success
+          expect(message.status.message).to eql ["No current session"]
+        end
+
+        it "redirects an error response to idp if a different user is logged in" do
+          user = User.create!
+          user_session(user)
+          logout_request = SAML2::LogoutRequest.new
+          logout_request.issuer = SAML2::NameID.new(@aac2.idp_entity_id)
+          logout_request.name_id = SAML2::NameID.new("bogus user")
+          expect(SAML2::Bindings::HTTPRedirect).to receive(:decode).and_return(logout_request)
+
+          controller.request.env["canvas.domain_root_account"] = @account
+          get :destroy, params: { SAMLRequest: "foo" }
+
+          expect(response).to be_redirect
+          expect(response.location).to match %r{^https://example.com/idp2/slo\?SAMLResponse=}
+          allow(SAML2::Bindings::HTTPRedirect).to receive(:decode).and_call_original
+          message, = SAML2::Bindings::HTTPRedirect.decode(response.location)
+          expect(message).to be_a(SAML2::LogoutResponse)
+          expect(message.status).not_to be_a_success
+          expect(message.status.message).to eql ["NameID does not match current session"]
+        end
+
+        it "redirects a response to idp on logout with a SAMLRequest parameter" do
+          user = User.create!
+          user_session(user)
+          session[:name_id] = "real_user"
+          expect(controller).to receive(:logout_current_user)
+          logout_request = SAML2::LogoutRequest.new
+          logout_request.issuer = SAML2::NameID.new(@aac2.idp_entity_id)
+          logout_request.name_id = SAML2::NameID.new("real_user")
+          expect(SAML2::Bindings::HTTPRedirect).to receive(:decode).and_return(logout_request)
+
+          controller.request.env["canvas.domain_root_account"] = @account
+          get :destroy, params: { SAMLRequest: "foo" }
+
+          expect(response).to be_redirect
+          expect(response.location).to match %r{^https://example.com/idp2/slo\?SAMLResponse=}
+          allow(SAML2::Bindings::HTTPRedirect).to receive(:decode).and_call_original
+          message, = SAML2::Bindings::HTTPRedirect.decode(response.location)
+          expect(message).to be_a(SAML2::LogoutResponse)
+          expect(message.status).to be_a_success
+        end
+
+        it "is a bad request if the request can't be validated against the schema" do
+          logout_request = SAML2::LogoutRequest.new
+          logout_request.issuer = SAML2::NameID.new(@aac2.idp_entity_id)
+          allow(logout_request).to receive(:valid_schema?).and_return(false)
+          expect(SAML2::Bindings::HTTPRedirect).to receive(:decode).and_return(logout_request)
+
+          controller.request.env["canvas.domain_root_account"] = @account
+          get :destroy, params: { SAMLRequest: "foo" }
+
+          expect(response).to have_http_status :bad_request
+          expect(response.body).to eql "Invalid SAML message"
+        end
+
+        it "can optionally ignore schema validation" do
+          logout_request = SAML2::LogoutRequest.new
+          logout_request.issuer = SAML2::NameID.new(@aac2.idp_entity_id)
+          allow(logout_request).to receive(:valid_schema?).and_return(false)
+          @aac2.settings["ignore_slo_schema_errors"] = true
+          @aac2.save!
+          expect(SAML2::Bindings::HTTPRedirect).to receive(:decode).and_return(logout_request)
+
+          controller.request.env["canvas.domain_root_account"] = @account
+          get :destroy, params: { SAMLRequest: "foo" }
+
+          expect(response).to be_redirect
         end
 
         it "is a bad request if there's no destination to send the request to" do

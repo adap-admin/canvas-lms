@@ -25,9 +25,9 @@ import {type TemplatePanelProps, type KeyboardOrMouseEvent} from './types'
 import {TemplateEditor, type BlockTemplate, type TemplateNodeTree} from '../../../types'
 import {createFromTemplate} from '../../../utils'
 import {EditTemplateButtons} from './EditTemplateButtons'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 
-const I18n = useI18nScope('block-editor')
+const I18n = createI18nScope('block-editor')
 
 interface SectionsPanelProps extends TemplatePanelProps {
   onDeleteTemplate: (id: string) => void
@@ -53,7 +53,7 @@ const SectionsPanel = ({
         actions.addNodeTree(node_tree, 'ROOT')
       }
     },
-    [actions, query, templates]
+    [actions, query, templates],
   )
 
   const handleAddSectionKey = useCallback(
@@ -62,7 +62,7 @@ const SectionsPanel = ({
         handleAddSection(id)
       }
     },
-    [handleAddSection]
+    [handleAddSection],
   )
 
   const renderSection = (section_template: BlockTemplate) => {

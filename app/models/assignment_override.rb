@@ -76,8 +76,14 @@ class AssignmentOverride < ActiveRecord::Base
       when CourseSection
         record.errors.add :set, "not from assignment's course" unless record.set.course_id == record.assignment.context_id
       when Group
+        is_non_collaborative = record.set.non_collaborative?
         valid_group_category_id = record.assignment.effective_group_category_id
-        record.errors.add :set, "not from assignment's group category" unless record.set.group_category_id == valid_group_category_id
+
+        if is_non_collaborative && !record.assignment.context.account.allow_assign_to_differentiation_tags?
+          record.errors.add :set, "not allowed to assign to assignment"
+        elsif !is_non_collaborative && record.set.group_category_id != valid_group_category_id
+          record.errors.add :set, "not from assignment's group category"
+        end
       when Course
         record.errors.add :set, "not from assignment's course" unless record.set.id == record.assignment.context_id
       end
@@ -100,7 +106,7 @@ class AssignmentOverride < ActiveRecord::Base
     record.assignment_override_students.each do |s|
       next if s.valid?
 
-      s.errors.each do |_, error| # rubocop:disable Style/HashEachMethods
+      s.errors.each do |error|
         record.errors.add(:assignment_override_students,
                           error.type,
                           message: error.message)
@@ -157,7 +163,7 @@ class AssignmentOverride < ActiveRecord::Base
   end
 
   def update_grading_period_grades
-    return true unless due_at_overridden && saved_change_to_due_at? && !saved_change_to_id?
+    return true unless due_at_overridden && saved_change_to_due_at? && !previously_new_record?
 
     course = overridable&.context || quiz&.assignment&.context
     return true unless course&.grading_periods?
@@ -276,6 +282,8 @@ class AssignmentOverride < ActiveRecord::Base
   end
 
   scope :active, -> { where(workflow_state: "active") }
+
+  scope :adhoc, -> { where(set_type: "ADHOC") }
 
   scope :visible_students_only, lambda { |visible_ids|
     scope = select("assignment_overrides.*")
@@ -456,6 +464,17 @@ class AssignmentOverride < ActiveRecord::Base
       override: self }
   end
 
+  def as_hash_for(user)
+    hash = as_hash
+
+    # Remove sensitive information if appropriate
+    if set_type == "Group" && !set.grants_right?(user, :read)
+      hash.delete(:title)
+    end
+
+    hash
+  end
+
   def applies_to_students
     # FIXME: exclude students for whom this override does not apply
     # because a higher-priority override exists
@@ -514,7 +533,7 @@ class AssignmentOverride < ActiveRecord::Base
   def destroy_if_empty_set
     return unless set_type == "ADHOC"
 
-    assignment_override_students.reload if id_before_last_save.nil? # fixes a problem with rails 4.2 caching an empty association scope
+    assignment_override_students.reload if previously_new_record? # fixes a problem with rails 4.2 caching an empty association scope
     destroy if set.empty?
   end
 

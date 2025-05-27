@@ -28,6 +28,12 @@ import assertChange from 'chai-assert-change'
 let fakeServer
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
+
+// Helper to clean up any iframes created during tests
+const cleanupIframes = () => {
+  const iframes = document.querySelectorAll('iframe')
+  iframes.forEach(iframe => iframe.parentNode.removeChild(iframe))
+}
 const jsonResponse = (statusCode, payload) => [
   statusCode,
   {'Content-Type': 'application/json'},
@@ -38,12 +44,13 @@ beforeEach(() => {
   fakeServer = sinon.useFakeServer()
   config.ajax = $.ajax
   config.quizReportsUrl = '/reports'
+  cleanupIframes()
 })
 
 afterEach(() => {
   fakeServer.restore()
   fakeServer = null
-
+  cleanupIframes()
   subject.__reset__()
 })
 
@@ -55,7 +62,7 @@ describe('.load', () => {
     return subject.load().then(() => {
       const quizReports = subject.getAll()
 
-      expect(quizReports.length).toEqual(2)
+      expect(quizReports).toHaveLength(2)
       expect(quizReports.map(x => x.id).sort()).toEqual(['200', '201'])
     })
   })
@@ -91,7 +98,7 @@ describe('.load', () => {
     const quizReportsUrl = decodeURI(fakeServer.requests[0].url)
 
     expect(quizReportsUrl).toBe(
-      '/reports?include[]=progress&include[]=file&includes_all_versions=true'
+      '/reports?include[]=progress&include[]=file&includes_all_versions=true',
     )
   })
 })
@@ -111,14 +118,17 @@ describe('.populate', function () {
           },
         ],
       },
-      {track: true}
+      {track: true},
     )
 
-    expect(fakeServer.requests.length).toBe(1)
+    expect(fakeServer.requests).toHaveLength(1)
     expect(fakeServer.requests[0].url).toBe('/progress/1')
   })
 
   it('but it does not auto-download them when generated', async () => {
+    // Make sure no iframes exist before the test
+    cleanupIframes()
+
     subject.populate(
       {
         quiz_reports: [
@@ -132,12 +142,12 @@ describe('.populate', function () {
           },
         ],
       },
-      {track: true}
+      {track: true}, // track: true but autoDownload defaults to false
     )
 
     await sleep(1) // let Promise tick
 
-    expect(fakeServer.requests.length).toBe(1)
+    expect(fakeServer.requests).toHaveLength(1)
     expect(fakeServer.requests[0].url).toBe('/progress/1')
 
     fakeServer.respond(
@@ -145,12 +155,12 @@ describe('.populate', function () {
       jsonResponse(200, {
         workflow_state: K.PROGRESS_COMPLETE,
         completion: 100,
-      })
+      }),
     )
 
     await sleep(1)
 
-    expect(fakeServer.requests.length).toBe(2)
+    expect(fakeServer.requests).toHaveLength(2)
     expect(fakeServer.requests[1].url).toContain('/reports/1')
 
     fakeServer.requests[1].respond(
@@ -163,14 +173,17 @@ describe('.populate', function () {
             },
           },
         ],
-      })
+      }),
     )
 
     await sleep(1)
 
-    expect(fakeServer.requests.length).toBe(2)
+    expect(fakeServer.requests).toHaveLength(2)
 
-    expect(document.body.querySelector('iframe[src="/files/1/download"]')).toBeFalsy()
+    // Use waitFor to ensure the DOM has been updated
+    // Since autoDownload is false, no iframe should be created
+    const iframes = document.body.querySelectorAll('iframe[src="/files/1/download"]')
+    expect(iframes).toHaveLength(0)
   })
 
   it('does not track the same report multiple times simultaneously', async function () {
@@ -188,7 +201,7 @@ describe('.populate', function () {
               },
             ],
           },
-          {track: true}
+          {track: true},
         )
 
         await sleep(1)
@@ -211,7 +224,7 @@ describe('.populate', function () {
               },
             ],
           },
-          {track: true}
+          {track: true},
         )
 
         await sleep(1)
@@ -226,7 +239,7 @@ describe('quizReports:generate', function () {
   it('makes the right request', async () => {
     Dispatcher.dispatch('quizReports:generate', 'student_analysis')
 
-    expect(fakeServer.requests.length).toBe(1)
+    expect(fakeServer.requests).toHaveLength(1)
     expect(fakeServer.requests[0].url).toBe('/reports')
     expect(fakeServer.requests[0].method).toBe('POST')
     expect(fakeServer.requests[0].requestBody).toEqual(
@@ -238,7 +251,7 @@ describe('quizReports:generate', function () {
           },
         ],
         include: ['progress', 'file'],
-      })
+      }),
     )
 
     fakeServer.requests[0].respond(
@@ -251,7 +264,7 @@ describe('quizReports:generate', function () {
             },
           },
         ],
-      })
+      }),
     )
 
     await sleep(1)
@@ -262,7 +275,7 @@ describe('quizReports:generate', function () {
   it('tracks the generation progress', async () => {
     Dispatcher.dispatch('quizReports:generate', 'student_analysis')
 
-    expect(fakeServer.requests.length).toBe(1)
+    expect(fakeServer.requests).toHaveLength(1)
     expect(fakeServer.requests[0].url).toBe('/reports')
 
     fakeServer.requests[0].respond(
@@ -276,19 +289,19 @@ describe('quizReports:generate', function () {
             },
           },
         ],
-      })
+      }),
     )
 
     await sleep(1)
 
-    expect(fakeServer.requests.length).toBe(2)
+    expect(fakeServer.requests).toHaveLength(2)
     expect(fakeServer.requests[1].url).toBe('/progress/1')
   })
 
   it('should auto download the file when generated', async () => {
     Dispatcher.dispatch('quizReports:generate', 'student_analysis')
 
-    expect(fakeServer.requests.length).toBe(1)
+    expect(fakeServer.requests).toHaveLength(1)
     expect(fakeServer.requests[0].url).toBe('/reports')
 
     fakeServer.requests[0].respond(
@@ -302,24 +315,24 @@ describe('quizReports:generate', function () {
             },
           },
         ],
-      })
+      }),
     )
 
     await sleep(1)
 
-    expect(fakeServer.requests.length).toBe(2)
+    expect(fakeServer.requests).toHaveLength(2)
     expect(fakeServer.requests[1].url).toBe('/progress/1')
 
     fakeServer.requests[1].respond(
       ...jsonResponse(200, {
         workflow_state: K.PROGRESS_COMPLETE,
         completion: 100,
-      })
+      }),
     )
 
     await sleep(1)
 
-    expect(fakeServer.requests.length).toBe(3)
+    expect(fakeServer.requests).toHaveLength(3)
     expect(fakeServer.requests[2].url).toContain('/reports/1?include%5B%5D=progress')
 
     fakeServer.requests[2].respond(
@@ -332,7 +345,7 @@ describe('quizReports:generate', function () {
             },
           },
         ],
-      })
+      }),
     )
 
     await sleep(1)
@@ -375,7 +388,7 @@ describe('quizReports:generate', function () {
       },
       error => {
         expect(error.message).toContain('report is already being generated')
-      }
+      },
     )
   })
 
@@ -402,7 +415,7 @@ describe('quizReports:generate', function () {
       },
       error => {
         expect(error.message).toContain('report is already generated')
-      }
+      },
     )
   })
 })

@@ -26,7 +26,6 @@ module Lti
     class DynamicRegistrationController < ApplicationController
       REGISTRATION_TOKEN_EXPIRATION = 1.hour
 
-      before_action :require_dynamic_registration_flag, except: [:create]
       before_action :require_user, except: [:create]
       before_action :require_account, except: [:create]
 
@@ -34,6 +33,8 @@ module Lti
       # attempt to find the bearer token, which is not stored with
       # the other Canvas tokens.
       skip_before_action :load_user, only: [:create]
+
+      include Api::V1::Lti::Registration
 
       def require_account
         require_context_with_permission(account_context, :manage_developer_keys)
@@ -53,7 +54,7 @@ module Lti
 
       def registration_token
         uuid = SecureRandom.uuid
-        current_time = DateTime.now.iso8601
+        current_time = Time.zone.now.iso8601
         user_id = @current_user.id
         root_account_global_id = account_context.global_id
         unified_tool_id = params[:unified_tool_id].presence
@@ -78,8 +79,18 @@ module Lti
         }
       end
 
-      def registration_by_uuid
-        render json: Lti::IMS::Registration.find_by(guid: params[:registration_uuid]).as_json(context: account_context)
+      def lti_registration_by_uuid
+        reg = Lti::IMS::Registration.find_by!(guid: params[:registration_uuid])
+        render json: lti_registration_json(reg.lti_registration,
+                                           @current_user,
+                                           session,
+                                           @context,
+                                           includes: %i[configuration overlay],
+                                           overlay: reg.lti_registration.overlay_for(@context))
+      end
+
+      def ims_registration_by_uuid
+        render json: Lti::IMS::Registration.find_by!(guid: params[:registration_uuid]).as_json(context: account_context)
       end
 
       def show
@@ -156,11 +167,6 @@ module Lti
           return
         end
 
-        unless root_account.feature_enabled? :lti_dynamic_registration
-          render status: :not_found, template: "shared/errors/404_message"
-          return
-        end
-
         Schemas::Lti::IMS::OidcRegistration.to_model_attrs(params.to_unsafe_h) =>
           {errors:, registration_attrs:}
         return render status: :unprocessable_entity, json: { errors: } if errors.present?
@@ -192,6 +198,7 @@ module Lti
           ActiveRecord::Base.transaction do
             developer_key.save!
             registration.save!
+            registration.lti_registration.update!(vendor: registration.vendor)
           end
 
           render_registration(registration, developer_key) if registration.persisted?
@@ -254,12 +261,6 @@ module Lti
                json: {
                  errorMessage: message
                }
-      end
-
-      def require_dynamic_registration_flag
-        unless account_context.feature_enabled? :lti_dynamic_registration
-          render status: :not_found, template: "shared/errors/404_message"
-        end
       end
     end
   end

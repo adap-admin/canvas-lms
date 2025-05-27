@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import gql from 'graphql-tag'
+import {gql} from '@apollo/client'
 import qs from 'qs'
 import {executeQuery} from '@canvas/query/graphql'
 import type {RubricFormProps} from '../types/RubricForm'
@@ -91,12 +91,12 @@ export const fetchRubric = async (id?: string): Promise<RubricQueryResponse | nu
 }
 
 export type SaveRubricResponse = {
-  rubric: Rubric
+  rubric: Rubric & {association_count?: number}
   rubricAssociation: RubricAssociation
 }
 export const saveRubric = async (
   rubric: RubricFormProps,
-  assignmentId?: string
+  assignmentId?: string,
 ): Promise<SaveRubricResponse> => {
   const {
     id,
@@ -171,7 +171,7 @@ export const saveRubric = async (
   }
 
   return {
-    rubric: mapRubricUnderscoredKeysToCamelCase(savedRubric),
+    rubric: {...mapRubricUnderscoredKeysToCamelCase(savedRubric), association_count: 1},
     rubricAssociation: rubric_association,
   }
 }

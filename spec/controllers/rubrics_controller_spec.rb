@@ -1092,7 +1092,7 @@ describe RubricsController do
       before do
         course_with_teacher_logged_in(active_all: true)
         @assignment = @course.assignments.create!(assignment_valid_attributes)
-        allow(InstStatsd::Statsd).to receive(:increment).and_call_original
+        allow(InstStatsd::Statsd).to receive(:distributed_increment).and_call_original
       end
 
       let(:create_params) do
@@ -1151,19 +1151,19 @@ describe RubricsController do
         end
 
         it "track rubric created with old version" do
-          expect(InstStatsd::Statsd).to receive(:increment).with("course.rubrics.created_old").at_least(:once)
+          expect(InstStatsd::Statsd).to receive(:distributed_increment).with("course.rubrics.created_old").at_least(:once)
 
           post "create", params: create_params
         end
 
         it "track creationfrom assignments ui" do
-          expect(InstStatsd::Statsd).to receive(:increment).with("course.rubrics.created_from_assignment").at_least(:once)
+          expect(InstStatsd::Statsd).to receive(:distributed_increment).with("course.rubrics.created_from_assignment").at_least(:once)
 
           post "create", params: create_params
         end
 
         it "track rubric updated with old version" do
-          expect(InstStatsd::Statsd).to receive(:increment).with("course.rubrics.updated_old").at_least(:once)
+          expect(InstStatsd::Statsd).to receive(:distributed_increment).with("course.rubrics.updated_old").at_least(:once)
 
           rubric_association_model(user: @user, context: @course)
           put "update", params: { course_id: @course.id, id: @rubric.id, rubric: { title: "new title" } }
@@ -1176,27 +1176,27 @@ describe RubricsController do
         end
 
         it "track rubric created with enhanced version" do
-          expect(InstStatsd::Statsd).to receive(:increment).with("course.rubrics.created_enhanced").at_least(:once)
+          expect(InstStatsd::Statsd).to receive(:distributed_increment).with("course.rubrics.created_enhanced").at_least(:once)
 
           post "create", params: create_params
         end
 
         it "track rubric duplicate" do
-          expect(InstStatsd::Statsd).to receive(:increment).with("course.rubrics.duplicated_enhanced").at_least(:once)
+          expect(InstStatsd::Statsd).to receive(:distributed_increment).with("course.rubrics.duplicated_enhanced").at_least(:once)
           create_params["rubric"]["is_duplicate"] = true
           post "create", params: create_params
         end
 
         it "track rubric updated with enhanced version" do
-          expect(InstStatsd::Statsd).to receive(:increment).with("course.rubrics.updated_enhanced").at_least(:once)
+          expect(InstStatsd::Statsd).to receive(:distributed_increment).with("course.rubrics.updated_enhanced").at_least(:once)
 
           rubric_association_model(user: @user, context: @course)
           put "update", params: { course_id: @course.id, id: @rubric.id, rubric: { title: "new title" } }
         end
 
         it "track rubric aligned with outcome" do
-          allow(InstStatsd::Statsd).to receive(:increment).and_call_original
-          expect(InstStatsd::Statsd).to receive(:increment)
+          allow(InstStatsd::Statsd).to receive(:distributed_increment).and_call_original
+          expect(InstStatsd::Statsd).to receive(:distributed_increment)
             .with("rubrics_management.rubric_criterion.aligned_with_outcome_used_for_scoring")
             .at_least(:once)
           outcome_group = @course.root_outcome_group
@@ -1212,6 +1212,117 @@ describe RubricsController do
           post "create", params: create_params
         end
       end
+    end
+  end
+
+  describe "POST 'llm_criteria'" do
+    before do
+      course_with_teacher_logged_in(active_all: true)
+      @assignment = @course.assignments.create!(assignment_valid_attributes)
+
+      @course.enable_feature!(:enhanced_rubrics)
+      @course.enable_feature!(:ai_rubrics)
+
+      @inst_llm = double("InstLLM::Client")
+      allow(InstLLMHelper).to receive(:client).and_return(@inst_llm)
+    end
+
+    it "queues job for generation of criteria via LLM when features are enabled" do
+      llm_response = {
+        criteria: [
+          {
+            name: "Critical Analysis",
+            description: "Demonstrates thorough understanding and analysis",
+            ratings: [
+              { title: "Excellent", description: "Thoroughly demonstrated understanding" },
+              { title: "Good", description: "Partially demonstrated understanding" },
+              { title: "Needs Improvement", description: "Failed to demonstrate understanding" }
+            ]
+          },
+          {
+            name: "Detailed Diagrams",
+            description: "Demonstrates diagramming ability ",
+            ratings: [
+              { title: "Excellent", description: "Thoroughly demonstrated diagramming" },
+              { title: "Good", description: "Partially demonstrated diagramming" },
+              { title: "Needs Improvement", description: "Failed to demonstrate diagramming" }
+            ]
+          }
+        ]
+      }
+
+      expect(@inst_llm).to receive(:chat).and_return(
+        InstLLM::Response::ChatResponse.new(
+          model: "model",
+          message: { role: :assistant, content: llm_response.to_json },
+          stop_reason: "stop_reason",
+          usage: {
+            input_tokens: 10,
+            output_tokens: 20,
+          }
+        )
+      )
+
+      post "llm_criteria",
+           params: {
+             course_id: @course.id,
+             rubric_association: { association_type: "Assignment", association_id: @assignment.id },
+             generate_options: { criteria_count: 2, rating_count: 3, points_per_criterion: 5, use_range: true }
+           },
+           format: :json
+
+      expect(response).to be_successful
+      json = response.parsed_body
+      expect(json).to be_present
+      expect(json["workflow_state"]).to eq "queued"
+
+      run_jobs
+
+      progress = Progress.find(json["id"])
+      expect(progress.results).to be_present
+      expect(progress.results[:criteria].length).to eq 2
+      expect(progress.results[:criteria][0][:criterion_use_range]).to be_truthy
+    end
+
+    it "returns error when features are disabled" do
+      @course.disable_feature!(:enhanced_rubrics)
+      @course.disable_feature!(:ai_rubrics)
+
+      post "llm_criteria",
+           params: {
+             course_id: @course.id,
+             rubric_association: { association_type: "Assignment", association_id: @assignment.id },
+             generate_options: { criteria_count: 2, rating_count: 3, points_per_criterion: 5 }
+           },
+           format: :json
+
+      expect(response).to be_forbidden
+    end
+
+    it "returns error when user lacks permissions" do
+      course_with_student_logged_in(active_all: true, course: @course)
+
+      post "llm_criteria",
+           params: {
+             course_id: @course.id,
+             rubric_association: { association_type: "Assignment", association_id: @assignment.id },
+             generate_options: { criteria_count: 2, rating_count: 3, points_per_criterion: 5 }
+           },
+           format: :json
+
+      expect(response).to be_forbidden
+    end
+
+    it "returns error when user specifies out-of-bounds parameters" do
+      post "llm_criteria",
+           params: {
+             course_id: @course.id,
+             rubric_association: { association_type: "Assignment", association_id: @assignment.id },
+             generate_options: { criteria_count: 1, rating_count: 3, points_per_criterion: 5 }
+           },
+           format: :json
+
+      expect(response).to be_bad_request
     end
   end
 end

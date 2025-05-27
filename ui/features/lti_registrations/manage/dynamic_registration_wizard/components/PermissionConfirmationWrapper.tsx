@@ -17,14 +17,14 @@
  */
 
 import React from 'react'
-import type {RegistrationOverlayStore} from '../../registration_wizard/registration_settings/RegistrationOverlayState'
-import type {LtiImsRegistration} from '../../model/lti_ims_registration/LtiImsRegistration'
+import type {DynamicRegistrationOverlayStore} from '../DynamicRegistrationOverlayState'
 import {useOverlayStore} from '../hooks/useOverlayStore'
 import {PermissionConfirmation} from '../../registration_wizard_forms/PermissionConfirmation'
+import type {LtiRegistrationWithConfiguration} from '../../model/LtiRegistration'
 
 export type PermissionConfirmationWrapperProps = {
-  registration: LtiImsRegistration
-  overlayStore: RegistrationOverlayStore
+  registration: LtiRegistrationWithConfiguration
+  overlayStore: DynamicRegistrationOverlayStore
 }
 
 export const PermissionConfirmationWrapper = ({
@@ -34,11 +34,13 @@ export const PermissionConfirmationWrapper = ({
   const [state, actions] = useOverlayStore(overlayStore)
   return (
     <PermissionConfirmation
-      appName={registration.client_name}
-      scopesSelected={registration.scopes.filter(
-        s => !state.registration.disabledScopes?.includes(s)
+      showAllSettings={false}
+      mode="new"
+      appName={registration.name}
+      scopesSelected={registration.configuration.scopes.filter(
+        s => !state.overlay.disabled_scopes?.includes(s),
       )}
-      scopesSupported={registration.scopes}
+      scopesSupported={registration.configuration.scopes}
       onScopeToggled={actions.toggleDisabledScope}
     />
   )

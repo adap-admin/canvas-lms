@@ -183,7 +183,7 @@ class GradeBookHistory
     end
 
     def final_grade_override_checkbox
-      f('div[data-testid="show-final-grade-overrides-only-checkbox"]')
+      f('div[data-testid="show-final-grade-overrides-only-checkbox"] div div')
     end
 
     def start_date_textfield
@@ -195,7 +195,7 @@ class GradeBookHistory
     end
 
     def error_text_invalid_dates
-      fxpath("(//span[contains(text(), 'date must be before')])[2]")
+      fxpath("(//span[contains(text(), 'date must be before')])[1]")
     end
 
     def filter_button

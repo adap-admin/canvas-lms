@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020 - present Instructure, Inc.
+ * Copyright (C) 2024 - present Instructure, Inc.
  *
  * This file is part of Canvas.
  *
@@ -20,6 +20,7 @@ import NotificationPreferencesTable from '../Table'
 import {render} from '@testing-library/react'
 import {within} from '@testing-library/dom'
 import React from 'react'
+import fakeENV from '@canvas/test-utils/fakeENV'
 
 const category = 0
 const commsChannel1 = 1
@@ -28,7 +29,7 @@ const commsChannel3 = 3
 
 describe('Notification Preferences Table', () => {
   beforeEach(() => {
-    window.ENV = {
+    fakeENV.setup({
       NOTIFICATION_PREFERENCES_OPTIONS: {
         send_scores_in_emails_text: {
           label: 'Some Label Text',
@@ -36,22 +37,29 @@ describe('Notification Preferences Table', () => {
         allowed_push_categories: ['announcement'],
       },
       current_user_roles: [],
-    }
+      discussions_reporting: false,
+    })
+  })
+
+  afterEach(() => {
+    fakeENV.teardown()
   })
 
   it('does not render the send scores in emails toggle if the env var is null', () => {
-    window.ENV = {
+    fakeENV.setup({
       NOTIFICATION_PREFERENCES_OPTIONS: {
         send_scores_in_emails_text: null,
         allowed_push_categories: [],
       },
-    }
+      current_user_roles: [],
+      discussions_reporting: false,
+    })
 
     const {getByTestId, queryByText} = render(
       <NotificationPreferencesTable
         preferences={mockedNotificationPreferences()}
         updatePreference={jest.fn()}
-      />
+      />,
     )
 
     const gradingCategory = getByTestId('grading')
@@ -64,7 +72,7 @@ describe('Notification Preferences Table', () => {
       <NotificationPreferencesTable
         preferences={mockedNotificationPreferences()}
         updatePreference={jest.fn()}
-      />
+      />,
     )
 
     const gradingCategory = getByTestId('grading')
@@ -77,14 +85,14 @@ describe('Notification Preferences Table', () => {
       <NotificationPreferencesTable
         preferences={mockedNotificationPreferences()}
         updatePreference={jest.fn()}
-      />
+      />,
     )
 
     const dueDateCategory = getByTestId('due_date')
     expect(dueDateCategory).not.toBeNull()
     expect(dueDateCategory.children[category].children[0].textContent).toEqual('Due Date')
     expect(
-      dueDateCategory.children[commsChannel2].querySelector('svg[name="IconNo"]')
+      dueDateCategory.children[commsChannel2].querySelector('svg[name="IconNo"]'),
     ).toBeInTheDocument()
   })
 
@@ -93,14 +101,14 @@ describe('Notification Preferences Table', () => {
       <NotificationPreferencesTable
         preferences={mockedNotificationPreferences()}
         updatePreference={jest.fn()}
-      />
+      />,
     )
 
     const dueDateCategory = getByTestId('due_date')
     expect(dueDateCategory).not.toBeNull()
     expect(dueDateCategory.children[category].children[0].textContent).toEqual('Due Date')
     expect(
-      dueDateCategory.children[commsChannel3].querySelector('svg[name="IconNo"]')
+      dueDateCategory.children[commsChannel3].querySelector('svg[name="IconNo"]'),
     ).toBeInTheDocument()
   })
 
@@ -109,14 +117,14 @@ describe('Notification Preferences Table', () => {
       <NotificationPreferencesTable
         preferences={mockedNotificationPreferences()}
         updatePreference={jest.fn()}
-      />
+      />,
     )
 
     const dueDateCategory = getByTestId('due_date')
     expect(dueDateCategory).not.toBeNull()
     expect(dueDateCategory.children[category].children[0].textContent).toEqual('Due Date')
     expect(
-      dueDateCategory.children[commsChannel1].querySelector('svg[name="IconMuted"]')
+      dueDateCategory.children[commsChannel1].querySelector('svg[name="IconMuted"]'),
     ).toBeInTheDocument()
   })
 
@@ -125,7 +133,7 @@ describe('Notification Preferences Table', () => {
       <NotificationPreferencesTable
         preferences={mockedNotificationPreferences()}
         updatePreference={jest.fn()}
-      />
+      />,
     )
 
     expect(getByText('Push Notification')).toBeInTheDocument()
@@ -137,7 +145,7 @@ describe('Notification Preferences Table', () => {
       <NotificationPreferencesTable
         preferences={mockedNotificationPreferences()}
         updatePreference={jest.fn()}
-      />
+      />,
     )
 
     expect(queryByTestId('courseActivities')).not.toBeNull()
@@ -149,7 +157,7 @@ describe('Notification Preferences Table', () => {
       <NotificationPreferencesTable
         preferences={mockedNotificationPreferences()}
         updatePreference={jest.fn()}
-      />
+      />,
     )
 
     const dueDateTooltip = getByTestId('due_date_description')
@@ -164,7 +172,7 @@ describe('Notification Preferences Table', () => {
       <NotificationPreferencesTable
         preferences={mockedNotificationPreferences()}
         updatePreference={jest.fn()}
-      />
+      />,
     )
 
     const dueDateScreenReader = getByTestId('due_date_screenReader')
@@ -179,7 +187,7 @@ describe('Notification Preferences Table', () => {
       <NotificationPreferencesTable
         preferences={mockedNotificationPreferences()}
         updatePreference={jest.fn()}
-      />
+      />,
     )
 
     const sendScoresToggle = getByTestId('grading-send-score-in-email')
@@ -191,7 +199,7 @@ describe('Notification Preferences Table', () => {
       <NotificationPreferencesTable
         preferences={mockedNotificationPreferences({sendScoresInEmails: false})}
         updatePreference={jest.fn()}
-      />
+      />,
     )
 
     const sendScoresToggle = getByTestId('grading-send-score-in-email')
@@ -203,70 +211,10 @@ describe('Notification Preferences Table', () => {
       <NotificationPreferencesTable
         preferences={mockedNotificationPreferences()}
         updatePreference={jest.fn()}
-      />
+      />,
     )
 
     const dueDate = container.getByTestId('due_date_header')
     expect(dueDate.tabIndex).toBe(0)
-  })
-
-  describe('Reported Reply', () => {
-    it('does not show the notification preference', () => {
-      const container = render(
-        <NotificationPreferencesTable
-          preferences={mockedNotificationPreferences()}
-          updatePreference={jest.fn()}
-        />
-      )
-
-      const test = container.queryByTestId('reported_reply_header')
-      expect(test).toBeNull()
-    })
-
-    describe('when the user is a teacher', () => {
-      beforeEach(() => {
-        window.ENV.current_user_roles = ['teacher']
-      })
-
-      afterEach(() => {
-        window.ENV.current_user_roles = []
-      })
-
-      describe('when reporting is disabled', () => {
-        beforeEach(() => {
-          window.ENV.discussions_reporting = false
-        })
-
-        it('does not show the notification preference', () => {
-          const container = render(
-            <NotificationPreferencesTable
-              preferences={mockedNotificationPreferences()}
-              updatePreference={jest.fn()}
-            />
-          )
-
-          const test = container.queryByTestId('reported_reply_header')
-          expect(test).toBeNull()
-        })
-      })
-
-      describe('when reporting is enabled', () => {
-        beforeEach(() => {
-          window.ENV.discussions_reporting = true
-        })
-
-        it('shows the notification preference', () => {
-          const container = render(
-            <NotificationPreferencesTable
-              preferences={mockedNotificationPreferences()}
-              updatePreference={jest.fn()}
-            />
-          )
-
-          const test = container.getByTestId('reported_reply_header')
-          expect(test).toBeInTheDocument()
-        })
-      })
-    })
   })
 })

@@ -25,7 +25,7 @@ import {DiscussionPermissions} from '../../../../graphql/DiscussionPermissions'
 import {DiscussionThreadContainer} from '../DiscussionThreadContainer'
 import {fireEvent, render} from '@testing-library/react'
 import {getSpeedGraderUrl} from '../../../utils'
-import {MockedProvider} from '@apollo/react-testing'
+import {MockedProvider} from '@apollo/client/testing'
 import React from 'react'
 import {
   updateDiscussionEntryParticipantMock,
@@ -34,27 +34,18 @@ import {
 import {User} from '../../../../graphql/User'
 import {waitFor} from '@testing-library/dom'
 
-jest.mock('../../../utils', () => ({
-  ...jest.requireActual('../../../utils'),
-  responsiveQuerySizes: () => ({desktop: {maxWidth: '1024px'}}),
-}))
-
-jest.mock('../../../utils/constants', () => ({
-  ...jest.requireActual('../../../utils/constants'),
-  HIGHLIGHT_TIMEOUT: 0,
-}))
+jest.mock('@canvas/util/globalUtils')
 
 describe('DiscussionThreadContainer', () => {
   const onFailureStub = jest.fn()
   const onSuccessStub = jest.fn()
   const openMock = jest.fn()
+
   beforeAll(() => {
-    delete window.location
-    window.location = {search: ''}
-    window.open = openMock
     window.ENV = {
       course_id: '1',
       SPEEDGRADER_URL_TEMPLATE: '/courses/1/gradebook/speed_grader?assignment_id=1&:student_id',
+      discussions_reporting: false,
     }
 
     window.matchMedia = jest.fn().mockImplementation(() => {
@@ -66,12 +57,16 @@ describe('DiscussionThreadContainer', () => {
         removeListener: jest.fn(),
       }
     })
+
+    window.open = openMock
   })
 
   afterEach(() => {
     onFailureStub.mockClear()
     onSuccessStub.mockClear()
     openMock.mockClear()
+    window.ENV.discussions_reporting = false
+    jest.clearAllMocks()
   })
 
   const defaultProps = ({
@@ -92,7 +87,7 @@ describe('DiscussionThreadContainer', () => {
         >
           <DiscussionThreadContainer {...props} />
         </AlertManagerContext.Provider>
-      </MockedProvider>
+      </MockedProvider>,
     )
   }
 
@@ -110,7 +105,7 @@ describe('DiscussionThreadContainer', () => {
     const {container} = setup(
       defaultProps({
         discussionEntryOverrides: {permissions: DiscussionEntryPermissions.mock({reply: false})},
-      })
+      }),
     )
     expect(container.querySelector('svg[name="IconDiscussionReply2"]')).not.toBeInTheDocument()
   })
@@ -124,10 +119,10 @@ describe('DiscussionThreadContainer', () => {
     const {queryAllByText, getByTestId} = setup(
       defaultProps({
         discussionEntryOverrides: {permissions: DiscussionEntryPermissions.mock({reply: false})},
-      })
+      }),
     )
     fireEvent.click(getByTestId('thread-actions-menu'))
-    expect(queryAllByText('Quote Reply').length).toBe(0)
+    expect(queryAllByText('Quote Reply')).toHaveLength(0)
   })
 
   it('should render quote button if reply permission is true', () => {
@@ -144,7 +139,7 @@ describe('DiscussionThreadContainer', () => {
       const {getByTestId, queryAllByText} = setup(props)
       fireEvent.click(getByTestId('thread-actions-menu'))
 
-      expect(queryAllByText('Delete').length).toBe(0)
+      expect(queryAllByText('Delete')).toHaveLength(0)
     })
 
     it('present when true', async () => {
@@ -179,20 +174,19 @@ describe('DiscussionThreadContainer', () => {
         updateDiscussionEntryParticipantMock({
           read: false,
           forcedReadState: true,
-        })
+        }),
       )
 
       fireEvent.click(getByTestId('thread-actions-menu'))
       fireEvent.click(getByTestId('markAsUnread'))
 
       await waitFor(() => {
-        expect(onSuccessStub.mock.calls.length).toBe(1)
-        expect(onFailureStub.mock.calls.length).toBe(0)
+        expect(onSuccessStub.mock.calls).toHaveLength(1)
+        expect(onFailureStub.mock.calls).toHaveLength(0)
       })
     })
 
     it('Should render Mark Thread as Unread and Read', () => {
-      window.location = {assign: jest.fn()}
       const setHighlightEntryId = jest.fn()
       const {getByTestId, getAllByText} = setup(
         defaultProps({
@@ -202,16 +196,16 @@ describe('DiscussionThreadContainer', () => {
         updateDiscussionThreadReadStateMock({
           discussionEntryId: 'DiscussionEntry-default-mock',
           read: false,
-        })
+        }),
       )
 
       fireEvent.click(getByTestId('thread-actions-menu'))
 
-      expect(getAllByText('Mark Thread as Unread').length).toBe(1)
-      expect(getAllByText('Mark Thread as Read').length).toBe(1)
+      expect(getAllByText('Mark Thread as Unread')).toHaveLength(1)
+      expect(getAllByText('Mark Thread as Read')).toHaveLength(1)
 
       fireEvent.click(getAllByText('Mark Thread as Unread')[0])
-      expect(setHighlightEntryId.mock.calls.length).toBe(1)
+      expect(setHighlightEntryId.mock.calls).toHaveLength(1)
       expect(setHighlightEntryId).toHaveBeenCalledWith('DiscussionEntry-default-mock')
     })
 
@@ -219,7 +213,7 @@ describe('DiscussionThreadContainer', () => {
       const {getByTestId, queryByTestId} = setup(
         defaultProps({
           discussionOverrides: {discussionType: 'not_threaded'},
-        })
+        }),
       )
 
       fireEvent.click(getByTestId('thread-actions-menu'))
@@ -235,15 +229,15 @@ describe('DiscussionThreadContainer', () => {
             read: false,
             forcedReadState: true,
             shouldError: true,
-          })
+          }),
         )
 
         fireEvent.click(getByTestId('thread-actions-menu'))
         fireEvent.click(getByTestId('markAsUnread'))
 
         await waitFor(() => {
-          expect(onSuccessStub.mock.calls.length).toBe(0)
-          expect(onFailureStub.mock.calls.length).toBe(1)
+          expect(onSuccessStub.mock.calls).toHaveLength(0)
+          expect(onFailureStub.mock.calls).toHaveLength(1)
         })
       })
     })
@@ -255,14 +249,14 @@ describe('DiscussionThreadContainer', () => {
         defaultProps(),
         updateDiscussionEntryParticipantMock({
           rating: 'liked',
-        })
+        }),
       )
 
       fireEvent.click(getByTestId('like-button'))
 
       await waitFor(() => {
-        expect(onSuccessStub.mock.calls.length).toBe(1)
-        expect(onFailureStub.mock.calls.length).toBe(0)
+        expect(onSuccessStub.mock.calls).toHaveLength(1)
+        expect(onFailureStub.mock.calls).toHaveLength(0)
       })
     })
 
@@ -273,14 +267,14 @@ describe('DiscussionThreadContainer', () => {
           updateDiscussionEntryParticipantMock({
             rating: 'liked',
             shouldError: true,
-          })
+          }),
         )
 
         fireEvent.click(getByTestId('like-button'))
 
         await waitFor(() => {
-          expect(onSuccessStub.mock.calls.length).toBe(0)
-          expect(onFailureStub.mock.calls.length).toBe(1)
+          expect(onSuccessStub.mock.calls).toHaveLength(0)
+          expect(onFailureStub.mock.calls).toHaveLength(1)
         })
       })
     })
@@ -296,7 +290,7 @@ describe('DiscussionThreadContainer', () => {
       await waitFor(() => {
         expect(openMock).toHaveBeenCalledWith(
           getSpeedGraderUrl('2', 'DiscussionEntry-default-mock'),
-          `_blank`
+          `_blank`,
         )
       })
     })
@@ -305,7 +299,7 @@ describe('DiscussionThreadContainer', () => {
       const {getByTestId, queryByTestId} = setup(
         defaultProps({
           discussionOverrides: {permissions: DiscussionPermissions.mock({speedGrader: false})},
-        })
+        }),
       )
 
       fireEvent.click(getByTestId('thread-actions-menu'))
@@ -322,7 +316,7 @@ describe('DiscussionThreadContainer', () => {
       fireEvent.click(getByTestId('toTopic'))
 
       await waitFor(() => {
-        expect(goToTopic.mock.calls.length).toBe(1)
+        expect(goToTopic.mock.calls).toHaveLength(1)
       })
     })
 
@@ -330,14 +324,14 @@ describe('DiscussionThreadContainer', () => {
       const setHighlightEntryId = jest.fn()
       const parentId = '1'
       const {getByTestId} = setup(
-        defaultProps({propOverrides: {setHighlightEntryId, parentId, depth: 2}})
+        defaultProps({propOverrides: {setHighlightEntryId, parentId, depth: 2}}),
       )
 
       fireEvent.click(getByTestId('thread-actions-menu'))
       fireEvent.click(getByTestId('toParent'))
 
       await waitFor(() => {
-        expect(setHighlightEntryId.mock.calls.length).toBe(1)
+        expect(setHighlightEntryId.mock.calls).toHaveLength(1)
       })
     })
   })
@@ -348,7 +342,7 @@ describe('DiscussionThreadContainer', () => {
         const container = setup(
           defaultProps({
             discussionEntryOverrides: {entryParticipant: {read: false, rating: false}},
-          })
+          }),
         )
         expect(container.getByTestId('is-unread')).toBeInTheDocument()
       })
@@ -364,7 +358,7 @@ describe('DiscussionThreadContainer', () => {
                 __typename: 'DiscussionEntryCounts',
               },
             },
-          })
+          }),
         )
         expect(container.getByTestId('is-unread')).toBeInTheDocument()
       })
@@ -382,7 +376,7 @@ describe('DiscussionThreadContainer', () => {
                 __typename: 'DiscussionEntryCounts',
               },
             },
-          })
+          }),
         )
         expect(container.queryByTestId('is-unread')).not.toBeInTheDocument()
       })
@@ -405,16 +399,16 @@ describe('DiscussionThreadContainer', () => {
               __typename: 'DiscussionEntryCounts',
             },
           },
-        })
+        }),
       )
-      expect(getAllByText('1 Reply, 1 Unread').length).toBe(2)
+      expect(getAllByText('1 Reply, 1 Unread')).toHaveLength(2)
     })
 
     it('pluralizes replies message correctly when there are multiple replies', () => {
       const {getAllByText} = setup(
         defaultProps({
           discussionEntryOverrides: {rootEntryParticipantCounts: {unreadCount: 1, repliesCount: 2}},
-        })
+        }),
       )
       expect(getAllByText('2 Replies, 1 Unread')).toBeTruthy()
     })
@@ -423,10 +417,10 @@ describe('DiscussionThreadContainer', () => {
       const {queryAllByText} = setup(
         defaultProps({
           discussionEntryOverrides: {rootEntryParticipantCounts: {unreadCount: 0, repliesCount: 2}},
-        })
+        }),
       )
-      expect(queryAllByText('2 Replies, 0 Unread').length).toBe(0)
-      expect(queryAllByText('2 Replies').length).toBe(2)
+      expect(queryAllByText('2 Replies, 0 Unread')).toHaveLength(0)
+      expect(queryAllByText('2 Replies')).toHaveLength(2)
     })
   })
 
@@ -440,7 +434,7 @@ describe('DiscussionThreadContainer', () => {
     })
 
     describe('when feature flag and setting is enabled', () => {
-      beforeAll(() => {
+      beforeEach(() => {
         window.ENV.discussions_reporting = true
       })
 
@@ -460,7 +454,7 @@ describe('DiscussionThreadContainer', () => {
                 reportType: 'other',
               },
             },
-          })
+          }),
         )
 
         fireEvent.click(getByTestId('thread-actions-menu'))
@@ -469,16 +463,16 @@ describe('DiscussionThreadContainer', () => {
       })
 
       it('can Report', async () => {
-        const {getByTestId, queryByText} = setup(
+        const {getByTestId, getByText} = setup(
           defaultProps(),
           updateDiscussionEntryParticipantMock({
             reportType: 'other',
-          })
+          }),
         )
 
         fireEvent.click(getByTestId('thread-actions-menu'))
-        fireEvent.click(queryByText('Report'))
-        fireEvent.click(queryByText('Other'))
+        fireEvent.click(getByText('Report'))
+        fireEvent.click(getByText('Other'))
         fireEvent.click(getByTestId('report-reply-submit-button'))
 
         await waitFor(() => {

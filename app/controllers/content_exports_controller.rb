@@ -91,7 +91,7 @@ class ContentExportsController < ApplicationController
   def xml_schema
     if (filename = CC::Schema.for_version(params[:version]))
       cancel_cache_buster
-      send_file(filename, type: "text/xml", disposition: "inline")
+      safe_send_file(filename, type: "text/xml", disposition: "inline")
     else
       render "shared/errors/404_message", status: :not_found, formats: [:html]
     end
@@ -101,7 +101,10 @@ class ContentExportsController < ApplicationController
 
   def render_export(export)
     json = export.as_json(only: %i[id progress workflow_state], methods: [:error_message])
-    json["content_export"]["download_url"] = verified_file_download_url(export.attachment, export) if export.attachment && !export.expired?
+    if export.attachment && !export.expired?
+      verifier = Account.site_admin.feature_enabled?(:disable_verified_content_export_links) ? nil : export.attachment.uuid
+      json["content_export"]["download_url"] = file_download_url(export.attachment, verifier:)
+    end
     render json:
   end
 end

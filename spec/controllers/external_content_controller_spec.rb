@@ -115,15 +115,16 @@ describe ExternalContentController do
         post(:success, params:)
         env = controller.js_env
 
-        expect(env[:message]).to eq('{"html"=>"msg somehtml"}')
-        expect(env[:log]).to eq('{"html"=>"log somehtml"}')
-        expect(env[:error_message]).to eq('{"html"=>"errormsg somehtml"}')
-        expect(env[:error_log]).to eq('{"html"=>"errorlog somehtml"}')
+        separator = (RUBY_VERSION >= "3.4.0") ? " => " : "=>"
+        expect(env[:message]).to eq(%({"html"#{separator}"msg somehtml"}))
+        expect(env[:log]).to eq(%({"html"#{separator}"log somehtml"}))
+        expect(env[:error_message]).to eq(%({"html"#{separator}"errormsg somehtml"}))
+        expect(env[:error_log]).to eq(%({"html"#{separator}"errorlog somehtml"}))
         expect(env[:lti_response_messages]).to eq(
-          lti_msg: '{"html"=>"msg somehtml"}',
-          lti_log: '{"html"=>"log somehtml"}',
-          lti_errormsg: '{"html"=>"errormsg somehtml"}',
-          lti_errorlog: '{"html"=>"errorlog somehtml"}'
+          lti_msg: %({"html"#{separator}"msg somehtml"}),
+          lti_log: %({"html"#{separator}"log somehtml"}),
+          lti_errormsg: %({"html"#{separator}"errormsg somehtml"}),
+          lti_errorlog: %({"html"#{separator}"errorlog somehtml"})
         )
       end
 
@@ -448,7 +449,7 @@ describe ExternalContentController do
       let(:iss) { tool.consumer_key }
       let(:jti) { SecureRandom.uuid }
       let(:params) { { oembed_token: } }
-      let(:sub) { Lti::Asset.opaque_identifier_for(user) }
+      let(:sub) { Lti::V1p1::Asset.opaque_identifier_for(user) }
 
       context "and an active user session" do
         before { user_session(user) }

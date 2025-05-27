@@ -37,13 +37,15 @@ describe Api::V1::Lti::Registration do
   end
 
   describe "#lti_registration_json" do
-    subject { tester.lti_registration_json(registration, user, session, context, includes:) }
+    subject { tester.lti_registration_json(registration, user, session, context, includes:, account_binding:, overlay:) }
 
     let(:registration) { lti_registration_model(admin_nickname: "Test", vendor: "Test Company", account: context) }
     let(:user) { user_model }
     let(:session) { {} }
     let(:context) { account_model }
     let(:includes) { [] }
+    let(:account_binding) { nil }
+    let(:overlay) { nil }
 
     it "includes all expected base attributes" do
       expect(subject).to include({
@@ -148,6 +150,25 @@ describe Api::V1::Lti::Registration do
 
       it "includes dynamic_registration as true" do
         expect(subject[:dynamic_registration]).to be(true)
+      end
+
+      context "with an overlay" do
+        let(:overlay) { lti_overlay_model(registration:, account: context, data: { title: }) }
+        let(:title) { "Test" }
+
+        before { overlay }
+
+        it "does not overlay configuration" do
+          expect(subject.dig(:configuration, :title)).not_to eq(title)
+        end
+
+        context "with overlaid_configuration" do
+          let(:includes) { [:overlaid_configuration] }
+
+          it "includes the overlaid configuration" do
+            expect(subject.dig(:overlaid_configuration, :title)).to eq(title)
+          end
+        end
       end
     end
 

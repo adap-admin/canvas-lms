@@ -47,13 +47,13 @@ module Types
 
     global_id_field :id
 
-    field :name, String, null: true
+    field :name, HtmlEncodedStringType, null: true
     field :short_name,
-          String,
+          HtmlEncodedStringType,
           "A short name the user has selected, for use in conversations or other less formal places through the site.",
           null: true
     field :sortable_name,
-          String,
+          HtmlEncodedStringType,
           "The name of the user that is should be used for sorting groups of users, such as in the gradebook.",
           null: true
 
@@ -81,13 +81,21 @@ module Types
     end
     def html_url(course_id: nil)
       resolved_course_id = course_id.nil? ? context[:course_id] : course_id
-      return if resolved_course_id.nil?
 
-      GraphQLHelpers::UrlHelpers.course_user_url(
-        course_id: resolved_course_id,
-        id: object.id,
-        host: context[:request].host_with_port
-      )
+      if context[:group_id]
+        GraphQLHelpers::UrlHelpers.group_user_url(
+          group_id: context[:group_id],
+          id: object.id,
+          host: context[:request].host_with_port
+        )
+      elsif resolved_course_id
+        # it is possible to be a user in an admin group discussion where is no course
+        GraphQLHelpers::UrlHelpers.course_user_url(
+          course_id: resolved_course_id,
+          id: object.id,
+          host: context[:request].host_with_port
+        )
+      end
     end
 
     field :email, String, null: true
@@ -144,6 +152,8 @@ module Types
       end
     end
 
+    ALLOWED_ORDER_BY_VALUES = %w[id user_id course_id created_at start_at end_at completed_at courses.id courses.name courses.course_code courses.start_at courses.conclude_at].to_set
+
     field :enrollments, [EnrollmentType], null: false do
       argument :course_id,
                ID,
@@ -158,9 +168,18 @@ module Types
                Boolean,
                "Whether or not to exclude `completed` enrollments",
                required: false
+      argument :horizon_courses,
+               Boolean,
+               "Whether or not to include or exclude Canvas Career courses",
+               required: false
       argument :order_by,
                [String],
                "The fields to order the results by",
+               required: false,
+               validates: { all: { inclusion: { in: ALLOWED_ORDER_BY_VALUES } } }
+      argument :sort,
+               EnrollmentsSortInputType,
+               "The sort field and direction for the results. Secondary sort is by section name",
                required: false
     end
 
@@ -182,13 +201,15 @@ module Types
       pseudonym.unique_id
     end
 
-    def enrollments(course_id: nil, current_only: false, order_by: [], exclude_concluded: false)
+    def enrollments(course_id: nil, current_only: false, order_by: [], exclude_concluded: false, horizon_courses: nil, sort: {})
       course_ids = [course_id].compact
       Loaders::UserCourseEnrollmentLoader.for(
         course_ids:,
         order_by:,
         current_only:,
-        exclude_concluded:
+        exclude_concluded:,
+        horizon_courses:,
+        sort:
       ).load(object.id).then do |enrollments|
         (enrollments || []).select do |enrollment|
           object == context[:current_user] ||
@@ -232,26 +253,46 @@ module Types
     field :conversations_connection, Types::ConversationParticipantType.connection_type, null: true do
       argument :filter, [String], required: false
       argument :scope, String, required: false
+      argument :show_horizon_conversations, Boolean, required: false
     end
-    def conversations_connection(scope: nil, filter: nil)
+    def conversations_connection(scope: nil, filter: nil, show_horizon_conversations: false)
       if object == context[:current_user]
+
         conversations_scope = case scope
                               when "unread"
-                                InstStatsd::Statsd.increment("inbox.visit.scope.unread.pages_loaded.react")
+                                InstStatsd::Statsd.distributed_increment("inbox.visit.scope.unread.pages_loaded.react")
                                 object.conversations.unread
                               when "starred"
-                                InstStatsd::Statsd.increment("inbox.visit.scope.starred.pages_loaded.react")
+                                InstStatsd::Statsd.distributed_increment("inbox.visit.scope.starred.pages_loaded.react")
                                 object.starred_conversations
                               when "sent"
-                                InstStatsd::Statsd.increment("inbox.visit.scope.sent.pages_loaded.react")
+                                InstStatsd::Statsd.distributed_increment("inbox.visit.scope.sent.pages_loaded.react")
                                 object.all_conversations.sent
                               when "archived"
-                                InstStatsd::Statsd.increment("inbox.visit.scope.archived.pages_loaded.react")
+                                InstStatsd::Statsd.distributed_increment("inbox.visit.scope.archived.pages_loaded.react")
                                 object.conversations.archived
                               else
-                                InstStatsd::Statsd.increment("inbox.visit.scope.inbox.pages_loaded.react")
+                                InstStatsd::Statsd.distributed_increment("inbox.visit.scope.inbox.pages_loaded.react")
                                 object.conversations.default
                               end
+
+        # Filter out conversations from horizon courses unless explicitly shown
+        unless show_horizon_conversations
+          # Get IDs of horizon courses where the user is a student
+          horizon_student_course_ids = object.enrollments
+                                             .where(type: "StudentEnrollment")
+                                             .joins(:course)
+                                             .where(courses: { workflow_state: "available" })
+                                             .horizon
+                                             .pluck(:course_id)
+          # Get IDs of conversations that have messages from horizon courses
+          horizon_conversation_ids = conversations_scope
+                                     .where(
+                                       tags: horizon_student_course_ids.map { |c| "course_#{c}" }
+                                     )
+                                     .pluck(:id)
+          conversations_scope = conversations_scope.where.not(id: horizon_conversation_ids) if horizon_student_course_ids.present? && horizon_conversation_ids.present?
+        end
 
         filter_mode = :and
         filter = filter.presence || []
@@ -409,14 +450,41 @@ module Types
       end
     end
 
-    field :favorite_groups_connection, Types::GroupType.connection_type, null: true
-    def favorite_groups_connection
+    def get_favorite_groups(scope)
+      favorite_group_ids = object.favorite_context_ids("Group")
+      favorite_groups = scope.where(id: favorite_group_ids)
+
+      # Return favorite groups if any exist; otherwise, return the provided scope
+      favorite_groups.exists? ? favorite_groups : scope
+    end
+
+    field :favorite_groups_connection, Types::GroupType.connection_type, null: true do
+      description "Favorite groups for the user."
+      argument :include_non_collaborative, Boolean, required: false, default_value: false
+    end
+    def favorite_groups_connection(include_non_collaborative: false)
+      # Ensure that the field is accessed by the current user
       return unless object == current_user
 
       load_association(:groups).then do |groups|
-        load_association(:favorites).then do
-          favorite_groups = groups.active.shard(object).where(id: object.favorite_context_ids("Group"))
-          favorite_groups.any? ? favorite_groups : object.groups.active.shard(object)
+        collaborative_scope = groups.active.shard(object)
+        final_scope = collaborative_scope
+
+        if include_non_collaborative
+          load_association(:differentiation_tags).then do |differentiation_tags|
+            non_collaborative_scope = differentiation_tags.active.shard(object)
+
+            # non_collaborative groups where the current user does not have read access
+            non_viewable_group_ids = non_collaborative_scope
+                                     .reject { |group| group.grants_right?(object, :read) }
+                                     .map(&:id)
+            non_collaborative_scope = non_collaborative_scope.where.not(id: non_viewable_group_ids)
+            final_scope = collaborative_scope.or(non_collaborative_scope)
+
+            get_favorite_groups(final_scope)
+          end
+        else
+          get_favorite_groups(final_scope)
         end
       end
     end
@@ -465,7 +533,7 @@ module Types
         submission_ids = StreamItem.where(id: shard_stream_items.map(&:stream_item_id)).pluck(:asset_id)
         submissions += Submission.where(id: submission_ids)
       end
-      InstStatsd::Statsd.increment("inbox.visit.scope.submission_comments.pages_loaded.react")
+      InstStatsd::Statsd.distributed_increment("inbox.visit.scope.submission_comments.pages_loaded.react")
       # on FE we use newest submission comment to render date so use that first.
       submissions.sort_by { |t| t.submission_comments.last.created_at || t.last_comment_at }.reverse
     rescue
@@ -549,8 +617,14 @@ end
 
 module Loaders
   class UserCourseEnrollmentLoader < Loaders::ForeignKeyLoader
-    def initialize(course_ids:, order_by: [], current_only: false, exclude_concluded: false, exclude_pending_enrollments: true)
-      scope = Enrollment.joins(:course)
+    def initialize(course_ids:, order_by: [], current_only: false, exclude_concluded: false, exclude_pending_enrollments: true, horizon_courses: nil, sort: {})
+      scope = if horizon_courses
+                Enrollment.horizon
+              elsif horizon_courses == false
+                Enrollment.not_horizon
+              else
+                Enrollment.joins(:course)
+              end
 
       scope = if current_only
                 scope.current.active_by_date
@@ -566,6 +640,37 @@ module Loaders
       scope = scope.excluding_pending if exclude_pending_enrollments
 
       order_by.each { |o| scope = scope.order(o) }
+
+      if sort.present?
+        sort_direction = (sort[:direction] == "desc") ? "DESC" : "ASC"
+        reversed_sort_direction = (sort[:direction] == "desc") ? "ASC" : "DESC"
+
+        case sort[:field]
+        when "last_activity_at"
+          # The order for last_activity_at is intentionally reversed because last activity is
+          # a timestamp and we want the most recent activity to appear first in ascending order
+          scope = scope.joins(:course_section)
+                       .select("enrollments.*, course_sections.name as section_name")
+                       .order("last_activity_at #{reversed_sort_direction} NULLS LAST, section_name ASC")
+        when "section_name"
+          scope = scope.joins(:course_section)
+                       .select("enrollments.*, course_sections.name as section_name")
+                       .order("section_name #{sort_direction} NULLS LAST")
+        when "role"
+          # use the same role ordering as the one in lib/user_search.rb
+          scope = scope.joins(:course_section)
+                       .select("enrollments.*, course_sections.name as section_name,
+                                (CASE
+                                  WHEN type = 'TeacherEnrollment' THEN 0
+                                  WHEN type = 'TaEnrollment' THEN 1
+                                  WHEN type = 'StudentEnrollment' THEN 2
+                                  WHEN type = 'ObserverEnrollment' THEN 3
+                                  WHEN type = 'DesignerEnrollment' THEN 4
+                                  ELSE NULL
+                                END) as role")
+                       .order("role #{sort_direction} NULLS LAST, section_name ASC")
+        end
+      end
 
       super(scope, :user_id)
     end

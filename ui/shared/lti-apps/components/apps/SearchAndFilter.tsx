@@ -21,18 +21,17 @@ import {Flex} from '@instructure/ui-flex'
 import {View} from '@instructure/ui-view'
 import {TextInput} from '@instructure/ui-text-input'
 import {ScreenReaderContent} from '@instructure/ui-a11y-content'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {Button, IconButton} from '@instructure/ui-buttons'
 import {IconEndSolid, IconFilterLine, IconSearchLine} from '@instructure/ui-icons'
 import useDebouncedSearch from '../../hooks/useDebouncedSearch'
 import useDiscoverQueryParams from '../../hooks/useDiscoverQueryParams'
 import useBreakpoints from '../../hooks/useBreakpoints'
+import {instructorAppsHash, instructorAppsRoute} from '../../utils/routes'
 
-const I18n = useI18nScope('lti_registrations')
+const I18n = createI18nScope('lti_registrations')
 
 export const SearchAndFilter = (props: {setIsTrayOpen: (isOpen: boolean) => void}) => {
-  const instructorAppsRoute = 'configurations'
-  const instructorAppsHash = '#tab-apps'
   const disableQueryParams =
     window.location.href.includes(instructorAppsRoute) &&
     window.location.hash !== instructorAppsHash
@@ -47,7 +46,7 @@ export const SearchAndFilter = (props: {setIsTrayOpen: (isOpen: boolean) => void
 
   return (
     <Flex gap="small" margin="0 0 small 0" direction={isMaxMobile ? 'column-reverse' : 'row'}>
-      <Flex.Item shouldGrow={true} overflowX="hidden" overflowY="hidden">
+      <Flex.Item shouldGrow={true} overflowY="visible">
         <View as="div">
           <TextInput
             renderLabel={

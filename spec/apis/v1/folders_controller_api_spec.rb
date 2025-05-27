@@ -120,17 +120,19 @@ describe "Folders API", type: :request do
       before(:once) do
         @root.sub_folders.create!(name: "folder1", context: @course)
         @root.sub_folders.create!(name: "folder2", context: @course, workflow_state: "hidden")
+        @root.sub_folders.create!(name: "folder3", context: @course, workflow_state: "visible", locked: true)
         Attachment.create!(filename: "test1.txt", display_name: "test1.txt", uploaded_data: StringIO.new("file"), folder: @root, context: @course)
         Attachment.create!(filename: "test2.txt", display_name: "test2.txt", uploaded_data: StringIO.new("file"), folder: @root, context: @course).update_attribute(:file_state, "hidden")
+        Attachment.create!(filename: "test3.txt", display_name: "test3.txt", uploaded_data: StringIO.new("file"), folder: @root, context: @course, workflow_state: "processed", file_state: "available", locked: true)
       end
 
-      it "counts hidden items for teachers" do
+      it "counts locked and hidden items for teachers" do
         json = api_call(:get, @folders_path + "/#{@root.id}", @folders_path_options.merge(action: "show"), {})
-        expect(json["files_count"]).to eq 2
-        expect(json["folders_count"]).to eq 2
+        expect(json["files_count"]).to eq 3
+        expect(json["folders_count"]).to eq 3
       end
 
-      it "does not count hidden items for students" do
+      it "does not count locked and hidden items for students" do
         student_in_course active_all: true
         json = api_call(:get, @folders_path + "/#{@root.id}", @folders_path_options.merge(action: "show"), {})
         expect(json["files_count"]).to eq 1
@@ -742,6 +744,25 @@ describe "Folders API", type: :request do
                { expected_status: 403 })
     end
 
+    it "errors on duplicate file name if on_duplicate set to error" do
+      @context = course_with_teacher
+      @user = @teacher
+      @root_folder = Folder.root_folders(@course).first
+      @root_folder.attachments.create!(filename: "duplicate.txt",
+                                       display_name: "duplicate.txt",
+                                       uploaded_data: StringIO.new("file"),
+                                       folder: @root_folder,
+                                       context: @course,
+                                       user: @user)
+      api_call(:post,
+               "/api/v1/folders/#{@root_folder.id}/files",
+               { controller: "folders", action: "create_file", format: "json", folder_id: @root_folder.id.to_param },
+               { name: "duplicate.txt",
+                 on_duplicate: "error" },
+               {},
+               { expected_status: 409 })
+    end
+
     context "as teacher without manage_files_add permission" do
       before do
         teacher_role = Role.get_built_in_role("TeacherEnrollment", root_account_id: @course.root_account.id)
@@ -1039,15 +1060,17 @@ describe "Folders API", type: :request do
       expect(@dest_folder.active_file_attachments).not_to be_exists
     end
 
-    it "copies a file" do
-      @dest_context.enroll_teacher @user, enrollment_state: "active"
-      json = api_call(:post,
-                      "/api/v1/folders/#{@dest_folder.id}/copy_file?source_file_id=#{@source_file.id}",
-                      @params_hash.merge(dest_folder_id: @dest_folder.to_param, source_file_id: @source_file.to_param))
-      file = Attachment.find(json["id"])
-      expect(file.folder).to eq(@dest_folder)
-      expect(file.root_attachment).to eq(@source_file)
-      expect(json["url"]).to include "verifier="
+    double_testing_with_disable_adding_uuid_verifier_in_api_ff do
+      it "copies a file" do
+        @dest_context.enroll_teacher @user, enrollment_state: "active"
+        json = api_call(:post,
+                        "/api/v1/folders/#{@dest_folder.id}/copy_file?source_file_id=#{@source_file.id}",
+                        @params_hash.merge(dest_folder_id: @dest_folder.to_param, source_file_id: @source_file.to_param))
+        file = Attachment.find(json["id"])
+        expect(file.folder).to eq(@dest_folder)
+        expect(file.root_attachment).to eq(@source_file)
+        expect(json["url"]).to include "verifier=" unless disable_adding_uuid_verifier_in_api
+      end
     end
 
     it "omits verifier in-app" do
@@ -1253,24 +1276,44 @@ describe "Folders API", type: :request do
       @folders_files_path = "/api/v1/folders/#{@root.id}/all"
       @folders_files_path_options = { controller: "folders", action: "list_folders_and_files", format: "json", id: @root.id.to_param }
 
-      @folder1 = @root.sub_folders.create!(name: "folder1", context: @course, position: 1)
-      @folder2 = @root.sub_folders.create!(name: "folder2", context: @course, position: 2, hidden: true)
-      @file1 = Attachment.create!(
-        filename: "file1.txt",
-        display_name: "file1.txt",
-        uploaded_data: StringIO.new("existing"),
-        folder: @root,
-        context: @course,
-        user: @user
-      )
-      @file2 = Attachment.create!(
-        filename: "file2.txt",
-        display_name: "file2.txt",
-        uploaded_data: StringIO.new("existing"),
-        folder: @root,
-        context: @course,
-        hidden: true
-      )
+      now = Time.now.utc
+      now -= 10.minutes
+      Timecop.freeze(now) do
+        @folder1 = @root.sub_folders.create!(name: "folder1", context: @course, position: 1)
+        Timecop.travel(now + 1.minute)
+        @folder2 = @root.sub_folders.create!(name: "folder2", context: @course, position: 2, hidden: true)
+        Timecop.travel(now + 2.minutes)
+        @file1 = Attachment.create!(
+          filename: "file1.txt",
+          display_name: "file1.txt",
+          uploaded_data: StringIO.new("existing file with more content"),
+          folder: @root,
+          context: @course,
+          user: @user,
+          usage_rights: UsageRights.create!(context: @course, use_justification: "used_by_permission")
+        )
+        Timecop.travel(now + 3.minutes)
+        @file2 = Attachment.create!(
+          filename: "file2.txt",
+          display_name: "file2.txt",
+          uploaded_data: StringIO.new("existing file"),
+          folder: @root,
+          context: @course,
+          hidden: true,
+          user_id: User.create!(name: "User"),
+          usage_rights: UsageRights.create!(context: @course, use_justification: "own_copyright")
+        )
+        Timecop.travel(now + 4.minutes)
+        @file3 = Attachment.create!(
+          filename: "file3.txt",
+          display_name: "file3.txt",
+          uploaded_data: StringIO.new("another existing file"),
+          folder: @root,
+          context: @course,
+          user: @user,
+          usage_rights: UsageRights.create!(context: @course, use_justification: "fair_use")
+        )
+      end
     end
 
     it "returns unauthorized if feature is disabled" do
@@ -1284,7 +1327,7 @@ describe "Folders API", type: :request do
       result_names = json.map do |item|
         item["name"] || item["display_name"] || item["filename"]
       end
-      expect(result_names).to eq %w[folder1 folder2 file1.txt file2.txt]
+      expect(result_names).to eq %w[folder1 folder2 file1.txt file2.txt file3.txt]
     end
 
     it "paginates folders and files correctly" do
@@ -1312,6 +1355,26 @@ describe "Folders API", type: :request do
       expect(result_names).to eq %w[extra_file_0.txt extra_file_1.txt extra_file_2.txt file1.txt file2.txt]
     end
 
+    it "respects default 25 per_page when listing folders and files correctly" do
+      25.times { |i| @root.sub_folders.create!(name: "extra_folder_#{i}", context: @course) }
+      25.times do |i|
+        Attachment.create!(
+          filename: "extra_file_#{i}.txt",
+          display_name: "extra_file_#{i}.txt",
+          uploaded_data: StringIO.new("existing"),
+          folder: @root,
+          context: @course
+        )
+      end
+
+      json = api_call(:get, @folders_files_path, @folders_files_path_options, {})
+      expect(json.size).to eq 25
+
+      next_page = Api.parse_pagination_links(response.headers["Link"]).detect { |p| p[:rel] == "next" }
+      next_page_json = api_call(:get, @folders_files_path, @folders_files_path_options.merge(page: next_page["page"]), {})
+      expect(next_page_json.size).to eq 25
+    end
+
     it "excludes hidden folders and files if the user lacks permission" do
       course_with_student(course: @course)
       json = api_call(:get, @folders_files_path, @folders_files_path_options)
@@ -1326,6 +1389,127 @@ describe "Folders API", type: :request do
         item.dig("user", "display_name")
       end
       expect(result_names).to include(@user.name)
+    end
+
+    describe "sorting" do
+      it "sorts folders and files by name, ascending by default" do
+        json = api_call(:get, @folders_files_path, @folders_files_path_options)
+        result_names = json.map do |item|
+          item["name"] || item["display_name"]
+        end
+        expect(result_names).to eq %w[folder1 folder2 file1.txt file2.txt file3.txt]
+      end
+
+      it "sorts folders by name and files by size if sorting on size" do
+        json = api_call(:get, @folders_files_path, @folders_files_path_options.merge(sort: "size", order: "asc"))
+        result_names = json.map do |item|
+          item["name"] || item["display_name"] || item["filename"]
+        end
+        expect(result_names).to eq %w[folder1 folder2 file2.txt file3.txt file1.txt]
+      end
+
+      it "sorts folders and files by created_at if sorting on created_at" do
+        json = api_call(:get, @folders_files_path, @folders_files_path_options.merge(sort: "created_at", order: "desc"))
+        result_names = json.map do |item|
+          item["name"] || item["display_name"] || item["filename"]
+        end
+        expect(result_names).to eq %w[folder2 folder1 file3.txt file2.txt file1.txt]
+      end
+
+      it "sorts folders and files by updated_at if sorting on updated_at" do
+        json = api_call(:get, @folders_files_path, @folders_files_path_options.merge(sort: "updated_at", order: "desc"))
+        result_names = json.map do |item|
+          item["name"] || item["display_name"] || item["filename"]
+        end
+        expect(result_names).to eq %w[folder2 folder1 file3.txt file2.txt file1.txt]
+      end
+
+      it "sorts folders and files by modified_by if sorting on modified_by" do
+        json = api_call(:get, @folders_files_path, @folders_files_path_options.merge(sort: "modified_by", order: "asc"))
+        result_names = json.map do |item|
+          item["name"] || item["display_name"] || item["filename"]
+        end
+        expect(result_names).to eq %w[folder1 folder2 file1.txt file3.txt file2.txt]
+      end
+
+      it "sorts folders and files by use_justification if sorting on use_justification" do
+        json = api_call(:get, @folders_files_path, @folders_files_path_options.merge(sort: "use_justification", order: "asc"))
+        result_names = json.map do |item|
+          item["name"] || item["display_name"] || item["filename"]
+        end
+        expect(result_names).to eq %w[folder1 folder2 file1.txt file2.txt file3.txt]
+      end
+
+      it "paginates the results" do
+        json = api_call(:get, @folders_files_path, @folders_files_path_options.merge(per_page: 3, sort: "size", order: "asc"))
+        expect(json.size).to eq 3
+
+        result_names = json.map do |item|
+          item["name"] || item["display_name"] || item["filename"]
+        end
+        expect(result_names).to eq ["folder1", "folder2", "file2.txt"]
+
+        next_page = Api.parse_pagination_links(response.headers["Link"]).detect { |p| p[:rel] == "next" }
+        next_page_json = api_call(:get, @folders_files_path, @folders_files_path_options.merge(per_page: 3, sort: next_page["sort"], order: next_page["order"], page: next_page["page"]))
+        result_names = next_page_json.map do |item|
+          item["name"] || item["display_name"] || item["filename"]
+        end
+        expect(result_names).to eq ["file3.txt", "file1.txt"]
+      end
+
+      it "paginates correctly when sorting by modified_by in DESC order with NULL user_id values appearing last" do
+        per_page = 4
+
+        # Create 3 files where user_id is NULL (they should appear on page 2 and 3)
+        3.times do |i|
+          Attachment.create!(
+            filename: "file_null_#{i}.txt",
+            display_name: "file_null_#{i}.txt",
+            uploaded_data: StringIO.new("file"),
+            folder: @root,
+            context: @course,
+            user_id: nil
+          )
+        end
+
+        # Make API request for first page with sorting by modified_by DESC (NULLS LAST)
+        json = api_call(
+          :get,
+          @folders_files_path,
+          @folders_files_path_options.merge(sort: "modified_by", order: "desc", per_page:)
+        )
+
+        result_names = json.map do |item|
+          item["name"] || item["display_name"] || item["filename"]
+        end
+
+        # Ensure first page contains 3 files (all with user_id set)
+        expect(json.size).to eq(per_page)
+        expect(result_names).to eq ["folder1", "folder2", "file2.txt", "file3.txt"]
+
+        # Get the next page
+        next_page = Api.parse_pagination_links(response.headers["Link"]).detect { |p| p[:rel] == "next" }
+        expect(next_page).not_to be_nil
+
+        # Make API request for second page
+        json_page_2 = api_call(
+          :get,
+          @folders_files_path,
+          @folders_files_path_options.merge(sort: "modified_by", order: "desc", per_page:, page: next_page["page"])
+        )
+
+        result_names = json_page_2.map do |item|
+          item["name"] || item["display_name"] || item["filename"]
+        end
+
+        # Ensure second page contains 3 files (all with NULL user_id)
+        expect(json_page_2.size).to eq(per_page)
+        expect(result_names).to eq ["file1.txt", "file_null_2.txt", "file_null_1.txt", "file_null_0.txt"]
+
+        # Get the next page
+        next_page = Api.parse_pagination_links(response.headers["Link"]).detect { |p| p[:rel] == "next" }
+        expect(next_page).to be_nil
+      end
     end
   end
 end

@@ -16,8 +16,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {useScope as useI18nScope} from '@canvas/i18n'
-import React, {useCallback, useEffect, useState, useMemo} from 'react'
+import {useScope as createI18nScope} from '@canvas/i18n'
+import React, {useCallback, useEffect, useState, useMemo, useRef} from 'react'
 import {func, string} from 'prop-types'
 import moment from 'moment-timezone'
 import produce from 'immer'
@@ -33,9 +33,11 @@ import useSaveAssignments from './hooks/useSaveAssignments'
 import useMonitorJobCompletion from './hooks/useMonitorJobCompletion'
 import DateValidator from '@canvas/grading/DateValidator'
 import GradingPeriodsAPI from '@canvas/grading/jquery/gradingPeriodsApi'
-import {originalDateField, canEditAll} from './utils'
+import {originalDateField, canEditAll, anyAssignmentEdited} from './utils'
+import { CloseButton } from '@instructure/ui-buttons'
 
-const I18n = useI18nScope('assignments_bulk_edit')
+
+const I18n = createI18nScope('assignments_bulk_edit')
 
 BulkEdit.propTypes = {
   courseId: string.isRequired,
@@ -60,18 +62,22 @@ export default function BulkEdit({courseId, onCancel, onSave, defaultDueTime}) {
         gradingPeriods: GradingPeriodsAPI.deserializePeriods(ENV.active_grading_periods || []),
         userIsAdmin: ENV.current_user_is_admin,
       }),
-    []
+    [],
   )
   const [assignments, setAssignments] = useState([])
   const [loadingError, setLoadingError] = useState(null)
   const [loading, setLoading] = useState(true)
   const [moveDatesModalOpen, setMoveDatesModalOpen] = useState(false)
+  const [noAssignmentsSelectedError, setNoAssignmentsSelectedError] = useState(false)
+  const noAssignmentsSelectedCloseButtonRef = useRef(null)
+  const [noAssignmentsEditedError, setNoAssignmentsEditedError] = useState(false)
+  const noAssignmentsEditedCloseButtonRef = useRef(null)
   const {saveAssignments, startingSave, startingSaveError, progressUrl, setProgressUrl} =
     useSaveAssignments(courseId)
   const {jobCompletion, jobRunning, jobSuccess, jobErrors, setJobSuccess} = useMonitorJobCompletion(
     {
       progressUrl,
-    }
+    },
   )
 
   const filterAssignments = useCallback(assignments => {
@@ -109,7 +115,7 @@ export default function BulkEdit({courseId, onCancel, onSave, defaultDueTime}) {
             delete draftOverride[originalDateField('unlock_at')]
             delete draftOverride[originalDateField('lock_at')]
           })
-        })
+        }),
       )
     }
 
@@ -125,10 +131,10 @@ export default function BulkEdit({courseId, onCancel, onSave, defaultDueTime}) {
               let error
               if (draftOverride.base) {
                 error = errors.find(
-                  e => e.assignment_id == draftAssignment.id && !e.assignment_override_id // eslint-disable-line eqeqeq
+                  e => e.assignment_id == draftAssignment.id && !e.assignment_override_id,
                 )
               } else {
-                error = errors.find(e => e.assignment_override_id == draftOverride.id) // eslint-disable-line eqeqeq
+                error = errors.find(e => e.assignment_override_id == draftOverride.id)
               }
               if (error && error.errors) {
                 draftOverride.errors = {}
@@ -140,11 +146,23 @@ export default function BulkEdit({courseId, onCancel, onSave, defaultDueTime}) {
               }
             })
           })
-        })
+        }),
       )
     }
     if (jobErrors && !jobErrors.hasOwnProperty('message')) recordJobErrors(jobErrors)
   }, [jobErrors])
+
+  useEffect(() => {
+    if (noAssignmentsEditedError && noAssignmentsEditedCloseButtonRef.current) {
+      noAssignmentsEditedCloseButtonRef.current.focus()
+    }
+  }, [noAssignmentsEditedError])
+
+  useEffect(() => {
+    if (noAssignmentsSelectedError && noAssignmentsSelectedCloseButtonRef.current) {
+      noAssignmentsSelectedCloseButtonRef.current.focus()
+    }
+  }, [noAssignmentsSelectedError])
 
   const setDateOnOverride = useCallback(
     (override, dateFieldName, newDate) => {
@@ -160,7 +178,7 @@ export default function BulkEdit({courseId, onCancel, onSave, defaultDueTime}) {
       override.persisted = false
       override.errors = dateValidator.validateDatetimes(override)
     },
-    [dateValidator]
+    [dateValidator],
   )
 
   const shiftDateOnOverride = useCallback(
@@ -171,7 +189,7 @@ export default function BulkEdit({courseId, onCancel, onSave, defaultDueTime}) {
         setDateOnOverride(override, dateFieldName, newDate)
       }
     },
-    [setDateOnOverride]
+    [setDateOnOverride],
   )
 
   const clearPreviousSave = useCallback(() => {
@@ -195,10 +213,10 @@ export default function BulkEdit({courseId, onCancel, onSave, defaultDueTime}) {
         produce(currentAssignments, draftAssignments => {
           const override = findOverride(draftAssignments, assignmentId, overrideId)
           setDateOnOverride(override, dateKey, newDate)
-        })
+        }),
       )
     },
-    [clearPreviousSave, findOverride, setDateOnOverride]
+    [clearPreviousSave, findOverride, setDateOnOverride],
   )
 
   const clearOverrideEdits = useCallback(
@@ -215,10 +233,10 @@ export default function BulkEdit({courseId, onCancel, onSave, defaultDueTime}) {
           })
           delete override.errors
           delete override.persisted
-        })
+        }),
       )
     },
-    [findOverride]
+    [findOverride],
   )
 
   const setAssignmentSelected = useCallback((assignmentId, selected) => {
@@ -226,7 +244,7 @@ export default function BulkEdit({courseId, onCancel, onSave, defaultDueTime}) {
       produce(currentAssignments, draftAssignments => {
         const assignment = draftAssignments.find(a => a.id === assignmentId)
         assignment.selected = selected
-      })
+      }),
     )
   }, [])
 
@@ -236,7 +254,7 @@ export default function BulkEdit({courseId, onCancel, onSave, defaultDueTime}) {
         draftAssignments.forEach(a => {
           if (canEditAll(a)) a.selected = selected
         })
-      })
+      }),
     )
   }, [])
 
@@ -249,23 +267,35 @@ export default function BulkEdit({courseId, onCancel, onSave, defaultDueTime}) {
         draftAssignments.forEach(draftAssignment => {
           const shouldSelect = draftAssignment.all_dates.some(draftOverride =>
             ['due_at', 'lock_at', 'unlock_at'].some(dateField =>
-              moment(draftOverride[dateField]).isBetween(startMoment, endMoment, null, '[]')
-            )
+              moment(draftOverride[dateField]).isBetween(startMoment, endMoment, null, '[]'),
+            ),
           )
           draftAssignment.selected = shouldSelect
         })
-      })
+      }),
     )
   }, [])
 
   const handleSave = useCallback(() => {
-    onSave()
-    saveAssignments(assignments)
+    const assignmentEdited = anyAssignmentEdited(assignments)
+    if(assignmentEdited){
+      onSave()
+      saveAssignments(assignments)
+    }
+    else{
+      setNoAssignmentsEditedError(true)
+    }
   }, [assignments, onSave, saveAssignments])
 
   const handleOpenBatchEdit = useCallback((value = true) => {
+    const selectedAssignmentsCount = assignments.filter(a => a.selected).length
+    if(value && selectedAssignmentsCount === 0){
+      setNoAssignmentsSelectedError(true)
+      return
+    }
+    setNoAssignmentsSelectedError(false)
     setMoveDatesModalOpen(!!value)
-  }, [])
+  }, [assignments])
 
   const handleBatchEditShift = useCallback(
     nDays => {
@@ -280,11 +310,11 @@ export default function BulkEdit({courseId, onCancel, onSave, defaultDueTime}) {
               })
             }
           })
-        })
+        }),
       )
       setMoveDatesModalOpen(false)
     },
-    [shiftDateOnOverride]
+    [shiftDateOnOverride],
   )
   const handleBatchEditRemove = useCallback(
     datesToRemove => {
@@ -302,11 +332,11 @@ export default function BulkEdit({courseId, onCancel, onSave, defaultDueTime}) {
               })
             }
           })
-        })
+        }),
       )
       setMoveDatesModalOpen(false)
     },
-    [setDateOnOverride]
+    [setDateOnOverride],
   )
 
   function renderHeader() {
@@ -343,6 +373,52 @@ export default function BulkEdit({courseId, onCancel, onSave, defaultDueTime}) {
         {I18n.t('There was an error retrieving assignment dates.')}
       </CanvasInlineAlert>
     )
+  }
+
+  function renderNoAssignmentsSelectedError(){
+    if(noAssignmentsSelectedError){
+      return(
+        <CanvasInlineAlert
+          variant="error"
+          liveAlert={true}
+          renderCloseButtonLabel={() => {
+            return (
+              <CloseButton 
+                elementRef={element => noAssignmentsSelectedCloseButtonRef.current = element} 
+                screenReaderLabel={I18n.t('Close')}
+              />
+            )
+          }}
+          onDismiss={() => setNoAssignmentsSelectedError(false)}
+          timeout={5000}
+        >
+          {I18n.t('Use checkboxes to select one or more assignments to batch edit.')}
+        </CanvasInlineAlert>
+      )
+    }
+  }
+
+  function renderNoAssignmentsEditedError(){
+    if(noAssignmentsEditedError){
+      return(
+        <CanvasInlineAlert
+          variant="error"
+          liveAlert={true}
+          renderCloseButtonLabel={() => {
+            return (
+              <CloseButton 
+                elementRef={element => noAssignmentsEditedCloseButtonRef.current = element} 
+                screenReaderLabel={I18n.t('Close')}
+              />
+            )
+          }}
+          onDismiss={() => setNoAssignmentsEditedError(false)}
+          timeout={5000}
+        >
+          {I18n.t('Update at least one date to save changes.')}
+        </CanvasInlineAlert>
+      )
+    }
   }
 
   function renderSaveError() {
@@ -404,12 +480,13 @@ export default function BulkEdit({courseId, onCancel, onSave, defaultDueTime}) {
       </>
     )
   }
-
   return (
     <>
       {renderMoveDatesModal()}
       {renderSaveSuccess()}
       {renderSaveError()}
+      {renderNoAssignmentsSelectedError()}
+      {renderNoAssignmentsEditedError()}
       {renderHeader()}
       {renderDateSelect()}
       {renderBody()}

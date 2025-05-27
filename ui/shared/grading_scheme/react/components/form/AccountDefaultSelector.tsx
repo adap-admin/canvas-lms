@@ -23,12 +23,12 @@ import {Tooltip} from '@instructure/ui-tooltip'
 import {IconInfoLine} from '@instructure/ui-icons'
 import {Modal} from '@instructure/ui-modal'
 import type {GradingScheme} from '../../../gradingSchemeApiModel'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {View} from '@instructure/ui-view'
 import {Flex} from '@instructure/ui-flex'
 import {Heading} from '@instructure/ui-heading'
 
-const I18n = useI18nScope('GradingSchemeManagement')
+const I18n = createI18nScope('GradingSchemeManagement')
 
 export type AccountDefaultSelectorProps = {
   defaultGradingSchemeId: string | undefined
@@ -46,7 +46,7 @@ const AccountDefaultGradingSchemeLabel = () => {
             {I18n.t(
               `This grading scheme will be the default for all courses in the account.
               Individual courses can override it with their own default. Sub accounts will
-              inherit the default grading scheme from their parent account unless overridden.`
+              inherit the default grading scheme from their parent account unless overridden.`,
             )}
           </View>
         }
@@ -152,7 +152,7 @@ export const AccountDefaultSelector = ({
         </Modal.Header>
         <Modal.Body>
           {I18n.t(
-            'This change will affect all active courses and assignments that are currently inheriting the account default. This change will take awhile to finish as all course and assignment grades are recalculated with respect to the new account default grading scheme.'
+            'This change will affect all active courses and assignments that are currently inheriting the account default. This change will take awhile to finish as all course and assignment grades are recalculated with respect to the new account default grading scheme.',
           )}
         </Modal.Body>
         <Modal.Footer>

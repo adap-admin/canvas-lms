@@ -102,7 +102,7 @@ describe('CanvasSelect component', () => {
         <CanvasSelect.Option key="3" id="3" value="three" isDisabled={true}>
           Three
         </CanvasSelect.Option>
-      </CanvasSelect>
+      </CanvasSelect>,
     )
     const label = getByText('Choose one')
     label.click()
@@ -124,7 +124,7 @@ describe('CanvasSelect component', () => {
         <CanvasSelect.Option key="3" id="3" value="three" isDisabled={true}>
           Three
         </CanvasSelect.Option>
-      </CanvasSelect>
+      </CanvasSelect>,
     )
     const label = getByText('Choose one')
     label.click()
@@ -143,7 +143,7 @@ describe('CanvasSelect component', () => {
 
   it('handles no options', () => {
     const {getByText} = render(
-      <CanvasSelect {...selectProps({noOptionsLabel: 'No Options'})}>what is this?</CanvasSelect>
+      <CanvasSelect {...selectProps({noOptionsLabel: 'No Options'})}>what is this?</CanvasSelect>,
     )
     const label = getByText('Choose one')
     label.click()
@@ -156,7 +156,7 @@ describe('CanvasSelect component', () => {
       const options = [
         <CanvasSelect.Option id="1" key="1" value="one">
           One
-        </CanvasSelect.Option>
+        </CanvasSelect.Option>,
       ]
       const {getByText} = renderSelect({}, options)
       const label = getByText('Choose one')
@@ -168,15 +168,15 @@ describe('CanvasSelect component', () => {
       const options = [
         <CanvasSelect.Option id="1" key="1" value="one" description="description">
           One
-        </CanvasSelect.Option>
+        </CanvasSelect.Option>,
       ]
       const {getByText} = renderSelect({}, options)
       const label = getByText('Choose one')
       await fireEvent.click(label)
 
       expect(getByText('description')).toBeInTheDocument()
-    });
-  });
+    })
+  })
 
   describe('CanvasSelectGroups', () => {
     it('renders enumerated groups and options', () => {
@@ -204,7 +204,7 @@ describe('CanvasSelect component', () => {
               Six
             </CanvasSelect.Option>
           </CanvasSelect.Group>
-        </CanvasSelect>
+        </CanvasSelect>,
       )
       expect(getByText('Choose one')).toBeInTheDocument()
       const label = getByText('Choose one')
@@ -224,7 +224,7 @@ describe('CanvasSelect component', () => {
               One
             </CanvasSelect.Option>
           </CanvasSelect.Group>
-        </CanvasSelect>
+        </CanvasSelect>,
       )
       expect(getByText('Choose one')).toBeInTheDocument()
       const label = getByText('Choose one')
@@ -270,7 +270,7 @@ describe('CanvasSelect component', () => {
             ))}
           </CanvasSelect.Group>
         ))}
-      </CanvasSelect>
+      </CanvasSelect>,
     )
 
     expect(getByText('Choose one')).toBeInTheDocument()

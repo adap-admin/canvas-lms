@@ -22,7 +22,7 @@ import {Pill} from '@instructure/ui-pill'
 import {Tooltip} from '@instructure/ui-tooltip'
 import {Button, IconButton} from '@instructure/ui-buttons'
 import {IconEditLine, IconPlusLine, IconTrashLine} from '@instructure/ui-icons'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {ScreenReaderContent} from '@instructure/ui-a11y-content'
 import {Table} from '@instructure/ui-table'
 import type {Bookmark, Enrollment, EnrollmentType, User, ModifyPermissions} from './types'
@@ -36,12 +36,30 @@ import {TempEnrollNavigation} from './TempEnrollNavigation'
 import {Alert} from '@instructure/ui-alerts'
 import {Spinner} from '@instructure/ui-spinner'
 import {captureException} from '@sentry/browser'
-import {useQuery, queryClient, useMutation} from '@canvas/query'
+import {queryClient} from '@canvas/query'
+import {useMutation, useQuery} from '@tanstack/react-query'
 
-const I18n = useI18nScope('temporary_enrollment')
+const I18n = createI18nScope('temporary_enrollment')
 
 // initialize analytics props
 const analyticProps = createAnalyticPropsGenerator(MODULE_NAME)
+
+type TemporaryEnrollmentsQueryKey = readonly [
+  string, // 'enrollments'
+  string, // userId
+  boolean, // isRecipient
+  number, // currentBookmark
+  string, // page
+]
+
+const fetchTemporaryEnrollmentsWithQueryKey = async ({
+  queryKey,
+}: {
+  queryKey: TemporaryEnrollmentsQueryKey
+}) => {
+  const [, userId, isRecipient, , pageRequest] = queryKey
+  return fetchTemporaryEnrollments(userId, isRecipient, pageRequest)
+}
 
 interface Props {
   user: User
@@ -57,14 +75,17 @@ export function getRelevantUserFromEnrollment(enrollment: Enrollment) {
 }
 
 export function groupEnrollmentsByPairingId(enrollments: Enrollment[]) {
-  return enrollments.reduce((groupedById, enrollment) => {
-    const groupId = enrollment.temporary_enrollment_pairing_id
-    if (!groupedById[groupId]) {
-      groupedById[groupId] = []
-    }
-    groupedById[groupId].push(enrollment)
-    return groupedById
-  }, {} as Record<number, Enrollment[]>)
+  return enrollments.reduce(
+    (groupedById, enrollment) => {
+      const groupId = enrollment.temporary_enrollment_pairing_id
+      if (!groupedById[groupId]) {
+        groupedById[groupId] = []
+      }
+      groupedById[groupId].push(enrollment)
+      return groupedById
+    },
+    {} as Record<number, Enrollment[]>,
+  )
 }
 
 /**
@@ -77,15 +98,15 @@ export function groupEnrollmentsByPairingId(enrollments: Enrollment[]) {
  */
 async function handleConfirmAndDeleteEnrollment(tempEnrollments: Enrollment[]): Promise<void> {
   // TODO is there a good inst ui component for confirmation dialog?
-  // eslint-disable-next-line no-alert
+
   const userConfirmed = window.confirm(I18n.t('Are you sure you want to delete this enrollment?'))
   if (userConfirmed) {
     const results = await Promise.allSettled(
       tempEnrollments.map(enrollment =>
         deleteEnrollment(enrollment.course_id, enrollment.id)
           .then(() => ({status: 'success', id: enrollment.id}))
-          .catch(() => ({status: 'error', id: enrollment.id}))
-      )
+          .catch(() => ({status: 'error', id: enrollment.id})),
+      ),
     )
     const successfulDeletions = results
       .filter(result => result.status === 'fulfilled')
@@ -93,14 +114,16 @@ async function handleConfirmAndDeleteEnrollment(tempEnrollments: Enrollment[]): 
     if (successfulDeletions.length > 0) {
       showFlashAlert({
         type: 'success',
-        message: `${successfulDeletions.length} enrollments deleted successfully.`,
+        message: I18n.t(`%{successfulDeletionCount} enrollments deleted successfully.`, {
+          successfulDeletionCount: successfulDeletions.length,
+        }),
       })
     }
     const errorCount = results.filter(result => result.status === 'rejected').length
     if (errorCount > 0) {
       showFlashAlert({
         type: 'error',
-        message: `${errorCount} enrollments could not be deleted.`,
+        message: I18n.t('%{errorCount} enrollments could not be deleted.', {errorCount}),
       })
     }
   }
@@ -119,28 +142,29 @@ export function TempEnrollView(props: Props) {
   const enrollmentTypeLabel =
     props.enrollmentType === PROVIDER ? I18n.t('Recipient') : I18n.t('Provider')
 
-  const fetchAndUpdateBookmarks = async (
-    userId: string,
-    isRecipient: boolean,
-    pageRequest: string
-  ) => {
-    const results = await fetchTemporaryEnrollments(userId, isRecipient, pageRequest)
-
-    // add to bookmarks if there is a next page
-    if (results.link?.next != null && allBookmarks[currentBookmark + 1] == null) {
-      setAllBookmarks([...allBookmarks, results.link?.next])
-    }
-    return results
-  }
-
   const isRecipient = props.enrollmentType === RECIPIENT
+
+  // Define the query key
+  const queryKey = [
+    'enrollments',
+    props.user.id,
+    isRecipient,
+    currentBookmark,
+    allBookmarks[currentBookmark].page,
+  ] as const
+
   const {isFetching, error, data} = useQuery({
-    queryKey: ['enrollments', props.user.id, isRecipient, currentBookmark],
-    queryFn: () =>
-      fetchAndUpdateBookmarks(props.user.id, isRecipient, allBookmarks[currentBookmark].page),
+    queryKey,
+    queryFn: fetchTemporaryEnrollmentsWithQueryKey,
     staleTime: 10_000,
     refetchOnMount: 'always',
   })
+
+  useEffect(() => {
+    if (data?.link?.next && allBookmarks[currentBookmark + 1] == null) {
+      setAllBookmarks(prevBookmarks => [...prevBookmarks, data.link!.next!])
+    }
+  }, [data, currentBookmark, allBookmarks])
 
   const {mutate} = useMutation({
     mutationFn: async (enrollments: Enrollment[]) => handleConfirmAndDeleteEnrollment(enrollments),
@@ -149,20 +173,21 @@ export function TempEnrollView(props: Props) {
   })
 
   useEffect(() => {
-    isFetching ? props.disableModal(true) : props.disableModal(false)
+    props.disableModal(isFetching)
   }, [isFetching, props])
 
   const handleBookmarkChange = async (bookmark: Bookmark) => {
-    bookmark.rel === 'next'
-      ? setCurrentBookmark(currentBookmark + 1)
-      : setCurrentBookmark(currentBookmark - 1)
+    if (bookmark.rel === 'next') {
+      setCurrentBookmark(currentBookmark + 1)
+    } else {
+      setCurrentBookmark(currentBookmark - 1)
+    }
   }
 
   const handleEditClick = (enrollments: Enrollment[]) => {
     if (canEdit) {
       props.onEdit?.(getRelevantUserFromEnrollment(enrollments[0]), enrollments)
     } else {
-      // eslint-disable-next-line no-console
       console.error('User does not have permission to edit enrollment')
     }
   }
@@ -171,7 +196,6 @@ export function TempEnrollView(props: Props) {
     if (canDelete) {
       mutate(enrollments)
     } else {
-      // eslint-disable-next-line no-console
       console.error('User does not have permission to delete enrollment')
     }
   }
@@ -180,7 +204,6 @@ export function TempEnrollView(props: Props) {
     if (canAdd) {
       props.onAddNew?.()
     } else {
-      // eslint-disable-next-line no-console
       console.error('User does not have permission to add enrollment')
     }
   }
@@ -253,13 +276,13 @@ export function TempEnrollView(props: Props) {
             </Table.RowHeader>
             <Table.Cell>
               {`${formatDateTime(firstEnrollment.start_at)} - ${formatDateTime(
-                firstEnrollment.end_at
+                firstEnrollment.end_at,
               )}`}
             </Table.Cell>
             <Table.Cell>{firstEnrollment.type}</Table.Cell>
             <Table.Cell>{renderEnrollmentPairingStatus(group)}</Table.Cell>
-            {canEditOrDelete && <Table.Cell>{renderActionIcons(group)}</Table.Cell>}
-          </Table.Row>
+            {canEditOrDelete ? <Table.Cell>{renderActionIcons(group)}</Table.Cell> : <></>}
+          </Table.Row>,
         )
         usedKeys.push(pairingId)
       }
@@ -269,7 +292,7 @@ export function TempEnrollView(props: Props) {
 
   if (error) {
     const errorMsg = error.message
-    // eslint-disable-next-line no-console
+
     console.error(`Failed to fetch enrollments for user ${props.user.id}:`, errorMsg)
     captureException(errorMsg)
     return (
@@ -304,6 +327,7 @@ export function TempEnrollView(props: Props) {
                     onClick={handleAddNewClick}
                     aria-label={I18n.t('Create temporary enrollment')}
                     {...analyticProps('Create')}
+                    // @ts-expect-error
                     renderIcon={IconPlusLine}
                   >
                     {I18n.t('Recipient')}
@@ -328,12 +352,15 @@ export function TempEnrollView(props: Props) {
                     {I18n.t('Recipient Enrollment Type')}
                   </Table.ColHeader>
                   <Table.ColHeader id="usertable-status">{I18n.t('Status')}</Table.ColHeader>
-                  {(canEdit || canDelete) && (
+
+                  {canEdit || canDelete ? (
                     <Table.ColHeader id="header-user-option-links">
                       <ScreenReaderContent>
                         {I18n.t('Temporary enrollment option links')}
                       </ScreenReaderContent>
                     </Table.ColHeader>
+                  ) : (
+                    <></>
                   )}
                 </Table.Row>
               </Table.Head>

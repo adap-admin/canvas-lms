@@ -24,11 +24,11 @@ import {IconMiniArrowEndLine, IconMiniArrowStartLine} from '@instructure/ui-icon
 import $ from 'jquery'
 import {find} from 'lodash'
 import template from '../jst/ModuleSequenceFooter.handlebars'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import htmlEscape from '@instructure/html-escape'
 import '@canvas/jquery/jquery.ajaxJSON'
 
-const I18n = useI18nScope('sequence_footer')
+const I18n = createI18nScope('sequence_footer')
 
 // Summary
 //   Creates a new ModuleSequenceFooter so clicking to see the next item in a module
@@ -64,7 +64,7 @@ $.fn.moduleSequenceFooter = function (options = {}) {
   this.msfAnimation = enabled =>
     this.find('.module-sequence-padding, .module-sequence-footer').toggleClass(
       'no-animation',
-      !enabled
+      !enabled,
     )
 
   if (!this.data('msfInstance')) {
@@ -85,7 +85,7 @@ $.fn.moduleSequenceFooter = function (options = {}) {
           instanceNumber: this.msfInstance.instanceNumber,
           previous: this.msfInstance.previous,
           next: this.msfInstance.next,
-        })
+        }),
       )
       if (options && options.animation !== undefined) {
         this.msfAnimation(options.animation)
@@ -96,6 +96,7 @@ $.fn.moduleSequenceFooter = function (options = {}) {
         const label = `Previous Module Item${
           this.msfInstance.previous.externalItem ? ` - ${I18n.t('opens in new window')}` : ''
         }`
+
         ReactDOM.render(
           <Tooltip
             aria-label={label}
@@ -110,7 +111,7 @@ $.fn.moduleSequenceFooter = function (options = {}) {
               <IconMiniArrowStartLine /> {I18n.t('Previous')}
             </Flex>
           </Tooltip>,
-          previousButton
+          previousButton,
         )
       }
 
@@ -119,6 +120,7 @@ $.fn.moduleSequenceFooter = function (options = {}) {
         const label = `Next Module Item${
           this.msfInstance.next.externalItem ? ` - ${I18n.t('opens in new window')}` : ''
         }`
+
         ReactDOM.render(
           <Tooltip
             aria-label={label}
@@ -133,7 +135,7 @@ $.fn.moduleSequenceFooter = function (options = {}) {
               {I18n.t('Next')} <IconMiniArrowEndLine />
             </Flex>
           </Tooltip>,
-          nextButton
+          nextButton,
         )
       }
 
@@ -209,7 +211,7 @@ export default class ModuleSequenceFooter {
         },
         this.success,
         null,
-        {}
+        {},
       )
     } else {
       return $.ajaxJSON(
@@ -222,7 +224,7 @@ export default class ModuleSequenceFooter {
         },
         this.success,
         null,
-        {}
+        {},
       )
     }
   }
@@ -311,7 +313,7 @@ export default class ModuleSequenceFooter {
     } else {
       const lockedMessage = I18n.t('Next mastery path is currently locked')
       const processingMessage = I18n.t(
-        'Next mastery path is still processing, please periodically refresh the page'
+        'Next mastery path is still processing, please periodically refresh the page',
       )
       const tooltipText = masteryPath.locked ? lockedMessage : processingMessage
       this.next.modules_tab_disabled = masteryPath.modules_tab_disabled

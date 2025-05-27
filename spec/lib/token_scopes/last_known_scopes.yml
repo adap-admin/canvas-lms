@@ -55,6 +55,8 @@
   path: '/api/v1/accounts/:account_id/authentication_providers/:id'
 - verb: PUT
   path: '/api/v1/accounts/:account_id/authentication_providers/:id'
+- verb: PUT
+  path: "/api/v1/accounts/:account_id/authentication_providers/:id/restore"
 - verb: GET
   path: '/api/v1/accounts/:account_id/blackout_dates'
 - verb: POST
@@ -209,6 +211,8 @@
   path: '/api/v1/accounts/:account_id/lti_registration_by_client_id/:client_id'
 - verb: GET
   path: '/api/v1/accounts/:account_id/lti_registrations'
+- verb: POST
+  path: '/api/v1/accounts/:account_id/lti_registrations'
 - verb: DELETE
   path: '/api/v1/accounts/:account_id/lti_registrations/:id'
 - verb: GET
@@ -217,6 +221,18 @@
   path: '/api/v1/accounts/:account_id/lti_registrations/:id'
 - verb: POST
   path: '/api/v1/accounts/:account_id/lti_registrations/:id/bind'
+- verb: PUT
+  path: '/api/v1/accounts/:account_id/lti_registrations/:id/reset'
+- verb: GET
+  path: '/api/v1/accounts/:account_id/lti_registrations/:registration_id/deployments'
+- verb: POST
+  path: '/api/v1/accounts/:account_id/lti_registrations/:registration_id/deployments'
+- verb: DELETE
+  path: '/api/v1/accounts/:account_id/lti_registrations/:registration_id/deployments/:id'
+- verb: GET
+  path: '/api/v1/accounts/:account_id/lti_registrations/:registration_id/deployments/:id'
+- verb: GET
+  path: '/api/v1/accounts/:account_id/lti_registrations/:registration_id/deployments/:id/controls'
 - verb: POST
   path: '/api/v1/accounts/:account_id/lti_registrations/configuration/validate'
 - verb: GET
@@ -569,6 +585,8 @@
   path: '/api/v1/courses/:course_id/assignments/:assignment_id/date_details'
 - verb: PUT
   path: '/api/v1/courses/:course_id/assignments/:assignment_id/date_details'
+- verb: PUT
+  path: '/api/v1/courses/:course_id/assignments/:assignment_id/date_details/convert_tag_overrides'
 - verb: POST
   path: '/api/v1/courses/:course_id/assignments/:assignment_id/duplicate'
 - verb: POST
@@ -718,6 +736,8 @@
 - verb: PUT
   path: '/api/v1/courses/:course_id/blueprint_templates/:template_id/update_associations'
 - verb: GET
+  path: '/api/v1/courses/:course_id/bulk_student_enrollments/student_bulk_pace_edit_view'
+- verb: GET
   path: '/api/v1/courses/:course_id/bulk_user_progress'
 - verb: GET
   path: '/api/v1/courses/:course_id/calendar_events/timetable'
@@ -788,6 +808,8 @@
 - verb: POST
   path: '/api/v1/courses/:course_id/course_pacing/:id/publish'
 - verb: POST
+  path: '/api/v1/courses/:course_id/course_pacing/bulk_create_enrollment_paces'
+- verb: POST
   path: '/api/v1/courses/:course_id/course_pacing/compress_dates'
 - verb: GET
   path: '/api/v1/courses/:course_id/course_pacing/new'
@@ -821,6 +843,8 @@
   path: '/api/v1/courses/:course_id/discussion_topics/:discussion_topic_id/date_details'
 - verb: PUT
   path: '/api/v1/courses/:course_id/discussion_topics/:discussion_topic_id/date_details'
+- verb: PUT
+  path: '/api/v1/courses/:course_id/discussion_topics/:discussion_topic_id/date_details/convert_tag_overrides'
 - verb: DELETE
   path: '/api/v1/courses/:course_id/discussion_topics/:topic_id'
 - verb: GET
@@ -850,6 +874,14 @@
 - verb: GET
   path: '/api/v1/courses/:course_id/discussion_topics/:topic_id/entry_list'
 - verb: GET
+  path: '/api/v1/courses/:course_id/discussion_topics/:topic_id/insights'
+- verb: POST
+  path: '/api/v1/courses/:course_id/discussion_topics/:topic_id/insights'
+- verb: GET
+  path: '/api/v1/courses/:course_id/discussion_topics/:topic_id/insights/entries'
+- verb: PUT
+  path: '/api/v1/courses/:course_id/discussion_topics/:topic_id/insights/entries/:entry_id'
+- verb: GET
   path: '/api/v1/courses/:course_id/discussion_topics/:topic_id/messageable_users'
 - verb: DELETE
   path: '/api/v1/courses/:course_id/discussion_topics/:topic_id/read'
@@ -864,6 +896,8 @@
 - verb: PUT
   path: '/api/v1/courses/:course_id/discussion_topics/:topic_id/subscribed'
 - verb: GET
+  path: '/api/v1/courses/:course_id/discussion_topics/:topic_id/summaries'
+- verb: POST
   path: '/api/v1/courses/:course_id/discussion_topics/:topic_id/summaries'
 - verb: POST
   path: '/api/v1/courses/:course_id/discussion_topics/:topic_id/summaries/:summary_id/feedback'
@@ -999,6 +1033,8 @@
   path: '/api/v1/courses/:course_id/group_categories'
 - verb: POST
   path: '/api/v1/courses/:course_id/group_categories'
+- verb: POST
+  path: '/api/v1/courses/:course_id/group_categories/bulk_manage_differentiation_tag'
 - verb: GET
   path: '/api/v1/courses/:course_id/groups'
 - verb: GET
@@ -1069,6 +1105,8 @@
   path: '/api/v1/courses/:course_id/modules/:context_module_id/assignment_overrides'
 - verb: PUT
   path: '/api/v1/courses/:course_id/modules/:context_module_id/assignment_overrides'
+- verb: PUT
+  path: '/api/v1/courses/:course_id/modules/:context_module_id/assignment_overrides/convert_tag_overrides'
 - verb: GET
   path: '/api/v1/courses/:course_id/modules/:context_module_id/date_details'
 - verb: DELETE
@@ -1167,6 +1205,8 @@
   path: '/api/v1/courses/:course_id/pages/:url_or_id/date_details'
 - verb: PUT
   path: '/api/v1/courses/:course_id/pages/:url_or_id/date_details'
+- verb: PUT
+  path: '/api/v1/courses/:course_id/pages/:url_or_id/date_details/convert_tag_overrides'
 - verb: POST
   path: '/api/v1/courses/:course_id/pages/:url_or_id/duplicate'
 - verb: GET
@@ -1209,6 +1249,8 @@
   path: '/api/v1/courses/:course_id/quizzes/:quiz_id/date_details'
 - verb: PUT
   path: '/api/v1/courses/:course_id/quizzes/:quiz_id/date_details'
+- verb: PUT
+  path: '/api/v1/courses/:course_id/quizzes/:quiz_id/date_details/convert_tag_overrides'
 - verb: POST
   path: '/api/v1/courses/:course_id/quizzes/:quiz_id/extensions'
 - verb: POST
@@ -1271,6 +1313,12 @@
   path: '/api/v1/courses/:course_id/quizzes/assignment_overrides'
 - verb: GET
   path: '/api/v1/courses/:course_id/recent_students'
+- verb: GET
+  path: '/api/v1/courses/:course_id/reports/:report_type'
+- verb: POST
+  path: '/api/v1/courses/:course_id/reports/:report_type'
+- verb: GET
+  path: '/api/v1/courses/:course_id/reports/:report_type/:id'
 - verb: POST
   path: '/api/v1/courses/:course_id/reset_content'
 - verb: GET
@@ -1614,6 +1662,14 @@
 - verb: GET
   path: '/api/v1/groups/:group_id/discussion_topics/:topic_id/entry_list'
 - verb: GET
+  path: '/api/v1/groups/:group_id/discussion_topics/:topic_id/insights'
+- verb: POST
+  path: '/api/v1/groups/:group_id/discussion_topics/:topic_id/insights'
+- verb: GET
+  path: '/api/v1/groups/:group_id/discussion_topics/:topic_id/insights/entries'
+- verb: PUT
+  path: '/api/v1/groups/:group_id/discussion_topics/:topic_id/insights/entries/:entry_id'
+- verb: GET
   path: '/api/v1/groups/:group_id/discussion_topics/:topic_id/messageable_users'
 - verb: DELETE
   path: '/api/v1/groups/:group_id/discussion_topics/:topic_id/read'
@@ -1628,6 +1684,8 @@
 - verb: PUT
   path: '/api/v1/groups/:group_id/discussion_topics/:topic_id/subscribed'
 - verb: GET
+  path: '/api/v1/groups/:group_id/discussion_topics/:topic_id/summaries'
+- verb: POST
   path: '/api/v1/groups/:group_id/discussion_topics/:topic_id/summaries'
 - verb: POST
   path: '/api/v1/groups/:group_id/discussion_topics/:topic_id/summaries/:summary_id/feedback'
@@ -1771,6 +1829,18 @@
   path: '/api/v1/jwts/refresh'
 - verb: GET
   path: '/api/v1/login/session_token'
+- verb: GET
+  path: '/api/v1/lti_registrations/:registration_id/controls'
+- verb: POST
+  path: '/api/v1/lti_registrations/:registration_id/controls'
+- verb: DELETE
+  path: '/api/v1/lti_registrations/:registration_id/controls/:id'
+- verb: GET
+  path: '/api/v1/lti_registrations/:registration_id/controls/:id'
+- verb: PUT
+  path: '/api/v1/lti_registrations/:registration_id/controls/:id'
+- verb: POST
+  path: '/api/v1/lti_registrations/:registration_id/controls/bulk'
 - verb: GET
   path: '/api/v1/manageable_accounts'
 - verb: GET
@@ -2037,6 +2107,8 @@
   path: '/api/v1/users/:id/dashboard_positions'
 - verb: PUT
   path: '/api/v1/users/:id/dashboard_positions'
+- verb: PUT
+  path: '/api/v1/users/:id/files_ui_version_preference'
 - verb: GET
   path: '/api/v1/users/:id/graded_submissions'
 - verb: PUT
@@ -2315,3 +2387,4 @@
   path: '/api/v1/users/self/todo_item_count'
 - verb: GET
   path: '/api/v1/users/self/upcoming_events'
+

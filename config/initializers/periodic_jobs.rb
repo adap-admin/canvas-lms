@@ -72,32 +72,36 @@ class PeriodicJobs
 end
 
 def with_each_job_cluster(klass, method, *, jitter: nil, local_offset: false)
-  DatabaseServer.send_in_each_region(
-    PeriodicJobs,
-    :with_each_shard_by_database_in_region,
-    { singleton: "periodic:region: #{klass}.#{method}" },
-    klass,
-    method,
-    *,
-    jitter:,
-    local_offset:,
-    connection_class: Delayed::Backend::ActiveRecord::AbstractJob
-  )
+  Canvas::CrossRegionQueryMetrics.ignore do
+    DatabaseServer.send_in_each_region(
+      PeriodicJobs,
+      :with_each_shard_by_database_in_region,
+      { singleton: "periodic:region: #{klass}.#{method}" },
+      klass,
+      method,
+      *,
+      jitter:,
+      local_offset:,
+      connection_class: Delayed::Backend::ActiveRecord::AbstractJob
+    )
+  end
 end
 
 def with_each_shard_by_database(klass, method, *, jitter: nil, local_offset: false, error_callback: nil)
-  DatabaseServer.send_in_each_region(
-    PeriodicJobs,
-    :with_each_shard_by_database_in_region,
-    { singleton: "periodic:region: #{klass}.#{method}" },
-    klass,
-    method,
-    *,
-    jitter:,
-    local_offset:,
-    connection_class: ActiveRecord::Base,
-    error_callback:
-  )
+  Canvas::CrossRegionQueryMetrics.ignore do
+    DatabaseServer.send_in_each_region(
+      PeriodicJobs,
+      :with_each_shard_by_database_in_region,
+      { singleton: "periodic:region: #{klass}.#{method}" },
+      klass,
+      method,
+      *,
+      jitter:,
+      local_offset:,
+      connection_class: ActiveRecord::Base,
+      error_callback:
+    )
+  end
 end
 
 Rails.configuration.after_initialize do
@@ -228,7 +232,7 @@ Rails.configuration.after_initialize do
   end
 
   Delayed::Periodic.cron "Auditors::ActiveRecord::Partitioner.prune", "0 0 * * 6" do
-    if Time.now.day >= 3
+    if Time.zone.now.day >= 3
       with_each_shard_by_database(
         Auditors::ActiveRecord::Partitioner, :prune, jitter: 30.minutes, local_offset: true
       )
@@ -240,7 +244,7 @@ Rails.configuration.after_initialize do
   end
 
   Delayed::Periodic.cron "Quizzes::QuizSubmissionEventPartitioner.prune", "0 0 * * 6" do
-    if Time.now.day >= 3
+    if Time.zone.now.day >= 3
       with_each_shard_by_database(
         Quizzes::QuizSubmissionEventPartitioner, :prune, jitter: 30.minutes, local_offset: true
       )
@@ -252,7 +256,7 @@ Rails.configuration.after_initialize do
   end
 
   Delayed::Periodic.cron "Messages::Partitioner.prune", "0 0 * * 6" do
-    if Time.now.day >= 3
+    if Time.zone.now.day >= 3
       with_each_shard_by_database(
         Messages::Partitioner, :prune, jitter: 30.minutes, local_offset: true
       )

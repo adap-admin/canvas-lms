@@ -676,8 +676,8 @@ describe "security" do
         expect(response).to be_successful
         html = Nokogiri::HTML5(response.body)
         expect(html.css(".edit_course_link")).to be_empty
-        expect(html.css("#tab-users")).to be_empty
-        expect(html.css("#tab-navigation")).to be_empty
+        expect(html.css("#tab-users-mount")).to be_empty
+        expect(html.css("#tab-navigation-mount")).to be_empty
 
         @course.enroll_teacher(@admin).accept!
         @admin.reload
@@ -689,7 +689,7 @@ describe "security" do
         expect(response).to be_successful
         html = Nokogiri::HTML5(response.body)
         expect(html.css("#course_form")).not_to be_empty
-        expect(html.css("#tab-navigation")).not_to be_empty
+        expect(html.css("#tab-navigation-mount")).not_to be_empty
       end
 
       it "read_roster" do
@@ -706,7 +706,7 @@ describe "security" do
         expect(response).to be_successful
         expect(response.body).not_to match(/People/)
         html = Nokogiri::HTML5(response.body)
-        expect(html.css("#tab-users")).to be_empty
+        expect(html.css("#tab-users-mount")).to be_empty
 
         add_permission :read_roster
 
@@ -952,27 +952,7 @@ describe "security" do
         expect(@course.reload).to be_deleted
       end
 
-      it "manage_content" do
-        @course.root_account.disable_feature!(:granular_permissions_manage_course_content)
-        get "/courses/#{@course.id}/details"
-        expect(response).to be_successful
-        expect(response.body).not_to match(/Import Course Content/)
-
-        get "/courses/#{@course.id}/content_migrations"
-        assert_status(401)
-
-        add_permission :manage_content
-
-        get "/courses/#{@course.id}/details"
-        expect(response).to be_successful
-        expect(response.body).to match(/Import Course Content/)
-
-        get "/courses/#{@course.id}/content_migrations"
-        expect(response).to be_successful
-      end
-
-      it "manage_course_content (granular permissions)" do
-        @course.root_account.enable_feature!(:granular_permissions_manage_course_content)
+      it "manage_course_content" do
         get "/courses/#{@course.id}/details"
         expect(response).to be_successful
         expect(response.body).not_to match(/Import Course Content/)

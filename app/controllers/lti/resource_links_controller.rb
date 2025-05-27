@@ -129,15 +129,30 @@
 #             "active",
 #             "deleted"
 #           ]
+#         },
+#         "associated_content_type": {
+#           "description": "Type of the associated content this resource link belongs to if present. Now only supports `ModuleItems`, later may be extend others",
+#           "example": "ModuleItem",
+#           "type": "string",
+#           "enum":
+#           [
+#             "ModuleItem"
+#           ]
+#         },
+#         "associated_content_id": {
+#           "description": "The Canvas identifier of the associated content, e.g. ModuleItem related to this link. Present if associated_content_type is present",
+#           "example": 1,
+#           "type": "integer"
 #         }
 #       }
 #     }
 class Lti::ResourceLinksController < ApplicationController
   before_action :require_context_instrumented
-  before_action :require_feature_flag
   before_action :require_permissions
   before_action :validate_custom, only: [:create, :update]
   before_action :validate_url, only: [:create, :update]
+  before_action :validate_tool, only: [:update]
+  before_action :validate_url_match_tool, only: [:update]
 
   include Api::V1::Lti::ResourceLink
 
@@ -234,7 +249,7 @@ class Lti::ResourceLinksController < ApplicationController
   #
   # @returns Lti::ResourceLink
   def create
-    tool = ContextExternalTool.find_external_tool(create_params[:url], @context, only_1_3: true)
+    tool = Lti::ToolFinder.from_url(create_params[:url], @context, only_1_3: true)
     return render_error(:invalid_url, "No tool found for the provided URL") unless tool
 
     resource_link = Lti::ResourceLink.create_with(
@@ -244,7 +259,7 @@ class Lti::ResourceLinksController < ApplicationController
       create_params[:url],
       create_params[:title]
     )
-    render json: lti_resource_link_json(resource_link, @current_user, session, :rich_content)
+    render json: lti_resource_link_json(resource_link, @current_user, session, :rich_content, nil)
   rescue => e
     report_error(e)
     raise e
@@ -282,7 +297,7 @@ class Lti::ResourceLinksController < ApplicationController
     end
 
     possible_links = bulk_create_params[:_json].map do |link_params|
-      tool = ContextExternalTool.find_external_tool(link_params[:url], @context, only_1_3: true)
+      tool = Lti::ToolFinder.from_url(link_params[:url], @context, only_1_3: true)
       link_params.merge(tool:)
     end
 
@@ -311,7 +326,7 @@ class Lti::ResourceLinksController < ApplicationController
 
     links = bulk_create_links(possible_links, @context)
 
-    render json: links.map { |link| lti_resource_link_json(link, @current_user, session, :rich_content) }
+    render json: links.map { |link| lti_resource_link_json(link, @current_user, session, :rich_content, nil) }
   rescue => e
     report_error(e)
     raise e
@@ -323,10 +338,12 @@ class Lti::ResourceLinksController < ApplicationController
   # <b>Caution!</b> Changing existing links may result in launch errors.
   #
   # @argument url [Optional, String] The launch URL for this resource link.
-  #   <b>Caution!</b> Updating this to a URL that doesn't match the tool could result in errors when launching this link!
+  #   <b>Caution!</b> URL must match the URL or domain of the tool associated with this resource link
   # @argument custom [Optional, Hash] Custom parameters to be sent to the tool when launching this link.
   #   <b>Caution!</b> Changing these from what the tool provided could result in errors if the tool doesn't see what it's expecting.
   # @argument include_deleted [Optional, Boolean] Update link even if it is deleted. Default is false.
+  # @argument context_external_tool_id [Optional, Integer] The Canvas identifier for the LTI 1.3 External Tool that the LTI Resource Link was originally installed from.
+  #  <b>Caution!</b> The resource link url must match the tool's domain or url.
   #
   # @example_request
   #
@@ -401,7 +418,7 @@ class Lti::ResourceLinksController < ApplicationController
   end
 
   def resource_link_json(link)
-    lti_resource_link_json(link, @current_user, session, resource_link_type(link))
+    lti_resource_link_json(link, @current_user, session, resource_link_type(link), link_id_to_module_item_id[link.id])
   end
 
   def resource_link_type(link)
@@ -417,7 +434,13 @@ class Lti::ResourceLinksController < ApplicationController
   end
 
   def module_item_resource_link_ids
-    @module_item_resource_link_ids ||= base_scope(@context.context_module_tags).where(associated_asset_type: "Lti::ResourceLink").pluck(:associated_asset_id)
+    @module_item_resource_link_ids ||= link_id_to_module_item_id.keys
+  end
+
+  def link_id_to_module_item_id
+    @link_id_to_module_item_id ||= base_scope(@context.context_module_tags)
+                                   .where(associated_asset_type: "Lti::ResourceLink")
+                                   .pluck(:associated_asset_id, :id).to_h
   end
 
   def bulk_create_links(links, context)
@@ -459,6 +482,22 @@ class Lti::ResourceLinksController < ApplicationController
     render_error(:invalid_url, "'url' param must be a valid URL")
   end
 
+  def validate_tool
+    return if params[:context_external_tool_id].nil? || (new_tool.present? && new_tool.root_account_id == resource_link.root_account_id)
+
+    render_error(:context_external_tool_id, "'context_external_tool_id' param must be a valid ContextExternalTool ID")
+  end
+
+  def validate_url_match_tool
+    return if params[:url].nil? && new_tool.nil?
+
+    url = params[:url] || resource_link.url
+    tool = new_tool || resource_link.original_context_external_tool
+    return if url.nil? || tool.matches_host?(url)
+
+    render_error(:url_tool_mismatch, "'url' param must match the tool associated with 'context_external_tool_id'")
+  end
+
   def valid_custom?(custom)
     return true if custom.nil?
     return false unless custom.respond_to?(:to_unsafe_h)
@@ -472,8 +511,12 @@ class Lti::ResourceLinksController < ApplicationController
     false
   end
 
+  def new_tool
+    @new_tool ||= Lti::ToolFinder.find_by(id: params[:context_external_tool_id])
+  end
+
   def update_params
-    params.permit(:url, custom: ArbitraryStrongishParams::ANYTHING)
+    params.permit(:url, :context_external_tool_id, custom: ArbitraryStrongishParams::ANYTHING)
   end
 
   def create_params
@@ -491,15 +534,6 @@ class Lti::ResourceLinksController < ApplicationController
     raise e
   end
 
-  def require_feature_flag
-    unless @context.root_account.feature_enabled?(:lti_resource_links_api)
-      respond_to do |format|
-        format.html { render "shared/errors/404_message", status: :not_found }
-        format.json { render_error(:not_found, "The specified resource does not exist.", status: :not_found) }
-      end
-    end
-  end
-
   def require_permissions
     require_context_with_permission(@context, :manage_lti_add)
     require_context_with_permission(@context, :manage_assignments_add)
@@ -511,6 +545,6 @@ class Lti::ResourceLinksController < ApplicationController
 
   def report_error(exception, code = nil)
     code ||= response_code_for_rescue(exception) if exception
-    InstStatsd::Statsd.increment("canvas.lti_resource_links_controller.request_error", tags: { action: action_name, code: })
+    InstStatsd::Statsd.distributed_increment("canvas.lti_resource_links_controller.request_error", tags: { action: action_name, code: })
   end
 end

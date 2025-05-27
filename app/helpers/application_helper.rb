@@ -26,7 +26,7 @@ module ApplicationHelper
   include Canvas::LockExplanation
   include DatadogRumHelper
   include NewQuizzesFeaturesHelper
-  include HeapHelper
+  include UsageMetricsHelper
 
   BYTE_UNITS = %w[B KB MB GB TB PB EB ZB YB].freeze
 
@@ -127,7 +127,7 @@ module ApplicationHelper
       opts["#{context_name}_id"] = context.id
       res = url_for opts
     else
-      res = context_name.to_s + opts.to_json.to_s
+      res = context_name.to_s + opts.to_json
     end
     @context_url_lookup[lookup] = res
   end
@@ -167,7 +167,7 @@ module ApplicationHelper
     end.any?
   end
 
-  def hidden(include_style = false)
+  def hidden(include_style: false)
     include_style ? "style='display:none;'".html_safe : "display: none;"
   end
 
@@ -268,7 +268,7 @@ module ApplicationHelper
     @rendered_css_bundles += new_css_bundles
 
     unless new_css_bundles.empty?
-      bundles = new_css_bundles.map { |(bundle, plugin)| css_url_for(bundle, plugin) }
+      bundles = new_css_bundles.map { |(bundle, plugin)| css_url_for(bundle, plugin:) }
       bundles << css_url_for("disable_transitions") if disable_css_transitions?
       bundles << { media: "all" }
       tags = bundles.map { |bundle| stylesheet_link_tag(bundle) }
@@ -289,11 +289,13 @@ module ApplicationHelper
   def css_variant(opts = {})
     use_high_contrast =
       @current_user&.prefers_high_contrast? || opts[:force_high_contrast]
+    use_dyslexic_font = @current_user&.prefers_dyslexic_font?
     "new_styles" + + (use_high_contrast ? "_high_contrast" : "_normal_contrast") +
+      (use_dyslexic_font ? "_dyslexic" : "") +
       (I18n.rtl? ? "_rtl" : "")
   end
 
-  def css_url_for(bundle_name, plugin = false, opts = {})
+  def css_url_for(bundle_name, plugin: false, force_high_contrast: false)
     bundle_path =
       if plugin
         "../../gems/plugins/#{plugin}/app/stylesheets/#{bundle_name}"
@@ -301,8 +303,8 @@ module ApplicationHelper
         "bundles/#{bundle_name}"
       end
 
-    cache = BrandableCSS.cache_for(bundle_path, css_variant(opts))
-    base_dir = cache[:includesNoVariables] ? "no_variables" : css_variant(opts)
+    cache = BrandableCSS.cache_for(bundle_path, css_variant(force_high_contrast:))
+    base_dir = cache[:includesNoVariables] ? "no_variables" : css_variant(force_high_contrast:)
     File.join("/dist", "brandable_css", base_dir, "#{bundle_path}-#{cache[:combinedChecksum]}.css")
   end
 
@@ -370,26 +372,7 @@ module ApplicationHelper
       Rails
       .cache
       .fetch(["active_external_tool_for", @context, tool_id].cache_key, expires_in: 1.hour) do
-        # don't use for groups. they don't have account_chain_ids
-        tool = @context.context_external_tools.active.where(tool_id:).first
-
-        unless tool
-          # account_chain_ids is in the order we need to search for tools
-          # unfortunately, the db will return an arbitrary one first.
-          # so, we pull all the tools (probably will only have one anyway) and look through them here
-          account_chain_ids = @context.account_chain_ids
-
-          tools =
-            ContextExternalTool
-            .active
-            .where(context_type: "Account", context_id: account_chain_ids, tool_id:)
-            .to_a
-          account_chain_ids.each do |account_id|
-            tool = tools.find { |t| t.context_id == account_id }
-            break if tool
-          end
-        end
-        tool
+        Lti::ContextToolFinder.ordered_by_context_for(@context).where(tool_id:).first
       end
   end
 
@@ -525,7 +508,7 @@ module ApplicationHelper
     # called outside of Lti::ContextToolFinder to make sure that
     # @context is non-nil and also a type of Context that would have
     # tools in it (ie Course/Account/Group/User)
-    contexts = ContextExternalTool.contexts_to_search(@context)
+    contexts = Lti::ContextToolFinder.contexts_to_search(@context)
     return [] if contexts.empty?
 
     cached_tools =
@@ -1062,7 +1045,9 @@ module ApplicationHelper
                     script-src-elem 'self' 'unsafe-inline' #{allow_list_domains};\
                     font-src 'self' data: #{allow_list_domains};\
                     connect-src 'self' #{allow_list_domains};\
-                    worker-src 'self' blob: #{allow_list_domains};"
+                    worker-src 'self' blob: #{allow_list_domains};\
+                    manifest-src 'self' #{allow_list_domains};\
+                    media-src 'self' #{allow_list_domains};"
 
       directives.squish + csp_report_uri
     else
@@ -1142,6 +1127,10 @@ module ApplicationHelper
     request.fullpath =~ %r{groups/#{group.id}}
   end
 
+  def enable_content_view_if_requested
+    @content_only = Canvas::Plugin.value_to_boolean(params[:content_only])
+  end
+
   def link_to_parent_signup(auth_type)
     data = reg_link_data(auth_type)
     link_to(
@@ -1189,16 +1178,27 @@ module ApplicationHelper
   end
 
   def generate_access_verifier(return_url: nil, fallback_url: nil, authorization: nil)
-    Users::AccessVerifier.generate(
-      authorization:,
-      user: @current_user,
-      real_user: logged_in_user,
-      developer_key: @access_token&.developer_key,
-      root_account: @domain_root_account,
-      oauth_host: request.host_with_port,
-      return_url:,
-      fallback_url:
-    )
+    if @advantage_token_developer_key.present?
+      DeveloperKeys::AccessVerifier.generate(
+        authorization:,
+        developer_key: @advantage_token_developer_key,
+        root_account: @domain_root_account,
+        oauth_host: request.host_with_port,
+        return_url:,
+        fallback_url:
+      )
+    else
+      Users::AccessVerifier.generate(
+        authorization:,
+        user: @current_user,
+        real_user: logged_in_user,
+        developer_key: @access_token&.developer_key,
+        root_account: @domain_root_account,
+        oauth_host: request.host_with_port,
+        return_url:,
+        fallback_url:
+      )
+    end
   end
 
   def validate_access_verifier
@@ -1447,7 +1447,7 @@ module ApplicationHelper
   end
 
   def append_default_due_time_js_env(context, hash)
-    hash[:DEFAULT_DUE_TIME] = context.default_due_time if context&.default_due_time.present? && context.root_account.feature_enabled?(:default_due_time)
+    hash[:DEFAULT_DUE_TIME] = context.default_due_time if context&.default_due_time.present?
   end
 
   def number_to_human_size_mb(number, options = {})

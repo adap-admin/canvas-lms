@@ -51,6 +51,12 @@
 #           "example": true,
 #           "type": "boolean"
 #         },
+#         "selected_days_to_skip": {
+#           "description": "array of strings representing the days of the work week",
+#           "example": ["fri", "sat"],
+#           "type": "array",
+#           "items": {"type": "integer"}
+#         },
 #         "hard_end_dates": {
 #           "description": "set if the end date is set from course",
 #           "example": true,
@@ -284,17 +290,17 @@ class CoursePacesController < ApplicationController
   before_action :load_blackout_dates, only: %i[index]
   before_action :load_calendar_event_blackout_dates, only: %i[index]
   before_action :require_feature_flag
-  before_action :authorize_action
   before_action :load_course_pace, only: %i[api_show publish update destroy]
 
   include Api::V1::Course
   include Api::V1::Progress
   include K5Mode
-  include GranularPermissionEnforcement
 
   COURSE_PACES_PUBLISHING_LIMIT = 50
 
   def index
+    return unless authorized_action(@course, @current_user, RoleOverride::GRANULAR_MANAGE_COURSE_CONTENT_PERMISSIONS)
+
     add_crumb(t("Course Pacing"))
     @course_pace = @context.course_paces.primary.first
 
@@ -316,6 +322,7 @@ class CoursePacesController < ApplicationController
       master_course_data[:default_restrictions] = MasterCourses::MasterTemplate.full_template_for(@context).default_restrictions_for(@course_pace) if status == :master
     end
 
+    set_js_assignment_data
     js_env({
              BLACKOUT_DATES: @blackout_dates.as_json(include_root: false),
              CALENDAR_EVENT_BLACKOUT_DATES: @calendar_event_blackout_dates.as_json(include_root: false),
@@ -329,9 +336,10 @@ class CoursePacesController < ApplicationController
              VALID_DATE_RANGE: CourseDateRange.new(@context),
              MASTER_COURSE_DATA: master_course_data,
              IS_MASQUERADING: @current_user && @real_current_user && @real_current_user != @current_user,
-             PACES_PUBLISHING: paces_publishing
-           })
-
+             PACES_PUBLISHING: paces_publishing,
+             CONTEXT_URL_ROOT: polymorphic_path([@context])
+           },
+           true)
     js_bundle :course_paces
     css_bundle :course_paces
   end
@@ -387,6 +395,8 @@ class CoursePacesController < ApplicationController
   #     -H 'Authorization: Bearer <token>'
 
   def api_show
+    return unless authorized_action(@course, @current_user, RoleOverride::GRANULAR_MANAGE_COURSE_CONTENT_PERMISSIONS)
+
     load_and_run_progress
     render json: {
       course_pace: CoursePacePresenter.new(@course_pace).as_json,
@@ -395,17 +405,10 @@ class CoursePacesController < ApplicationController
   end
 
   def new
-    @course_pace = case @context
-                   when Course
-                     @context.course_paces.primary.published.take ||
-                     @context.course_paces.primary.not_deleted.take
-                   when CourseSection
-                     @course.course_paces.for_section(@context).published.take ||
-                     @course.course_paces.for_section(@context).not_deleted.take
-                   when Enrollment
-                     @course.course_paces.for_user(@context.user).published.take ||
-                     @course.course_paces.for_user(@context.user).not_deleted.take
-                   end
+    return unless authorized_action(@course, @current_user, RoleOverride::GRANULAR_MANAGE_COURSE_CONTENT_PERMISSIONS)
+
+    @course_pace = CoursePace.pace_for_context(@course, @context, exact: true)
+
     load_and_run_progress
     if @course_pace.nil?
       pace_params = case @context
@@ -438,6 +441,8 @@ class CoursePacesController < ApplicationController
   end
 
   def publish
+    return unless authorized_action(@course, @current_user, :manage_course_content_edit)
+
     publish_course_pace
     log_course_paces_publishing
     render json: progress_json(@progress, @current_user, session)
@@ -463,6 +468,9 @@ class CoursePacesController < ApplicationController
   # @argument exclude_weekends [Boolean]
   #   Course pace dates excludes weekends if true
   #
+  # @argument selected_days_to_skip [Array<String>]
+  #   Course pace dates excludes weekends if true
+  #
   # @argument hard_end_dates [Boolean]
   #   Course pace uess hard end dates if true
   #
@@ -486,14 +494,13 @@ class CoursePacesController < ApplicationController
   #     -H 'Authorization: Bearer <token>'
 
   def create
-    create_params
-    pace_draft_feature_flag
-    @course_pace = @context.course_paces.new(@permitted_params)
+    return unless authorized_action(@course, @current_user, :manage_course_content_add)
+
+    @course_pace = @context.course_paces.new(create_params)
 
     if @course_pace.save
-      @progress = nil
-      if @draft_feature_flag_enabled
-        if @permitted_params[:workflow_state].present? && @permitted_params[:workflow_state] == "active"
+      if @context.root_account.feature_enabled?(:course_pace_draft_state)
+        if create_params[:workflow_state].present? && create_params[:workflow_state] == "active"
           # only publishes the pace if workflow_state is explicitly set to active to allow creating paces in draft state
           publish_course_pace
         end
@@ -510,6 +517,12 @@ class CoursePacesController < ApplicationController
     end
   end
 
+  def bulk_create_enrollment_paces
+    return unless authorized_action(@course, @current_user, :manage_course_content_edit)
+
+    @course.run_bulk_assign_enrollment_paces_delayed_job(params[:enrollment_ids], bulk_create_params)
+  end
+
   # @API Update a Course pace
   # Returns the updated course pace
   #
@@ -523,6 +536,9 @@ class CoursePacesController < ApplicationController
   #   End date of the course pace
   #
   # @argument exclude_weekends [Boolean]
+  #   Course pace dates excludes weekends if true
+  #
+  # @argument selected_days_to_skip [Array<String>]
   #   Course pace dates excludes weekends if true
   #
   # @argument hard_end_dates [Boolean]
@@ -542,26 +558,22 @@ class CoursePacesController < ApplicationController
   #     -H 'Authorization: Bearer <token>'
 
   def update
-    update_params
-    pace_draft_feature_flag
-    @progress = nil
+    return unless authorized_action(@course, @current_user, :manage_course_content_edit)
+
     should_publish = false
 
-    if @draft_feature_flag_enabled
-      if @course_pace.workflow_state == "active" || @permitted_params[:workflow_state] == "active"
-        should_publish = true
-        # override workflow state to ensure it's always active if we're publishing
-        @permitted_params = @permitted_params.merge(workflow_state: "active")
-      end
-    else
+    if @context.root_account.feature_enabled?(:course_pace_draft_state) &&
+       (@course_pace.workflow_state == "active" || update_params[:workflow_state] == "active")
+      # override workflow state to ensure it's always active if we're publishing
+      update_params[:workflow_state] = "active"
       should_publish = true
     end
 
-    if @course_pace.update(@permitted_params)
+    if @course_pace.update(update_params)
       # Force the updated_at to be updated, because if the update just changed the items the course pace's
       # updated_at doesn't get modified
       @course_pace.touch
-      if should_publish
+      if should_publish || @course_pace.workflow_state == "active"
         publish_course_pace
       end
 
@@ -575,6 +587,8 @@ class CoursePacesController < ApplicationController
   end
 
   def compress_dates
+    return unless authorized_action(@course, @current_user, :manage_course_content_edit)
+
     @course_pace = @course.course_paces.new(create_params)
     if params[:blackout_dates]
       # keep the param.permit values in sync with BlackoutDatesController#blackout_date_params
@@ -622,7 +636,7 @@ class CoursePacesController < ApplicationController
   #     -H 'Authorization: Bearer <token>'
 
   def destroy
-    return not_found unless Account.site_admin.feature_enabled?(:course_paces_redesign)
+    return unless authorized_action(@course, @current_user, :manage_course_content_delete)
 
     if @course_pace.primary? && @course_pace.published?
       return render json: { success: false, errors: t("You cannot delete the default course pace.") }, status: :unprocessable_entity
@@ -635,24 +649,6 @@ class CoursePacesController < ApplicationController
   end
 
   private
-
-  def authorize_action
-    enforce_granular_permissions(
-      @course,
-      overrides: [:manage_content],
-      actions: {
-        index: RoleOverride::GRANULAR_MANAGE_COURSE_CONTENT_PERMISSIONS,
-        api_show: RoleOverride::GRANULAR_MANAGE_COURSE_CONTENT_PERMISSIONS,
-        new: RoleOverride::GRANULAR_MANAGE_COURSE_CONTENT_PERMISSIONS,
-        publish: [:manage_course_content_edit],
-        create: [:manage_course_content_add],
-        update: [:manage_course_content_edit],
-        compress_dates: [:manage_course_content_edit],
-        master_course_info: [:manage_course_content_edit],
-        destroy: [:manage_course_content_delete]
-      }
-    )
-  end
 
   def latest_progress
     progress = Progress.order(created_at: :desc).find_by(context: @course_pace, tag: "course_pace_publish")
@@ -670,7 +666,7 @@ class CoursePacesController < ApplicationController
           @progress.fail!
           @progress = publish_course_pace
         in [true, true]
-          @progress.delayed_job.update(run_at: Time.now)
+          @progress.delayed_job.update(run_at: Time.zone.now)
         end
       end
       @progress_json = progress_json(@progress, @current_user, session)
@@ -708,11 +704,7 @@ class CoursePacesController < ApplicationController
   end
 
   def require_feature_flag
-    not_found unless @course.account.feature_enabled?(:course_paces) && @course.enable_course_paces
-  end
-
-  def pace_draft_feature_flag
-    @draft_feature_flag_enabled = @context.root_account.feature_enabled?(:course_pace_draft_state)
+    not_found unless @course.enable_course_paces
   end
 
   def load_course_pace
@@ -744,25 +736,48 @@ class CoursePacesController < ApplicationController
   end
 
   def update_params
-    @permitted_params = params.require(:course_pace).permit(
-      :context_id,
-      :context_type,
-      :course_section_id,
-      :user_id,
-      :end_date,
-      :exclude_weekends,
-      :hard_end_dates,
-      :workflow_state,
-      course_pace_module_items_attributes: %i[id duration module_item_id root_account_id]
-    )
-    set_context_ids
-    @permitted_params
+    @update_params ||= begin
+      permitted_params = params.require(:course_pace).permit(
+        :context_id,
+        :context_type,
+        :course_section_id,
+        :user_id,
+        :end_date,
+        :exclude_weekends,
+        :hard_end_dates,
+        :workflow_state,
+        :time_to_complete_calendar_days,
+        course_pace_module_items_attributes: %i[id duration module_item_id root_account_id],
+        selected_days_to_skip: [],
+        assignments_weighting: strong_anything
+      )
+      set_context_ids_in(permitted_params)
+    end
   end
 
   def create_params
-    @permitted_params = params.require(:course_pace).permit(
-      :context_id,
-      :context_type,
+    @create_params ||= begin
+      permitted_params = params.require(:course_pace).permit(
+        :context_id,
+        :context_type,
+        :course_id,
+        :course_section_id,
+        :user_id,
+        :end_date,
+        :exclude_weekends,
+        :hard_end_dates,
+        :workflow_state,
+        :time_to_complete_calendar_days,
+        course_pace_module_items_attributes: %i[duration module_item_id root_account_id],
+        selected_days_to_skip: [],
+        assignments_weighting: strong_anything
+      )
+      set_context_ids_in(permitted_params)
+    end
+  end
+
+  def bulk_create_params
+    @bulk_create_params ||= params.require(:course_pace).permit(
       :course_id,
       :course_section_id,
       :user_id,
@@ -770,26 +785,28 @@ class CoursePacesController < ApplicationController
       :exclude_weekends,
       :hard_end_dates,
       :workflow_state,
-      course_pace_module_items_attributes: %i[duration module_item_id root_account_id]
+      :time_to_complete_calendar_days,
+      course_pace_module_items_attributes: %i[duration module_item_id root_account_id],
+      selected_days_to_skip: [],
+      assignments_weighting: strong_anything
     )
-    set_context_ids
-    @permitted_params
   end
 
   # Converts the context_id and context_type params to the database column required for that context
-  def set_context_ids
-    return unless @permitted_params[:context_id].present? && @permitted_params[:context_type].present?
+  def set_context_ids_in(permitted_params)
+    return permitted_params unless permitted_params[:context_id].present? && permitted_params[:context_type].present?
 
-    if @permitted_params[:context_type] == "Section"
-      @permitted_params[:course_section_id] = @permitted_params[:context_id]
-    elsif @permitted_params[:context_type] == "Enrollment"
-      @permitted_params[:user_id] = @permitted_params[:context_id]
+    if permitted_params[:context_type] == "Section"
+      permitted_params[:course_section_id] = permitted_params[:context_id]
+    elsif permitted_params[:context_type] == "Enrollment"
+      permitted_params[:user_id] = permitted_params[:context_id]
     end
-    @permitted_params = @permitted_params.except(:context_id, :context_type)
+
+    permitted_params.except(:context_id, :context_type)
   end
 
   def publish_course_pace
-    @progress = @course_pace.create_publish_progress(run_at: Time.now)
+    @progress = @course_pace.create_publish_progress(run_at: Time.zone.now)
   end
 
   def log_course_paces_publishing

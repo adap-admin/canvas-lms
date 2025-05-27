@@ -25,22 +25,24 @@ module Lti
       LtiDeepLinkingRequest
     ].freeze
 
+    TARGET_LINK_URI_PRIORITY_PLACEMENTS = [:assignment_edit, :assignment_view].freeze
+
     class << self
       include Rails.application.routes.url_helpers
 
       def external_tools_for(context, placements, options = {})
-        tools_options = {}
+        tools_options = {
+          placements:
+        }
         if options[:current_user]
           tools_options[:current_user] = options[:current_user]
-          tools_options[:user] = options[:current_user]
         end
         if options[:only_visible]
           tools_options[:only_visible] = options[:only_visible]
           tools_options[:session] = options[:session] if options[:session]
-          tools_options[:visibility_placements] = placements
         end
 
-        Lti::ContextToolFinder.all_tools_for(context, tools_options).placements(*placements)
+        Lti::ContextToolFinder.all_tools_for(context, **tools_options)
       end
 
       def message_handlers_for(context, placements)
@@ -108,7 +110,15 @@ module Lti
             url: tool.extension_setting(p, :url) || tool.extension_default_value(p, :url) || tool.extension_default_value(p, :target_link_uri),
             title: tool.label_for(p, I18n.locale || I18n.default_locale.to_s),
           }
-          definition[:placements][:global_navigation].merge!(global_nav_info(tool)) if p == "global_navigation"
+          definition[:placements][p.to_sym].merge!(global_nav_info(tool)) if p == "global_navigation"
+          definition[:placements][p.to_sym].merge!(asset_processor_info(tool)) if p == Lti::ResourcePlacement::ASSET_PROCESSOR
+
+          # Overwrite the URL with the target_link_uri if it is set
+          # and the placement is assignment_edit or assignment_view
+          if TARGET_LINK_URI_PRIORITY_PLACEMENTS.include?(p.to_sym) && Account.site_admin.feature_enabled?(:lti_target_link_uri_for_assignment_edit_view)
+            placement_target_link_uri = tool.extension_setting(p, :target_link_uri)
+            definition[:placements][p.to_sym][:url] = placement_target_link_uri unless placement_target_link_uri.blank?
+          end
 
           message_type = definition.dig(:placements, p.to_sym, :message_type)
 
@@ -120,7 +130,8 @@ module Lti
             definition[:placements][p.to_sym][:selection_height] = height
           end
 
-          %i[launch_width launch_height].each do |property|
+          launch_properties = %i[launch_width launch_height]
+          launch_properties.each do |property|
             if tool.extension_setting(p, property)
               definition[:placements][p.to_sym][property] = tool.extension_setting(p, property)
             end
@@ -156,6 +167,16 @@ module Lti
           message_type: message_handler.message_type,
           url: message_handler.launch_path,
           title: message_handler.resource_handler.name
+        }
+      end
+
+      def asset_processor_info(tool)
+        {
+          icon_url:
+            tool.extension_setting(Lti::ResourcePlacement::ASSET_PROCESSOR, :icon_url),
+
+          # TODO: use this for global nav too, for consistent default icons
+          tool_name_for_default_icon: tool.name,
         }
       end
 

@@ -32,6 +32,12 @@
   "additional_considerations_f3801683": {
     "message": "Additional considerations"
   },
+  "address_applied_64269b0b": {
+    "message": "Address applied"
+  },
+  "address_removed_fcb496e0": {
+    "message": "Address removed"
+  },
   "adjacent_links_with_the_same_url_should_be_a_singl_7a1f7f6c": {
     "message": "Adjacent links with the same URL should be a single link."
   },
@@ -202,6 +208,12 @@
   },
   "blue_daf8fea9": {
     "message": "Blue"
+  },
+  "bold_applied_42d547b7": {
+    "message": "Bold applied"
+  },
+  "bold_removed_da474a5c": {
+    "message": "Bold removed"
   },
   "border_5b08b06d": {
     "message": "Border"
@@ -512,6 +524,9 @@
   "deep_purple_bb3e2907": {
     "message": "Deep Purple"
   },
+  "default_9db103d": {
+    "message": "Default"
+  },
   "default_bulleted_unordered_list_47079da8": {
     "message": "default bulleted unordered list"
   },
@@ -592,6 +607,12 @@
   },
   "display_text_link_opens_in_a_new_tab_75e9afc9": {
     "message": "Display Text Link (Opens in a new tab)"
+  },
+  "div_applied_49ad83fc": {
+    "message": "Div applied"
+  },
+  "div_removed_d13f8e17": {
+    "message": "Div removed"
   },
   "division_sign_72190870": {
     "message": "Division Sign"
@@ -863,9 +884,6 @@
   "for_all_b919f972": {
     "message": "For All"
   },
-  "foreground_3acfb942": {
-    "message": "Foreground"
-  },
   "format_4247a9c5": {
     "message": "Format"
   },
@@ -991,6 +1009,12 @@
   },
   "heading_4_b2e74be7": {
     "message": "Heading 4"
+  },
+  "heading_h_applied_eccd294d": {
+    "message": "Heading { h } applied"
+  },
+  "heading_h_removed_745f24a6": {
+    "message": "Heading { h } removed"
   },
   "heading_levels_should_not_be_skipped_3947c0e0": {
     "message": "Heading levels should not be skipped."
@@ -1176,6 +1200,9 @@
   "intersection_cd4590e4": {
     "message": "Intersection"
   },
+  "invalid_description_991e23bb": {
+    "message": "Invalid description"
+  },
   "invalid_entry_f7d2a0f5": {
     "message": "Invalid entry."
   },
@@ -1199,6 +1226,12 @@
   },
   "italian_bd3c792d": {
     "message": "Italian"
+  },
+  "italic_applied_8f59a684": {
+    "message": "Italic applied"
+  },
+  "italic_removed_17cbab6f": {
+    "message": "Italic removed"
   },
   "japanese_b5721ca7": {
     "message": "Japanese"
@@ -1485,12 +1518,6 @@
   "music_icon_4db5c972": {
     "message": "Music Icon"
   },
-  "must_be_at_least_percentage_22e373b6": {
-    "message": "Must be at least { percentage }%"
-  },
-  "must_be_at_least_width_x_height_px_41dc825e": {
-    "message": "Must be at least { width } x { height }px"
-  },
   "my_files_2f621040": {
     "message": "My files"
   },
@@ -1686,8 +1713,8 @@
   "outline_size_a6059a21": {
     "message": "Outline Size"
   },
-  "p_is_not_a_valid_protocol_which_must_be_ftp_http_h_adf13fc2": {
-    "message": "{ p } is not a valid protocol which must be ftp, http, https, mailto, skype, tel or may be omitted"
+  "p_is_not_a_valid_protocol_b1c4efaa": {
+    "message": "{ p } is not a valid protocol."
   },
   "page_50c4823d": {
     "message": "Page"
@@ -1697,6 +1724,12 @@
   },
   "paragraph_5e5ad8eb": {
     "message": "Paragraph"
+  },
+  "paragraph_applied_959b3fe5": {
+    "message": "Paragraph applied"
+  },
+  "paragraph_removed_d09320e": {
+    "message": "Paragraph removed"
   },
   "paragraph_starting_with_start_a59923f8": {
     "message": "Paragraph starting with { start }"
@@ -1727,6 +1760,9 @@
   },
   "percentage_must_be_a_number_8033c341": {
     "message": "Percentage must be a number"
+  },
+  "percentage_must_be_at_least_percentage_a98ca8fc": {
+    "message": "Percentage must be at least { percentage }%"
   },
   "performing_arts_icon_f3497486": {
     "message": "Performing Arts Icon"
@@ -1761,6 +1797,9 @@
   "pixels_52ece7d1": {
     "message": "Pixels"
   },
+  "pixels_must_be_at_least_width_x_height_px_e965edd5": {
+    "message": "Pixels must be at least { width } x { height }px"
+  },
   "play_1a47eaa7": {
     "message": "Play"
   },
@@ -1773,8 +1812,17 @@
   "please_allow_canvas_to_access_your_microphone_and__dc2c3079": {
     "message": "Please allow Canvas to access your microphone and webcam."
   },
+  "please_choose_a_file_c2449cc": {
+    "message": "Please choose a file"
+  },
   "please_decribe_what_you_would_like_to_compose_27a51be5": {
     "message": "Please decribe what you would like to compose."
+  },
+  "please_enter_a_file_name_f159edc1": {
+    "message": "Please enter a file name"
+  },
+  "please_select_a_file_of_a_supported_type_1fc578f2": {
+    "message": "Please select a file of a supported type"
   },
   "plus_d43cd4ec": {
     "message": "Plus"
@@ -2361,9 +2409,6 @@
   "the_first_heading_on_a_page_should_be_an_h2_859089f2": {
     "message": "The first heading on a page should be an H2."
   },
-  "the_following_content_is_partner_provided_ed1da756": {
-    "message": "The following content is partner provided"
-  },
   "the_material_is_in_the_public_domain_279c39a3": {
     "message": "The material is in the public domain"
   },
@@ -2372,9 +2417,6 @@
   },
   "the_material_is_subject_to_an_exception_e_g_fair_u_a39c8ca2": {
     "message": "The material is subject to an exception - e.g. fair use, the right to quote, or others under applicable copyright laws"
-  },
-  "the_preceding_content_is_partner_provided_d753928c": {
-    "message": "The preceding content is partner provided"
   },
   "the_pretty_html_editor_is_not_keyboard_accessible__d6d5d2b": {
     "message": "The pretty html editor is not keyboard accessible. Press Shift O to open the raw html editor."
@@ -2471,6 +2513,12 @@
   },
   "unable_to_determine_resource_selection_url_7867e060": {
     "message": "Unable to determine resource selection url"
+  },
+  "underline_applied_ae01ec97": {
+    "message": "Underline applied"
+  },
+  "underline_removed_3693e17c": {
+    "message": "Underline removed"
   },
   "union_e6b57a53": {
     "message": "Union"

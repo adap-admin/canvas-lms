@@ -38,10 +38,15 @@ describe Login::OAuth2Controller do
   end
 
   describe "#create" do
-    let(:token) { instance_double("OAuth2::AccessToken", options: {}) }
+    let(:token) { instance_double(OAuth2::AccessToken, options: {}) }
+    let(:root_account) { Account.default }
+
+    before do
+      controller.instance_variable_set(:@domain_root_account, root_account)
+    end
 
     it "checks the OAuth2 CSRF token" do
-      session[:oauth2_nonce] = "bob"
+      session[:oauth2_nonce] = ["bob"]
       jwt = Canvas::Security.create_jwt(aac_id: aac.global_id, nonce: "different")
       get :create, params: { state: jwt }
       # it could be a 422, or 0 if error handling isn't enabled properly in specs
@@ -72,7 +77,7 @@ describe Login::OAuth2Controller do
     end
 
     it "works" do
-      session[:oauth2_nonce] = "bob"
+      session[:oauth2_nonce] = ["bob"]
       expect_any_instantiation_of(aac).to receive(:get_token).and_return(token)
       expect_any_instantiation_of(aac).to receive(:unique_id).with(token).and_return("user")
       expect_any_instantiation_of(aac).to receive(:provider_attributes).with(token).and_return({})
@@ -89,7 +94,7 @@ describe Login::OAuth2Controller do
     end
 
     it "handles multi-valued identifiers from providers" do
-      session[:oauth2_nonce] = "bob"
+      session[:oauth2_nonce] = ["bob"]
       expect_any_instantiation_of(aac).to receive(:get_token).and_return(token)
       expect_any_instantiation_of(aac).to receive(:unique_id).with(token).and_return(["user"])
       expect_any_instantiation_of(aac).to receive(:provider_attributes).with(token).and_return({})
@@ -105,8 +110,66 @@ describe Login::OAuth2Controller do
       expect(session[:sentinel]).to be_nil
     end
 
+    it "allows the provider to substitute a different provider" do
+      session[:oauth2_nonce] = ["bob"]
+      account2 = Account.create!(name: "elsewhere")
+      aac2 = account2.authentication_providers.create!(auth_type: "saml")
+
+      expect_any_instantiation_of(aac).to receive(:get_token).and_return(token)
+      expect_any_instantiation_of(aac).to receive(:unique_id).with(token).and_return("user")
+      expect_any_instantiation_of(aac).to receive(:provider_attributes).with(token).and_return({})
+      expect_any_instantiation_of(aac).to receive(:alternate_provider_for_token).with(token).and_return(aac2)
+      user_with_pseudonym(username: "user", active_all: 1, account: account2)
+      @pseudonym.authentication_provider = aac2
+      @pseudonym.save!
+      # the user needs an association with this account to work
+      aac.pseudonyms.create!(user: @user, unique_id: "user2", account: Account.default)
+
+      jwt = Canvas::Security.create_jwt(aac_id: aac.global_id, nonce: "bob")
+      get :create, params: { state: jwt }
+      expect(response).to redirect_to(dashboard_url(login_success: 1))
+      expect(flash[:notice]).to eql "You are logged in at #{Account.default.name} using your credentials from #{account2.name}"
+    end
+
+    it "redirects to MFA if the account requires it" do
+      session[:oauth2_nonce] = ["bob"]
+      Account.default.settings[:mfa_settings] = :required
+      Account.default.save!
+      expect_any_instantiation_of(aac).to receive(:get_token).and_return(token)
+      expect_any_instantiation_of(aac).to receive(:unique_id).with(token).and_return("user")
+      expect_any_instantiation_of(aac).to receive(:provider_attributes).with(token).and_return({})
+      user_with_pseudonym(username: "user", active_all: 1)
+      @pseudonym.authentication_provider = aac
+      @pseudonym.save!
+
+      session[:sentinel] = true
+      jwt = Canvas::Security.create_jwt(aac_id: aac.global_id, nonce: "bob")
+      get :create, params: { state: jwt }
+      expect(response).to redirect_to(login_otp_url)
+    end
+
+    it "allows the provider to skip MFA dynamically" do
+      session[:oauth2_nonce] = ["bob"]
+      Account.default.settings[:mfa_settings] = :required
+      Account.default.save!
+      expect_any_instantiation_of(aac).to receive(:get_token).and_return(token)
+      expect_any_instantiation_of(aac).to receive(:unique_id).with(token).and_return("user")
+      expect_any_instantiation_of(aac).to receive(:provider_attributes).with(token).and_return({})
+      expect_any_instantiation_of(aac).to receive(:mfa_passed?).with(token).and_return(true)
+      user_with_pseudonym(username: "user", active_all: 1)
+      @pseudonym.authentication_provider = aac
+      @pseudonym.save!
+
+      session[:sentinel] = true
+      jwt = Canvas::Security.create_jwt(aac_id: aac.global_id, nonce: "bob")
+      get :create, params: { state: jwt }
+      expect(response).to redirect_to(dashboard_url(login_success: 1))
+      # ensure the session was reset
+      expect(session[:sentinel]).to be_nil
+    end
+
     it "doesn't allow deleted users to login" do
-      session[:oauth2_nonce] = "bob"
+      session[:oauth2_nonce] = ["bob"]
       expect_any_instantiation_of(aac).to receive(:get_token).and_return(token)
       expect_any_instantiation_of(aac).to receive(:unique_id).with(token).and_return("user")
       expect_any_instantiation_of(aac).to receive(:provider_attributes).with(token).and_return({})
@@ -126,7 +189,7 @@ describe Login::OAuth2Controller do
       expect_any_instantiation_of(aac).to receive(:unique_id).with(token).and_return("user")
       expect_any_instantiation_of(aac).to receive(:provider_attributes).with(token).and_return({})
 
-      session[:oauth2_nonce] = "bob"
+      session[:oauth2_nonce] = ["bob"]
       jwt = Canvas::Security.create_jwt(aac_id: aac.global_id, nonce: "bob")
 
       get :create, params: { state: jwt }
@@ -139,7 +202,7 @@ describe Login::OAuth2Controller do
       expect_any_instantiation_of(aac).to receive(:unique_id).with(token).and_return(nil)
       expect_any_instantiation_of(aac).to receive(:provider_attributes).with(token).and_return({})
 
-      session[:oauth2_nonce] = "bob"
+      session[:oauth2_nonce] = ["bob"]
       jwt = Canvas::Security.create_jwt(aac_id: aac.global_id, nonce: "bob")
 
       get :create, params: { state: jwt }
@@ -160,7 +223,7 @@ describe Login::OAuth2Controller do
       expect_any_instantiation_of(aac).to receive(:unique_id).with(token).and_return("user")
       expect_any_instantiation_of(aac).to receive(:provider_attributes).with(token).and_return({})
 
-      session[:oauth2_nonce] = "bob"
+      session[:oauth2_nonce] = ["bob"]
       jwt = Canvas::Security.create_jwt(aac_id: aac.global_id, nonce: "bob")
 
       expect(Account.default.pseudonyms.active.by_unique_id("user")).to_not be_exists
@@ -171,7 +234,7 @@ describe Login::OAuth2Controller do
     end
 
     it "redirects to login any time an expired token is noticed" do
-      session[:oauth2_nonce] = "bob"
+      session[:oauth2_nonce] = ["bob"]
       expect_any_instantiation_of(aac).to receive(:get_token).and_raise(Canvas::Security::TokenExpired)
       user_with_pseudonym(username: "user", active_all: 1)
       @pseudonym.authentication_provider = aac
@@ -183,7 +246,7 @@ describe Login::OAuth2Controller do
     end
 
     it "redirects to login any time an external timeout is noticed" do
-      session[:oauth2_nonce] = "fred"
+      session[:oauth2_nonce] = ["fred"]
       expect_any_instantiation_of(aac).to receive(:get_token).and_raise(Canvas::TimeoutCutoff)
       user_with_pseudonym(username: "user", active_all: 1)
       @pseudonym.authentication_provider = aac
@@ -192,6 +255,44 @@ describe Login::OAuth2Controller do
       jwt = Canvas::Security.create_jwt(aac_id: aac.global_id, nonce: "fred")
       get :create, params: { state: jwt }
       expect(response).to redirect_to(login_url)
+    end
+
+    context "when the authentication provider pseudonym validation fails" do
+      let(:state) { Canvas::Security.create_jwt(aac_id: aac.global_id, nonce: "bob") }
+      let(:retry_url) { "https://test.instructure.com/retry" }
+
+      before do
+        allow(aac).to receive(:validate_found_pseudonym!).and_raise(RetriableOAuthValidationError)
+
+        session[:oauth2_nonce] = ["bob"]
+        allow_any_instantiation_of(aac).to receive(:get_token).and_return(token)
+        allow_any_instantiation_of(aac).to receive(:unique_id).with(token).and_return("user")
+        allow_any_instantiation_of(aac).to receive(:provider_attributes).with(token).and_return({})
+        user_with_pseudonym(username: "user", active_all: 1)
+        @pseudonym.authentication_provider = aac
+        @pseudonym.save!
+        session[:sentinel] = true
+      end
+
+      it "redirects to the specified retry_url" do
+        expect(aac).to receive(:validation_error_retry_url).and_return(retry_url)
+
+        get :create, params: { state: }
+        expect(response).to redirect_to(retry_url)
+        expect(session[:sentinel]).to be_nil
+      end
+
+      context "but the authentication provider does not specify a retry_url" do
+        before do
+          allow(aac).to receive(:validation_error_retry_url).and_return(nil)
+        end
+
+        it "redirects to the login page" do
+          get :create, params: { state: }
+          expect(response).to redirect_to(login_url)
+          expect(session[:sentinel]).to be_nil
+        end
+      end
     end
   end
 end

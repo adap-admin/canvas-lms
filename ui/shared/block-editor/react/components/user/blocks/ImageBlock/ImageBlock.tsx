@@ -24,9 +24,9 @@ import {type ImageBlockProps, type ImageVariant, type ImageConstraint} from './t
 import {BlockResizer} from '../../../editor/BlockResizer'
 import {Spinner} from '@instructure/ui-spinner'
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 
-const I18n = useI18nScope('block-editor/image-block')
+const I18n = createI18nScope('block-editor')
 
 const ImageBlock = ({
   src,
@@ -104,7 +104,7 @@ const ImageBlock = ({
     if (maintainAspectRatio) {
       sty.height = 'auto'
     } else {
-      sty.height = `${height}${unit}`
+      sty.height = `${height}px` // A set height is always px
     }
     setStyl(sty)
   }, [blockRef, height, maintainAspectRatio, sizeVariant, src, width])
@@ -172,6 +172,7 @@ const ImageBlock = ({
         ) : null}
 
         <div
+          // @ts-expect-error
           ref={imgRef}
           dangerouslySetInnerHTML={{__html: svg || ''}}
           style={{width: '100%', height: '100%', objectFit: imgConstrain, display: 'inline-block'}}

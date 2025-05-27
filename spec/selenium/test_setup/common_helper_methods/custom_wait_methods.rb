@@ -282,6 +282,14 @@ module CustomWaitMethods
     ::SeleniumExtensions::FinderWaiting.wait_for(...)
   end
 
+  def wait_for_selector(selector)
+    keep_trying_until do
+      disable_implicit_wait { driver.find_element(:css, selector) }
+    rescue => e
+      puts e.message
+    end
+  end
+
   def wait_for_no_such_element(method: nil, timeout: SeleniumExtensions::FinderWaiting.timeout)
     wait_for(method:, timeout:, ignore: []) do
       # so find_element calls return ASAP
@@ -301,6 +309,23 @@ module CustomWaitMethods
     rescue => e
       puts e.inspect
       false
+    end
+  end
+
+  def wait_for_block_editor_toolbar(selector = ".block-toolbar")
+    keep_trying_until do
+      disable_implicit_wait { driver.find_element(:css, selector) }
+    rescue => e
+      puts e.message
+    end
+  end
+
+  def click_and_check(element, validator)
+    keep_trying_until do
+      disable_implicit_wait { element.click }
+      disable_implicit_wait { f(validator).displayed? }
+    rescue => e
+      puts e.message
     end
   end
 end

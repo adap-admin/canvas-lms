@@ -17,15 +17,14 @@
  */
 
 import React from 'react'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {colors} from '@instructure/canvas-theme'
 import {Flex} from '@instructure/ui-flex'
 import {Text} from '@instructure/ui-text'
 import {View} from '@instructure/ui-view'
 import {possibleString} from '../Points'
 
-const I18n = useI18nScope('rubrics-assessment')
-const {ash, shamrock} = colors
+const I18n = createI18nScope('rubrics-assessment')
 
 type InstructorScoreProps = {
   instructorPoints: number
@@ -45,7 +44,7 @@ export const InstructorScore = ({
             lineHeight: '3rem',
             width: '13.813rem',
             height: '3rem',
-            backgroundColor: '#F5F5F5',
+            backgroundColor: '#F2F4F4',
             borderRadius: '.35rem 0 0 .35rem',
           }}
         >
@@ -62,7 +61,7 @@ export const InstructorScore = ({
             lineHeight: '3rem',
             width: '4.313rem',
             height: '3rem',
-            backgroundColor: isPreviewMode ? ash : shamrock,
+            backgroundColor: isPreviewMode ? colors.contrasts.grey4570 : colors.contrasts.green4570,
             borderRadius: '0 .35rem .35rem 0',
             textAlign: 'center',
           }}

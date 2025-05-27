@@ -20,6 +20,8 @@
 class ImpossibleCredentialsError < ArgumentError; end
 
 class Pseudonym < ActiveRecord::Base
+  self.ignored_columns += %w[auth_type]
+
   # this field is used for audit logging.
   # if a request is deleting a pseudonym, it should set this value
   # before persisting the change.
@@ -51,6 +53,7 @@ class Pseudonym < ActiveRecord::Base
 
   validates :unique_id, length: { maximum: MAX_UNIQUE_ID_LENGTH }
   validates :sis_user_id, length: { maximum: maximum_string_length, allow_blank: true }
+  validates :integration_id, length: { maximum: maximum_string_length, allow_blank: true }
   validates :account_id, presence: true
   validate :must_be_root_account
   # allows us to validate the user and pseudonym together, before saving either
@@ -108,6 +111,46 @@ class Pseudonym < ActiveRecord::Base
 
     def crypted_password_field
       :crypted_password
+    end
+
+    # See https://datatracker.ietf.org/doc/rfc4518/
+
+    # This is a superset of RFC3454 B.1
+    MAP_TO_NOTHING = /[\u{00ad 1806 034f}\u{180b}-\u{180d}\u{fe00}-\u{fe0f}\u{fffc}\u{0000}-\u{0008}\u{000e}-\u{001f}\u{007f}-\u{0084}\u{0086}-\u{009f}\u{06dd 070f 180e}\u{200c}-\u{200f}\u{202a}-\u{202e}\u{2060}-\u{2063}\u{206a}-\u{206f}\u{feff}\u{fff9}-\u{fffb}\u{1d173}-\u{1d17a}\u{e0001}\u{e0020}-\u{e007f}\u{200b}]/
+    MAP_TO_SPACE = /[\u{0009}-\u{000d}\u{0085 00a0 1680}\u{2000}-\u{200a}\u{2028}-\u{2029}\u{202f 205f 3000}]/
+
+    mappings = Net::IMAP::StringPrep::Tables::MAPPINGS.dup
+    mappings["RFC4518 Nothings"] = [MAP_TO_NOTHING, ""].freeze
+    mappings["RFC4518 Spaces"] = [MAP_TO_SPACE, " "].freeze
+    Net::IMAP::StringPrep::Tables.send(:remove_const, :MAPPINGS)
+    Net::IMAP::StringPrep::Tables.const_set(:MAPPINGS, mappings.freeze)
+
+    # Mn, Mc, and Me (as of Unicode 3.2), with a couple characters added and removed
+    # to match RFC 4518 Appendix A
+    FOLD_SPACES_REGEX = /( (?![\p{Mn}\p{Mc}\p{Me}\u{06de 094e 094f}&&\p{AGE=3.2}&&^\u{05bd 1885 1886}]))+/
+    TRIM_REGEX = /\A ?([^ ].*?) ?\z/
+    private_constant :MAP_TO_NOTHING,
+                     :MAP_TO_SPACE,
+                     :FOLD_SPACES_REGEX,
+                     :TRIM_REGEX
+
+    # Normalize a username
+    #
+    # It applies the following transformations:
+    #  - Unicode normalization (NFKC)
+    #  - Remove all "ignorable" characters (RTL marks, directional formatting, NBSP, etc.)
+    #  - Collapse all whitespace to a single space
+    #  - Trim leading and trailing spaces (but only if there are non-spaces in the string)
+    # The space collapsing matches the first section of Appendix B of the above RFC.
+    def normalize(unique_id)
+      unique_id = Net::IMAP::StringPrep.stringprep(unique_id,
+                                                   maps: ["RFC4518 Nothings", "RFC4518 Spaces", "B.2"], # B.2 is case folding
+                                                   normalization: :nfkc,
+                                                   prohibited: ["A.1", "C.3", "C.4", "C.5", /\ufffd/])
+      # Section 2.6.1, but see Appendix B on the simplification because this is for comparison only
+      unique_id.gsub!(FOLD_SPACES_REGEX, " ")
+      unique_id.gsub!(TRIM_REGEX, "\\1")
+      unique_id
     end
   end
 
@@ -191,7 +234,7 @@ class Pseudonym < ActiveRecord::Base
   def update_account_associations_if_account_changed
     return unless user && !User.skip_updating_account_associations?
 
-    if id_before_last_save.nil?
+    if previously_new_record?
       return if %w[creation_pending deleted].include?(user.workflow_state)
 
       user.update_account_associations(incremental: true, precalculated_associations: { account_id => 0 })
@@ -246,7 +289,24 @@ class Pseudonym < ActiveRecord::Base
     update!(unique_id: unique_ids[login_attribute])
   end
 
-  scope :by_unique_id, ->(unique_id) { where("LOWER(unique_id)=LOWER(?)", unique_id.to_s) }
+  scope :by_unique_id, lambda { |unique_id|
+    # only do normalized lookups once the migration has completed on this shard
+    if ((s = primary_shard).is_a?(Shard) && s.settings["pseudonyms_normalized"]) ||
+       s.is_a?(Switchman::DefaultShard)
+      unique_id = if unique_id.is_a?(Array)
+                    unique_id.map { |uid| Pseudonym.normalize(uid) }
+                  else
+                    Pseudonym.normalize(unique_id.to_s)
+                  end
+      where(unique_id_normalized: unique_id)
+    elsif unique_id.is_a?(Array)
+      where("LOWER(unique_id) IN (?)", unique_id)
+    else
+      where("LOWER(unique_id)=LOWER(?)", unique_id.to_s)
+    end
+  }
+  scope :sis, -> { where.not(sis_user_id: nil) }
+  scope :not_instructure_identity, -> { all }
 
   def self.custom_find_by_unique_id(unique_id)
     return unless unique_id
@@ -331,7 +391,6 @@ class Pseudonym < ActiveRecord::Base
   end
 
   def infer_defaults
-    self.account ||= Account.default
     if (!crypted_password || crypted_password == "") && !@require_password
       generate_temporary_password
       # this helps us differentiate between a generated password and one that was
@@ -360,7 +419,7 @@ class Pseudonym < ActiveRecord::Base
 
     # Assert a time zone for the user if none provided
     if user && !user.time_zone
-      user.time_zone = self.account.default_time_zone rescue Account.default.default_time_zone
+      user.time_zone = account.default_time_zone
       user.time_zone ||= Time.zone
     end
     user.save if user.workflow_state_changed? || user.time_zone_changed?
@@ -383,11 +442,18 @@ class Pseudonym < ActiveRecord::Base
     communication_channels.each { |cc| cc.update_attribute(:workflow_state, "retired") }
   end
 
+  def invalid_email?
+    account.email_pseudonyms && !deleted? &&
+      (unique_id.blank? || !EmailAddressValidator.valid?(unique_id))
+  end
+
   def validate_unique_id
-    if (!account || account.email_pseudonyms) &&
-       !deleted? &&
-       (unique_id.blank? ||
-       !EmailAddressValidator.valid?(unique_id))
+    self.account ||= Account.default
+
+    if unique_id && unique_id_changed?
+      self.unique_id_normalized = self.class.normalize(unique_id)
+    end
+    if invalid_email?
       errors.add(:unique_id, "not_email")
       throw :abort
     end
@@ -395,10 +461,15 @@ class Pseudonym < ActiveRecord::Base
 
     unless deleted?
       shard.activate do
-        existing_pseudo = Pseudonym.active.by_unique_id(unique_id).where(account_id:,
-                                                                         authentication_provider_id:,
-                                                                         login_attribute:).where.not(id: self).exists?
-        if existing_pseudo
+        scope = Pseudonym.active.by_unique_id(unique_id).where(account_id:, login_attribute:)
+        scope = scope.where.not(id: self) unless new_record?
+        scope = if authentication_provider.nil?
+                  scope.left_joins(:authentication_provider)
+                       .where(authentication_providers: { auth_type: [nil, "canvas", "cas", "ldap", "saml"] })
+                else
+                  scope.where(authentication_provider: authentication_provider.auth_provider_filter)
+                end
+        if scope.exists?
           errors.add(:unique_id,
                      :taken,
                      message: t("ID already in use for this account and authentication provider"))
@@ -507,12 +578,21 @@ class Pseudonym < ActiveRecord::Base
   end
 
   alias_method :destroy_permanently!, :destroy
-  def destroy
+  def destroy(custom_deleted_at: nil, **)
     self.workflow_state = "deleted"
-    self.deleted_at = Time.now.utc
-    result = save
+    self.deleted_at = (custom_deleted_at.presence || Time.now.utc)
+    result = save(**)
     user.try(:update_account_associations) if result
     result
+  end
+
+  def restore
+    self.workflow_state = "active"
+    self.deleted_at = nil
+    if save
+      user.try(:update_account_associations)
+      true
+    end
   end
 
   def never_logged_in?
@@ -520,7 +600,7 @@ class Pseudonym < ActiveRecord::Base
   end
 
   def user_code
-    user.uuid rescue nil
+    user.uuid
   end
 
   def email
@@ -686,7 +766,7 @@ class Pseudonym < ActiveRecord::Base
     Canvas::Errors.capture(e, {
                              type: :ldap,
                              message: "LDAP authentication error",
-                             object: inspect.to_s,
+                             object: inspect,
                              unique_id:,
                            })
     nil
@@ -774,7 +854,7 @@ class Pseudonym < ActiveRecord::Base
     !Canvas.redis.get(redis_key, failsafe: nil).nil?
   end
 
-  def self.expire_cas_ticket(ticket)
+  def self.expire_cas_ticket(ticket, _request)
     return unless Canvas.redis_enabled?
 
     redis_key = cas_ticket_key(ticket)
@@ -782,8 +862,16 @@ class Pseudonym < ActiveRecord::Base
     Canvas.redis.set(redis_key, true, ex: CAS_TICKET_TTL)
   end
 
-  def self.oidc_session_key(*subkeys)
+  def self.oidc_session_key(iss, sub, sid)
+    subkeys = [iss, sid ? "sid" : "sub", sid || sub]
     ["oidc_session_slo", Digest::SHA512.new.update(subkeys.cache_key).hexdigest].cache_key
+  end
+
+  def self.oidc_session_keys(iss, sub, sid)
+    keys = []
+    keys << oidc_session_key(iss, sub, nil) if sub
+    keys << oidc_session_key(iss, nil, sid) if sid
+    keys
   end
 
   def self.oidc_session_expired?(session)
@@ -794,20 +882,12 @@ class Pseudonym < ActiveRecord::Base
     sub = session[:oidc_id_token_sub]
     return false unless iss && (sid || sub)
 
-    keys = [sid, sub].compact.map do |key|
-      oidc_session_key("sid", iss, key)
-    end
-    keys.any? do |key|
-      !Canvas.redis.get("oidc_session_slo_#{key}", failsafe: nil).nil?
+    oidc_session_keys(iss, sub, sid).any? do |key|
+      !Canvas.redis.get(key, failsafe: nil).nil?
     end
   end
 
-  def self.expire_oidc_session(logout_token)
-    key = if logout_token["sid"]
-            oidc_session_key("sid", logout_token["iss"], logout_token["sid"])
-          else
-            oidc_session_key("sid", logout_token["iss"], logout_token["sub"])
-          end
-    Canvas.redis.set("oidc_session_slo_#{key}", true, ex: CAS_TICKET_TTL)
+  def self.expire_oidc_session(logout_token, _request)
+    Canvas.redis.set(oidc_session_key(logout_token["iss"], logout_token["sub"], logout_token["sid"]), true, ex: CAS_TICKET_TTL)
   end
 end

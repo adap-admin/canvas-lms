@@ -34,7 +34,7 @@ const setUp = (propOverrides = {}) => {
   return render(
     <MockedQueryClientProvider client={new QueryClient()}>
       <AssignmentHeader {...props} />
-    </MockedQueryClientProvider>
+    </MockedQueryClientProvider>,
   )
 }
 
@@ -57,6 +57,7 @@ describe('AssignmentHeader', () => {
     it('for saved assignment view', () => {
       const {queryByTestId} = setUp()
       expect(queryByTestId('assignment-heading')).toBeInTheDocument()
+      // @ts-expect-error
       expect(queryByTestId('assignment-heading')).toHaveTextContent(mockAssignment().name)
     })
   })

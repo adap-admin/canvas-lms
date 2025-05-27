@@ -32,6 +32,12 @@
     "additional_considerations_f3801683": {
         "message": "ข้อพิจารณาเพิ่มเติม"
     },
+    "address_applied_64269b0b": {
+        "message": "ปรับใช้ที่อยู่แล้ว"
+    },
+    "address_removed_fcb496e0": {
+        "message": "ลบที่อยู่แล้ว"
+    },
     "adjacent_links_with_the_same_url_should_be_a_singl_7a1f7f6c": {
         "message": "ลิงค์ที่ติดกันกับ URL เหมือน ๆ กันควรเป็นลิงค์แยกเดี่ยว"
     },
@@ -167,6 +173,9 @@
     "available_folders_694d0436": {
         "message": "โฟลเดอร์ที่ใช้ได้"
     },
+    "background_1bc88842": {
+        "message": "พื้นหลัง"
+    },
     "backslash_b2d5442d": {
         "message": "แบ็คสแลช"
     },
@@ -199,6 +208,15 @@
     },
     "blue_daf8fea9": {
         "message": "น้ำเงิน"
+    },
+    "bold_applied_42d547b7": {
+        "message": "ปรับใช้ตัวหนาแล้ว"
+    },
+    "bold_removed_da474a5c": {
+        "message": "ลบตัวหนาแล้ว"
+    },
+    "border_5b08b06d": {
+        "message": "ขอบ"
     },
     "bottom_15a2a9be": {
         "message": "ล่างสุด"
@@ -341,11 +359,23 @@
     "collapse_to_hide_types_1ab46d2e": {
         "message": "ย่อเพื่อซ่อน { types }"
     },
+    "color_a363e1b0": {
+        "message": "สี"
+    },
+    "color_contrast_4c418add": {
+        "message": "ความต่างสี"
+    },
+    "color_contrast_ratio_687782f0": {
+        "message": "สัดส่วนความต่างสี"
+    },
     "color_picker_6b359edf": {
         "message": "ระบบเลือกสี "
     },
     "color_picker_colorname_selected_ad4cf400": {
         "message": "ระบบเลือกสี ({ colorName } ที่เลือก)"
+    },
+    "color_popup_af39810f": {
+        "message": "ป๊อปอัพสี"
     },
     "column_e1ae5c64": {
         "message": "คอลัมน์"
@@ -494,6 +524,9 @@
     "deep_purple_bb3e2907": {
         "message": "ม่วงเข้ม"
     },
+    "default_9db103d": {
+        "message": "ค่าเริ่มต้น"
+    },
     "default_bulleted_unordered_list_47079da8": {
         "message": "รายการที่ไม่ได้จัดลำดับแบบมีหัวข้อย่อยเริ่มต้น"
     },
@@ -574,6 +607,12 @@
     },
     "display_text_link_opens_in_a_new_tab_75e9afc9": {
         "message": "แสดงลิงค์ข้อความ (เปิดในแท็บใหม่)"
+    },
+    "div_applied_49ad83fc": {
+        "message": "ปรับใช้ Div แล้ว"
+    },
+    "div_removed_d13f8e17": {
+        "message": "ลบ Div แล้ว"
     },
     "division_sign_72190870": {
         "message": "สัญลักษณ์หาร"
@@ -779,6 +818,9 @@
     "f_function_fe422d65": {
         "message": "F (ฟังก์ชั่น)"
     },
+    "fail_544e5dde": {
+        "message": "ล้มเหลว"
+    },
     "failed_getting_file_contents_e9ea19f4": {
         "message": "ไม่สามารถสืบค้นเนื้อหาของไฟล์"
     },
@@ -896,6 +938,9 @@
     "grades_a61eba0a": {
         "message": "เกรด"
     },
+    "graphics_text_bc9568bc": {
+        "message": "ข้อความกราฟิก"
+    },
     "greater_than_e98af662": {
         "message": "มากกว่า"
     },
@@ -964,6 +1009,12 @@
     },
     "heading_4_b2e74be7": {
         "message": "หัวเรื่อง 4"
+    },
+    "heading_h_applied_eccd294d": {
+        "message": "ปรับใช้หัวเรื่อง { h } แล้ว"
+    },
+    "heading_h_removed_745f24a6": {
+        "message": "ลบหัวเรื่อง { h } แล้ว"
     },
     "heading_levels_should_not_be_skipped_3947c0e0": {
         "message": "ไม่ควรข้ามระดับหัวเรื่อง"
@@ -1121,6 +1172,18 @@
     "infinity_7a10f206": {
         "message": "อนันต์"
     },
+    "input_field_for_alpha_678265fd": {
+        "message": "ฟิลด์ป้อนข้อมูลสำหรับอัลฟ่า"
+    },
+    "input_field_for_blue_561e020a": {
+        "message": "ฟิลด์ป้อนข้อมูลสำหรับสีน้ำเงิน"
+    },
+    "input_field_for_green_67f8b2b6": {
+        "message": "ฟิลด์ป้อนข้อมูลสำหรับสีเขียว"
+    },
+    "input_field_for_red_86a84615": {
+        "message": "ฟิลด์ป้อนข้อมูลสำหรับสีแดง"
+    },
     "insert_593145ef": {
         "message": "ใบกัด"
     },
@@ -1135,6 +1198,9 @@
     },
     "intersection_cd4590e4": {
         "message": "ตัดกัน"
+    },
+    "invalid_description_991e23bb": {
+        "message": "รายละเอียดไม่ถูกต้อง"
     },
     "invalid_entry_f7d2a0f5": {
         "message": "รายการไม่ถูกต้อง"
@@ -1159,6 +1225,12 @@
     },
     "italian_bd3c792d": {
         "message": "อิตาลี"
+    },
+    "italic_applied_8f59a684": {
+        "message": "ปรับใช้ตัวเอียงแล้ว"
+    },
+    "italic_removed_17cbab6f": {
+        "message": "ลบตัวเอียงแล้ว"
     },
     "japanese_b5721ca7": {
         "message": "ญี่ปุ่น"
@@ -1189,6 +1261,9 @@
     },
     "large_9c5e80e7": {
         "message": "ใหญ่"
+    },
+    "large_text_e7ba08cd": {
+        "message": "ข้อความขนาดใหญ่"
     },
     "latvian_2bbb6aab": {
         "message": "ลัทเวีย"
@@ -1442,12 +1517,6 @@
     "music_icon_4db5c972": {
         "message": "ไอคอนดนตรี"
     },
-    "must_be_at_least_percentage_22e373b6": {
-        "message": "จะต้องเท่ากับอย่างน้อย { percentage }%"
-    },
-    "must_be_at_least_width_x_height_px_41dc825e": {
-        "message": "จะต้องเท่ากับอย่างน้อย { width } x { height }px"
-    },
     "my_files_2f621040": {
         "message": "ไฟล์ของฉัน"
     },
@@ -1562,6 +1631,9 @@
     "none_selected_b93d56d2": {
         "message": "ไม่ได้เลือกรายการใด"
     },
+    "normal_text_7b03da48": {
+        "message": "ข้อความปกติ"
+    },
     "norwegian_53f391ec": {
         "message": "นอร์เวย์"
     },
@@ -1640,8 +1712,8 @@
     "outline_size_a6059a21": {
         "message": "ขนาดเค้าโครง"
     },
-    "p_is_not_a_valid_protocol_which_must_be_ftp_http_h_adf13fc2": {
-        "message": "{ p } ไม่ใช่โปรโตคอลที่ถูกต้อง โดยจะต้องเป็น ftp, http, https, mailto, skype, tel หรือสามารถเว้นว่าง"
+    "p_is_not_a_valid_protocol_b1c4efaa": {
+        "message": "{ p } ไม่ใช่โปรโตคอลที่ถูกต้อง"
     },
     "page_50c4823d": {
         "message": "หน้า"
@@ -1652,6 +1724,12 @@
     "paragraph_5e5ad8eb": {
         "message": "ย่อหน้า"
     },
+    "paragraph_applied_959b3fe5": {
+        "message": "ปรับใช้ย่อหน้าแล้ว"
+    },
+    "paragraph_removed_d09320e": {
+        "message": "ลบย่อหน้าแล้ว"
+    },
     "paragraph_starting_with_start_a59923f8": {
         "message": "ย่อหน้าที่เริ่มต้นด้วย { start }"
     },
@@ -1660,6 +1738,9 @@
     },
     "partial_derivative_4a9159df": {
         "message": "บางส่วน (อนุพันธ์)"
+    },
+    "pass_1c19a2b3": {
+        "message": "ผ่าน"
     },
     "paste_5963d1c1": {
         "message": "วาง"
@@ -1678,6 +1759,9 @@
     },
     "percentage_must_be_a_number_8033c341": {
         "message": "เปอร์เซ็นต์จะต้องเป็นตัวเลข"
+    },
+    "percentage_must_be_at_least_percentage_a98ca8fc": {
+        "message": "เปอร์เซ็นต์อย่างน้อยจะต้องเท่ากับ { percentage }%"
     },
     "performing_arts_icon_f3497486": {
         "message": "ไอคอนนาฏศิลป์"
@@ -1703,11 +1787,17 @@
     "pi_variant_10f5f520": {
         "message": "พาย (ตัวแปร)"
     },
+    "pick_a_color_557abfb0": {
+        "message": "เลือกสี"
+    },
     "pink_68ad45cb": {
         "message": "ชมพู"
     },
     "pixels_52ece7d1": {
         "message": "พิกเซล"
+    },
+    "pixels_must_be_at_least_width_x_height_px_e965edd5": {
+        "message": "พิกเซลจะต้องอย่างน้อยเท่ากับ { width } x { height }px"
     },
     "play_1a47eaa7": {
         "message": "เปิดเล่น"
@@ -1721,8 +1811,17 @@
     "please_allow_canvas_to_access_your_microphone_and__dc2c3079": {
         "message": "กรุณาให้อนุญาต Canvas ในการใช้งานไมโครโฟนและเว็บแคมของคุณ"
     },
+    "please_choose_a_file_c2449cc": {
+        "message": "กรุณาเลือกไฟล์"
+    },
     "please_decribe_what_you_would_like_to_compose_27a51be5": {
         "message": "กรุณาระบุรายละเอียดสิ่งที่คุณต้องการเขียน"
+    },
+    "please_enter_a_file_name_f159edc1": {
+        "message": "กรุณากรอกชื่อไฟล์"
+    },
+    "please_select_a_file_of_a_supported_type_1fc578f2": {
+        "message": "กรุณาเลือกประเภทไฟล์ที่รองรับ"
     },
     "plus_d43cd4ec": {
         "message": "บวก"
@@ -1774,6 +1873,9 @@
     },
     "previous_findtext_8dfbfd30": {
         "message": "{ findText } ก่อนหน้า"
+    },
+    "previously_chosen_colors_f1338315": {
+        "message": "สีที่เลือกไว้ก่อนหน้า"
     },
     "prime_917ea60e": {
         "message": "เฉพาะ"
@@ -2306,9 +2408,6 @@
     "the_first_heading_on_a_page_should_be_an_h2_859089f2": {
         "message": "หัวเรื่องแรกในเพจควรเป็น H2"
     },
-    "the_following_content_is_partner_provided_ed1da756": {
-        "message": "เนื้อหาต่อไปนี้จัดหาโดยพันธมิตรของเรา"
-    },
     "the_material_is_in_the_public_domain_279c39a3": {
         "message": "สื่ออยู่ในโดเมนสาธารณะ"
     },
@@ -2317,9 +2416,6 @@
     },
     "the_material_is_subject_to_an_exception_e_g_fair_u_a39c8ca2": {
         "message": "สื่อมีข้อยกเว้น เช่น การใช้งานอย่างเหมาะสม สิทธิ์ในการเสนอราคา หรืออื่น ๆ ภายใต้กฎหมายลิขสิทธิ์ที่เกี่ยวข้อง"
-    },
-    "the_preceding_content_is_partner_provided_d753928c": {
-        "message": "เนื้อหาก่อนหน้าไม่ได้จัดหาโดยผู้ใช้"
     },
     "the_pretty_html_editor_is_not_keyboard_accessible__d6d5d2b": {
         "message": "HTML Editor ที่สวยงามไม่สามารถใช้งานผ่านแป้นพิมพ์ กด Shift-O เพื่อเปิด HTML Editor แบบไม่ปรุงแต่ง"
@@ -2416,6 +2512,12 @@
     },
     "unable_to_determine_resource_selection_url_7867e060": {
         "message": "ไม่สามารถพิจารณา url การเลือกทรัพยากรข้อมูล"
+    },
+    "underline_applied_ae01ec97": {
+        "message": "ปรับใช้เส้นใต้แล้ว"
+    },
+    "underline_removed_3693e17c": {
+        "message": "ลบเส้นใต้แล้ว"
     },
     "union_e6b57a53": {
         "message": "ยูเนียน"
@@ -2674,6 +2776,15 @@
     },
     "yiddish_f96986df": {
         "message": "ยิดติช"
+    },
+    "you_are_on_a_color_palette_to_navigate_on_the_pale_227fc3a6": {
+        "message": "คุณอยู่ที่จานสี เลื่อนจานสีขึ้น ไปทางซ้าย ลงหรือไปทางขวาโดยใช้ปุ่ม ''W'' ''A'' ''S'' และ ''D'' ตามลำดับ"
+    },
+    "you_are_on_a_color_slider_to_navigate_the_slider_l_e800f68a": {
+        "message": "คุณอยู่ที่แถบเลื่อนสี เลื่อนแถบเลื่อนไปทางซ้ายหรือขวาโดยใช้ปุ่ม ''A'' และ ''D'' ตามลำดับ"
+    },
+    "you_are_on_an_alpha_slider_to_navigate_the_slider__3a014dc5": {
+        "message": "คุณอยู่ในแถบเลื่อนอัลฟ่า เลื่อนแถบเลื่อนไปทางซ้ายหรือขวาโดยใช้ปุ่ม ''A'' และ ''D'' ตามลำดับ"
     },
     "you_can_replace_by_uploading_a_new_caption_file_6c88ce00": {
         "message": "คุณสามารถแทนที่ได้โดยการอัพโหลดไฟล์คำบรรยายใหม่"

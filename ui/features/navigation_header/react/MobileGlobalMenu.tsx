@@ -40,7 +40,7 @@ import {
   IconQuestionLine,
   IconXLine,
 } from '@instructure/ui-icons'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import HelpDialog from '@canvas/help-dialog'
 import {Link} from '@instructure/ui-link'
 import CoursesList from './lists/CoursesList'
@@ -48,13 +48,14 @@ import GroupsList from './lists/GroupsList'
 import AccountsList from './lists/AccountsList'
 import ProfileTabsList from './lists/ProfileTabsList'
 import HistoryList from './lists/HistoryList'
-import {useQuery} from '@canvas/query'
 import {getUnreadCount} from './queries/unreadCountQuery'
 import {filterAndProcessTools, getExternalApps, type ProcessedTool} from './utils'
 import {SVGIcon} from '@instructure/ui-svg-images'
 import {Img} from '@instructure/ui-img'
+import {useQuery} from '@tanstack/react-query'
+import {sessionStoragePersister} from '@canvas/query'
 
-const I18n = useI18nScope('MobileGlobalMenu')
+const I18n = createI18nScope('MobileGlobalMenu')
 
 type Props = {
   onDismiss: () => void
@@ -63,7 +64,7 @@ type Props = {
 export default function MobileGlobalMenu(props: Props) {
   const showGroups = useMemo(() => Boolean(document.getElementById('global_nav_groups_link')), [])
   const countsEnabled = Boolean(
-    window.ENV.current_user_id && !window.ENV.current_user?.fake_student
+    window.ENV.current_user_id && !window.ENV.current_user?.fake_student,
   )
   const k5User = window.ENV.K5_USER
   const showAdmin =
@@ -79,10 +80,11 @@ export default function MobileGlobalMenu(props: Props) {
     queryFn: getExternalApps,
     staleTime: 2 * 60 * 1000, // two minutes,
     enabled: true,
+    persister: sessionStoragePersister,
   })
   const processedTools = useMemo(
     () => filterAndProcessTools(externalToolsData || []),
-    [externalToolsData]
+    [externalToolsData],
   )
 
   const {data: unreadConversationsCount, isSuccess: unreadConversationsCountHasLoaded} = useQuery({
@@ -90,6 +92,7 @@ export default function MobileGlobalMenu(props: Props) {
     queryFn: getUnreadCount,
     staleTime: 2 * 60 * 1000, // two minutes
     enabled: countsEnabled && !ENV.current_user_disabled_inbox,
+    persister: sessionStoragePersister,
   })
 
   return (

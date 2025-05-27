@@ -256,14 +256,69 @@ describe GraphQLController do
         end
       end
     end
+
+    context "get_context" do
+      context "on creating submissions" do
+        before do
+          @course = Course.create!
+          @assignment = @course.assignments.create!
+        end
+
+        it "sets context based on the course" do
+          params = { operationName: "CreateSubmission", variables: { assignmentLid: @assignment.id } }
+          expect { post :execute, params:, format: :json }.to change { subject.context }.from(nil).to(@course)
+        end
+      end
+
+      context "on creating discussion entries" do
+        before do
+          @course = Course.create!
+          @group = Group.create!(context: @course)
+
+          @course_discussion_topic = DiscussionTopic.create!(context: @course)
+          @group_discussion_topic = DiscussionTopic.create!(context: @group)
+        end
+
+        context "when the discussion is under a course" do
+          it "sets context based on the course" do
+            params = { operationName: "CreateDiscussionEntry", variables: { discussionTopicId: @course_discussion_topic.id } }
+            expect { post :execute, params:, format: :json }.to change { subject.context }.from(nil).to(@course)
+          end
+        end
+
+        context "when the discussion is under a group" do
+          it "sets context based on the group" do
+            params = { operationName: "CreateDiscussionEntry", variables: { discussionTopicId: @group_discussion_topic.id } }
+            expect { post :execute, params:, format: :json }.to change { subject.context }.from(nil).to(@group)
+          end
+        end
+      end
+
+      context "on other operations" do
+        it "does not change the context" do
+          params = { operationName: "CreateDiscussionTopic" }
+          expect { post :execute, params:, format: :json }.not_to change { subject.context }
+        end
+      end
+
+      context "on invalid context objects" do
+        before do
+          allow(subject).to receive(:subject) { double("dummy subject", pick: ["User", 1]) }
+        end
+
+        it "raises an exception" do
+          post :execute, format: :json
+          expect(response).to have_http_status(:internal_server_error)
+          expect(ErrorReport.last.message).to eq("Can not handle User in GraphQL context")
+        end
+      end
+    end
   end
 
   context "with feature flag disable_graphql_authentication enabled" do
     context "graphql, without a session" do
       it "works" do
-        expect(Account.site_admin).to(
-          receive(:feature_enabled?).with(:disable_graphql_authentication).and_return(true)
-        )
+        Account.site_admin.enable_feature!(:disable_graphql_authentication)
         post :execute, params: { query: '{ course(id: "1") { id } }' }, format: :json
         expect(response.parsed_body["errors"]).to be_blank
         expect(response.parsed_body["data"]).not_to be_blank

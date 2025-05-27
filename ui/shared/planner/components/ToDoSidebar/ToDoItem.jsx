@@ -35,9 +35,9 @@ import {
 
 import {func, shape, object, arrayOf, number, string, bool} from 'prop-types'
 import {dateTimeString} from '../../utilities/dateUtils'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 
-const I18n = useI18nScope('planner')
+const I18n = createI18nScope('planner')
 
 const getAriaLabel = (itemType, itemTitle) => {
   switch (itemType) {
@@ -122,12 +122,12 @@ export default class ToDoItem extends React.Component {
       toDisplay.push(
         <InlineList.Item key="points">
           {I18n.t('%{numPoints} points', {numPoints: points})}
-        </InlineList.Item>
+        </InlineList.Item>,
       )
     }
 
     toDisplay.push(
-      <InlineList.Item key="date">{dateTimeString(dueAt, this.props.timeZone)}</InlineList.Item>
+      <InlineList.Item key="date">{dateTimeString(dueAt, this.props.timeZone)}</InlineList.Item>,
     )
     return toDisplay
   }
@@ -173,7 +173,7 @@ export default class ToDoItem extends React.Component {
             {this.getInformationRow(
               this.props.item.date,
               this.props.item.points,
-              this.props.item?.restrict_quantitative_data
+              this.props.item?.restrict_quantitative_data,
             )}
           </InlineList>
         </div>

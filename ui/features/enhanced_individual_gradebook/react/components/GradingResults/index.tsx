@@ -18,7 +18,7 @@
 
 import React, {useCallback, useEffect, useState} from 'react'
 import {showFlashError, showFlashSuccess} from '@canvas/alerts/react/FlashAlert'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import LoadingIndicator from '@canvas/loading-indicator'
 import {Button} from '@instructure/ui-buttons'
 import {Pill} from '@instructure/ui-pill'
@@ -41,14 +41,14 @@ import {
   passFailStatusOptions,
   assignmentHasCheckpoints,
   getCorrectSubmission,
-} from '../../../utils/gradebookUtils'
+} from '../../../utils/gradeInputUtils'
 import GradeFormatHelper from '@canvas/grading/GradeFormatHelper'
 import DefaultGradeInput from './DefaultGradeInput'
 import {CheckpointGradeInputs} from './CheckpointGradeInputs'
 import {Flex} from '@instructure/ui-flex'
 import SubmissionSticker, {stickersAvailable} from '@canvas/submission-sticker'
 
-const I18n = useI18nScope('enhanced_individual_gradebook')
+const I18n = createI18nScope('enhanced_individual_gradebook')
 
 export type GradingResultsComponentProps = {
   currentStudent?: GradebookStudentDetails
@@ -77,7 +77,7 @@ export default function GradingResults({
   dropped,
 }: GradingResultsComponentProps) {
   const submission = studentSubmissions?.find(s => s.assignmentId === assignment?.id)
-  const [gradeInput, setGradeInput] = useState<string>('')
+  const [gradeInput, setGradeInput] = useState<string>(submission?.enteredGrade ?? '')
   const [replyToTopicGradeInput, setReplyToTopicGradeInput] = useState<string>('')
   const [replyToEntryGradeInput, setReplyToEntryGradeInput] = useState<string>('')
   const [excusedChecked, setExcusedChecked] = useState<boolean>(false)
@@ -126,7 +126,7 @@ export default function GradingResults({
         const index = passFailStatusOptions.findIndex(
           passFailStatusOption =>
             passFailStatusOption.value === correctSubmission.grade ||
-            (passFailStatusOption.value === 'EX' && correctSubmission.excused)
+            (passFailStatusOption.value === 'EX' && correctSubmission.excused),
         )
 
         const passFailStatusIndexSetter = getPassFailStatusIndexSetter(subAssignmentTag)
@@ -154,7 +154,7 @@ export default function GradingResults({
         gradeInputSetter(correctSubmission.enteredGrade)
       }
     },
-    [assignment, submission]
+    [assignment, submission],
   )
 
   useEffect(() => {
@@ -188,7 +188,7 @@ export default function GradingResults({
           break
       }
     },
-    [onSubmissionSaved]
+    [onSubmissionSaved],
   )
 
   const handlePostComment = useCallback(() => {
@@ -283,7 +283,7 @@ export default function GradingResults({
       correctSubmission,
       getGradeFromState(subAssignmentTag),
       submitScoreUrl,
-      subAssignmentTag
+      subAssignmentTag,
     )
   }
 
@@ -302,7 +302,7 @@ export default function GradingResults({
   const handleChangePassFailStatusWrapper = (
     value: string | number | undefined,
     setterForGradeInput: (value: ((prevState: string) => string) | string) => void,
-    setterForPassFailStatusIndex: (value: ((prevState: number) => number) | number) => void
+    setterForPassFailStatusIndex: (value: ((prevState: number) => number) | number) => void,
   ) => {
     if (typeof value === 'string') {
       setterForGradeInput(value)
@@ -312,30 +312,30 @@ export default function GradingResults({
 
   const handleChangePassFailStatus = (
     event: React.SyntheticEvent,
-    data: {value?: string | number | undefined}
+    data: {value?: string | number | undefined},
   ) => {
     handleChangePassFailStatusWrapper(data.value, setGradeInput, setPassFailStatusIndex)
   }
 
   const handleChangeReplyToTopicPassFailStatus = (
     event: React.SyntheticEvent,
-    data: {value?: string | number | undefined}
+    data: {value?: string | number | undefined},
   ) => {
     handleChangePassFailStatusWrapper(
       data.value,
       setReplyToTopicGradeInput,
-      setReplyToTopicPassFailStatusIndex
+      setReplyToTopicPassFailStatusIndex,
     )
   }
 
   const handleChangeReplyToEntryPassFailStatus = (
     event: React.SyntheticEvent,
-    data: {value?: string | number | undefined}
+    data: {value?: string | number | undefined},
   ) => {
     handleChangePassFailStatusWrapper(
       data.value,
       setReplyToEntryGradeInput,
-      setReplyToEntryPassFailStatusIndex
+      setReplyToEntryPassFailStatusIndex,
     )
   }
 
@@ -353,7 +353,7 @@ export default function GradingResults({
       assignmentEnhancementsEnabled: assignmentEnhancementsEnabled ?? false,
       stickersEnabled: stickersEnabled ?? false,
     },
-    assignment
+    assignment,
   )
 
   return (

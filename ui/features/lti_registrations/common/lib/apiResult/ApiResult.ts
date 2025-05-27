@@ -51,37 +51,37 @@ export type ApiResult<A> =
       error: Error
     }
 
-type UnsuccessfulApiResult = Exclude<ApiResult<unknown>, {_type: 'Success'}>
-type SuccessfulApiResult<A> = Extract<ApiResult<A>, {_type: 'Success'}>
+export type UnsuccessfulApiResult = Exclude<ApiResult<unknown>, {_type: 'Success'}>
+export type SuccessfulApiResult<A> = Extract<ApiResult<A>, {_type: 'Success'}>
 
 export const success = <A>(data: A): ApiResult<A> => ({
   _type: 'Success',
   data,
 })
 
-export const apiParseError = (error: ZodError, url: string): ApiResult<never> => ({
+export const apiParseError = (error: ZodError, url: string): UnsuccessfulApiResult => ({
   _type: 'ApiParseError',
   url,
   error,
 })
 
-export const apiError = (status: number, body: unknown): ApiResult<never> => ({
+export const apiError = (status: number, body: unknown): UnsuccessfulApiResult => ({
   _type: 'ApiError',
   status,
   body,
 })
 
-export const genericError = (message: string): ApiResult<never> => ({
+export const genericError = (message: string): UnsuccessfulApiResult => ({
   _type: 'GenericError',
   message,
 })
 
-export const exception = (error: Error): ApiResult<never> => ({
+export const exception = (error: Error): UnsuccessfulApiResult => ({
   _type: 'Exception',
   error,
 })
 
-export const invalidJson = (url: string, error?: Error): ApiResult<never> => ({
+export const invalidJson = (url: string, error?: Error): UnsuccessfulApiResult => ({
   _type: 'InvalidJson',
   url,
   error,

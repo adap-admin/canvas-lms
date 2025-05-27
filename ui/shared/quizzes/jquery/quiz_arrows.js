@@ -18,11 +18,11 @@
 
 // xsslint jqueryObject.property /Tpl$/
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
 import {direction} from '@canvas/i18n/rtlHelper'
 
-const I18n = useI18nScope('quizzes.show')
+const I18n = createI18nScope('quizzes.show')
 
 // Create and append right/wrong arrows to all appropriate
 // answers on a quiz results page.
@@ -33,7 +33,7 @@ export default class QuizArrowApplicator {
     this.rightAnswers = this.$questions.find('.selected_answer.correct_answer')
     this.wrongAnswers = this.$questions.find('.selected_answer.wrong_answer')
     this.correctAnswers = this.$questions.find(
-      '.question:not(.short_answer_question, .numerical_question, .matching_question) .correct_answer:not(.selected_answer)'
+      '.question:not(.short_answer_question, .numerical_question, .matching_question) .correct_answer:not(.selected_answer)',
     )
     this.editableMatches = $('#quiz_edit_wrapper')
       .find(this.$questions.selector)
@@ -44,24 +44,24 @@ export default class QuizArrowApplicator {
     this.shortAnswers = this.$questions
       .filter(':not(.survey_results)')
       .find(
-        '.short_answer_question .answers_wrapper, #questions.show_correct_answers:not(.survey_results):not(.survey_quiz) .numerical_question .answers_wrapper, #questions.show_correct_answers:not(.survey_results):not(.survey_quiz) .equation_combinations_holder_holder.calculated_question_answers'
+        '.short_answer_question .answers_wrapper, #questions.show_correct_answers:not(.survey_results):not(.survey_quiz) .numerical_question .answers_wrapper, #questions.show_correct_answers:not(.survey_results):not(.survey_quiz) .equation_combinations_holder_holder.calculated_question_answers',
       )
-    this.unansweredQ = $('.question.unanswered .header .question_name')
+    this.unansweredQ = $('.question.unanswered')
     this.creditPartial = $(
-      '#questions.suppress_correct_answers:not(.survey_results) .question.partial_credit .header .question_name'
+      '#questions.suppress_correct_answers:not(.survey_results) .question.partial_credit .header .question_name',
     )
     this.creditFull = $(
-      '#questions.suppress_correct_answers:not(.survey_results) .question.correct .header .question_name'
+      '#questions.suppress_correct_answers:not(.survey_results) .question.correct .header .question_name',
     )
     this.creditNone = $(
-      '#questions.suppress_correct_answers:not(.survey_results) .question.incorrect:not(.unanswered) .header .question_name'
+      '#questions.suppress_correct_answers:not(.survey_results) .question.incorrect:not(.unanswered) .header .question_name',
     )
     this.surveyAnswers = $('#questions.survey_results .selected_answer')
     this.rightTpl = $('<span />', {class: 'answer_arrow correct'})
     this.wrongTpl = $('<span />', {class: 'answer_arrow incorrect'})
     this.correctTpl = $('<span />', {class: 'answer_arrow info'})
     this.shortTpl = $('<span />', {class: 'answer_arrow info'})
-    this.unansweredTpl = $('<span />', {class: 'answer_arrow incorrect'})
+    this.unansweredTpl = $('<span />', {class: 'answer_indicator incorrect'})
     this.creditFullTpl = $('<span />', {class: 'answer_arrow correct'})
     this.creditPartialTpl = $('<span />', {class: 'answer_arrow incorrect'})
     this.creditNoneTpl = $('<span />', {class: 'answer_arrow incorrect'})
@@ -73,14 +73,11 @@ export default class QuizArrowApplicator {
       [this.rightTpl, this.wrongTpl, this.correctTpl, this.shortTpl, this.surveyAnswerTpl],
       function () {
         this.css({[direction('left')]: -128, top: 5})
-      }
+      },
     )
-    $.each(
-      [this.unansweredTpl, this.creditFullTpl, this.creditNoneTpl, this.creditPartialTpl],
-      function () {
-        this.css({[direction('left')]: -108, top: 9})
-      }
-    )
+    $.each([this.creditFullTpl, this.creditNoneTpl, this.creditPartialTpl], function () {
+      this.css({[direction('left')]: -108, top: 9})
+    })
   }
 
   applyCorrectAndIncorrectArrows() {
@@ -110,6 +107,8 @@ export default class QuizArrowApplicator {
     this.surveyAnswerTpl.text(I18n.t('answers.you_answered', 'You Answered'))
     this.unansweredQ.prepend(this.unansweredTpl)
     this.surveyAnswers.prepend(this.surveyAnswerTpl)
+
+    this.unansweredQ.addClass('bordered')
   }
 
   makeArrowsAccessible() {
@@ -120,7 +119,7 @@ export default class QuizArrowApplicator {
     //
     // Enable a11y for <input /> elements that receive focus by speaking the
     // answer result which is contained in the arrow marker.
-    $('#questions .answer_arrow').each(function () {
+    $('#questions .answer_arrow, #questions .answer_indicator').each(function () {
       const $arrow = $(this)
 
       // This might be either an ".answer", or an ".answers_wrapper" in case

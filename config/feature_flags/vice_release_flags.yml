@@ -37,6 +37,9 @@ react_discussions_post:
       For full details, please see the *Discussions/Announcements Redesign user group*
       in the Canvas Community
   applies_to: Course
+  environments:
+    development:
+      state: allowed_on # default to on for local development
 
 discussions_reporting:
   state: hidden
@@ -142,7 +145,12 @@ discussion_checkpoints:
     create separate due dates for the initial response and replies. The initial
     response and replies are then graded separately, and those grades are
     combined to form a final discussion grade.
-  applies_to: RootAccount
+  applies_to: Account
+  environments:
+    ci:
+      state: allowed_on # enable for automated testing builds and local testing
+    development:
+      state: allowed_on # enable for local development
 
 inbox_settings:
   state: hidden
@@ -156,3 +164,31 @@ disallow_threaded_replies_fix_alert:
   display_name: Disallow Threaded Replies Fix Alert
   description: |-
     This feature flag controls the visibility of the alert that allows teachers to fix threaded replies on the Discussions Index page.
+
+discussion_default_sort:
+  state: hidden
+  applies_to: SiteAdmin
+  display_name: discussion default sort
+  description: |-
+    Allow discussion's default sorting setting
+
+discussion_default_expand:
+  state: hidden
+  applies_to: SiteAdmin
+  display_name: discussion default expand
+  description: |-
+    Allow discussion's default expand setting
+
+discussion_permalink:
+  state: hidden
+  applies_to: SiteAdmin
+  display_name: Discussion permalink
+  description: |-
+    This feature flag enables the Copy Link option in the discussions redesign
+
+discussion_insights:
+  state: hidden
+  applies_to: Course
+  display_name: Discussion Insights
+  description: |-
+    Allow access to discussion insights

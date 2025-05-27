@@ -1,14 +1,16 @@
 require:
+  # this odd relative path is so that rubocop works when run without "bundle
+  # exec", such as from most editors/IDEs.
+  - ./gems/rubocop-canvas/lib/rubocop_canvas
+  - outrigger/cops/migration/tagged
+
+plugins:
   - rubocop-factory_bot
   - rubocop-graphql
   - rubocop-rails
   - rubocop-rake
   - rubocop-rspec
-  #- rubocop-rspec_rails
-  # this odd relative path is so that rubocop works when run without "bundle
-  # exec", such as from most editors/IDEs.
-  - ./gems/rubocop-canvas/lib/rubocop_canvas
-  - outrigger/cops/migration/tagged
+  - rubocop-rspec_rails
 
 inherit_gem:
   rubocop-inst:
@@ -89,6 +91,9 @@ Performance:
   Severity: error
 Performance/CollectionLiteralInLoop:
   Severity: convention # not auto-correctable; can be a pain to fix and isn't necessarily performance critical
+  Exclude: # don't care about performance in specs
+    - "gems/plugins/*/spec_canvas/**/*"
+    - "spec/**/*"
 Performance/MethodObjectAsBlock:
   Enabled: false # decreases expressiveness
 
@@ -118,6 +123,8 @@ Rails/DynamicFindBy:
     - find_by_asset_string # ApplicationRecord
     - find_by_pseudonym_credentials # SessionPersistenceToken
     - find_by_quiz # Quizzes::OutstandingQuizSubmissionManager
+Rails/EnumHash:
+  Enabled: false # we override Rails' enum method to only take a string array, see why at lib/extensions/active_record/enum.rb
 Rails/HasManyOrHasOneDependent:
   Enabled: false # legacy code + most things we soft delete anyway
 Rails/HelperInstanceVariable:
@@ -140,6 +147,10 @@ Rails/RedundantPresenceValidationOnBelongsTo:
                  # config.load_defaults line
 Rails/SkipsModelValidations:
   Enabled: false # Canvas skips validations in many places for optimization reasons
+Rails/TimeZone:
+  Exclude:
+    - "gems/*/lib/**/*.rb"
+    - "gems/*/spec/**/*.rb"
 Rails/WhereExists:
   EnforcedStyle: where
 Rails/WhereNotWithMultipleConditions:
@@ -200,8 +211,12 @@ Style/OpenStructUse:
   Severity: warning # unfortunately, legacy code uses it a lot;
 Style/ParallelAssignment:
   Enabled: false # most uses are legitimate deconstruction or value swapping
+Style/RescueModifier:
+  AutoCorrect: false # force the developer to think about how to handle it; don't just blindly ignore errors
 Style/ReturnNil:
   Enabled: false # explicit nil is okay when a method is expected to have a return value
+Style/SafeNavigationChainLength:
+  Enabled: false # kind of Metrics-y, not clear it actually improves code quality
 Style/SoleNestedConditional:
   AllowModifier: true # it makes lines too long and complicated otherwise
 Style/SpecialGlobalVars:
@@ -288,9 +303,6 @@ Rails/OutputSafety:
 Rails/RakeEnvironment:
   Severity: convention
   AutoCorrect: false
-Rails/TimeZone:
-  Enabled: false
-  AutoCorrect: false
 Rails/TimeZoneAssignment:
   Severity: convention
 
@@ -374,8 +386,6 @@ RSpec/VerifiedDoubleReference:
 RSpec/VerifiedDoubles:
   Enabled: false
 
-Style/AccessModifierDeclarations:
-  Severity: convention
 Style/AccessorGrouping:
   Severity: convention
   AutoCorrect: false
@@ -393,8 +403,6 @@ Style/CommentedKeyword:
   Severity: convention
   AutoCorrect: false
 Style/DocumentDynamicEvalDefinition:
-  Severity: convention
-Style/ExponentialNotation:
   Severity: convention
 Style/FormatString:
   Severity: convention
@@ -428,9 +436,6 @@ Style/OptionalArguments:
   Severity: convention
 Style/OptionalBooleanParameter:
   Severity: convention
-Style/RescueModifier:
-  Severity: warning
-  AutoCorrect: false
 Style/StringConcatenation:
   Enabled: false
   AutoCorrect: false

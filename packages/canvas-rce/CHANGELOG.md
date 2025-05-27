@@ -4,6 +4,64 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## 7.0.0 - 2025-03-31
+
+### Fixed
+
+- Screen readers for RCE toolbar on mobile platform
+- Axios CSRF vulnerability
+- Mailto link insertion 
+
+### Changed
+
+- Upgraded Instui to v10
+- Refactored deprecated plugins to prepare for tinymce upgrade
+- Removed media_links_use_attachment_id feature flag
+
+## 6.0.0 - 2025-03-20
+
+### Changed
+
+- Upgraded to Node 20 LTS
+
+### Fixed
+
+- Redirect focus on invalid save in Image Options tray
+- Whitelist the aria-description attribute
+- Flag external links when they have multi-part TLDs
+- Save changes to alt text when it is the only thing that changes
+- Screenreader reads out content inside raw HTML editor
+- Validations in Upload Media modal
+- Increased Link header size
+
+## 5.15.8 - 2025-02-20
+
+### Fixed
+
+- Fixed invalid `querySelectorAll` selector (`:not(.not_external, .external)`)
+  that caused errors in older Chrome versions (87 and below). Updated to
+  `:not(.not_external):not(.external)` for improved browser compatibility
+- Improved external link handling logic in canvas-rce
+
+### Added
+
+- Jest test to ensure the fix does not introduce regressions
+
+## 5.15.0 - 2025-02-12
+
+- Lazy load iframe and images by default
+- Improve TypeScript coverage
+- Use Biome for formatting
+- Upgrade ESLint
+- Remove jQuery dependency
+- Remove some node.js dependencies
+- Replace some ReactDOM.render usage with createRoot
+
+## 5.14.2 - 2024-11-26
+
+- Added an icon to find and replace tray error
+
 ## 5.14.1 - 2024-10-28
 
 ### Changed

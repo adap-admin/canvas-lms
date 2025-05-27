@@ -34,6 +34,16 @@ describe Types::ModuleItemType do
     expect(resolver.resolve("_id")).to eq module_item1.id.to_s
   end
 
+  it "gets the indent" do
+    resolver = GraphQLTypeTester.new(module_item1, current_user: @teacher)
+    expect(resolver.resolve("indent")).to eq 0
+  end
+
+  it "gets the position" do
+    resolver = GraphQLTypeTester.new(module_item1, current_user: @teacher)
+    expect(resolver.resolve("position")).to eq 1
+  end
+
   context "permissions" do
     let_once(:student) { student_in_course(course:).user }
 
@@ -197,6 +207,175 @@ describe Types::ModuleItemType do
         GraphQLTypeTester.new(module_item, current_user: @teacher)
            .resolve("content { ... on SubHeader { title } }")
       ).to eq module_item.title
+    end
+
+    it "shows estimated_duration" do
+      assignment = assignment_model({ context: course })
+      EstimatedDuration.create!(assignment:, duration: 1.hour + 30.minutes)
+      module_item = module1.add_item({ type: "Assignment", id: assignment.id }, nil, position: 1)
+      resolver = GraphQLTypeTester.new(module_item, current_user: @teacher)
+      expect(resolver.resolve("estimatedDuration")).to eq (1.hour + 30.minutes).iso8601
+    end
+
+    it "does not show estimated_duration when missing" do
+      assignment = assignment_model({ context: course })
+      module_item = module1.add_item({ type: "Assignment", id: assignment.id }, nil, position: 1)
+      resolver = GraphQLTypeTester.new(module_item, current_user: @teacher)
+      expect(resolver.resolve("estimatedDuration")).to be_nil
+    end
+  end
+
+  context "assignments" do
+    let_once(:assignment) { assignment_model({ context: course }) }
+    let_once(:module_item) { module1.add_item({ type: "Assignment", id: assignment.id }, nil, position: 1) }
+
+    it "works" do
+      resolver = GraphQLTypeTester.new(module_item, current_user: @teacher)
+      expect(resolver.resolve("content { title }")).to eq module_item.title
+      expect(resolver.resolve("content { type }")).to eq "Assignment"
+      expect(resolver.resolve("content { pointsPossible }")).to eq module_item.content.points_possible
+      expect(resolver.resolve("content { published }")).to eq module_item.content.published?
+      expect(resolver.resolve("content { canUnpublish }")).to eq module_item.content.can_unpublish?
+      expect(resolver.resolve("content { canDuplicate }")).to eq module_item.content.can_duplicate?
+    end
+  end
+
+  context "discussions" do
+    let_once(:discussion_topic) { discussion_topic_model({ context: course }) }
+    let_once(:module_item) { module1.add_item({ type: "DiscussionTopic", id: discussion_topic.id }, nil, position: 1) }
+
+    it "works" do
+      resolver = GraphQLTypeTester.new(module_item, current_user: @teacher)
+      expect(resolver.resolve("content { title }")).to eq module_item.title
+      expect(resolver.resolve("content { type }")).to eq "DiscussionTopic"
+      expect(resolver.resolve("content { published }")).to eq module_item.content.published?
+      expect(resolver.resolve("content { canUnpublish }")).to eq module_item.content.can_unpublish?
+      expect(resolver.resolve("content { canDuplicate }")).to be true
+    end
+
+    context "graded discussions" do
+      it "works" do
+        assignment = assignment_model({ context: course })
+        discussion_topic.assignment = assignment
+        discussion_topic.save!
+        module_item.reload
+        resolver = GraphQLTypeTester.new(module_item, current_user: @teacher)
+        expect(resolver.resolve("content { title }")).to eq module_item.title
+        expect(resolver.resolve("content { type }")).to eq "DiscussionTopic"
+        expect(resolver.resolve("content { pointsPossible }")).to eq module_item.content.assignment.points_possible
+        expect(resolver.resolve("content { canDuplicate }")).to be true
+      end
+    end
+  end
+
+  context "quizzes" do
+    let_once(:quiz) { quiz_model({ course: }) }
+    let_once(:module_item) { module1.add_item({ type: "Quiz", id: quiz.id }, nil, position: 1) }
+
+    it "works" do
+      resolver = GraphQLTypeTester.new(module_item, current_user: @teacher)
+      expect(resolver.resolve("content { title }")).to eq module_item.title
+      expect(resolver.resolve("content { type }").to_s).to eq "Quizzes::Quiz"
+      expect(resolver.resolve("content { pointsPossible }")).to eq module_item.content.points_possible
+      expect(resolver.resolve("content { canDuplicate }")).to be false
+    end
+  end
+
+  context "module text sub header" do
+    let_once(:module_item) { module1.add_item({ type: "ContextModuleSubHeader", title: "Sub Header" }, nil, position: 1) }
+
+    it "works" do
+      resolver = GraphQLTypeTester.new(module_item, current_user: @teacher)
+      expect(resolver.resolve("content { title }")).to eq module_item.title
+      expect(resolver.resolve("content { type }")).to eq "ContentTag"
+      expect(resolver.resolve("content { published }")).to be module_item.active?
+      expect(resolver.resolve("content { canUnpublish }")).to be true
+      expect(resolver.resolve("content { canDuplicate }")).to be false
+    end
+  end
+
+  context "external url" do
+    let_once(:module_item) { module1.add_item({ type: "ExternalUrl", title: "External URL", url: "https://example.com" }, nil, position: 1) }
+
+    it "works" do
+      resolver = GraphQLTypeTester.new(module_item, current_user: @teacher)
+      expect(resolver.resolve("content { title }")).to eq module_item.title
+      expect(resolver.resolve("content { type }")).to eq "ContentTag"
+      expect(resolver.resolve("content { published }")).to be module_item.active?
+      expect(resolver.resolve("content { canUnpublish }")).to be true
+      expect(resolver.resolve("content { canDuplicate }")).to be false
+    end
+  end
+
+  context "blueprint courses" do
+    before do
+      @course_1 = Course.create!(name: "Course 1")
+      @course_2 = Course.create!(name: "Course 2")
+
+      @teacher_1 = User.create!(name: "Teacher 1")
+      @course_1.enroll_teacher(@teacher_1).accept!
+      @course_2.enroll_teacher(@teacher_1).accept!
+
+      @module_1 = @course_1.context_modules.create!(name: "Module the First", position: 1)
+      @original_assmt = @course_1.assignments.create!(
+        title: "blah", description: "bloo", points_possible: 27
+      )
+
+      @module_1.add_item({ type: "Assignment", id: @original_assmt.id }, nil, position: 1)
+      @template = MasterCourses::MasterTemplate.set_as_master_course(@course_1)
+      @tag = @template.create_content_tag_for!(@original_assmt)
+
+      @module_2 = @course_2.context_modules.create!(name: "Module the First", position: 1)
+      @copy_assmt = @course_2.assignments.create!(
+        title: "blah", description: "bloo", points_possible: 27
+      )
+
+      @module_2.add_item({ type: "Assignment", id: @copy_assmt.id }, nil, position: 1)
+      @template.add_child_course!(@course_2)
+      @copy_assmt.migration_id = @tag.migration_id
+      @copy_assmt.save!
+
+      @module_item = ContentTag.find_by!(content_id: @original_assmt.id, context_id: @course_1.id)
+      @module_item_copy = ContentTag.find_by!(content_id: @copy_assmt.id, context_id: @course_2.id)
+    end
+
+    context "returns false" do
+      context "for the master course" do
+        it "isLockedByMasterCourse" do
+          resolver = GraphQLTypeTester.new(@module_item, current_user: @teacher_1)
+          expect(resolver.resolve("content { isLockedByMasterCourse }")).to be false
+        end
+      end
+
+      context "for the child course" do
+        it "isLockedByMasterCourse" do
+          resolver = GraphQLTypeTester.new(@module_item_copy, current_user: @teacher_1)
+          expect(resolver.resolve("content { isLockedByMasterCourse }")).to be false
+        end
+      end
+    end
+
+    context "returns true" do
+      before do
+        mc_tag = @template.content_tag_for(@original_assmt)
+        mc_tag.use_default_restrictions = true
+        mc_tag.restrictions = { content: true, points: true, due_dates: false, availability_dates: false }
+        mc_tag.save!
+      end
+
+      context "for the master course" do
+        it "isLockedByMasterCourse" do
+          resolver = GraphQLTypeTester.new(@module_item, current_user: @teacher_1)
+          expect(resolver.resolve("content { isLockedByMasterCourse }")).to be true
+        end
+      end
+
+      context "for the child course" do
+        it "isLockedByMasterCourse" do
+          resolver = GraphQLTypeTester.new(@module_item_copy, current_user: @teacher_1)
+          expect(resolver.resolve("content { isLockedByMasterCourse }")).to be true
+        end
+      end
     end
   end
 end

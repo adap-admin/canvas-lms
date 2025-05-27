@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import type {GetState, SetState} from 'zustand'
+import type {StoreApi} from 'zustand'
 import type {GradebookStore} from './index'
 
 type ExportAssignment = {
@@ -34,13 +34,13 @@ export type RubricAssessmentExportState = {
   toggleRubricAssessmentExportModal: (
     isOpen?: boolean,
     studentsCount?: number,
-    assignment?: ExportAssignment
+    assignment?: ExportAssignment,
   ) => void
 }
 
 export default (
-  set: SetState<GradebookStore>,
-  get: GetState<GradebookStore>
+  set: StoreApi<GradebookStore>['setState'],
+  get: StoreApi<GradebookStore>['getState'],
 ): RubricAssessmentExportState => ({
   rubricAssessmentExportModalProps: {
     isOpen: false,
@@ -51,7 +51,7 @@ export default (
   toggleRubricAssessmentExportModal: (
     isOpen?: boolean,
     studentsCount?: number,
-    assignment?: ExportAssignment
+    assignment?: ExportAssignment,
   ): void => {
     const existingProps = get().rubricAssessmentExportModalProps
     set({

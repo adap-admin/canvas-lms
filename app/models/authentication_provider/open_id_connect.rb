@@ -27,6 +27,8 @@ class AuthenticationProvider
       client_secret_post
     ].freeze
 
+    POST_LOGIN_REDIRECT_CLAIM = "https://instructure.com/claims/post_login_redirect"
+
     class << self
       attr_reader :jwks_cache
 
@@ -88,10 +90,6 @@ class AuthenticationProvider
         }]
       end
 
-      def always_validate?
-        false
-      end
-
       def validate_issuer?
         true
       end
@@ -125,7 +123,7 @@ class AuthenticationProvider
       claims(token)[login_attribute]
     end
 
-    def persist_to_session(session, token)
+    def persist_to_session(request, session, pseudonym, domain_root_account, token)
       return unless token.options[:jwt_string]
 
       # the raw JWT for RP Initiated Logout
@@ -137,24 +135,29 @@ class AuthenticationProvider
       session[:oidc_id_token_iss] = id_token["iss"]
       session[:oidc_id_token_sub] = id_token["sub"]
       session[:oidc_id_token_sid] = id_token["sid"] if id_token["sid"]
+
+      Login::Shared.set_return_to_from_provider(request, session, pseudonym, domain_root_account, id_token[POST_LOGIN_REDIRECT_CLAIM])
     end
 
-    def user_logout_redirect(controller, _current_user)
-      return super unless end_session_endpoint.present?
-      return end_session_endpoint unless account.feature_enabled?(:oidc_rp_initiated_logout_params)
+    def slo?
+      end_session_endpoint.present?
+    end
+
+    def user_logout_redirect(controller, current_user, redirect_options: {})
+      return super(controller, current_user) unless end_session_endpoint.present?
 
       uri = URI.parse(end_session_endpoint)
-      params = post_logout_redirect_params(controller)
+      params = post_logout_redirect_params(controller, redirect_options:)
 
       # anything explicitly set on the end_session_endpoint overrides what Canvas adds
       explicit_params = URI.decode_www_form(uri.query || "").to_h
       uri.query = URI.encode_www_form(explicit_params.reverse_merge(params.stringify_keys))
       uri.to_s
     rescue URI::InvalidURIError
-      super
+      super(controller, current_user)
     end
 
-    def post_logout_redirect_params(controller)
+    def post_logout_redirect_params(controller, redirect_options: {})
       result = { client_id:, post_logout_redirect_uri: self.class.post_logout_redirect_uri(controller) }
       if (id_token = controller.session[:oidc_id_token])
         # theoretically we could use POST, especially since this might be large, but
@@ -266,6 +269,51 @@ class AuthenticationProvider
       e.message
     end
 
+    def claims(token)
+      token.options[:claims] ||= begin
+        id_token = unverified_id_token(token)
+
+        unless (missing_claims = %w[aud iss iat exp nonce] - id_token.keys).empty?
+          raise OAuthValidationError, t({ one: "Missing claim %{claims}", other: "Missing claims %{claims}" },
+                                        count: missing_claims.length,
+                                        claims: missing_claims.join(", "))
+        end
+
+        unless Array(id_token["aud"]).include?(client_id)
+          raise OAuthValidationError, t("Invalid JWT audience: %{audience}", audience: id_token["aud"].inspect)
+        end
+
+        if self.class.validate_issuer?
+          if issuer.blank?
+            raise OAuthValidationError, t("No issuer configured for OpenID Connect provider")
+          end
+          unless issuer === id_token["iss"] # rubocop:disable Style/CaseEquality -- may be a string or a RegEx
+            raise OAuthValidationError, t("Invalid JWT issuer: %{issuer}", issuer: id_token["iss"])
+          end
+        end
+        unless id_token["nonce"] == token.options[:nonce]
+          raise OAuthValidationError, t("Invalid nonce claim in ID Token")
+        end
+
+        if (signature_error = validate_signature(id_token))
+          raise OAuthValidationError, t("Invalid signature: %{signature_error}", signature_error:)
+        end
+
+        # we have a userinfo endpoint, and we don't have everything we want,
+        # then request more
+        if userinfo_endpoint.present? && !(requested_claims - id_token.keys).empty?
+          userinfo = token.get(userinfo_endpoint).parsed
+          debug_set(:userinfo, userinfo.to_json) if instance_debugging
+          # but only use it if it's for the user we logged in as
+          # see http://openid.net/specs/openid-connect-core-1_0.html#UserInfoResponse
+          if userinfo["sub"] == id_token["sub"]
+            id_token.merge!(userinfo)
+          end
+        end
+        id_token
+      end
+    end
+
     protected
 
     def authorize_options
@@ -281,6 +329,24 @@ class AuthenticationProvider
           options[:auth_scheme] = :request_body
         end
       end
+    end
+
+    def unverified_id_token(token)
+      jwt_string = token.options[:jwt_string] = token.params["id_token"] || token.token
+      debug_set(:id_token, jwt_string) if instance_debugging
+      id_token = {} if jwt_string.blank?
+
+      id_token ||= begin
+        ::Canvas::Security.decode_jwt(jwt_string, [:skip_verification])
+      rescue ::Canvas::Security::InvalidToken, ::Canvas::Security::TokenExpired => e
+        Rails.logger.warn("Failed to decode OpenID Connect id_token: #{jwt_string.inspect}")
+        raise OAuthValidationError, e.message
+      end
+
+      debug_set(:header, id_token.header.to_json) if instance_debugging
+      debug_set(:claims, id_token.to_json) if instance_debugging
+
+      id_token
     end
 
     private
@@ -309,7 +375,12 @@ class AuthenticationProvider
 
     def download_discovery
       discovery_url = self.discovery_url
+
+      # was the Discovery URL changed?
       download = discovery_url.present? && discovery_url_changed?
+
+      # was the authentication provider restored?
+      download ||= self.class.restorable? && active? && workflow_state_changed?
 
       # infer the discovery url from the issuer if possible
       if discovery_url.blank? && issuer_changed? && issuer.present?
@@ -349,96 +420,6 @@ class AuthenticationProvider
       end
     end
 
-    def claims(token)
-      token.options[:claims] ||= begin
-        jwt_string = token.options[:jwt_string] = token.params["id_token"] || token.token
-        debug_set(:id_token, jwt_string) if instance_debugging
-        id_token = {} if jwt_string.blank?
-
-        id_token ||= begin
-          ::Canvas::Security.decode_jwt(jwt_string, [:skip_verification])
-        rescue ::Canvas::Security::InvalidToken, ::Canvas::Security::TokenExpired => e
-          Rails.logger.warn("Failed to decode OpenID Connect id_token: #{jwt_string.inspect}")
-          raise OAuthValidationError, e.message
-        end
-        debug_set(:header, id_token.header.to_json) if instance_debugging
-        debug_set(:claims, id_token.to_json) if instance_debugging
-
-        if self.class.always_validate? || account.feature_enabled?(:oidc_full_token_validation)
-          unless (missing_claims = %w[aud iss iat exp nonce] - id_token.keys).empty?
-            raise OAuthValidationError, t({ one: "Missing claim %{claims}", other: "Missing claims %{claims}" },
-                                          count: missing_claims.length,
-                                          claims: missing_claims.join(", "))
-          end
-
-          unless Array(id_token["aud"]).include?(client_id)
-            raise OAuthValidationError, t("Invalid JWT audience: %{audience}", audience: id_token["aud"].inspect)
-          end
-
-          if self.class.validate_issuer?
-            if issuer.blank?
-              raise OAuthValidationError, t("No issuer configured for OpenID Connect provider")
-            end
-            unless issuer === id_token["iss"] # rubocop:disable Style/CaseEquality may be a string or a RegEx
-              raise OAuthValidationError, t("Invalid JWT issuer: %{issuer}", issuer: id_token["iss"])
-            end
-          end
-          unless id_token["nonce"] == token.options[:nonce]
-            raise OAuthValidationError, t("Invalid nonce claim in ID Token")
-          end
-
-          if (signature_error = validate_signature(id_token))
-            raise OAuthValidationError, t("Invalid signature: %{signature_error}", signature_error:)
-          end
-        elsif id_token != {}
-          missing_claims_persisted = settings["missing_claims"] ||= []
-          missing_claims = %w[aud iss iat exp nonce] - id_token.keys
-          missing_claims_persisted.replace(missing_claims_persisted | missing_claims)
-
-          audiences = settings["known_audiences"] ||= []
-          if audiences.length < 20 && !audiences.include?(id_token["aud"])
-            audiences << id_token["aud"]
-          end
-
-          issuers = settings["known_issuers"] ||= []
-          if issuers.length < 20 && !issuers.include?(id_token["iss"])
-            issuers << id_token["iss"]
-          end
-          alg = id_token.alg&.to_s
-          algs = settings["known_signature_algorithms"] ||= []
-          algs << alg if algs.length < 20 && !algs.include?(alg)
-
-          nonce_valid_list = settings["nonce_valid"] ||= []
-          nonce_valid = id_token["nonce"] == token.options[:nonce]
-          nonce_valid_list << nonce_valid unless nonce_valid_list.include?(nonce_valid)
-
-          # validate the signature if we have enough information
-          sigs_valid_list = settings["sigs_valid"] ||= []
-          if id_token.send(:hmac?)
-            sig_valid = !!validate_signature(id_token) if client_secret
-          elsif id_token.alg&.to_sym != :none && jwks_uri
-            sig_valid = !!validate_signature(id_token)
-          end
-          sigs_valid_list << sig_valid unless sigs_valid_list.include?(sig_valid)
-
-          save! if changed?
-        end
-
-        # we have a userinfo endpoint, and we don't have everything we want,
-        # then request more
-        if userinfo_endpoint.present? && !(id_token.keys - requested_claims).empty?
-          userinfo = token.get(userinfo_endpoint).parsed
-          debug_set(:userinfo, userinfo.to_json) if instance_debugging
-          # but only use it if it's for the user we logged in as
-          # see http://openid.net/specs/openid-connect-core-1_0.html#UserInfoResponse
-          if userinfo["sub"] == id_token["sub"]
-            id_token.merge!(userinfo)
-          end
-        end
-        id_token
-      end
-    end
-
     def requested_claims
       ([login_attribute] + federated_attributes.map { |_canvas_attribute, details| details["attribute"] }).uniq
     end
@@ -457,6 +438,8 @@ class AuthenticationProvider
                         zoneinfo
                         locale
                         updated_at].freeze
+    private_constant :PROFILE_CLAIMS
+
     def scope_for_options
       result = (scope || "").split
 

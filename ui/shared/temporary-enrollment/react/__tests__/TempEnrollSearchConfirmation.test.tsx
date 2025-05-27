@@ -28,6 +28,7 @@ const props = {
   searchFailure: jest.fn(),
   readySubmit: jest.fn(),
   canReadSIS: true,
+  duplicateReq: false,
 }
 
 const oneUser = {
@@ -46,6 +47,7 @@ const twoUser = {
   primary_email: 'user2@email.com',
 } as User
 
+// @ts-expect-error
 const twoBrotherUser = {
   user_name: 'brother_2',
   user_id: '21',
@@ -53,6 +55,7 @@ const twoBrotherUser = {
   primary_email: 'user2@email.com',
 } as DuplicateUser
 
+// @ts-expect-error
 const twoSisterUser = {
   name: 'sister_2',
   user_name: 'sister_2',
@@ -99,7 +102,7 @@ describe('TempEnrollSearchConfirmation', () => {
     userDetailsUriMock('1', oneUser)
     userDetailsUriMock('21', twoUser)
     const {findByText} = render(
-      <TempEnrollSearchConfirmation {...props} foundUsers={[oneUser, twoUser]} />
+      <TempEnrollSearchConfirmation {...props} foundUsers={[oneUser, twoUser]} />,
     )
 
     expect(await findByText('user1@email.com')).toBeInTheDocument()
@@ -110,7 +113,7 @@ describe('TempEnrollSearchConfirmation', () => {
   it('render one set of duplicates', async () => {
     const duplicateObj = {sis_2: [twoBrotherUser, twoSisterUser]}
     const {getByText} = render(
-      <TempEnrollSearchConfirmation {...props} duplicateUsers={duplicateObj} />
+      <TempEnrollSearchConfirmation {...props} duplicateUsers={duplicateObj} />,
     )
 
     expect(getByText('sister_2')).toBeInTheDocument()
@@ -124,14 +127,15 @@ describe('TempEnrollSearchConfirmation', () => {
       sis_3: [threeSisterUser, threeBrotherUser],
     }
     const {getByText, getAllByText} = render(
-      <TempEnrollSearchConfirmation {...props} duplicateUsers={duplicateObj} />
+      // @ts-expect-error
+      <TempEnrollSearchConfirmation {...props} duplicateUsers={duplicateObj} />,
     )
 
     expect(
-      getAllByText('Possible matches for "sis_2". Select the desired one below.')[0]
+      getAllByText('Possible matches for "sis_2". Select the desired one below.')[0],
     ).toBeInTheDocument()
     expect(
-      getAllByText('Possible matches for "sis_3". Select the desired one below.')[0]
+      getAllByText('Possible matches for "sis_3". Select the desired one below.')[0],
     ).toBeInTheDocument()
     expect(getByText(/No users are ready/)).toBeInTheDocument()
   })
@@ -142,7 +146,8 @@ describe('TempEnrollSearchConfirmation', () => {
       sis_3: [threeSisterUser, threeBrotherUser],
     }
     const {getByLabelText, getByText} = render(
-      <TempEnrollSearchConfirmation {...props} duplicateUsers={duplicateObj} />
+      // @ts-expect-error
+      <TempEnrollSearchConfirmation {...props} duplicateUsers={duplicateObj} />,
     )
 
     expect(getByText(/No users are ready/)).toBeInTheDocument()

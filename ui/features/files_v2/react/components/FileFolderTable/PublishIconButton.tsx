@@ -17,7 +17,7 @@
  */
 
 import React from 'react'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {IconButton} from '@instructure/ui-buttons'
 import {
   IconPublishSolid,
@@ -26,46 +26,34 @@ import {
   IconOffLine,
 } from '@instructure/ui-icons'
 import {Tooltip} from '@instructure/ui-tooltip'
-import {datetimeString} from '@canvas/datetime/date-functions'
 import {type File, type Folder} from '../../../interfaces/File'
+import {getRestrictedText, isPublished, isRestricted, isHidden} from '../../../utils/fileUtils'
+import {getName} from '../../../utils/fileFolderUtils'
 
-const I18n = useI18nScope('files_v2')
+const I18n = createI18nScope('files_v2')
 
 interface PublishIconButtonProps {
   item: File | Folder
-  userCanEditFilesForContext: boolean
+  userCanRestrictFilesForContext: boolean
+  onClick: () => void
 }
 
-interface RenderButtonProps {
+type PublishTooltipButtonProps = {
   icon: React.ReactNode
-  srLabel: string
+  screenReaderLabel: string
   tooltip: string
+  permissionType: 'restricted' | 'link-only' | 'published' | 'unpublished'
+  onClick: () => void
 }
 
-const PublishIconButton = ({item, userCanEditFilesForContext}: PublishIconButtonProps) => {
-  const fileName = 'name' in item ? item.name : item.display_name
-  const published = !item.locked
-  const restricted = !!item.lock_at || !!item.unlock_at
-  const hidden = !!item.hidden
-
-  const getRestrictedText = () => {
-    if (item.unlock_at && item.lock_at) {
-      return I18n.t('Available from %{from_date} until %{until_date}', {
-        from_date: datetimeString(item.unlock_at),
-        until_date: datetimeString(item.lock_at),
-      })
-    } else if (item.unlock_at) {
-      return I18n.t('Available from %{from_date}', {
-        from_date: datetimeString(item.unlock_at),
-      })
-    } else if (item.lock_at) {
-      return I18n.t('Available until %{until_date}', {
-        until_date: datetimeString(item.lock_at),
-      })
-    }
-  }
-
-  const renderButton = ({icon, srLabel, tooltip}: RenderButtonProps) => (
+const PublishTooltipButton = ({
+  icon,
+  screenReaderLabel,
+  tooltip,
+  permissionType,
+  onClick,
+}: PublishTooltipButtonProps) => {
+  return (
     <Tooltip
       renderTip={tooltip}
       on={['hover', 'focus']}
@@ -78,55 +66,88 @@ const PublishIconButton = ({item, userCanEditFilesForContext}: PublishIconButton
         withBorder={false}
         size="small"
         shape="circle"
-        screenReaderLabel={srLabel}
+        screenReaderLabel={screenReaderLabel}
+        onClick={onClick}
+        data-testid={`${permissionType}-button-icon`}
       >
         {icon}
       </IconButton>
     </Tooltip>
   )
-  if (userCanEditFilesForContext) {
+}
+
+const PublishIconButton = ({
+  item,
+  userCanRestrictFilesForContext,
+  onClick,
+}: PublishIconButtonProps) => {
+  const fileName = getName(item)
+  const published = isPublished(item)
+  const restricted = isRestricted(item)
+  const hidden = isHidden(item)
+  const screenReaderLabel = I18n.t('%{fileName} - Click to modify', {fileName})
+
+  if (userCanRestrictFilesForContext) {
     if (published && restricted) {
-      return renderButton({
-        icon: <IconCalendarMonthLine />,
-        tooltip: getRestrictedText(),
-        srLabel: I18n.t('%{fileName} is %{restricted} - Click to modify', {
-          fileName,
-          restricted: getRestrictedText(),
-        }),
-      })
+      return (
+        <PublishTooltipButton
+          icon={<IconCalendarMonthLine />}
+          tooltip={getRestrictedText(item)}
+          screenReaderLabel={screenReaderLabel}
+          onClick={onClick}
+          permissionType="restricted"
+        />
+      )
     } else if (published && hidden) {
-      return renderButton({
-        icon: <IconOffLine />,
-        tooltip: I18n.t('Only available to students with link'),
-        srLabel: I18n.t(
-          '%{fileName} is only available to students with the link - Click to modify',
-          {
-            fileName,
-          }
-        ),
-      })
+      return (
+        <PublishTooltipButton
+          icon={<IconOffLine />}
+          tooltip={I18n.t('Only available to students with link')}
+          screenReaderLabel={screenReaderLabel}
+          onClick={onClick}
+          permissionType="link-only"
+        />
+      )
     } else if (published) {
-      return renderButton({
-        icon: <IconPublishSolid color="success" />,
-        tooltip: I18n.t('Published'),
-        srLabel: I18n.t('%{fileName} is Published - Click to modify', {fileName}),
-      })
+      return (
+        <PublishTooltipButton
+          icon={<IconPublishSolid color="success" />}
+          tooltip={I18n.t('Published')}
+          screenReaderLabel={screenReaderLabel}
+          onClick={onClick}
+          permissionType="published"
+        />
+      )
     } else {
-      return renderButton({
-        icon: <IconUnpublishedLine />,
-        tooltip: I18n.t('Unpublished'),
-        srLabel: I18n.t('%{fileName} is Unpublished - Click to modify', {fileName}),
-      })
+      return (
+        <PublishTooltipButton
+          icon={<IconUnpublishedLine />}
+          tooltip={I18n.t('Unpublished')}
+          screenReaderLabel={screenReaderLabel}
+          onClick={onClick}
+          permissionType="unpublished"
+        />
+      )
     }
   } else if (published && restricted) {
-    return renderButton({
-      icon: <IconCalendarMonthLine color="warning" />,
-      tooltip: getRestrictedText(),
-      srLabel: I18n.t('%{fileName} is %{restricted}', {
-        fileName,
-        restricted: getRestrictedText(),
-      }),
-    })
+    // if the user cannot edit files, we only show the icon, not a button
+    return (
+      <Tooltip
+        renderTip={getRestrictedText(item)}
+        on={['hover', 'focus']}
+        themeOverride={{
+          fontSize: '0.75rem',
+        }}
+      >
+        <IconCalendarMonthLine
+          color="warning"
+          title={I18n.t('%{fileName}', {
+            fileName,
+          })}
+          data-testid="restricted-icon"
+        />
+      </Tooltip>
+    )
   }
   return null
 }

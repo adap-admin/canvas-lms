@@ -16,26 +16,26 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React, {useMemo} from 'react'
 import classNames from 'classnames'
-import {useNewLogin} from '../context/NewLoginContext'
+import React, {useMemo} from 'react'
+import {useNewLoginData} from '../context'
 
 interface Props {
   className?: string
 }
 
 const Background = ({className}: Props) => {
-  const {bodyBgColor, bodyBgImage} = useNewLogin()
+  const {bodyBgColor, bodyBgImage} = useNewLoginData()
 
   const backgroundStyle = useMemo(
     () => ({
       backgroundColor: bodyBgColor || undefined,
       backgroundImage: bodyBgImage ? `url(${bodyBgImage})` : undefined,
-      backgroundPosition: 'left center',
+      backgroundAttachment: 'fixed',
       backgroundRepeat: 'no-repeat',
       backgroundSize: 'cover',
     }),
-    [bodyBgColor, bodyBgImage]
+    [bodyBgColor, bodyBgImage],
   )
 
   return <div className={classNames(className)} style={backgroundStyle} />

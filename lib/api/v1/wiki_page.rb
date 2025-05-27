@@ -23,6 +23,7 @@ module Api::V1::WikiPage
   include Api::V1::User
   include Api::V1::Locked
   include Api::V1::Assignment
+  include Api::V1::EstimatedDuration
 
   WIKI_PAGE_JSON_ATTRS = %w[url title created_at editing_roles].freeze
 
@@ -60,12 +61,15 @@ module Api::V1::WikiPage
         }
         hash["body"] = wiki_page.block_editor.viewer_iframe_html
       else
-        hash["body"] = api_user_content(wiki_page.body, wiki_page.context)
+        hash["body"] = api_user_content(wiki_page.body, wiki_page.context, location: wiki_page.asset_string)
       end
       wiki_page.context_module_action(current_user, wiki_page.context, :read)
     end
     if opts[:master_course_status]
       hash.merge!(wiki_page.master_course_api_restriction_data(opts[:master_course_status]))
+    end
+    if @context.is_a?(Course) && @context.horizon_course? && wiki_page.estimated_duration&.marked_for_destruction? == false
+      hash["estimated_duration"] = estimated_duration_json(wiki_page.estimated_duration, current_user, session)
     end
     hash
   end
@@ -89,7 +93,7 @@ module Api::V1::WikiPage
       hash.merge!({
                     "url" => page.url,
                     "title" => page.title,
-                    "body" => api_user_content(page.body)
+                    "body" => api_user_content(page.body, location: page.asset_string),
                   })
     end
     hash["edited_by"] = user_display_json(page.user, page.context) if page.user

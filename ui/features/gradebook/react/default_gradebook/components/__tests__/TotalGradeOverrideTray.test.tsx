@@ -17,7 +17,7 @@
  */
 
 import React from 'react'
-import {MockedProvider} from '@apollo/react-testing'
+import {MockedProvider} from '@apollo/client/testing'
 import {render, fireEvent} from '@testing-library/react'
 
 import GradeOverrideEntry from '@canvas/grading/GradeEntry/GradeOverrideEntry'
@@ -46,7 +46,11 @@ describe('TotalGradeOverrideTray Tests', () => {
       ...props,
     }
 
-    return render(<MockedProvider><TotalGradeOverrideTray {...trayProps} /></MockedProvider>)
+    return render(
+      <MockedProvider>
+        <TotalGradeOverrideTray {...trayProps} />
+      </MockedProvider>,
+    )
   }
 
   beforeEach(() => {
@@ -257,7 +261,7 @@ describe('TotalGradeOverrideTray Tests', () => {
       await new Promise(resolve => setTimeout(resolve, 0))
       const updatedFinalGradeOverrides = useStore.getState().finalGradeOverrides
       expect(
-        updatedFinalGradeOverrides['1'].gradingPeriodGrades?.['2']?.customGradeStatusId
+        updatedFinalGradeOverrides['1'].gradingPeriodGrades?.['2']?.customGradeStatusId,
       ).toEqual('1')
     })
 
@@ -282,7 +286,7 @@ describe('TotalGradeOverrideTray Tests', () => {
       await new Promise(resolve => setTimeout(resolve, 0))
       const updatedFinalGradeOverrides = useStore.getState().finalGradeOverrides
       expect(
-        updatedFinalGradeOverrides['1'].gradingPeriodGrades?.['2']?.customGradeStatusId
+        updatedFinalGradeOverrides['1'].gradingPeriodGrades?.['2']?.customGradeStatusId,
       ).toEqual('1')
     })
 
@@ -314,7 +318,7 @@ describe('TotalGradeOverrideTray Tests', () => {
       await new Promise(resolve => setTimeout(resolve, 0))
       const updatedFinalGradeOverrides = useStore.getState().finalGradeOverrides
       expect(
-        updatedFinalGradeOverrides['1'].gradingPeriodGrades?.['2']?.customGradeStatusId
+        updatedFinalGradeOverrides['1'].gradingPeriodGrades?.['2']?.customGradeStatusId,
       ).toEqual('1')
     })
 

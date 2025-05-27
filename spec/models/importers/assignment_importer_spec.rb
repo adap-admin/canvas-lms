@@ -181,7 +181,7 @@ describe "Importing assignments" do
       expect(a.title).to eq data[:title]
       expect(a.description).to include(data[:instructions]) if data[:instructions]
       expect(a.description).to include(data[:description]) if data[:description]
-      a.due_at = Time.at(data[:due_date].to_i / 1000)
+      a.due_at = Time.zone.at(data[:due_date].to_i / 1000)
       expect(a.points_possible).to eq data[:grading][:points_possible].to_f
     end
   end
@@ -381,7 +381,7 @@ describe "Importing assignments" do
       "unlock_at" => nil
     }
     migration = @course.content_migrations.create!
-    assignment = @course.assignments.create! title: "test", due_at: Time.now, unlock_at: 1.day.ago, lock_at: 1.day.from_now, peer_reviews_due_at: 2.days.from_now, migration_id: "ib4834d160d180e2e91572e8b9e3b1bc6"
+    assignment = @course.assignments.create! title: "test", due_at: Time.zone.now, unlock_at: 1.day.ago, lock_at: 1.day.from_now, peer_reviews_due_at: 2.days.from_now, migration_id: "ib4834d160d180e2e91572e8b9e3b1bc6"
     Importers::AssignmentImporter.import_from_migration(assign_hash, @course, migration)
     assignment.reload
     expect(assignment.title).to eq "date clobber or not"
@@ -1070,7 +1070,7 @@ describe "Importing assignments" do
         .to receive(:find_active_proxies_for_context_by_vendor_code_and_product_code) { [tool_proxy] }
       course_model
       migration = @course.content_migrations.create!
-      assignment = @course.assignments.create!(title: "test", due_at: Time.now, unlock_at: 1.day.ago, lock_at: 1.day.from_now, peer_reviews_due_at: 2.days.from_now, migration_id:)
+      assignment = @course.assignments.create!(title: "test", due_at: Time.zone.now, unlock_at: 1.day.ago, lock_at: 1.day.from_now, peer_reviews_due_at: 2.days.from_now, migration_id:)
       Importers::AssignmentImporter.import_from_migration(assign_hash, @course, migration)
       assignment.reload
       expect(assignment.assignment_configuration_tool_lookups.count).to eq 1
@@ -1087,7 +1087,7 @@ describe "Importing assignments" do
         .to receive(:find_active_proxies_for_context_by_vendor_code_and_product_code) { [tool_proxy] }
       course_model
       migration = @course.content_migrations.create!
-      assignment = @course.assignments.create!(title: "test", due_at: Time.now, unlock_at: 1.day.ago, lock_at: 1.day.from_now, peer_reviews_due_at: 2.days.from_now, migration_id:)
+      assignment = @course.assignments.create!(title: "test", due_at: Time.zone.now, unlock_at: 1.day.ago, lock_at: 1.day.from_now, peer_reviews_due_at: 2.days.from_now, migration_id:)
       Importers::AssignmentImporter.import_from_migration(assign_hash, @course, migration)
       assignment.reload
       tool_lookup = assignment.assignment_configuration_tool_lookups.first
@@ -1099,7 +1099,7 @@ describe "Importing assignments" do
         .to receive(:find_active_proxies_for_context_by_vendor_code_and_product_code) { [tool_proxy] }
       course_model
       migration = @course.content_migrations.create!
-      assignment = @course.assignments.create!(title: "test", due_at: Time.now, unlock_at: 1.day.ago, lock_at: 1.day.from_now, peer_reviews_due_at: 2.days.from_now, migration_id:)
+      assignment = @course.assignments.create!(title: "test", due_at: Time.zone.now, unlock_at: 1.day.ago, lock_at: 1.day.from_now, peer_reviews_due_at: 2.days.from_now, migration_id:)
       Importers::AssignmentImporter.import_from_migration(assign_hash, @course, migration)
       assignment.reload
       expect(assignment.turnitin_settings.with_indifferent_access[:originality_report_visibility]).to eq visibility
@@ -1108,7 +1108,7 @@ describe "Importing assignments" do
     it "adds a warning to the migration without an active tool_proxy" do
       course_model
       migration = @course.content_migrations.create!
-      @course.assignments.create!(title: "test", due_at: Time.now, unlock_at: 1.day.ago, lock_at: 1.day.from_now, peer_reviews_due_at: 2.days.from_now, migration_id:)
+      @course.assignments.create!(title: "test", due_at: Time.zone.now, unlock_at: 1.day.ago, lock_at: 1.day.from_now, peer_reviews_due_at: 2.days.from_now, migration_id:)
       expect(migration).to receive(:add_warning).with("We were unable to find a tool profile match for vendor_code: \"abc\" product_code: \"qrx\".")
       Importers::AssignmentImporter.import_from_migration(assign_hash, @course, migration)
     end
@@ -1118,7 +1118,7 @@ describe "Importing assignments" do
         .to receive(:find_active_proxies_for_context_by_vendor_code_and_product_code) { [tool_proxy] }
       course_model
       migration = @course.content_migrations.create!
-      @course.assignments.create!(title: "test", due_at: Time.now, unlock_at: 1.day.ago, lock_at: 1.day.from_now, peer_reviews_due_at: 2.days.from_now, migration_id:)
+      @course.assignments.create!(title: "test", due_at: Time.zone.now, unlock_at: 1.day.ago, lock_at: 1.day.from_now, peer_reviews_due_at: 2.days.from_now, migration_id:)
       expect(migration).to_not receive(:add_warning).with("We were unable to find a tool profile match for vendor_code: \"abc\" product_code: \"qrx\".")
       Importers::AssignmentImporter.import_from_migration(assign_hash, @course, migration)
     end
@@ -1278,7 +1278,7 @@ describe "Importing assignments" do
       end
 
       it "should early return" do
-        expect(Importers::CourseContentImporter).not_to receive(:shift_date_options)
+        expect(Importers::CourseContentImporter).not_to receive(:shift_date_options_from_migration)
         subject
       end
     end
@@ -1477,12 +1477,34 @@ describe "Importing assignments" do
 
     context "when setting needs_update_cached_due_dates field" do
       context "when field is given" do
+        let(:item) { Assignment.new }
+
         before do
-          item.update!(needs_update_cached_due_dates: true)
+          allow(item).to receive(:save_without_broadcasting!)
         end
 
         it "should shift the date" do
           expect(subject.needs_update_cached_due_dates).to be_truthy
+        end
+
+        context "when the update_cached_due_dates? is false" do
+          before do
+            allow(item).to receive_messages(update_cached_due_dates?: false)
+          end
+
+          it "sets needs_update_cached_due_dates false" do
+            expect(subject.needs_update_cached_due_dates).to be_falsey
+          end
+        end
+
+        context "when the update_cached_due_dates? is true" do
+          before do
+            allow(item).to receive_messages(update_cached_due_dates?: true)
+          end
+
+          it "sets needs_update_cached_due_dates to true" do
+            expect(subject.needs_update_cached_due_dates).to be true
+          end
         end
       end
 
@@ -1593,6 +1615,10 @@ describe "Importing assignments" do
     end
 
     context "when the discussion_checkpoints feature flag is off" do
+      before do
+        account.disable_feature!(:discussion_checkpoints)
+      end
+
       it "does not import sub assignments" do
         expect(subject.sub_assignments.length).to eq(0)
       end
@@ -1645,6 +1671,27 @@ describe "Importing assignments" do
           expect(subject.parent_assignment_id).to eq(parent_item.id)
         end
       end
+    end
+  end
+
+  describe "default assignment group" do
+    let(:course) { Course.create! }
+    let(:migration) { course.content_migrations.create! }
+    let(:assignment_hash) do
+      {
+        migration_id:,
+        title: "wiki page assignment",
+        submission_types: "wiki_page",
+        assignment_group_migration_id: nil,
+        wiki_page_migration_id: "mig"
+      }
+    end
+
+    it "hidden assignment for wiki page has default assignment group" do
+      Importers::AssignmentImporter.import_from_migration(assignment_hash, course, migration)
+
+      assignment = course.assignments.where(migration_id:).first
+      expect(assignment.assignment_group.name).to eq("Imported Assignments")
     end
   end
 end

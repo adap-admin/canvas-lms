@@ -20,8 +20,7 @@
 
 RSpec.describe DataFixup::Lti::BackfillLtiRegistrationAccountBindings do
   let(:dev_key) do
-    dev_key = dev_key_model_1_3(account:)
-    dev_key.developer_key_account_bindings.first.lti_registration_account_binding.delete
+    dev_key = lti_developer_key_model(account:)
     dev_key
   end
   let(:account) { account_model }
@@ -86,7 +85,7 @@ RSpec.describe DataFixup::Lti::BackfillLtiRegistrationAccountBindings do
   end
 
   context "when there are some LTI keys that already have a registration account binding" do
-    let(:other_key) { dev_key_model_1_3(account:) }
+    let(:other_key) { lti_developer_key_model(account:) }
 
     it "doesn't create any new bindings and runs successfully" do
       expect { described_class.run }.not_to change { Lti::RegistrationAccountBinding.count }
@@ -95,7 +94,7 @@ RSpec.describe DataFixup::Lti::BackfillLtiRegistrationAccountBindings do
 
   context "when the developer key is for a non-root account" do
     let(:subaccount) { account_model(parent_account: account) }
-    let!(:binding) { DeveloperKeyAccountBinding.create!(skip_lime_sync: true, account: subaccount, developer_key: dev_key, workflow_state: "on") }
+    let!(:binding) { DeveloperKeyAccountBinding.create!(account: subaccount, developer_key: dev_key, workflow_state: "on") }
 
     it "skips the account binding" do
       # should just move on to the next account binding and not log an error
@@ -109,9 +108,8 @@ RSpec.describe DataFixup::Lti::BackfillLtiRegistrationAccountBindings do
 
   context "when dealing with inherited account bindings" do
     let(:site_admin_key) do
-      key = dev_key_model_1_3(account: Account.site_admin)
+      key = lti_developer_key_model(account: Account.site_admin)
       key.update!(account: nil)
-      key.developer_key_account_bindings.first.lti_registration_account_binding.delete
       key
     end
 
@@ -122,10 +120,10 @@ RSpec.describe DataFixup::Lti::BackfillLtiRegistrationAccountBindings do
     end
 
     context "and there's a site admin and root account level binding" do
-      let(:root_account_binding) { DeveloperKeyAccountBinding.create!(account:, developer_key: site_admin_key, workflow_state: "on", skip_lime_sync: true) }
+      let(:root_account_binding) { DeveloperKeyAccountBinding.create!(account:, developer_key: site_admin_key, workflow_state: "on") }
 
       before do
-        site_admin_key.account_binding_for(Account.site_admin).update!(workflow_state: "allow", skip_lime_sync: true)
+        site_admin_key.account_binding_for(Account.site_admin).update!(workflow_state: "allow")
         root_account_binding
       end
 

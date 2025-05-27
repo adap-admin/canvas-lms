@@ -54,7 +54,7 @@
           <span id="speed_grader_settings_mount_point"></span>
         </div>
         <div class="assignmentDetails">
-          <a id="assignment_url" href="<%= context_url(@context, :context_assignment_url, @assignment.id) %>">
+          <a id="assignment_url" role="button" href="<%= context_url(@context, :context_assignment_url, @assignment.id) %>">
             <h2 class="assignmentDetails__Title"><%= @assignment.title %></h2>
           </a>
           <p class="assignmentDetails__Info">
@@ -203,10 +203,11 @@
               <% end %>
               <div class="turnitin_info_container"></div>
             </div>
+            <div id="speed_grader_lti_asset_reports_mount_point"></div>
           </div>
 
           <div class="content_box">
-            <% if @domain_root_account.feature_enabled?(:discussion_checkpoints) && @assignment.submission_types == 'discussion_topic' %>
+            <% if @assignment.context.discussion_checkpoints_enabled? && @assignment.submission_types == 'discussion_topic' %>
               <div id="speed_grader_discussions_navigation_mount_point"></div>
             <% end %>
             <% if @assignment.active_rubric_association? %>
@@ -231,7 +232,7 @@
             </div>
             <% end %>
 
-            <% if  @assignment.active_rubric_association? || can_do(@context, @current_user, :manage_grades) || (@context.concluded? && can_do(@context, @current_user, :read_as_admin)) %>
+            <% if @assignment.active_rubric_association? || @assignment.can_view_audit_trail?(@current_user) || can_do(@context, @current_user, :manage_grades) || (@context.concluded? && can_do(@context, @current_user, :read_as_admin)) %>
             <div id="grades-loading-spinner"></div>
 
             <div style="display: flex;">
@@ -248,7 +249,7 @@
                     </div>
                   </div>
 
-                  <% if @assignment.a2_enabled? && @context.feature_enabled?(:submission_stickers) %>
+                  <% if @assignment.stickers_enabled?(@current_user) %>
                   <div id="submission_sticker_mount_point"></div>
                   <% end %>
                 </div>
@@ -509,6 +510,22 @@
           <%= t('buttons.show_new_sg_ui', "Use new SpeedGrader UI") %>
         </button>
       </p>
+    <% end %>
+
+    <% if @context.discussion_checkpoints_enabled? %>
+      <fieldset class="ic-Fieldset ic-Fieldset--radio-checkbox">
+        <legend class="ic-Legend"><%= t("Default Discussion View Options") %></legend>
+          <div class="ic-Form-control ic-Form-control--radio">
+          <div class="ic-Radio">
+            <input type="radio" id="discussion_view_no_context" name="default_discussion_view" value="discussion_view_no_context">
+            <label class="ic-Label" for="discussion_view_no_context"><%= t('buttons.discussion_view_no_context', "Show replies without discussion context") %></label>
+          </div>
+          <div class="ic-Radio">
+            <input type="radio" id="discussion_view_with_context" name="default_discussion_view" value="discussion_view_with_context">
+            <label class="ic-Label" for="discussion_view_with_context"><%= t('buttons.discussion_view_with_context', "Show replies in context") %></label>
+          </div>
+        </div>
+      </fieldset>
     <% end %>
 
     <div class="button-container">

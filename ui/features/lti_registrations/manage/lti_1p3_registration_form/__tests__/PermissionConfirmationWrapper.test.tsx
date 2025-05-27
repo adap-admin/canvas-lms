@@ -21,7 +21,7 @@ import {render, screen} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {PermissionConfirmationWrapper} from '../components/PermissionConfirmationWrapper'
 import {mockInternalConfiguration} from './helpers'
-import {createLti1p3RegistrationOverlayStore} from '../Lti1p3RegistrationOverlayState'
+import {createLti1p3RegistrationOverlayStore} from '../../registration_overlay/Lti1p3RegistrationOverlayStore'
 import {LtiScopes} from '@canvas/lti/model/LtiScope'
 import {i18nLtiScope} from '@canvas/lti/model/i18nLtiScope'
 
@@ -32,14 +32,18 @@ describe('PermissionConfirmationWrapper', () => {
 
   it('renders the component', () => {
     const internalConfig = mockInternalConfiguration({title: 'Test App'})
-    const overlayStore = createLti1p3RegistrationOverlayStore(internalConfig)
+    const overlayStore = createLti1p3RegistrationOverlayStore(internalConfig, '')
     render(
-      <PermissionConfirmationWrapper internalConfig={internalConfig} overlayStore={overlayStore} />
+      <PermissionConfirmationWrapper
+        internalConfig={internalConfig}
+        overlayStore={overlayStore}
+        showAllSettings={true}
+      />,
     )
 
     expect(screen.getByText('Permissions')).toBeInTheDocument()
     expect(
-      screen.getByText(/is requesting permission to perform the following actions/i)
+      screen.getByText(/is requesting permission to perform the following actions/i),
     ).toBeInTheDocument()
   })
 
@@ -47,12 +51,16 @@ describe('PermissionConfirmationWrapper', () => {
     const internalConfig = mockInternalConfiguration({
       scopes: [LtiScopes.AgsLineItem, LtiScopes.AgsScore],
     })
-    const overlayStore = createLti1p3RegistrationOverlayStore(internalConfig)
+    const overlayStore = createLti1p3RegistrationOverlayStore(internalConfig, '')
     render(
-      <PermissionConfirmationWrapper internalConfig={internalConfig} overlayStore={overlayStore} />
+      <PermissionConfirmationWrapper
+        internalConfig={internalConfig}
+        overlayStore={overlayStore}
+        showAllSettings={true}
+      />,
     )
 
-    expect(screen.getAllByRole('checkbox').length).toEqual(Object.values(LtiScopes).length)
+    expect(screen.getAllByRole('checkbox')).toHaveLength(Object.values(LtiScopes).length)
 
     expect(screen.getByLabelText(i18nLtiScope(LtiScopes.AgsLineItem))).toBeChecked()
     expect(screen.getByLabelText(i18nLtiScope(LtiScopes.AgsScore))).toBeChecked()
@@ -60,9 +68,13 @@ describe('PermissionConfirmationWrapper', () => {
 
   it('toggles the scope when a checkbox is clicked', async () => {
     const internalConfig = mockInternalConfiguration({scopes: [LtiScopes.AgsLineItem]})
-    const overlayStore = createLti1p3RegistrationOverlayStore(internalConfig)
+    const overlayStore = createLti1p3RegistrationOverlayStore(internalConfig, '')
     render(
-      <PermissionConfirmationWrapper internalConfig={internalConfig} overlayStore={overlayStore} />
+      <PermissionConfirmationWrapper
+        internalConfig={internalConfig}
+        overlayStore={overlayStore}
+        showAllSettings={true}
+      />,
     )
 
     const firstScope = screen.getByLabelText(i18nLtiScope(LtiScopes.AgsLineItem))

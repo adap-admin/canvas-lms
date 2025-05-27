@@ -23,11 +23,10 @@ import {Flex} from '@instructure/ui-flex'
 import {Button, CloseButton} from '@instructure/ui-buttons'
 import {Heading} from '@instructure/ui-heading'
 import LoadingIndicator from '@canvas/loading-indicator'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {TextInput} from '@instructure/ui-text-input'
 import {IconAddLine, IconArrowOpenEndLine, IconSearchLine} from '@instructure/ui-icons'
 import {Text} from '@instructure/ui-text'
-import {useQuery} from '@canvas/query'
 import {getGradingRubricContexts, getGradingRubricsForContext} from '../queries'
 import {SimpleSelect} from '@instructure/ui-simple-select'
 import {RadioInput} from '@instructure/ui-radio-input'
@@ -35,8 +34,9 @@ import type {GradingRubricContext} from '../types/rubricAssignment'
 import type {Rubric, RubricAssociation} from '../../types/rubric'
 import {possibleString} from '../../Points'
 import {ScreenReaderContent} from '@instructure/ui-a11y-content'
+import {useQuery} from '@tanstack/react-query'
 
-const I18n = useI18nScope('enhanced-rubrics-assignment-search')
+const I18n = createI18nScope('enhanced-rubrics-assignment-search')
 
 type RubricSearchTrayProps = {
   courseId: string
@@ -174,11 +174,21 @@ const RubricContextSelect = ({
   const {data: rubricContexts = [], isLoading} = useQuery({
     queryKey: ['fetchGradingRubricContexts', courseId],
     queryFn: getGradingRubricContexts,
-    fetchAtLeastOnce: true,
-    onSuccess: successResponse => {
-      setSelectedContext(successResponse[0]?.context_code)
-    },
   })
+
+  useEffect(() => {
+    if (rubricContexts.length > 0) {
+      const matchingCourseContext = rubricContexts.find(
+        x => x.context_code === `course_${courseId}`,
+      )
+
+      if (matchingCourseContext) {
+        setSelectedContext(matchingCourseContext.context_code)
+      } else {
+        setSelectedContext(rubricContexts[0]?.context_code)
+      }
+    }
+  }, [rubricContexts, courseId, setSelectedContext])
 
   const contextPrefix = (contextCode: string) => {
     if (contextCode.startsWith('account_')) {
@@ -237,8 +247,6 @@ const RubricsForContext = ({
   const {data: rubricsForContext = [], isLoading: isRubricsLoading} = useQuery({
     queryKey: ['fetchGradingRubricsForContext', courseId, selectedContext],
     queryFn: getGradingRubricsForContext,
-    staleTime: 0,
-    fetchAtLeastOnce: true,
   })
 
   if (isRubricsLoading) {
@@ -246,7 +254,7 @@ const RubricsForContext = ({
   }
 
   const filteredContextRubrics = rubricsForContext?.filter(({rubric}) =>
-    rubric.title.toLowerCase().includes(search.toLowerCase())
+    rubric.title.toLowerCase().includes(search.toLowerCase()),
   )
 
   return (
@@ -338,6 +346,7 @@ const RubricSearchFooter = ({disabled, onSubmit, onCancel}: RubricSearchFooterPr
         <Flex.Item>
           <Button
             color="primary"
+            // @ts-expect-error
             renderIcon={IconAddLine}
             onClick={() => onSubmit()}
             data-testid="save-rubric-assessment-button"

@@ -37,21 +37,22 @@ module Api::V1::Submission
     context = nil,
     includes = [],
     params = {},
-    avatars = false
+    avatars = false,
+    preloaded_enrollments_by_user_id: nil
   )
     context ||= assignment.context
-    hash = submission_attempt_json(submission, assignment, current_user, session, context, params)
+    hash = submission_attempt_json(submission, assignment, current_user, session, context, params, preloaded_enrollments_by_user_id:)
 
     # The "body" attribute is intended to store the contents of text-entry
     # submissions, but for quizzes it contains a string that includes grading
     # information. Only return it if the caller has permissions.
     hash["body"] = nil if assignment.quiz? && !submission.user_can_read_grade?(current_user)
 
-    if includes.include?("sub_assignment_submissions") && assignment.root_account.feature_enabled?(:discussion_checkpoints)
+    if includes.include?("sub_assignment_submissions") && context.discussion_checkpoints_enabled?
       hash["has_sub_assignment_submissions"] = assignment.has_sub_assignments
       hash["sub_assignment_submissions"] = (assignment.has_sub_assignments &&
                                            assignment.sub_assignments&.map do |sub_assignment|
-                                             sub_assignment_submission = sub_assignment.submissions.active.find_by(user_id: submission.user_id)
+                                             sub_assignment_submission = sub_assignment.find_or_create_submission(submission.user)
                                              sub_assignnment_submission_json(sub_assignment_submission, sub_assignment_submission.assignment, current_user, session, context, includes, params, avatars)
                                            end) || []
     end
@@ -105,8 +106,7 @@ module Api::V1::Submission
     end
 
     if includes.include?("has_postable_comments")
-      hash["has_postable_comments"] =
-        submission.submission_comments.any?(&:allows_posting_submission?)
+      hash["has_postable_comments"] = submission.postable_comments?
     end
 
     if includes.include?("submission_comments")
@@ -226,7 +226,8 @@ module Api::V1::Submission
     session,
     context = nil,
     params = {},
-    quiz_submission_version = nil
+    quiz_submission_version = nil,
+    preloaded_enrollments_by_user_id: nil
   )
     context ||= assignment.context
     includes = Array.wrap(params[:include])
@@ -251,9 +252,14 @@ module Api::V1::Submission
       json_fields << "anonymous_id"
     end
 
+    if attempt.checkpoints_needs_grading? && context.discussion_checkpoints_enabled?
+      attempt.workflow_state = "pending_review"
+      attempt.submission_type = attempt.submission_type || attempt.assignment&.submission_types
+    end
+
     attempt.assignment = assignment
     hash = api_json(attempt, user, session, only: json_fields, methods: json_methods)
-    hash["body"] = api_user_content(hash["body"], context, user) if hash["body"].present?
+    hash["body"] = api_user_content(hash["body"], context, user, location: attempt.asset_string) if hash["body"].present?
 
     hash["group"] = submission_minimal_group_json(attempt) if includes.include?("group")
     if hash.key?("grade_matches_current_submission")
@@ -311,7 +317,7 @@ module Api::V1::Submission
             options = {
               anonymous_instructor_annotations: assignment.anonymous_instructor_annotations?,
               enable_annotations: true,
-              enrollment_type: user_type(context, user),
+              enrollment_type: user_type(context, user, preloaded_enrollments_by_user_id),
               include: includes,
               moderated_grading_allow_list: attempt.moderated_grading_allow_list(user),
               skip_permission_checks: true,
@@ -417,7 +423,6 @@ module Api::V1::Submission
     params = {},
     avatars = false
   )
-
     json = submission_json(submission, assignment, current_user, session, context, includes, params, avatars)
 
     # we want to make a clear distinction between a submission and a sub assignment submission, we will do this by

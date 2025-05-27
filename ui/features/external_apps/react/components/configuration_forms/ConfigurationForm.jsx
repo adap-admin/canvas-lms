@@ -16,18 +16,17 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {useScope as useI18nScope} from '@canvas/i18n'
-import $ from 'jquery'
-import React from 'react'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import PropTypes from 'prop-types'
-import ConfigurationFormLti13 from './ConfigurationFormLti13'
+import React from 'react'
 import ConfigurationFormLti2 from './ConfigurationFormLti2'
+import ConfigurationFormLti13 from './ConfigurationFormLti13'
 import ConfigurationFormManual from './ConfigurationFormManual'
 import ConfigurationFormUrl from './ConfigurationFormUrl'
 import ConfigurationFormXml from './ConfigurationFormXml'
 import ConfigurationTypeSelector from './ConfigurationTypeSelector'
 
-const I18n = useI18nScope('external_tools')
+const I18n = createI18nScope('external_tools')
 
 export default class ConfigurationForm extends React.Component {
   static propTypes = {
@@ -80,6 +79,7 @@ export default class ConfigurationForm extends React.Component {
     registrationUrl: '',
     xml: '',
     allow_membership_service_access: false,
+    hasBeenSubmitted: false,
   })
 
   reset = () => {
@@ -96,6 +96,7 @@ export default class ConfigurationForm extends React.Component {
       registrationUrl: '',
       xml: '',
       allow_membership_service_access: false,
+      hasBeenSubmitted: false,
     })
   }
 
@@ -107,6 +108,7 @@ export default class ConfigurationForm extends React.Component {
 
   handleSubmit = e => {
     e.preventDefault()
+    this.setState({hasBeenSubmitted: true})
     let form
     switch (this.state.configurationType) {
       case 'manual':
@@ -143,7 +145,7 @@ export default class ConfigurationForm extends React.Component {
       formData = strip(formData)
       this.props.handleSubmit(this.state.configurationType, formData, e)
     } else {
-      $('.ReactModal__Overlay').animate({scrollTop: 0}, 'slow')
+      document.querySelector('.ReactModal__Body')?.scrollIntoView({behavior: 'smooth'})
     }
   }
 
@@ -159,6 +161,7 @@ export default class ConfigurationForm extends React.Component {
       return (
         <ConfigurationFormManual
           ref="configurationFormManual"
+          data-testid="configuration-form-manual"
           name={this.state.name}
           consumerKey={this.state.consumerKey}
           sharedSecret={this.state.sharedSecret}
@@ -169,6 +172,7 @@ export default class ConfigurationForm extends React.Component {
           description={this.state.description}
           allowMembershipServiceAccess={this.state.allow_membership_service_access}
           membershipServiceFeatureFlagEnabled={this.props.membershipServiceFeatureFlagEnabled}
+          hasBeenSubmitted={this.state.hasBeenSubmitted}
         />
       )
     }
@@ -177,6 +181,7 @@ export default class ConfigurationForm extends React.Component {
       return (
         <ConfigurationFormUrl
           ref="configurationFormUrl"
+          data-testid="configuration-form-url"
           name={this.state.name}
           consumerKey={this.state.consumerKey}
           sharedSecret={this.state.sharedSecret}
@@ -191,6 +196,7 @@ export default class ConfigurationForm extends React.Component {
       return (
         <ConfigurationFormXml
           ref="configurationFormXml"
+          data-testid="configuration-form-xml"
           name={this.state.name}
           consumerKey={this.state.consumerKey}
           sharedSecret={this.state.sharedSecret}
@@ -205,7 +211,9 @@ export default class ConfigurationForm extends React.Component {
       return (
         <ConfigurationFormLti2
           ref="configurationFormLti2"
+          data-testid="configuration-form-lti2"
           registrationUrl={this.state.registrationUrl}
+          hasBeenSubmitted={this.state.hasBeenSubmitted}
         />
       )
     }
@@ -216,6 +224,7 @@ export default class ConfigurationForm extends React.Component {
           ref={el => {
             this.lti13Form = el
           }}
+          data-testid="configuration-form-lti13"
         />
       )
     }
@@ -226,6 +235,7 @@ export default class ConfigurationForm extends React.Component {
       return (
         <ConfigurationTypeSelector
           ref="configurationTypeSelector"
+          data-testid="configuration-type-selector"
           handleChange={this.handleSwitchConfigurationType}
           configurationType={this.props.configurationType}
         />
@@ -240,6 +250,7 @@ export default class ConfigurationForm extends React.Component {
           ref="submitLti2"
           type="button"
           id="submitExternalAppBtn"
+          data-testid="submit-button"
           className="btn btn-primary"
           onClick={this.handleSubmit}
         >
@@ -252,6 +263,7 @@ export default class ConfigurationForm extends React.Component {
           ref="submit"
           type="button"
           id="submitExternalAppBtn"
+          data-testid="submit-button"
           className="btn btn-primary"
           onClick={this.handleSubmit}
         >

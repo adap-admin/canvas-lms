@@ -16,17 +16,15 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* eslint-disable no-void */
-
 import {extend} from '@canvas/backbone/utils'
 import Backbone from '@canvas/backbone'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import template from '../../jst/ContentCheckbox.handlebars'
 import checkboxCollectionTemplate from '../../jst/ContentCheckboxCollection.handlebars'
 import CheckboxCollection from '../collections/ContentCheckboxCollection'
 import CollectionView from '@canvas/backbone-collection-view'
 
-const I18n = useI18nScope('content_migrations')
+const I18n = createI18nScope('content_migrations')
 
 extend(ContentCheckboxView, Backbone.View)
 
@@ -86,7 +84,7 @@ ContentCheckboxView.prototype.toJSON = function () {
       },
       {
         count: json.submodule_count,
-      }
+      },
     )
   }
   json.screenreaderType = {
@@ -187,7 +185,7 @@ ContentCheckboxView.prototype.fetchSublevelCheckboxes = function (silent) {
       return function () {
         return _this.$el.trigger('doneFetchingCheckboxes', _this.$el.find('#checkbox-' + _this.cid))
       }
-    })(this)
+    })(this),
   )
   if (!silent) {
     this.$el.disableWhileLoading(dfd)

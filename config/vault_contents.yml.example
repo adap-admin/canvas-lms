@@ -15,7 +15,7 @@ development:
     access_key: aws-key-id-goes-here
     secret_key: secret-goes-here
   # credentials used by translations
-  'sts/testaccount/sts/sagemaker-dev':
+  'sts/testaccount/sts/translation-dev':
     access_key: aws-key-id-goes-here
     secret_key: secret-goes-here
   'sts/testaccount/sts/canvas-release-notes':
@@ -29,6 +29,11 @@ development:
         signing_secret: "astringthatisactually32byteslong"
       lti_platform_storage:
         signing_secret: "astringthatisactually32byteslong"
+      cedar_client:
+        cedar_hostname: "http://cedar-api:3000"
+        cedar_audience: "cedar-local"
+        cedar_shared_secret: fake-secrete-key
+        cedar_consumer_name: "canvas"
 #     pandata_creds:
 #       canvas_key: 'INTERNAL_TEST'
 #       canvas_secret: 'internaltest'
@@ -79,9 +84,6 @@ development:
 #      twilio_creds:
 #        account_sid: <sid>
 #        auth_token: <token>
-#      twitter_creds:
-#        api_key: <apikey>
-#        secret_key: <secretkey>
 test:
   'sts/testaccount/sts/canvas-shards-lookupper-test':
     access_key: 'fake-access-key'

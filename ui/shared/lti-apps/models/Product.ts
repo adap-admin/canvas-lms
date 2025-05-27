@@ -25,16 +25,48 @@ export type Product = {
   tagline: string
   description: string
   updated_at: string
-  tool_integration_configurations: Lti
-  lti_configurations: LtiDetail
-  badges: Badges[]
+  canvas_lti_configurations: Lti[]
+  privacy_and_security_badges: Badges[]
+  accessibility_badges: Badges[]
+  integration_badges: Badges[]
   screenshots: string[]
   terms_of_service_url: string
   privacy_policy_url: string
   accessibility_url: string
-  support_link: string
+  support_url: string
   tags: Tag[]
   integration_resources: IntegrationResources
+  tool_integration_configurations: {
+    lti_11?: IntegrationConfiguration[]
+    lti_13?: IntegrationConfiguration[]
+  }
+}
+
+type IntegrationConfiguration = {
+  integration_type:
+    | 'lti_13_global_inherited_key'
+    | 'lti_13_configuration'
+    | 'lti_13_url'
+    | 'lti_13_dynamic_registration'
+    | 'lti_11_configuration'
+    | 'lti_11_url'
+    | 'lti_11_legacy_backfill'
+    | 'lti_13_legacy_backfill'
+    | 'lti_2_legacy_backfill'
+}
+
+export type ToolStatus = {
+  id: number
+  name: string
+  description: string
+  color: string
+}
+
+export type OrganizationProduct = Product & {
+  organization_tool: {
+    privacy_status: ToolStatus
+    product_status: ToolStatus
+  }
 }
 
 export type Company = {
@@ -44,19 +76,22 @@ export type Company = {
 }
 
 export type Lti = {
-  lti_13?: {id: number; integration_type: string; url: string; unified_tool_id: string}[]
-  lti_11?: {id: number; integration_type: string; url: string; unified_tool_id: string}[]
-}
-
-export type LtiDetail = {
-  lti_13?: {services: string[]; placements: string[]}
-  lti_11?: {services: string[]; placements: string[]}
+  id: number
+  integration_type: string
+  description: string
+  lti_placements: string[]
+  lti_services: string[]
+  url?: string
+  global_inherited_key?: string
+  configuration?: string
+  unified_tool_id: string
 }
 
 export type Badges = {
   name: string
   image_url: string
   link: string
+  description: string
 }
 
 export type TagGroup = {

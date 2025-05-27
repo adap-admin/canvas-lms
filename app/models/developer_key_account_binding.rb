@@ -36,23 +36,8 @@ class DeveloperKeyAccountBinding < ApplicationRecord
   before_save :set_root_account
   before_create :enable_default_key
   before_update :protect_default_key_binding
-  after_save :update_lti_registration_account_binding
   after_update :clear_cache_if_site_admin
   after_update :update_tools!
-
-  # The skip_lime_sync attribute should be set when this this model is being updated
-  # by the lti_registration_account_binding's after_save method. If it is set, this model
-  # should skip its own update_developer_key_account_binding method. This is to prevent
-  # a loop between the two models' after_saves.
-  attr_accessor :skip_lime_sync
-
-  # This current_user attribute doesn't actually exist in the developer_key_account_binding
-  # table. It is here so that we can use it when creating a corresponding
-  # lti_registration_account_binding, which has a field for the created_by and updated_by user.
-  # While we are maintaining these two models, and want to keep them in sync, we should
-  # set this current_user attribute when creating or updating a developer_key_account_binding.
-  # (This is done in the dkab controller, in the create_or_update method.)
-  attr_accessor :current_user
 
   # -- BEGIN SoftDeleteable --
   # adapting SoftDeleteable, but with no "active" state
@@ -72,6 +57,25 @@ class DeveloperKeyAccountBinding < ApplicationRecord
     true
   end
   # -- END SoftDeleteable --
+
+  # The association with developer keys is heavily cached to prevent performance
+  # issues. However, this cache occasionally presents problems, such as when you
+  # create a developer key within a transaction and immediately try to use it.
+  # Use this method to skip the cache for the duration of the block. Avoid
+  # using this method unless you are sure you need to.
+  #
+  # @param [Proc] block The block to execute while the cache is skipped.
+  # @return [Object] The result of the block.
+  # @example
+  #   binding.skip_dev_key_cache do
+  #     binding.developer_key.update!() # Not cached, will be fetched from the database if not already loaded
+  #   end
+  def skip_dev_key_association_cache(&)
+    @skip_dev_key_cache = true
+    yield(self)
+  ensure
+    @skip_dev_key_cache = false
+  end
 
   # Find a DeveloperKeyAccountBinding in order of accounts. The search for a binding will
   # be prioritized by the order of accounts. If a binding is found for the first account
@@ -155,31 +159,6 @@ class DeveloperKeyAccountBinding < ApplicationRecord
   # DeveloperKey.default is for user-generated tokens and must always be ON
   def protect_default_key_binding
     raise "Please don't turn off the default developer key" if !on? && for_default_key?
-  end
-
-  def update_lti_registration_account_binding
-    if skip_lime_sync
-      self.skip_lime_sync = false
-      return
-    end
-
-    if lti_registration_account_binding
-      updated_by = current_user || lti_registration_account_binding.updated_by
-      lti_registration_account_binding.update!(workflow_state:, updated_by:, skip_lime_sync: true)
-    # Check if developer_key.lti registration is present; there may be a valid reason to
-    # not have one, e.g. if the dev key doesn't have a tool_configuration on it yet.
-    # If it doesn't have one, skip creating a Lti::RegistrationAccountBinding until it does.
-    elsif developer_key.lti_registration
-      Lti::RegistrationAccountBinding.create!(
-        account:,
-        registration: developer_key.lti_registration,
-        created_by: current_user,
-        updated_by: current_user,
-        developer_key_account_binding: self,
-        skip_lime_sync: true,
-        workflow_state:
-      )
-    end
   end
 
   def set_root_account

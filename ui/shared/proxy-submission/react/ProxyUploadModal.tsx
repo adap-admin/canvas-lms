@@ -17,10 +17,10 @@
  */
 
 import React, {useRef, useState} from 'react'
-import {useMutation} from '@apollo/react-hooks'
+import {useMutation} from '@apollo/client'
 import {CREATE_SUBMISSION} from '@canvas/assignments/graphql/student/Mutations'
 import axios from '@canvas/axios'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import type {CamelizedAssignment} from '@canvas/grading/grading.d'
 import {getFileThumbnail} from '@canvas/util/fileHelper'
 import {uploadFile} from '@canvas/upload-file'
@@ -41,7 +41,7 @@ import {Text} from '@instructure/ui-text'
 import {View} from '@instructure/ui-view'
 import UploadFileSVG from '../../../features/assignments_show_student/images/UploadFile.svg'
 
-const I18n = useI18nScope('conversations_2')
+const I18n = createI18nScope('conversations_2')
 
 type AlertType = {
   text: string
@@ -270,7 +270,7 @@ const ProxyUploadModal = ({
           null,
           axios,
           onProgress,
-          true
+          true,
         )
       } else {
         promise = uploadFile(
@@ -283,7 +283,7 @@ const ProxyUploadModal = ({
           file,
           axios,
           onProgress,
-          true
+          true,
         )
       }
       uploadPromises.push(promise)
@@ -354,7 +354,7 @@ const ProxyUploadModal = ({
       return
     }
 
-    const cellTheme = {background: theme.colors.backgroundLight}
+    const cellTheme = {background: theme.colors.contrasts.grey1111}
 
     return (
       <Table
@@ -398,7 +398,7 @@ const ProxyUploadModal = ({
     // uploaded don't have that set yet, so use the local name (which we've set
     // to the URL for files from an LTI)
     const displayName = file.display_name || file.name
-    const cellTheme = {background: theme.colors.backgroundLight}
+    const cellTheme = {background: theme.colors.contrasts.grey1111}
     return (
       <Table.Row key={file._id || file.id}>
         <Table.Cell themeOverride={cellTheme}>{getFileThumbnail(file, 'small')}</Table.Cell>

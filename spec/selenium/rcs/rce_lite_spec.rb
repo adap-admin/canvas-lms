@@ -72,13 +72,10 @@ describe "RCE next tests" do
     before do
       course_with_teacher_logged_in
       stub_rcs_config
+      Account.site_admin.disable_feature! :remove_rce_resize_button
     end
 
     context "Full RCE" do
-      before do
-        Account.site_admin.enable_feature!(:buttons_and_icons_root_account)
-      end
-
       it "has all the UI" do
         create_wiki_page(@course, "full")
 

@@ -24,9 +24,9 @@ import doFetchApi from '@canvas/do-fetch-api-effect'
 import {type MediaBlockProps} from './types'
 import {showFlashError} from '@canvas/alerts/react/FlashAlert'
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 
-const I18n = useI18nScope('block-editor/media-block')
+const I18n = createI18nScope('block-editor')
 
 export default function BlockEditorVideoOptionsTray({
   open,
@@ -55,7 +55,7 @@ export default function BlockEditorVideoOptionsTray({
 
     doFetchApi({
       path: `/api/v1/media_attachments/${attachmentId}?user_entered_title=${encodeURIComponent(
-        titleText
+        titleText,
       )}`,
       method: 'PUT',
       headers: {'Content-Type': 'application/json'},
@@ -65,6 +65,7 @@ export default function BlockEditorVideoOptionsTray({
         setProp((prps: MediaBlockProps) => {
           prps.title = titleText || undefined
         })
+        // @ts-expect-error
         videoContainer?.contentWindow.location.reload()
         setOpenTray(false)
       })
@@ -81,12 +82,12 @@ export default function BlockEditorVideoOptionsTray({
           cb(event?.data?.payload)
         }
       },
-      {signal: _subtitleListener.signal}
+      {signal: _subtitleListener.signal},
     )
 
     videoContainer?.contentWindow?.postMessage(
       {subject: 'media_tracks_request'},
-      window.location.toString()
+      window.location.toString(),
     )
   }
 
@@ -100,10 +101,13 @@ export default function BlockEditorVideoOptionsTray({
         onSave={onSaveProps => {
           applyOptions(onSaveProps)
         }}
+        // @ts-expect-error
         trayProps={{}}
+        // @ts-expect-error
         videoOptions={{
           titleText: videoContainer?.getAttribute('title') || '',
         }}
+        // @ts-expect-error
         requestSubtitlesFromIframe={(cb: any) => requestSubtitlesFromIframe(cb)}
         forBlockEditorUse={true}
       />

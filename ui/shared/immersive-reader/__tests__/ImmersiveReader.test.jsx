@@ -19,10 +19,12 @@
 import React from 'react'
 import {initializeReaderButton, ImmersiveReaderButton} from '../ImmersiveReader'
 import {render} from '@testing-library/react'
+import fetchMock from 'fetch-mock'
 import userEvent, {PointerEventsCheckLevel} from '@testing-library/user-event'
-import {enableFetchMocks} from 'jest-fetch-mock'
 
-enableFetchMocks()
+afterEach(() => {
+  fetchMock.reset()
+})
 
 describe('#initializeReaderButton', () => {
   it('renders the immersive reader button into the given mount point', () => {
@@ -41,7 +43,10 @@ describe('#initializeReaderButton', () => {
 
     describe('onClick', () => {
       beforeEach(() => {
-        fetch.mockResponseOnce(JSON.stringify({token: 'fakeToken', subdomain: 'fakeSubdomain'}))
+        fetchMock.get('/api/v1/immersive_reader/authenticate', {
+          token: 'fakeToken',
+          subdomain: 'fakeSubdomain',
+        })
       })
 
       it('calls to launch the Immersive Reader with the proper content', async () => {
@@ -68,7 +73,7 @@ describe('#initializeReaderButton', () => {
           launchAsync: fakeLaunchAsync,
         })
         const {findByText} = render(
-          <ImmersiveReaderButton content={fakeContent} readerSDK={fakeReaderLib} />
+          <ImmersiveReaderButton content={fakeContent} readerSDK={fakeReaderLib} />,
         )
         const button = await findByText(/Immersive Reader/)
         await user.click(button)
@@ -122,7 +127,7 @@ describe('#initializeReaderButton', () => {
           })
 
           const {findByText} = render(
-            <ImmersiveReaderButton content={fakeContentWithMath} readerSDK={fakeReaderLib} />
+            <ImmersiveReaderButton content={fakeContentWithMath} readerSDK={fakeReaderLib} />,
           )
 
           const button = await findByText(/^Immersive Reader$/)

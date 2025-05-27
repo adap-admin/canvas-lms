@@ -102,7 +102,7 @@ class Quizzes::QuizSubmissionsController < ApplicationController
       end
 
       if !@submission || (@quiz.ip_filter && !@quiz.valid_ip?(request.remote_ip))
-        nil
+        # do nothing
       elsif is_previewing? || (@submission.temporary_user_code == temporary_user_code(false)) ||
             @submission.grants_right?(@current_user, session, :update)
         if !@submission.completed? && (!@submission.overdue? || is_previewing?)
@@ -156,7 +156,7 @@ class Quizzes::QuizSubmissionsController < ApplicationController
       @submission.manually_unlocked = params[:manually_unlocked] == "1" if params[:manually_unlocked]
       if @submission.extendable? && (params[:extend_from_now] || params[:extend_from_end_at]).to_i > 0
         if params[:extend_from_now].to_i > 0
-          @submission.end_at = Time.now + params[:extend_from_now].to_i.minutes
+          @submission.end_at = Time.zone.now + params[:extend_from_now].to_i.minutes
         else
           @submission.end_at += params[:extend_from_end_at].to_i.minutes
         end
@@ -219,17 +219,17 @@ class Quizzes::QuizSubmissionsController < ApplicationController
           cancel_cache_buster
 
           format.html do
-            send_file(attachment.full_filename, {
-                        type: attachment.content_type_with_encoding,
-                        disposition: "inline"
-                      })
+            safe_send_file(attachment.full_filename, {
+                             type: attachment.content_type_with_encoding,
+                             disposition: "inline"
+                           })
           end
 
           format.zip do
-            send_file(attachment.full_filename, {
-                        type: attachment.content_type_with_encoding,
-                        disposition: "inline"
-                      })
+            safe_send_file(attachment.full_filename, {
+                             type: attachment.content_type_with_encoding,
+                             disposition: "inline"
+                           })
           end
         else
           inline_url = authenticated_inline_url(attachment)

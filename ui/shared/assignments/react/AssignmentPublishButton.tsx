@@ -29,13 +29,13 @@ import {
 import {Menu} from '@instructure/ui-menu'
 import {View} from '@instructure/ui-view'
 import {showFlashSuccess, showFlashError} from '@canvas/alerts/react/FlashAlert'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import type {BaseButtonTheme} from '@instructure/shared-types'
-import {useMutation} from '@apollo/react-hooks'
+import {useMutation} from '@apollo/client'
 import {SET_WORKFLOW} from '@canvas/assignments/graphql/teacher/Mutations'
 import {BREAKPOINTS, type Breakpoints} from '@canvas/with-breakpoints'
 
-const I18n = useI18nScope('assignment_publish_button')
+const I18n = createI18nScope('assignment_publish_button')
 const AssignmentPublishButton = ({
   isPublished,
   assignmentLid,
@@ -101,6 +101,7 @@ const AssignmentPublishButton = ({
       .catch(() => handleUpdatePublishFailure(isPublishing))
   }
   const getButtonLabel = (): React.ReactFragment => {
+    // @ts-expect-error
     return (
       <>
         {assignmentPublished ? I18n.t('Published') : I18n.t('Unpublished')}
@@ -132,7 +133,7 @@ const AssignmentPublishButton = ({
     borderStyle: 'none',
   }
   if (assignmentPublished) {
-    buttonThemeOverride = {...buttonThemeOverride, primaryInverseColor: '#0B874B'}
+    buttonThemeOverride = {...buttonThemeOverride, primaryInverseColor: '#03893D'}
   }
   return (
     <Menu
@@ -146,6 +147,7 @@ const AssignmentPublishButton = ({
       }
       withArrow={false}
       trigger={
+        // @ts-expect-error
         <Button
           elementRef={buttonRefCallback}
           renderIcon={assignmentPublished ? IconPublishSolid : IconNoLine}
@@ -165,7 +167,7 @@ const AssignmentPublishButton = ({
         onClick={() => handlePublish(true)}
         value="Publish"
         themeOverride={{
-          labelColor: '#0B874B',
+          labelColor: '#03893D',
         }}
         data-testid="publish-option"
       >

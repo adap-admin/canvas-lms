@@ -20,9 +20,9 @@ import React, {useCallback, useState} from 'react'
 
 import {SimpleSelect} from '@instructure/ui-simple-select'
 import {ScreenReaderContent} from '@instructure/ui-a11y-content'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 
-const I18n = useI18nScope('block-editor')
+const I18n = createI18nScope('block-editor')
 
 type MatchingQuestionProps = {
   question: any
@@ -47,7 +47,7 @@ const MatchingQuestion = ({question, onAnswerChange}: MatchingQuestionProps) => 
           [curr.id]: undefined,
         }
       },
-      {} as MatchingQuestionAnswers
+      {} as MatchingQuestionAnswers,
     )
   })
 
@@ -57,7 +57,7 @@ const MatchingQuestion = ({question, onAnswerChange}: MatchingQuestionProps) => 
       data: {
         value?: string | number
         id?: string
-      }
+      },
     ) => {
       if (!data.id || !data.value) return
 
@@ -68,7 +68,7 @@ const MatchingQuestion = ({question, onAnswerChange}: MatchingQuestionProps) => 
       const isCorrect = Object.keys(currAnswers).every((id: string) => id === currAnswers[id])
       onAnswerChange(isCorrect)
     },
-    [answers, onAnswerChange, setAnswers]
+    [answers, onAnswerChange, setAnswers],
   )
 
   const renderChoices = () => {

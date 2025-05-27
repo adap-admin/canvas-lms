@@ -26,9 +26,9 @@ export interface QueryVariables extends Variables {
 
 export const executeQuery = async <QueryResponse>(
   query: DocumentNode,
-  variables: QueryVariables
+  variables: QueryVariables,
 ) => {
-  return request<QueryResponse>('/api/graphql', query, variables, {
+  return request<QueryResponse>(`${window.location.origin}/api/graphql`, query, variables, {
     'X-Requested-With': 'XMLHttpRequest',
     'GraphQL-Metrics': 'true',
     'X-CSRF-Token': getCookie('_csrf_token'),

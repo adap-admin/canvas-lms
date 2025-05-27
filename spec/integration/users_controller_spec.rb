@@ -325,41 +325,14 @@ describe UsersController do
     end
   end
 
-  describe "admin_merge" do
-    it "works for the whole flow" do
-      user_with_pseudonym(active_all: 1)
-      Account.default.account_users.create!(user: @user)
-      @admin = @user
-      user_with_pseudonym(active_all: 1, username: "user2@instructure.com")
-      user_session(@admin)
-
-      get user_admin_merge_url(@user, pending_user_id: @admin.id)
-      expect(response).to be_successful
-      expect(assigns["pending_other_user"]).to eq @admin
-      expect(assigns["other_user"]).to be_nil
-
-      get user_admin_merge_url(@user, new_user_id: @admin.id)
-      expect(response).to be_successful
-      expect(assigns["pending_other_user"]).to be_nil
-      expect(assigns["other_user"]).to eq @admin
-
-      post user_merge_url(@user, new_user_id: @admin.id)
-      expect(response).to redirect_to(user_profile_url(@admin))
-
-      expect(@user.reload).to be_deleted
-      expect(@admin.reload).to be_registered
-      expect(@admin.pseudonyms.count).to eq 2
-    end
-  end
-
   context "media_download url" do
     let(:kaltura_client) do
-      kaltura_client = instance_double("CanvasKaltura::ClientV3")
+      kaltura_client = instance_double(CanvasKaltura::ClientV3)
       allow(CanvasKaltura::ClientV3).to receive(:new).and_return(kaltura_client)
       kaltura_client
     end
 
-    let(:media_source_fetcher) { instance_double("MediaSourceFetcher") }
+    let(:media_source_fetcher) { instance_double(MediaSourceFetcher) }
 
     before do
       account = Account.create!

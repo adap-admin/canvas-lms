@@ -20,14 +20,13 @@ import React, {useCallback, useEffect, useState} from 'react'
 import {SimpleSelect} from '@instructure/ui-simple-select'
 import {TextInput} from '@instructure/ui-text-input'
 import {View} from '@instructure/ui-view'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {Text} from '@instructure/ui-text'
 import type {QuestionBankSettings} from '../types'
 
-const I18n = useI18nScope('content_migrations_redesign')
+const I18n = createI18nScope('content_migrations_redesign')
 
 type QuestionBank = {
-  // eslint-disable-next-line react/no-unused-prop-types
   assessment_question_bank: {
     id: number
     title: string
@@ -36,7 +35,6 @@ type QuestionBank = {
 
 type QuestionBankSelectorProps = {
   onChange: (settings: QuestionBankSettings | null) => void
-  questionBankError: boolean
   disable?: boolean
   notCompatible?: boolean
   questionBankSettings?: QuestionBankSettings | null
@@ -44,7 +42,6 @@ type QuestionBankSelectorProps = {
 
 const QuestionBankSelector = ({
   onChange,
-  questionBankError,
   disable = false,
   notCompatible = false,
   questionBankSettings,
@@ -53,6 +50,7 @@ const QuestionBankSelector = ({
   const questionBanks = ENV.QUESTION_BANKS || []
 
   const handleChange = useCallback(
+    // @ts-expect-error
     (_, {value}) => {
       setShowQuestionInput(value === 'new_question_bank')
       if (!value) {
@@ -61,7 +59,7 @@ const QuestionBankSelector = ({
         onChange({...questionBankSettings, question_bank_id: value})
       }
     },
-    [onChange, questionBankSettings]
+    [onChange, questionBankSettings],
   )
 
   useEffect(() => {
@@ -73,23 +71,33 @@ const QuestionBankSelector = ({
 
   return (
     <>
-      <View as="div" margin="medium 0" maxWidth="22.5rem">
+      <View as="div" margin="medium 0" maxWidth="46.5rem">
         <SimpleSelect
           data-testid="questionBankSelect"
           renderLabel={I18n.t('Default Question bank')}
           assistiveText={I18n.t('Select a question bank')}
+          // @ts-expect-error
           onChange={handleChange}
           disabled={disable}
           value={questionBankSettings?.question_bank_id || ''}
         >
-          <SimpleSelect.Option id="selectQuestion" value="">
+          <SimpleSelect.Option id="selectQuestion" value="" data-testid="selectQuestionOption">
             {I18n.t('Select question bank')}
           </SimpleSelect.Option>
-          <SimpleSelect.Option id="createQuestion" value="new_question_bank">
+          <SimpleSelect.Option
+            id="createQuestion"
+            value="new_question_bank"
+            data-testid="createQuestionOption"
+          >
             {I18n.t('Create new question bank...')}
           </SimpleSelect.Option>
           {questionBanks.map(({assessment_question_bank: {id, title}}: QuestionBank) => (
-            <SimpleSelect.Option key={id} id={id.toString()} value={id}>
+            <SimpleSelect.Option
+              key={id}
+              id={id.toString()}
+              value={id}
+              data-testid={`questionBankOption-${id}`}
+            >
               {title}
             </SimpleSelect.Option>
           ))}
@@ -101,23 +109,9 @@ const QuestionBankSelector = ({
         )}
       </View>
       {showQuestionInput && (
-        <View as="div" maxWidth="22.5rem">
+        <View as="div" maxWidth="46.5rem">
           <TextInput
             disabled={disable}
-            messages={
-              questionBankError
-                ? [
-                    {
-                      text: (
-                        <Text color="danger">
-                          {I18n.t('You must enter a name for the new question bank')}
-                        </Text>
-                      ),
-                      type: 'error',
-                    },
-                  ]
-                : []
-            }
             renderLabel={<></>}
             placeholder={I18n.t('New question bank')}
             onChange={(_, value) => onChange({...questionBankSettings, question_bank_name: value})}

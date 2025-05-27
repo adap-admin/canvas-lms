@@ -208,7 +208,7 @@ class PlannerController < ApplicationController
                    ungraded_discussion_collection,
                    calendar_events_collection,
                    peer_reviews_collection]
-    collections << sub_assignment_collection if @domain_root_account.feature_enabled?(:discussion_checkpoints)
+    collections << sub_assignment_collection if sub_assignment_collection.present?
 
     BookmarkedCollection.merge(*collections)
   end
@@ -216,7 +216,7 @@ class PlannerController < ApplicationController
   def unread_items
     collections = [unread_discussion_topic_collection,
                    unread_assignment_collection]
-    collections << unread_sub_assignment_collection if @domain_root_account.feature_enabled?(:discussion_checkpoints)
+    collections << unread_sub_assignment_collection if unread_sub_assignment_collection.present?
 
     BookmarkedCollection.merge(*collections)
   end
@@ -539,10 +539,10 @@ class PlannerController < ApplicationController
   def discussion_topic_todo_scopes
     scopes = []
     Shard.partition_by_shard(@pub_contexts) do |contexts|
-      scopes << DiscussionTopic.where(todo_date: @start_date..@end_date, context: contexts).published_or_post_delayed
+      scopes << DiscussionTopic.where(todo_date: @start_date..@end_date, context: contexts, assignment_id: nil).published_or_post_delayed
     end
     Shard.partition_by_shard(@unpub_contexts) do |contexts|
-      scopes << DiscussionTopic.where(todo_date: @start_date..@end_date, context: contexts).active
+      scopes << DiscussionTopic.where(todo_date: @start_date..@end_date, context: contexts, assignment_id: nil).active
     end
     scopes
   end

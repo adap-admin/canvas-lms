@@ -44,7 +44,7 @@ module Factories
                                              workflow_state: "active"
                                            })
 
-    if assignment_or_quiz.is_a?(SubAssignment) && assignment_or_quiz.root_account&.feature_enabled?(:discussion_checkpoints)
+    if assignment_or_quiz.is_a?(SubAssignment) && assignment_or_quiz.context.discussion_checkpoints_enabled?
       override_params = {
         set_type: opts_with_default[:set_type],
         set_id: opts_with_default[:course_section].id,
@@ -89,7 +89,7 @@ module Factories
                                              workflow_state: "active"
                                            })
 
-    if assignment.is_a?(SubAssignment) && assignment.root_account&.feature_enabled?(:discussion_checkpoints)
+    if assignment.is_a?(SubAssignment) && assignment.context.discussion_checkpoints_enabled?
       # Use the new service for sub-assignments
       override_params = {
         set_type: opts_with_default[:set_type],
@@ -116,7 +116,7 @@ module Factories
   end
 
   def create_adhoc_override_for_assignment(assignment_or_quiz, users, opts = {})
-    if assignment_or_quiz.is_a?(SubAssignment) && assignment_or_quiz.root_account&.feature_enabled?(:discussion_checkpoints)
+    if assignment_or_quiz.is_a?(SubAssignment) && assignment_or_quiz.context.discussion_checkpoints_enabled?
       override_params = {
         student_ids: Array.wrap(users).map(&:id),
         due_at: opts[:due_at]
@@ -136,6 +136,25 @@ module Factories
         @override_student.user = user
         @override_student.save!
       end
+    end
+
+    @override
+  end
+
+  def create_course_override_for_assignment(assignment_or_quiz, opts = {})
+    if assignment_or_quiz.is_a?(SubAssignment) && assignment_or_quiz.context.discussion_checkpoints_enabled?
+      override_params = {
+        student_ids: Array.wrap(users).map(&:id),
+        due_at: opts[:due_at]
+      }
+      service = Checkpoints::CourseOverrideCreatorService.new(checkpoint: assignment_or_quiz, override: override_params)
+      @override = service.call
+    else
+      @override = assignment_override_model(opts.merge(assignment: assignment_or_quiz))
+      @override.set = assignment_or_quiz.context
+      @override.set_type = "Course"
+      @override.due_at = opts[:due_at]
+      @override.save!
     end
 
     @override

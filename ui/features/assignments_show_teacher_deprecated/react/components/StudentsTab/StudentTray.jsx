@@ -17,7 +17,7 @@
  */
 
 import React from 'react'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 
 import {bool, func} from 'prop-types'
 import {TeacherAssignmentShape, UserShape} from '../../assignmentData'
@@ -39,7 +39,7 @@ import {
 } from '@instructure/ui-icons'
 import MessageStudents from '@canvas/message-students-modal'
 
-const I18n = useI18nScope('assignments_2')
+const I18n = createI18nScope('assignments_2')
 
 /*
  *  CAUTION: The InstUI DateTimeInput component was deprecated in v7.
@@ -101,7 +101,7 @@ export default class StudentTray extends React.Component {
     const courseLid = this.props.assignment.course.lid
     const studentLid = this.props.student.lid
     const speedgraderLink = encodeURI(
-      `/courses/${courseLid}/gradebook/speed_grader?assignment_id=${assignmentLid}#{"student_id":"${studentLid}"}`
+      `/courses/${courseLid}/gradebook/speed_grader?assignment_id=${assignmentLid}#{"student_id":"${studentLid}"}`,
     )
     return (
       <Link
@@ -119,7 +119,6 @@ export default class StudentTray extends React.Component {
   }
 
   handleSubmitForStudent = () => {
-    // eslint-disable-next-line no-alert
     window.confirm('Submit for Student is not implemented yet')
   }
 
@@ -138,13 +137,13 @@ export default class StudentTray extends React.Component {
       },
       () => {
         this.messageStudentsButton.focus()
-      }
+      },
     )
   }
 
   onChangeDueAt = (_event, newValue) => {
     // Should we be using this.state.dueAt with <DateTimeInput> below?
-    // eslint-disable-next-line react/no-unused-state
+
     this.setState({dueAt: newValue})
   }
 

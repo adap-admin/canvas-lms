@@ -16,8 +16,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {useScope as useI18nScope} from '@canvas/i18n'
-import React, {useEffect, useCallback, useState} from 'react'
+import {useScope as createI18nScope} from '@canvas/i18n'
+import React, {useEffect, useState} from 'react'
 import {Link} from '@instructure/ui-link'
 import {List} from '@instructure/ui-list'
 import {Flex} from '@instructure/ui-flex'
@@ -27,35 +27,39 @@ import {formatTimeAgoDate, formatTimeAgoTitle} from '@canvas/enhanced-user-conte
 import doFetchApi from '@canvas/do-fetch-api-effect'
 import {Alert} from '@instructure/ui-alerts'
 import {useInfiniteQuery} from '@tanstack/react-query'
+import type {QueryFunctionContext} from '@tanstack/react-query'
 
-const I18n = useI18nScope('new_nav')
+const I18n = createI18nScope('new_nav')
+
+const fetchHistory = async (context: QueryFunctionContext<string[], string>) => {
+  const {pageParam = '/api/v1/users/self/history'} = context
+  const {json, link} = await doFetchApi({path: pageParam})
+  const nextPage = link?.next ? link.next.url : null
+  return {json, nextPage}
+}
 
 export default function HistoryList() {
   const [lastItem, setLastItem] = useState<Element | null>(null)
 
-  const fetchHistory = useCallback(async ({pageParam = '/api/v1/users/self/history'}) => {
-    const {json, link} = await doFetchApi({path: pageParam})
-    const nextPage = link?.next ? link.next.url : null
-    return {json, nextPage}
-  }, [])
-
-  const {data, fetchNextPage, isFetching, hasNextPage, error} = useInfiniteQuery({
+  const {data, fetchNextPage, isLoading, hasNextPage, error} = useInfiniteQuery({
     queryKey: ['history'],
     queryFn: fetchHistory,
-    meta: {
-      fetchAtLeastOnce: true,
-    },
-    getNextPageParam: lastPage => lastPage.nextPage,
+    getNextPageParam: lastPage => lastPage.nextPage || undefined,
+    initialPageParam: '/api/v1/users/self/history',
   })
 
+  // @ts-expect-error
   const combineHistoryEntries = pages => {
     if (pages != null) {
       // combine all entries into one array
+      // @ts-expect-error
       const allEntries = pages.reduce((accumulator, page) => {
         return [...accumulator, ...page.json]
       }, [])
       // iterate over all entries and combine based on asset_code
+      // @ts-expect-error
       const historyEntries = allEntries.reduce((accumulator, historyItem) => {
+        // @ts-expect-error
         const alreadyAdded = accumulator.some(entry => historyItem.asset_code === entry.asset_code)
         if (!alreadyAdded) {
           accumulator.push(historyItem)
@@ -82,7 +86,7 @@ export default function HistoryList() {
           root: null,
           rootMargin: '0px',
           threshold: 0.4,
-        }
+        },
       )
       observer.observe(lastItem)
     }
@@ -90,13 +94,14 @@ export default function HistoryList() {
 
   if (error) {
     return <Alert variant="error">{I18n.t('Failed to retrieve history')}</Alert>
-  } else if (isFetching || data == null) {
+  } else if (isLoading || data == null) {
     return <Spinner size="small" renderTitle={I18n.t('Loading')} />
   } else {
     const historyEntries = combineHistoryEntries(data.pages)
     return (
       <>
         <List isUnstyled={true} margin="small 0" itemSpacing="small">
+          {/* @ts-expect-error */}
           {historyEntries.map((entry, index) => {
             const isLast = index === historyEntries.length - 1
             return (

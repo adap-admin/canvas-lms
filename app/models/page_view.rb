@@ -52,8 +52,8 @@ class PageView < ActiveRecord::Base
       p.user_agent = request.user_agent
       p.remote_ip = request.remote_ip
       p.interaction_seconds = 5
-      p.created_at = Time.now
-      p.updated_at = Time.now
+      p.created_at = Time.zone.now
+      p.updated_at = Time.zone.now
       p.id = RequestContext::Generator.request_id
       p.export_columns.each do |c|
         v = p.send(c)
@@ -86,7 +86,7 @@ class PageView < ActiveRecord::Base
   end
 
   def ensure_account
-    self.account_id ||= ((context_type == "Account") ? context_id : context.account_id) rescue nil
+    self.account_id ||= (context_type == "Account") ? context_id : context&.account_id
     self.account_id ||= (context.is_a?(Account) ? context : context.account) if context
   end
 
@@ -179,16 +179,16 @@ class PageView < ActiveRecord::Base
     # accidents in the future, we'll add the correct shard activation now
     shard = PageView.db? ? Shard.current : Shard.default
     shard.activate do
-      updated_at = params["updated_at"] || self.updated_at || Time.now
-      updated_at = Time.parse(updated_at) if updated_at.is_a?(String)
+      updated_at = params["updated_at"] || self.updated_at || Time.zone.now
+      updated_at = Time.zone.parse(updated_at) if updated_at.is_a?(String)
       seconds = interaction_seconds || 0
       if params["interaction_seconds"].to_i > 0
         seconds += params["interaction_seconds"].to_i
       else
-        seconds += [5, (Time.now - updated_at)].min
-        seconds = [seconds, Time.now - created_at].min if created_at
+        seconds += [5, (Time.zone.now - updated_at)].min
+        seconds = [seconds, Time.zone.now - created_at].min if created_at
       end
-      self.updated_at = Time.now
+      self.updated_at = Time.zone.now
       self.interaction_seconds = seconds
       self.is_update = true
     end
@@ -197,7 +197,7 @@ class PageView < ActiveRecord::Base
   scope :for_context, ->(ctx) { where(context_type: ctx.class.name, context_id: ctx) }
   scope :for_users, ->(users) { where(user_id: users) }
 
-  def self.pv4_client
+  def self.pv4_client(**)
     ConfigFile.cache_object("pv4") do |config|
       creds = Rails.application.credentials.pv4_creds
 
@@ -209,12 +209,13 @@ class PageView < ActiveRecord::Base
   # basically, it responds to #paginate and returns a
   # WillPaginate::Collection-like object
   def self.for_user(user, options = {})
+    client = options.delete(:client) || pv4_client
     viewer = options.delete(:viewer)
     viewer = nil if viewer == user
     viewer = nil if viewer && Account.site_admin.grants_any_right?(viewer, :view_statistics, :manage_students)
     user.shard.activate do
       if PageView.pv4?
-        result = pv4_client.for_user(user, **options)
+        result = client.for_user(user, **options)
         result = AccountFilter.filter(result, viewer) if viewer
         result
       else
@@ -239,7 +240,7 @@ class PageView < ActiveRecord::Base
   end
 
   # this is not intended to be called often; only from console as a debugging measure
-  def self.active_user_counts_by_shard(time = Time.now)
+  def self.active_user_counts_by_shard(time = Time.zone.now)
     members = Set.new
     time = time..time unless time.is_a?(Range)
     bucket_time = time.begin
@@ -282,6 +283,10 @@ class PageView < ActiveRecord::Base
   end
 
   def app_name
-    DeveloperKey.find_cached(developer_key_id).try(:name) if developer_key_id
+    return nil unless developer_key_id
+
+    DeveloperKey.find_cached(developer_key_id).try(:name)
+  rescue ActiveRecord::RecordNotFound
+    developer_key_id.to_s
   end
 end

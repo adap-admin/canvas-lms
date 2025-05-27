@@ -46,11 +46,23 @@ buttons_and_icons_root_account:
   description: |-
     Manage a library of custom icons from the RCE.
   environments:
+    development:
+      state: allowed_on
+    ci:
+      state: allowed_on
     production:
       state: hidden
 
-consolidated_media_player:
+canvas_content_builder:
   applies_to: Account
+  state: hidden
+  display_name: Canvas Content Builder
+  description: |-
+    Enable the new Canvas Content Builder for the Rich Content Editor.
+  shadow: true
+
+consolidated_media_player:
+  applies_to: SiteAdmin
   state: hidden
   display_name: Consolidated Media Player
   description: |-
@@ -60,6 +72,38 @@ consolidated_media_player:
       state: allowed_on
     development:
       state: allowed_on
+
+default_copyright_on_attachments:
+  applies_to: SiteAdmin
+  state: hidden
+  display_name: Default Copyright on Attachments
+  description: |-
+    Sets the default copyright for new attachments if the course requires copyright on files.
+  environments:
+    ci:
+      state: allowed_on
+    development:
+      state: allowed_on
+
+deprecate_uuid_in_files_api:
+  state: hidden
+  shadow: true
+  applies_to: RootAccount
+  display_name: Remove UUID from the response of the files API
+  description: This will remove the UUID from the response of the files API. This is an internal only field, and not sending it over the wire will be a network optimization.
+  environments:
+    development:
+      state: allowed_on
+    ci:
+      state: allowed_on
+
+disable_iframe_sandbox_file_show:
+  applies_to: RootAccount
+  state: hidden
+  shadow: true
+  display_name: Disable Iframe Sandbox at File Show
+  description: |-
+    Disable iframe sandboxing at file show.
 
 docviewer_enable_iwork_files:
   state: hidden
@@ -97,6 +141,23 @@ files_a11y_rewrite:
   display_name: Files a11y Rewrite
   description: |-
     Enables the new Files a11y Rewrite page.
+
+files_a11y_rewrite_toggle:
+  applies_to: SiteAdmin
+  state: hidden
+  display_name: Files a11y Rewrite Toggle
+  description: |-
+    Allows users to switch to the old files ui when the Files A11y Rewrite flag is enabled.
+  environments:
+    development:
+      state: allowed_on
+
+hidden_attachments_replacement_chain:
+  applies_to: SiteAdmin
+  state: hidden
+  display_name: Hidden Attachments Replacement Chain
+  description: |-
+    Enables that hidden attachments will be included into the replacement chain.
 
 media_links_use_attachment_id:
   state: hidden
@@ -143,20 +204,6 @@ rce_find_replace:
     development:
       state: allowed_on
 
-rce_linked_file_urls:
-  state: hidden
-  display_name: Allow Rich Content from other sources to create file links
-  description: |-
-    New Quizzes (and eventually others) need a way to create file links that work more independently
-    of Canvas. This API allows creation of link locations so that we can track files linked in the rich
-    content of other tools and grant access to them from those locations.
-  applies_to: SiteAdmin
-  environments:
-    ci:
-      state: allowed_on
-    development:
-      state: allowed_on
-
 rce_transform_loaded_content:
   state: hidden
   display_name: Transform RCE Content on Load
@@ -172,9 +219,29 @@ rce_transform_loaded_content:
     ci:
       state: allowed_on
 
+remove_rce_resize_button:
+  applies_to: SiteAdmin
+  state: hidden
+  shadow: true
+  display_name: Remove RCE Resize Button
+  description: |-
+    Remove the resize button from the status bar of RCE.
+
 reset_uuid_on_course_reset:
   state: allowed_on
   display_name: Reset UUID on Course Reset
   description: |-
     Reset the UUID of a course when it is reset.  This allows course restore to work better for New Quizzes.
   applies_to: RootAccount
+
+visibility_performance_improvements:
+  state: hidden
+  display_name: Selective Release Visibility Performance Improvements
+  description: |-
+    Improves performance of selective release visibility queries.
+  applies_to: SiteAdmin
+  environments:
+    ci:
+      state: allowed_on
+    development:
+      state: allowed_on

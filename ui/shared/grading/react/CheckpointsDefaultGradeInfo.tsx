@@ -18,15 +18,15 @@
 
 import React from 'react'
 import {Alert} from '@instructure/ui-alerts'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 
-const I18n = useI18nScope('sharedSetDefaultGradeDialog')
+const I18n = createI18nScope('sharedSetDefaultGradeDialog')
 
 export const CheckpointsDefaultGradeInfo = () => {
   return (
     <Alert variant="info">
       {I18n.t(
-        'Leaving any score field blank will result in overwriting graded submissions to be ungraded or incomplete.'
+        'Leaving any score field blank will result in overwriting graded submissions to be ungraded or incomplete.',
       )}
     </Alert>
   )

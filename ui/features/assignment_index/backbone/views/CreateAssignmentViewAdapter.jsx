@@ -21,35 +21,32 @@ import CreateEditAssignmentModal from '@canvas/assignments/react/CreateEditAssig
 import Assignment from '@canvas/assignments/backbone/models/Assignment'
 import {encodeQueryString} from '@instructure/query-string-encoding'
 import axios from '@canvas/axios'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {showFlashAlert} from '@canvas/alerts/react/FlashAlert'
 
-const I18n = useI18nScope('CreateEditAssignmentModalAdapter')
+const I18n = createI18nScope('CreateEditAssignmentModalAdapter')
 
 const CreateAssignmentViewAdapter = ({assignment, assignmentGroup, closeHandler}) => {
   const maxNameLength = ENV.MAX_NAME_LENGTH || 255
   const minNameLength = ENV.MAX_NAME_LENGTH_REQUIRED_FOR_ACCOUNT || 1
 
   // Different Assignment Types
-  const ONLINE_QUIZ = "online_quiz"
-  const DISCUSSION_TOPIC = "discussion_topic"
+  const ONLINE_QUIZ = 'online_quiz'
+  const DISCUSSION_TOPIC = 'discussion_topic'
 
-  const moreOptionsHandler = (data, isNewAssignment) => {
+  const moreOptionsHandler = (data, isNewAssignment = false) => {
     const assignmentModel = assignment || generateNewAssignment(assignmentGroup)
 
     const mappedData = {
-      submission_type: [data.type],
       name: data.name,
       due_at: data.dueAt,
       points_possible: data.points,
       post_to_sis: data.syncToSIS,
     }
 
-    assignmentModel.submissionTypes(mappedData.submission_type)
-
     // Redirect to appropriate "edit" page
     if (data.type === ONLINE_QUIZ) {
-      launchQuizEdit(newQuizUrl(), mappedData)
+      isNewAssignment ? launchQuizNew(mappedData) : launchQuizEdit(assignmentModel, mappedData)
     } else if (data.type === DISCUSSION_TOPIC) {
       launchDiscussionTopicEdit(assignmentModel, assignmentGroup, mappedData, isNewAssignment)
     } else {
@@ -57,13 +54,12 @@ const CreateAssignmentViewAdapter = ({assignment, assignmentGroup, closeHandler}
     }
   }
 
-  const saveHandler = async (data) => {
+  const saveHandler = async (data, isNewAssignment = false) => {
     const assignmentModel = assignment || generateNewAssignment(assignmentGroup)
 
     let mappedData = {
-      submission_type: [data.type],
       name: data.name,
-      due_at: (data.dueAt !== '') ? data.dueAt : null,
+      due_at: data.dueAt !== '' ? data.dueAt : null,
       points_possible: data.points,
       post_to_sis: data.syncToSIS,
     }
@@ -71,16 +67,28 @@ const CreateAssignmentViewAdapter = ({assignment, assignmentGroup, closeHandler}
     if (data.publish) {
       mappedData = {
         published: true,
-        ...mappedData
+        ...mappedData,
       }
     }
 
-    assignmentModel.submissionTypes(mappedData.submission_type)
+    // If this is a new assignment, we need to add the appropriate submission type
+    if (isNewAssignment) {
+      mappedData.submission_types = getSubmissionType(data)
+    }
+
+    if (ENV.FLAGS.new_quizzes_by_default && data.type === 'online_quiz') {
+      mappedData.quiz_lti = 1
+    }
 
     // Save the assignment model (Should fire backend call)
     try {
       const saveOpts = {wait: true}
       await assignmentModel.save(mappedData, saveOpts)
+      ENV.PERMISSIONS.by_assignment_id &&
+        (ENV.PERMISSIONS.by_assignment_id[assignmentModel.get('id')] = {
+          update: ENV.PERMISSIONS.manage_assignments_edit,
+          delete: ENV.PERMISSIONS.manage_assignments_delete,
+        })
       assignmentGroup?.get('assignments').add(assignmentModel)
     } catch (e) {
       showFlashAlert({
@@ -91,8 +99,8 @@ const CreateAssignmentViewAdapter = ({assignment, assignmentGroup, closeHandler}
   }
 
   const adaptAssignment = () => ({
-    assignmentGroupId: assignmentGroup ? assignmentGroup.id : null,
     type: assignment.assignmentType(),
+    submissionTypes: assignment.submissionTypes(),
     name: assignment.name(),
     dueAt: assignment.dueAt(),
     lockAt: assignment.lockAt(),
@@ -140,16 +148,25 @@ const courseUrl = () => {
   return ENV.current_context.url
 }
 
-const redirectTo = (url) => {
+const redirectTo = url => {
   window.location.href = url
 }
 
-const launchQuizEdit = async (url, data) => {
-  const response = await axios.post(url, data)
-  redirectTo(response.data.url)
+const launchQuizNew = async data => {
+  if (ENV.FLAGS.new_quizzes_by_default) {
+    redirectTo(newAssignmentUrl() + '?quiz_lti&' + encodeQueryString(data))
+  } else {
+    const response = await axios.post(newQuizUrl(), data)
+    redirectTo(response.data.url)
+  }
 }
 
-const generateNewAssignment = (assignmentGroup) => {
+const launchQuizEdit = (assignment, data) => {
+  const url = assignment.htmlEditUrl()
+  redirectTo(url + '?' + encodeQueryString(data))
+}
+
+const generateNewAssignment = assignmentGroup => {
   const assignment = new Assignment()
   if (assignmentGroup) {
     assignment.assignmentGroupId(assignmentGroup.id)
@@ -169,7 +186,7 @@ const launchAssignmentEdit = (assignment, assignmentGroup, data, isNewAssignment
   } else {
     url = assignment.htmlEditUrl()
   }
-  redirectTo(url + "?" + encodeQueryString(data))
+  redirectTo(url + '?' + encodeQueryString(data))
 }
 
 const launchDiscussionTopicEdit = (assignment, assignmentGroup, data, isNewAssignment) => {
@@ -184,7 +201,17 @@ const launchDiscussionTopicEdit = (assignment, assignmentGroup, data, isNewAssig
     redirectTo(url + encodeQueryString(data))
   } else {
     url = assignment.htmlEditUrl()
-    redirectTo(url + "?" + encodeQueryString(data))
+    redirectTo(url + '?' + encodeQueryString(data))
+  }
+}
+
+const getSubmissionType = formData => {
+  if (['discussion_topic', 'external_tool', 'not_graded'].includes(formData.type)) {
+    return [formData.type]
+  } else if (formData.type === 'online_quiz') {
+    return [ENV.FLAGS.new_quizzes_by_default ? 'external_tool' : formData.type]
+  } else {
+    return ['online_text_entry']
   }
 }
 
@@ -194,21 +221,24 @@ const addFrozenField = (frozenFields, field) => {
   }
 }
 
-const getFrozenFields = (assignment) => {
+const getFrozenFields = assignment => {
   const assignmentJSON = assignment.toView()
-  let fields = []
+  const fields = []
 
   // Check if assignment is a child of blueprint course
-  if (assignmentJSON.is_master_course_child_content) {
+  if (assignmentJSON.is_master_course_child_content && assignmentJSON.master_course_restrictions) {
     const restrictions = assignmentJSON.master_course_restrictions
-    Object.keys(restrictions).forEach((r) => {
-      switch(r) {
-        case "content":
+    Object.keys(restrictions).forEach(r => {
+      switch (r) {
+        case 'content':
           if (restrictions[r]) addFrozenField(fields, 'name')
-        case "points":
+          break
+        case 'points':
           if (restrictions[r]) addFrozenField(fields, 'points')
-        case "due_dates":
+          break
+        case 'due_dates':
           if (restrictions[r]) addFrozenField(fields, 'due_at')
+          break
       }
     })
   }

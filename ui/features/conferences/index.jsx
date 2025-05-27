@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
 import {clone} from 'lodash'
 import Backbone from '@canvas/backbone'
@@ -42,7 +42,7 @@ import {VideoConferenceModal} from './react/components/VideoConferenceModal/Vide
 import getCookie from '@instructure/get-cookie'
 import {initializeTopNavPortalWithDefaults} from '@canvas/top-navigation/react/TopNavPortalWithDefaults'
 
-const I18n = useI18nScope('conferences')
+const I18n = createI18nScope('conferences')
 
 if (ENV.can_create_conferences) {
   if (ENV.render_alternatives) {
@@ -98,9 +98,9 @@ const ConferencesRouter = Backbone.Router.extend({
     $.screenReaderFlashMessage(
       I18n.t(
         'notifications.inaccessible',
-        'Warning: This page contains third-party content which is not accessible to screen readers.'
+        'Warning: This page contains third-party content which is not accessible to screen readers.',
       ),
-      20000
+      20000,
     )
 
     const handleBreadCrumbSetter = ({getCrumbs, setCrumbs}) => {
@@ -115,8 +115,6 @@ const ConferencesRouter = Backbone.Router.extend({
     })
 
     $('.new-conference-btn').on('click', () => this.create())
-
-
   },
 
   index() {
@@ -160,6 +158,7 @@ const ConferencesRouter = Backbone.Router.extend({
           }) || []
 
         const menuData = availableAttendeesList.concat(availableSectionsList, availableGroupsList)
+
         ReactDOM.render(
           <VideoConferenceModal
             open={true}
@@ -167,6 +166,7 @@ const ConferencesRouter = Backbone.Router.extend({
             availableAttendeesList={menuData}
             onDismiss={() => {
               window.location.hash = ''
+
               ReactDOM.render(<span />, document.getElementById('react-conference-modal-container'))
             }}
             onSubmit={async (e, data) => {
@@ -174,8 +174,8 @@ const ConferencesRouter = Backbone.Router.extend({
                 attributes.context_type === 'Course'
                   ? 'courses'
                   : attributes.context_type === 'Group'
-                  ? 'groups'
-                  : null
+                    ? 'groups'
+                    : null
               const contextId = attributes.context_id
               const inviteAll = data.invitationOptions.includes('invite_all') ? 1 : 0
               const noTimeLimit = data.options.includes('no_time_limit') ? 1 : 0
@@ -224,7 +224,6 @@ const ConferencesRouter = Backbone.Router.extend({
                   }
                 })
               }
-
               ;[
                 'share_webcam',
                 'share_microphone',
@@ -262,7 +261,7 @@ const ConferencesRouter = Backbone.Router.extend({
               }
             }}
           />,
-          document.getElementById('react-conference-modal-container')
+          document.getElementById('react-conference-modal-container'),
         )
       } else {
         this.editView.show(conference)
@@ -330,7 +329,6 @@ const ConferencesRouter = Backbone.Router.extend({
       if (attributes.has_calendar_event && attributes.start_at && attributes.end_at) {
         options.push('add_to_calendar')
       }
-
       ;[
         'share_webcam',
         'share_other_webcams',
@@ -363,6 +361,7 @@ const ConferencesRouter = Backbone.Router.extend({
           endCalendarDate={attributes.end_at}
           onDismiss={() => {
             window.location.hash = ''
+
             ReactDOM.render(<span />, document.getElementById('react-conference-modal-container'))
           }}
           onSubmit={async (e, data) => {
@@ -370,8 +369,8 @@ const ConferencesRouter = Backbone.Router.extend({
               attributes.context_type === 'Course'
                 ? 'courses'
                 : attributes.context_type === 'Group'
-                ? 'groups'
-                : null
+                  ? 'groups'
+                  : null
             const contextId = attributes.context_id
             const conferenceId = conference.id
             const inviteAll = data.invitationOptions.includes('invite_all') ? 1 : 0
@@ -421,7 +420,6 @@ const ConferencesRouter = Backbone.Router.extend({
                 }
               })
             }
-
             ;[
               'share_webcam',
               'share_other_webcams',
@@ -430,7 +428,7 @@ const ConferencesRouter = Backbone.Router.extend({
               'send_private_chat',
             ].forEach(option => {
               payload[`web_conference[user_settings][${option}]`] = data.attendeesOptions.includes(
-                option
+                option,
               )
                 ? 1
                 : 0
@@ -452,7 +450,7 @@ const ConferencesRouter = Backbone.Router.extend({
 
             const response = await fetch(
               `/${context}/${contextId}/conferences/${conferenceId}`,
-              requestOptions
+              requestOptions,
             )
 
             if (response.status === 200) {
@@ -465,7 +463,7 @@ const ConferencesRouter = Backbone.Router.extend({
             }
           }}
         />,
-        document.getElementById('react-conference-modal-container')
+        document.getElementById('react-conference-modal-container'),
       )
     } else {
       this.editConferenceId = conference.get('id')

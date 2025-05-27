@@ -17,16 +17,16 @@
  */
 
 import React from 'react'
-import {useQuery} from '@apollo/react-hooks'
+import {useQuery} from '@apollo/client'
 import {Spinner} from '@instructure/ui-spinner'
 import {View} from '@instructure/ui-view'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {TEACHER_QUERY} from '@canvas/assignments/graphql/teacher/Queries'
 import GenericErrorPage from '@canvas/generic-error-page'
 import TeacherSavedView from './TeacherSavedView'
 import errorShipUrl from '@canvas/images/ErrorShip.svg'
 
-const I18n = useI18nScope('assignments_2')
+const I18n = createI18nScope('assignments_2')
 
 interface TeacherQueryProps {
   assignmentLid: string
@@ -37,6 +37,7 @@ const TeacherQuery: React.FC<TeacherQueryProps> = ({assignmentLid}) => {
     variables: {assignmentLid},
   })
 
+  // @ts-expect-error
   const ErrorPage = ({error}) => {
     return (
       <GenericErrorPage
@@ -57,6 +58,7 @@ const TeacherQuery: React.FC<TeacherQueryProps> = ({assignmentLid}) => {
   }
   if (error) return <ErrorPage error={error} />
 
+  // @ts-expect-error
   return <TeacherSavedView assignment={data.assignment} />
 }
 

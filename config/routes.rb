@@ -151,7 +151,11 @@ CanvasRails::Application.routes.draw do
   end
 
   concern :discussions do
-    resources :discussion_topics, only: %i[index new show edit destroy]
+    resources :discussion_topics, only: %i[index new show edit destroy] do
+      member do
+        get "insights" => "discussion_topics#insights", :as => :insights
+      end
+    end
     get "discussion_topics/:id/*extras" => "discussion_topics#show", :as => :map, :extras => /.+/
     resources :discussion_entries
   end
@@ -166,6 +170,7 @@ CanvasRails::Application.routes.draw do
     get "wiki/:id" => "wiki_pages#show_redirect", :id => %r{[^/]+}
     get "wiki/:id/revisions" => "wiki_pages#revisions_redirect", :id => %r{[^/]+}
     get "wiki/:id/revisions/:revision_id" => "wiki_pages#revisions_redirect", :id => %r{[^/]+}
+    get "new_page" => "wiki_pages#new", :as => :new_page
   end
 
   concern :conferences do
@@ -319,8 +324,8 @@ CanvasRails::Application.routes.draw do
       resource :rubric_association, path: :rubric do
         resources :rubric_assessments, path: :assessments do
           collection do
+            resources :rubric_assessment_imports, path: :imports, only: %i[create show], defaults: { format: :json }
             get :export
-            post :import
           end
         end
       end
@@ -437,6 +442,7 @@ CanvasRails::Application.routes.draw do
     get "lti_collaborations/*all" => "collaborations#lti_index"
     resources :gradebook_uploads
     resources :rubrics
+    post "rubrics/llm_criteria", controller: :rubrics, action: :llm_criteria
     resources :rubric_associations do
       post "remind/:assessment_request_id" => "rubric_assessments#remind", :as => :remind_assessee
       resources :rubric_assessments, path: "assessments"
@@ -464,6 +470,8 @@ CanvasRails::Application.routes.draw do
       post "items" => "context_modules#add_item", :as => :add_item
       post "reorder" => "context_modules#reorder_items", :as => :reorder
       post "collapse" => "context_modules#toggle_collapse", :as => :toggle_collapse
+      get "items_html" => "context_modules#items_html", :as => :context_modules_items_html
+      get "module_html" => "context_modules#module_html", :as => :context_modules_module_html
       get "prerequisites/:code" => "context_modules#content_tag_prerequisites_needing_finishing", :as => :prerequisites_needing_finishing
       get "items/last" => "context_modules#module_redirect", :as => :last_redirect, :last => 1
       get "items/first" => "context_modules#module_redirect", :as => :first_redirect, :first => 1
@@ -482,6 +490,7 @@ CanvasRails::Application.routes.draw do
     post "start_offline_web_export" => "courses#start_offline_web_export"
     get "start_offline_web_export" => "courses#start_offline_web_export"
     get "modules/items/assignment_info" => "context_modules#content_tag_assignment_data", :as => :context_modules_assignment_info
+    get "modules/items/estimated_duration_info" => "context_modules#content_tag_estimated_duration_data", :as => :context_modules_estimated_duration_info
     get "modules/items/master_course_info" => "context_modules#content_tag_master_course_data", :as => :context_modules_master_course_info
     get "modules/items/:id" => "context_modules#item_redirect", :as => :context_modules_item_redirect
     get "modules/items/:id/edit_mastery_paths" => "context_modules#item_redirect_mastery_paths"
@@ -501,6 +510,7 @@ CanvasRails::Application.routes.draw do
 
     post "reset" => "courses#reset_content"
     resources :alerts
+    get "student_view(/:redirect_to_referer)" => "courses#student_view"
     post "student_view(/:redirect_to_referer)" => "courses#student_view", :as => :student_view
     delete "student_view" => "courses#leave_student_view"
     delete "test_student" => "courses#reset_test_student"
@@ -516,6 +526,13 @@ CanvasRails::Application.routes.draw do
     put "grading_schemes/:id" => "grading_schemes_json#update"
     get "grading_schemes/default" => "grading_schemes_json#show_default_grading_scheme"
     get "grading_schemes/:id" => "grading_schemes_json#show"
+
+    get "canvas_career_validation" => "horizon#validate_course"
+    post "canvas_career_conversion" => "horizon#convert_course"
+    post "canvas_career_reversion" => "horizon#revert_course"
+    get "accessibility", controller: :accessibility, action: :show
+    get "accessibility/issues", controller: :accessibility, action: :issues
+    post "accessibility/update", controller: :accessibility, action: :update
   end
   get "quiz_statistics/:quiz_statistics_id/files/:file_id/download" => "files#show", :as => :quiz_statistics_download, :download => "1"
 
@@ -544,6 +561,8 @@ CanvasRails::Application.routes.draw do
   get "external_content/success/:service/:id" => "external_content#success", :as => :external_content_update
   get "external_content/retrieve/oembed" => "external_content#oembed_retrieve", :as => :external_content_oembed_retrieve
   get "external_content/cancel/:service" => "external_content#cancel", :as => :external_content_cancel
+
+  get "deep_linking_cancel", controller: "lti/ims/deep_linking", action: :deep_linking_cancel, as: "deep_linking_cancel"
 
   resources :block_editors, only: :show
 
@@ -594,7 +613,9 @@ CanvasRails::Application.routes.draw do
   resources :eportfolios, except: :index do
     post :reorder_categories
     post ":eportfolio_category_id/reorder_entries" => "eportfolios#reorder_entries", :as => :reorder_entries
-    resources :categories, controller: :eportfolio_categories
+    resources :categories, controller: :eportfolio_categories do
+      get "pages" => "eportfolio_categories#pages", :as => :pages
+    end
     resources :entries, controller: :eportfolio_entries do
       resources :page_comments, path: :comments, only: [:create, :destroy]
       get "files/:attachment_id" => "eportfolio_entries#attachment", :as => :view_file
@@ -602,6 +623,7 @@ CanvasRails::Application.routes.draw do
     end
 
     get :export, as: :export_portfolio
+    get :recent_submissions, as: :recent_submissions
     get ":category_name" => "eportfolio_categories#show", :as => :named_category
     get ":category_name/:entry_name" => "eportfolio_entries#show", :as => :named_category_entry
   end
@@ -840,6 +862,12 @@ CanvasRails::Application.routes.draw do
   get "login/canvas" => "login/canvas#new", :as => :canvas_login
   get "login/canvas/forgot-password", to: "login/canvas#new"
   post "login/canvas" => "login/canvas#create"
+  scope "login/canvas/register", as: "register" do
+    get "/", to: "login/canvas#new", as: :landing
+    get "/student", to: "login/canvas#new", as: :student
+    get "/parent", to: "login/canvas#new", as: :parent
+    get "/teacher", to: "login/canvas#new", as: :teacher
+  end
 
   get "login/email_verify" => "login/email_verify#show", :as => :login_email_verify_show
   post "login/email_verify" => "login/email_verify#verify", :as => :login_email_verify
@@ -870,7 +898,7 @@ CanvasRails::Application.routes.draw do
   get "login/oauth/callback" => "login/oauth#create", :as => :oauth_login_callback
   # the callback URL for all OAuth2 based SSO
   get "login/oauth2/callback" => "login/oauth2#create", :as => :oauth2_login_callback
-  # the callback URL for Sign in with Apple
+  # the callback URL for Apple
   post "login/oauth2/callback" => "login/oauth2#create"
   # ActionController::TestCase can't deal with aliased controllers when finding
   # routes, so we let this route exist only for tests
@@ -892,7 +920,6 @@ CanvasRails::Application.routes.draw do
   get "login/openid_connect" => "login/openid_connect#new"
   get "login/openid_connect/:id" => "login/openid_connect#new", :as => :openid_connect_login
   post "login/openid_connect/logout" => "login/openid_connect#destroy", :as => :openid_connect_logout
-  get "login/twitter" => "login/twitter#new", :as => :twitter_login
 
   get "login/otp" => "login/otp#new", :as => :otp_login
   post "login/otp/sms" => "login/otp#send_via_sms", :as => :send_otp_via_sms
@@ -934,6 +961,7 @@ CanvasRails::Application.routes.draw do
     resources :question_banks, only: :index
     get :admin_merge
     get :admin_split
+    get :user_for_merge
     post :merge
     get :grades
     get :manageable_courses
@@ -1084,6 +1112,13 @@ CanvasRails::Application.routes.draw do
   get "terms_of_use" => "legal_information#terms_of_use", :as => "terms_of_use_redirect"
   get "privacy_policy" => "legal_information#privacy_policy", :as => "privacy_policy_redirect"
 
+  scope(controller: :career) do
+    get "career/courses/:course_id", action: :catch_all, as: :course_career
+    get "career/courses/:course_id/*path", action: :catch_all, as: :course_career_path
+    get "career/accounts/:account_id", action: :catch_all, as: :account_career
+    get "career/accounts/:account_id/*path", action: :catch_all, as: :account_career_path
+  end
+
   scope(controller: :smart_search) do
     get "courses/:course_id/search", action: :show, as: :course_search
     # TODO: Add back global search once we have a good way to handle it
@@ -1093,7 +1128,17 @@ CanvasRails::Application.routes.draw do
   scope(controller: :translation) do
     post "courses/:course_id/translate", action: :translate, as: :translate
     post "courses/:course_id/translate/paragraph", action: :translate_paragraph, as: :translate_paragraph
-    post "translate/message", action: :translate_message, as: :translate_message
+  end
+
+  scope(controller: "lti/asset_processor_launch") do
+    get "asset_processors/:asset_processor_id/launch", action: :launch_settings, as: :asset_processor_settings_launch
+    get "asset_processors/:asset_processor_id/reports/:report_id/launch", action: :launch_report, as: :asset_report_launch
+  end
+
+  scope(controller: "lti/eula_launch") do
+    %w[course account].each do |context|
+      get "#{context}s/:#{context}_id/external_tools/:context_external_tool_id/eula_launch", action: :launch_eula, as: "#{context}_tool_eula_launch"
+    end
   end
 
   ### API routes ###
@@ -1465,9 +1510,14 @@ CanvasRails::Application.routes.draw do
         delete "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id", controller: :discussion_topics, action: :destroy
 
         get "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/view", action: :view, as: "#{context}_discussion_topic_view"
-        get "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/summaries", action: :summary, as: "#{context}_discussion_topic_summary"
+        get "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/summaries", action: :find_summary, as: "#{context}_discussion_topic_summary"
+        post "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/summaries", action: :find_or_create_summary, as: "#{context}_discussion_topic_create_summary"
         put "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/summaries/disable", action: :disable_summary, as: "#{context}_discussion_topic_disable_summary"
         post "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/summaries/:summary_id/feedback", action: :summary_feedback, as: "#{context}_discussion_topic_summary_feedback"
+        get "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/insights", action: :insight, as: "#{context}_discussion_topic_insight"
+        post "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/insights", action: :insight_generation, as: "#{context}_discussion_topic_insight_generation"
+        get "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/insights/entries", action: :insight_entries, as: "#{context}_discussion_topic_insight_entries"
+        put "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/insights/entries/:entry_id", action: :insight_entry_update, as: "#{context}_discussion_topic_insight_entry_update"
         post "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/duplicate", action: :duplicate
         get "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/entry_list", action: :entry_list, as: "#{context}_discussion_topic_entry_list"
         post "#{context.pluralize}/:#{context}_id/discussion_topics/:topic_id/entries", action: :add_entry, as: "#{context}_discussion_add_entry"
@@ -1637,6 +1687,8 @@ CanvasRails::Application.routes.draw do
 
       put "users/:id/text_editor_preference", controller: "users", action: "set_text_editor_preference"
 
+      put "users/:id/files_ui_version_preference", controller: "users", action: "set_files_ui_version_preference"
+
       get "users/:id/new_user_tutorial_statuses", action: "get_new_user_tutorial_statuses"
       put "users/:id/new_user_tutorial_statuses/:page_name", action: "set_new_user_tutorial_status"
 
@@ -1674,11 +1726,17 @@ CanvasRails::Application.routes.draw do
         get "courses/:course_id/discussion_topics/:discussion_topic_id/date_details", action: :show, as: "course_discussion_topic_date_details"
         get "courses/:course_id/pages/:url_or_id/date_details", action: :show, as: "course_wiki_page_date_details"
         get "courses/:course_id/files/:attachment_id/date_details", action: :show, as: "course_attachment_date_details"
+
         put "courses/:course_id/assignments/:assignment_id/date_details", action: :update
         put "courses/:course_id/quizzes/:quiz_id/date_details", action: :update
         put "courses/:course_id/discussion_topics/:discussion_topic_id/date_details", action: :update
         put "courses/:course_id/pages/:url_or_id/date_details", action: :update
         put "courses/:course_id/files/:attachment_id/date_details", action: :update
+
+        put "courses/:course_id/assignments/:assignment_id/date_details/convert_tag_overrides", action: :convert_tag_overrides_to_adhoc_overrides
+        put "courses/:course_id/quizzes/:quiz_id/date_details/convert_tag_overrides", action: :convert_tag_overrides_to_adhoc_overrides
+        put "courses/:course_id/discussion_topics/:discussion_topic_id/date_details/convert_tag_overrides", action: :convert_tag_overrides_to_adhoc_overrides
+        put "courses/:course_id/pages/:url_or_id/date_details/convert_tag_overrides", action: :convert_tag_overrides_to_adhoc_overrides
       end
 
       scope(controller: :login) do
@@ -1766,6 +1824,12 @@ CanvasRails::Application.routes.draw do
       put "accounts/:account_id/reports/:report/:id/abort", action: :abort
     end
 
+    scope(controller: :course_reports) do
+      get "courses/:course_id/reports/:report_type", action: :last
+      get "courses/:course_id/reports/:report_type/:id", action: :show
+      post "courses/:course_id/reports/:report_type", action: :create
+    end
+
     scope(controller: :admins) do
       post "accounts/:account_id/admins", action: :create
       delete "accounts/:account_id/admins/:user_id", action: :destroy
@@ -1782,6 +1846,7 @@ CanvasRails::Application.routes.draw do
       post "accounts/:account_id/authentication_providers", action: :create, as: "account_create_ap"
       put "accounts/:account_id/authentication_providers/:id", action: :update, as: "account_update_ap"
       delete "accounts/:account_id/authentication_providers/:id", action: :destroy, as: "account_delete_ap"
+      put "accounts/:account_id/authentication_providers/:id/restore", action: :restore, as: "account_restore_ap"
     end
 
     get "users/:user_id/page_views", controller: :page_views, action: :index, as: "user_page_views"
@@ -1924,12 +1989,31 @@ CanvasRails::Application.routes.draw do
 
     scope(controller: "lti/registrations") do
       get "accounts/:account_id/lti_registrations", action: :list
+      post "accounts/:account_id/lti_registrations", action: :create
       post "accounts/:account_id/lti_registrations/configuration/validate", action: :validate_lti_configuration
       delete "accounts/:account_id/lti_registrations/:id", action: :destroy
       get "accounts/:account_id/lti_registrations/:id", action: :show
       get "accounts/:account_id/lti_registration_by_client_id/:client_id", action: :show_by_client_id
       put "accounts/:account_id/lti_registrations/:id", action: :update
+      put "accounts/:account_id/lti_registrations/:id/reset", action: :reset
       post "accounts/:account_id/lti_registrations/:id/bind", action: :bind
+    end
+
+    scope(controller: "lti/deployments") do
+      get "accounts/:account_id/lti_registrations/:registration_id/deployments", action: :list, as: :list_deployments
+      post "accounts/:account_id/lti_registrations/:registration_id/deployments", action: :create
+      delete "accounts/:account_id/lti_registrations/:registration_id/deployments/:id", action: :destroy
+      get "accounts/:account_id/lti_registrations/:registration_id/deployments/:id", action: :show
+      get "accounts/:account_id/lti_registrations/:registration_id/deployments/:id/controls", action: :list_controls, as: :list_deployment_controls
+    end
+
+    scope(controller: "lti/context_controls") do
+      get "lti_registrations/:registration_id/controls", action: :index
+      post "lti_registrations/:registration_id/controls", action: :create
+      post "lti_registrations/:registration_id/controls/bulk", action: :create_many
+      get "lti_registrations/:registration_id/controls/:id", action: :show
+      put "lti_registrations/:registration_id/controls/:id", action: :update
+      delete "lti_registrations/:registration_id/controls/:id", action: :delete
     end
 
     scope(controller: "lti/resource_links") do
@@ -2075,6 +2159,7 @@ CanvasRails::Application.routes.draw do
     scope(controller: :module_assignment_overrides) do
       get "courses/:course_id/modules/:context_module_id/assignment_overrides", action: :index, as: "module_assignment_overrides_index"
       put "courses/:course_id/modules/:context_module_id/assignment_overrides", action: :bulk_update
+      put "courses/:course_id/modules/:context_module_id/assignment_overrides/convert_tag_overrides", action: :convert_tag_overrides_to_adhoc_overrides
     end
 
     scope(controller: "quizzes/quiz_assignment_overrides") do
@@ -2300,6 +2385,7 @@ CanvasRails::Application.routes.draw do
       get "group_categories/:group_category_id/users", action: :users, as: "group_category_users"
       get "group_categories/:group_category_id/export", action: :export, as: "group_category_export", defaults: { format: :csv }
       post "group_categories/:group_category_id/assign_unassigned_members", action: "assign_unassigned_members", as: "group_category_assign_unassigned_members"
+      post "courses/:course_id/group_categories/bulk_manage_differentiation_tag", action: :bulk_manage_differentiation_tag
     end
 
     scope(controller: :progress) do
@@ -2645,6 +2731,7 @@ CanvasRails::Application.routes.draw do
       delete "courses/:course_id/course_pacing/:id", action: :destroy
       post "courses/:course_id/course_pacing/:id/publish", action: :publish
       post "courses/:course_id/course_pacing/compress_dates", action: :compress_dates
+      post "courses/:course_id/course_pacing/bulk_create_enrollment_paces", action: :bulk_create_enrollment_paces
     end
 
     scope(controller: :blackout_dates) do
@@ -2685,6 +2772,10 @@ CanvasRails::Application.routes.draw do
       post "courses/:course_id/student_enrollments/:student_enrollment_id/paces", action: :create, as: :new_student_enrollment_pace
       patch "courses/:course_id/student_enrollments/:student_enrollment_id/pace", action: :update, as: :patch_student_enrollment_pace
       delete "courses/:course_id/student_enrollments/:student_enrollment_id/pace", action: :delete, as: :delete_student_enrollment_pace
+    end
+
+    scope(controller: "course_pacing/bulk_student_enrollment_paces_api") do
+      get "courses/:course_id/bulk_student_enrollments/student_bulk_pace_edit_view", action: :student_bulk_pace_edit_view, as: :student_bulk_pace_edit_view
     end
 
     scope(controller: "course_pacing/pace_contexts_api") do
@@ -2768,6 +2859,10 @@ CanvasRails::Application.routes.draw do
   get "post_message_forwarding", controller: "lti/platform_storage", action: :post_message_forwarding, as: :lti_post_message_forwarding
 
   get "lti/tool_default_icon" => "lti/tool_default_icon#show"
+
+  scope(controller: :ams) do
+    get "ams(/*path)", action: :show, as: :ams
+  end
 
   ApiRouteSet.draw(self, "/api/lti/v1") do
     post "tools/:tool_id/grade_passback", controller: :lti_api, action: :grade_passback, as: "lti_grade_passback_api"
@@ -2889,10 +2984,29 @@ CanvasRails::Application.routes.draw do
       get "courses/:course_id/progress/:id", action: :show, as: :lti_progress_show
     end
 
+    # Asset Service & Asset Report Service (LTI Asset Processor Specs)
+    scope(controller: "lti/ims/asset_processor") do
+      post "asset_processors/:asset_processor_id/reports", action: :create_report, as: :lti_asset_processor_create_report
+      get "asset_processors/:asset_processor_id/assets/:asset_id", action: :lti_asset_show, as: :lti_asset_processor_asset_show
+    end
+
+    # 1Edtech (IMS) LTI Asset Processor Eula service
+    scope(controller: "lti/ims/asset_processor_eula") do
+      put "asset_processor_eulas/:context_external_tool_id/deployment", action: :update_tool_eula, as: :update_tool_eula
+      delete "asset_processor_eulas/:context_external_tool_id/user", action: :delete_acceptances, as: :delete_tool_eula_acceptances
+      post "asset_processor_eulas/:context_external_tool_id/user", action: :create_acceptance, as: :create_user_eula_acceptance
+    end
+
+    # Asset Processor internal endpoints
+    scope(controller: "lti/asset_processor") do
+      post "asset_processors/:asset_processor_id/notices/:student_id/attempts/:attempt", action: :resubmit_notice, as: :lti_asset_processor_notice_resubmit
+    end
+
     # Dynamic Registration Service
     scope(controller: "lti/ims/dynamic_registration") do
       get "accounts/:account_id/registration_token", action: :registration_token
-      get "accounts/:account_id/registrations/uuid/:registration_uuid", action: :registration_by_uuid
+      get "accounts/:account_id/registrations/uuid/:registration_uuid", action: :ims_registration_by_uuid
+      get "accounts/:account_id/lti_registrations/uuid/:registration_uuid", action: :lti_registration_by_uuid
       get "accounts/:account_id/registrations/:registration_id", action: :show
       put "accounts/:account_id/registrations/:registration_id/overlay", action: :update_registration_overlay
       get "accounts/:account_id/dr_iframe", action: :dr_iframe

@@ -143,20 +143,8 @@ RSpec.shared_context "DiscussionTypeContext" do
       }
     ]
   end
-  let(:manage_content_permission) do
-    [
-      {
-        value: "manageContent",
-        allowed: ->(user) { discussion.context.grants_right?(user, :manage_content) }
-      }
-    ]
-  end
   let(:permissions) do
-    if Account.default.feature_enabled?(:granular_permissions_manage_course_content)
-      default_permissions.concat(manage_course_content_permissions)
-    else
-      default_permissions.concat(manage_content_permission)
-    end
+    default_permissions.concat(manage_course_content_permissions)
   end
 end
 
@@ -165,6 +153,25 @@ RSpec.shared_examples "DiscussionType" do
 
   it "works" do
     expect(discussion_type.resolve("_id")).to eq discussion.id.to_s
+  end
+
+  context "when file_association_access is enabled" do
+    it "tags attachment urls with asset location" do
+      attachment = attachment_model(context: @course)
+      attachment.root_account.enable_feature!(:file_association_access)
+      discussion_topic = DiscussionTopic.create!(title: "Welcome whoever you are",
+                                                 message: "<img src='/courses/#{@course.id}/files/#{attachment.id}'>",
+                                                 anonymous_state: "partial_anonymity",
+                                                 context: @course,
+                                                 user: @teacher,
+                                                 editor: @teacher,
+                                                 attachment:,
+                                                 is_anonymous_author: true)
+      discussion_type = GraphQLTypeTester.new(discussion_topic, current_user: @teacher, domain_root_account: attachment.root_account)
+
+      result = discussion_type.resolve("message", request: ActionDispatch::TestRequest.create)
+      expect(result).to include("location=#{discussion_topic.asset_string}")
+    end
   end
 
   it "returns if the current user requires an initial post" do
@@ -215,6 +222,11 @@ RSpec.shared_examples "DiscussionType" do
     expect(discussion_type.resolve("lockAt")).to eq discussion.lock_at
     expect(discussion_type.resolve("userCount")).to eq discussion.course.users.count
     expect(discussion_type.resolve("replyToEntryRequiredCount")).to eq discussion.reply_to_entry_required_count
+
+    expect(discussion_type.resolve("sortOrder")).to eq discussion.sort_order
+    expect(discussion_type.resolve("sortOrderLocked")).to eq discussion.sort_order_locked
+    expect(discussion_type.resolve("expanded")).to eq discussion.expanded
+    expect(discussion_type.resolve("expandedLocked")).to eq discussion.expanded_locked
   end
 
   it "orders root_entries by their created_at" do
@@ -223,10 +235,14 @@ RSpec.shared_examples "DiscussionType" do
     de3 = discussion.discussion_entries.create!(message: "root entry", user: @teacher)
     # adding a discussion entry should NOT impact sort order of root entries
     discussion.discussion_entries.create!(message: "sub entry", user: @teacher, parent_id: de2.id)
-    expect(discussion_type.resolve("discussionEntriesConnection(sortOrder: asc, rootEntries: true) { nodes { _id } }")).to eq [de.id, de2.id, de3.id].map(&:to_s)
-    expect(discussion_type.resolve("discussionEntriesConnection(sortOrder: desc, rootEntries: true) { nodes { _id } }")).to eq [de3.id, de2.id, de.id].map(&:to_s)
+    discussion.update!(sort_order: "asc", sort_order_locked: true)
+    Account.site_admin.enable_feature!(:discussion_default_sort)
+    expect(discussion_type.resolve("discussionEntriesConnection(rootEntries: true) { nodes { _id } }")).to eq [de.id, de2.id, de3.id].map(&:to_s)
+    discussion.update!(sort_order: "desc")
+    expect(discussion_type.resolve("discussionEntriesConnection(rootEntries: true) { nodes { _id } }")).to eq [de3.id, de2.id, de.id].map(&:to_s)
     discussion.discussion_entries.create!(message: "sub entry", user: @teacher, parent_id: de3.id)
-    expect(discussion_type.resolve("discussionEntriesConnection(sortOrder: desc,rootEntries: true) { nodes { _id } }")).to eq [de3.id, de2.id, de.id].map(&:to_s)
+    expect(discussion_type.resolve("discussionEntriesConnection(rootEntries: true) { nodes { _id } }")).to eq [de3.id, de2.id, de.id].map(&:to_s)
+    Account.site_admin.disable_feature!(:discussion_default_sort)
   end
 
   it "loads discussion_entry_drafts" do
@@ -579,19 +595,6 @@ RSpec.shared_examples "DiscussionType" do
   end
 
   it "returns the current user permissions" do
-    Account.default.disable_feature!(:granular_permissions_manage_course_content)
-    student_in_course(active_all: true)
-    type_with_student = GraphQLTypeTester.new(discussion, current_user: @student)
-
-    permissions.each do |permission|
-      expect(discussion_type.resolve("permissions { #{permission[:value]} }")).to eq permission[:allowed].call(@teacher)
-
-      expect(type_with_student.resolve("permissions { #{permission[:value]} }")).to eq permission[:allowed].call(@student)
-    end
-  end
-
-  it "returns the current user permissions (granular permissions)" do
-    Account.default.enable_feature!(:granular_permissions_manage_course_content)
     student_in_course(active_all: true)
     type_with_student = GraphQLTypeTester.new(discussion, current_user: @student)
 
@@ -701,7 +704,7 @@ describe Types::DiscussionType do
         .with(@student, check_policies: true)
         .and_return({ can_view: true })
 
-      expect(GraphQLTypeTester.new(discussion, current_user: @student).resolve("message")).to eq discussion.message
+      expect(GraphQLTypeTester.new(discussion, current_user: @student, request: ActionDispatch::TestRequest.create).resolve("message")).to eq discussion.message
     end
 
     describe "delayed post" do
@@ -725,10 +728,10 @@ describe Types::DiscussionType do
 
         course_with_student(course: @course)
 
-        @delayed_type_with_student = GraphQLTypeTester.new(@delayed_discussion, current_user: @student)
-        @delayed_type_with_teacher = GraphQLTypeTester.new(@delayed_discussion, current_user: @teacher)
-        @nil_delayed_at_type_with_student = GraphQLTypeTester.new(discussion, current_user: @student)
-        @past_delayed_type_with_student = GraphQLTypeTester.new(@past_delayed_discussion, current_user: @student)
+        @delayed_type_with_student = GraphQLTypeTester.new(@delayed_discussion, current_user: @student, request: ActionDispatch::TestRequest.create)
+        @delayed_type_with_teacher = GraphQLTypeTester.new(@delayed_discussion, current_user: @teacher, request: ActionDispatch::TestRequest.create)
+        @nil_delayed_at_type_with_student = GraphQLTypeTester.new(discussion, current_user: @student, request: ActionDispatch::TestRequest.create)
+        @past_delayed_type_with_student = GraphQLTypeTester.new(@past_delayed_discussion, current_user: @student, request: ActionDispatch::TestRequest.create)
       end
 
       it "exposes title field" do
@@ -794,7 +797,9 @@ describe Types::DiscussionType do
 
     describe "mentionable users connection" do
       it "finds lists the user" do
-        expect(discussion_type.resolve("mentionableUsersConnection { nodes { _id } }")).to eq(discussion.context.participating_users_in_context.map { |u| u.id.to_s })
+        expected = discussion.context.participating_users_in_context
+        expected |= discussion.course.teachers
+        expect(discussion_type.resolve("mentionableUsersConnection { nodes { _id } }")).to eq(expected.map { |u| u.id.to_s })
       end
     end
 
@@ -832,7 +837,7 @@ describe Types::DiscussionType do
     end
 
     it "returns module lock information" do
-      type_with_student = GraphQLTypeTester.new(@topic, current_user: @student)
+      type_with_student = GraphQLTypeTester.new(@topic, current_user: @student, request: ActionDispatch::TestRequest.create)
       resolved_message = type_with_student.resolve("message")
 
       canvaslms_url = resolved_message.match(/x-canvaslms-trusted-url='([^']+)'/)
@@ -841,7 +846,7 @@ describe Types::DiscussionType do
     end
 
     it "does not return locked module information when you are the teacher" do
-      teacher_type = GraphQLTypeTester.new(@topic, current_user: @teacher)
+      teacher_type = GraphQLTypeTester.new(@topic, current_user: @teacher, request: ActionDispatch::TestRequest.create)
       expect(teacher_type.resolve("message")).to eq @topic.message
     end
   end
@@ -908,14 +913,6 @@ describe Types::DiscussionType do
   end
 
   context "selective release" do
-    before do
-      Account.site_admin.enable_feature! :selective_release_ui_api
-    end
-
-    after do
-      Account.site_admin.disable_feature! :selective_release_ui_api
-    end
-
     context "ungraded discussions" do
       before do
         course_factory(active_all: true)
@@ -932,14 +929,6 @@ describe Types::DiscussionType do
       end
 
       context "visibility" do
-        before do
-          Account.site_admin.enable_feature! :selective_release_backend
-        end
-
-        after do
-          Account.site_admin.disable_feature! :selective_release_backend
-        end
-
         it "is visible only to the assigned student" do
           override = @topic.assignment_overrides.create!
           override.assignment_override_students.create!(user: @student1)
@@ -974,14 +963,6 @@ describe Types::DiscussionType do
       end
 
       context "overrides" do
-        before do
-          Account.site_admin.enable_feature! :selective_release_ui_api
-        end
-
-        after do
-          Account.site_admin.disable_feature! :selective_release_ui_api
-        end
-
         it "returns data" do
           override = @topic.assignment_overrides.create!
           override.assignment_override_students.create!(user: @student1)
@@ -989,16 +970,88 @@ describe Types::DiscussionType do
           expect(@student1_type.resolve("ungradedDiscussionOverrides { nodes { _id } }")).to match([override.id.to_s])
           expect(@student1_type.resolve("ungradedDiscussionOverrides { nodes { title } }")).to match([override.title])
         end
+      end
+    end
+  end
 
-        it "does not return data if flag is off" do
-          Account.site_admin.disable_feature!(:selective_release_ui_api)
+  context "checkpoints" do
+    before do
+      course_with_teacher(active_all: true)
+    end
 
-          override = @topic.assignment_overrides.create!
-          override.assignment_override_students.create!(user: @student1)
+    it "returns the reply to entry required count" do
+      cdt = DiscussionTopic.create_graded_topic!(course: @course, title: "checkpointed discussion")
+      Checkpoints::DiscussionCheckpointCreatorService.call(
+        discussion_topic: cdt,
+        checkpoint_label: CheckpointLabels::REPLY_TO_TOPIC,
+        dates: [{ type: "everyone", due_at: Time.zone.now }],
+        points_possible: 6
+      )
+      Checkpoints::DiscussionCheckpointCreatorService.call(
+        discussion_topic: cdt,
+        checkpoint_label: CheckpointLabels::REPLY_TO_ENTRY,
+        dates: [{ type: "everyone", due_at: Time.zone.now }],
+        points_possible: 7,
+        replies_required: 3
+      )
 
-          expect(@student1_type.resolve("ungradedDiscussionOverrides { nodes { _id } }")).to be_nil
-          expect(@student1_type.resolve("ungradedDiscussionOverrides { nodes { title } }")).to be_nil
-        end
+      discussion_type = GraphQLTypeTester.new(cdt, current_user: @teacher)
+      replies_required = discussion_type.resolve("replyToEntryRequiredCount")
+      expect(replies_required).to eq cdt.reply_to_entry_required_count
+      expect(replies_required).to eq 3
+    end
+
+    it "returns the parent's reply to entry required count for child topics" do
+      cgdt = group_discussion_assignment
+      GroupCategory.last
+
+      Checkpoints::DiscussionCheckpointCreatorService.call(
+        discussion_topic: cgdt,
+        checkpoint_label: CheckpointLabels::REPLY_TO_TOPIC,
+        dates: [{ type: "everyone", due_at: Time.zone.now }],
+        points_possible: 6
+      )
+      Checkpoints::DiscussionCheckpointCreatorService.call(
+        discussion_topic: cgdt,
+        checkpoint_label: CheckpointLabels::REPLY_TO_ENTRY,
+        dates: [{ type: "everyone", due_at: Time.zone.now }],
+        points_possible: 7,
+        replies_required: 3
+      )
+
+      child_topic = cgdt.child_topics.first
+      discussion_type = GraphQLTypeTester.new(child_topic, current_user: @teacher)
+      replies_required = discussion_type.resolve("replyToEntryRequiredCount")
+      expect(replies_required).to eq child_topic.root_topic.reply_to_entry_required_count
+      expect(replies_required).to eq 3
+    end
+  end
+
+  context "admin groups" do
+    before do
+      @account = Account.create!
+      @group = Group.create!(name: "Admin Group", context: @account)
+      @group_student, @group_teacher = create_users(2, return_type: :record)
+      puts @group_teacher
+      puts "Hello"
+      group.bulk_add_users_to_group([@group_teacher, @group_student])
+
+      @group_topic = DiscussionTopic.create!(title: "Admin Group Topic", context: group, user: @group_teacher, editor: @group_teacher)
+      @group_topic.discussion_entries.create!(message: "Group Entry", user: @group_student)
+    end
+
+    it "returns the correct htmlUrl for" do
+      puts @group_topic
+      discussion_type = GraphQLTypeTester.new(
+        @group_topic,
+        current_user: @group_teacher,
+        request: ActionDispatch::TestRequest.create
+      )
+      expect(discussion_type.resolve("author { htmlUrl }")).to end_with("/groups/#{@group.id}/users/#{@group_teacher.id}")
+      entries_url = discussion_type.resolve("discussionEntriesConnection { nodes { author { htmlUrl }}}")
+
+      entries_url.each do |entry|
+        expect(entry).to end_with("/groups/#{@group.id}/users/#{@group_student.id}")
       end
     end
   end

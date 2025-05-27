@@ -22,9 +22,9 @@ import {Button} from '@instructure/ui-buttons'
 import {Popover} from '@instructure/ui-popover'
 import {IconPicker} from '../blocks/IconBlock'
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 
-const I18n = useI18nScope('block-editor/icon-popup')
+const I18n = createI18nScope('block-editor')
 
 export type IconPopupProps = {
   iconName?: string
@@ -51,7 +51,7 @@ const IconPopup = ({iconName}: IconPopupProps) => {
       setProp((prps: {iconName: string}) => (prps.iconName = newIconName))
       handleHideContent()
     },
-    [handleHideContent, setProp]
+    [handleHideContent, setProp],
   )
 
   return (

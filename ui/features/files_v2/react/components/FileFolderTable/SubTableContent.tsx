@@ -17,42 +17,36 @@
  */
 
 import React from 'react'
-import {FileDrop} from '@instructure/ui-file-drop'
 import {View} from '@instructure/ui-view'
-import {Heading} from '@instructure/ui-heading'
-import {Text} from '@instructure/ui-text'
-import {IconUploadLine} from '@instructure/ui-icons'
 import {Spinner} from '@instructure/ui-spinner'
 import {Flex} from '@instructure/ui-flex'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
+import {NoResultsFound} from './NoResultsFound'
 
-const I18n = useI18nScope('files_v2')
+const I18n = createI18nScope('files_v2')
 
 interface SubTableContentProps {
   isLoading: boolean
   isEmpty: boolean
+  searchString: string
 }
 
-const SubTableContent = ({isLoading, isEmpty}: SubTableContentProps) => {
-  return isLoading ? (
-    <Flex as="div" alignItems="center" justifyItems="center" padding="medium">
-      <Spinner renderTitle={I18n.t('Loading data')} />
-    </Flex>
-  ) : (
-    <View as="div" padding="large none none none">
-      {isEmpty && (
-        <FileDrop
-          renderLabel={
-            <View as="div" padding="xx-large large" background="primary">
-              <IconUploadLine size="large" />
-              <Heading margin="medium 0 small 0">{I18n.t('Drag a file here, or')}</Heading>
-              <Text color="brand">{I18n.t('Choose a file to upload')}</Text>
-            </View>
-          }
-        />
-      )}
-    </View>
-  )
+const SubTableContent = ({isLoading, isEmpty, searchString}: SubTableContentProps) => {
+  if (isLoading) {
+    return (
+      <Flex as="div" alignItems="center" justifyItems="center" padding="medium">
+        <Spinner renderTitle={I18n.t('Loading data')} />
+      </Flex>
+    )
+  }
+
+  if (isEmpty && searchString) {
+    return (
+      <View as="div" padding="medium 0 0 0">
+        <NoResultsFound searchTerm={searchString} />
+      </View>
+    )
+  }
 }
 
 export default SubTableContent

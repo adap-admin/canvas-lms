@@ -41,7 +41,7 @@ import {
 import {showFlashAlert} from '@canvas/alerts/react/FlashAlert'
 import getLiveRegion from '@canvas/instui-bindings/react/liveRegion'
 import {lockLabels} from '@canvas/blueprint-courses/react/labels'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import doFetchApi from '@canvas/do-fetch-api-effect'
 import type {DateDetails, DateLockTypes, ItemAssignToCardSpec} from './types'
 import {
@@ -57,8 +57,10 @@ import ItemAssignToTrayContent from './ItemAssignToTrayContent'
 import CoursePacingNotice from '@canvas/due-dates/react/CoursePacingNotice'
 import useFetchAssignees from '../../utils/hooks/useFetchAssignees'
 import {calculateMasqueradeHeight} from '../../utils/miscHelpers'
+import MasteryPathToggle from '@canvas/mastery-path-toggle/react/MasteryPathToggle'
+import {FormField} from '@instructure/ui-form-field'
 
-const I18n = useI18nScope('differentiated_modules')
+const I18n = createI18nScope('differentiated_modules')
 
 function itemTypeToIcon(iconType: IconType) {
   switch (iconType) {
@@ -132,15 +134,15 @@ export interface ItemAssignToTrayProps {
   onSave?: (
     overrides: ItemAssignToCardSpec[],
     hasModuleOverrides: boolean,
-    deletedModuleAssignees: String[],
-    disabledOptionIds?: String[]
+    deletedModuleAssignees: string[],
+    disabledOptionIds?: string[],
   ) => void
   onChange?: (
     overrides: ItemAssignToCardSpec[],
     hasModuleOverrides: boolean,
-    deletedModuleAssignees: String[],
-    disabledOptionIds?: String[],
-    moduleOverrides?: ItemAssignToCardSpec[]
+    deletedModuleAssignees: string[],
+    disabledOptionIds?: string[],
+    moduleOverrides?: ItemAssignToCardSpec[],
   ) => ItemAssignToCardSpec[]
   onClose: () => void
   onDismiss: () => void
@@ -165,7 +167,7 @@ export interface ItemAssignToTrayProps {
   onAssigneesChange?: (
     cardId: string,
     newAssignee: Record<string, any>,
-    deletedAssignee: Record<string, any>[]
+    deletedAssignee: Record<string, any>[],
   ) => void
   onDatesChange?: (cardId: string, dateType: string, newDate: string) => void
   onCardRemove?: (cardId: string) => void
@@ -206,13 +208,15 @@ export default function ItemAssignToTray({
   isTray = true,
 }: ItemAssignToTrayProps) {
   const isPacedCourse = ENV.IN_PACED_COURSE
+  const isMasteryPathCourse =
+    !!ENV.CONDITIONAL_RELEASE_SERVICE_ENABLED && ENV.FEATURES.course_pace_pacing_with_mastery_paths
   const initialLoadRef = useRef(false)
   const cardsRefs = useRef<{[cardId: string]: RefObject<ItemAssignToCardRef>}>({})
   const [isLoading, setIsLoading] = useState(false)
   const [initialCardsState, setInitialCardsState] = useState<ItemAssignToCardSpec[]>([])
 
   const [assignToCards, setAssignToCardsInner] = useState<ItemAssignToCardSpec[]>(
-    defaultCards ?? []
+    defaultCards ?? [],
   )
   const setAssignToCards = (cards: ItemAssignToCardSpec[]) => {
     assignToCardsRef.current = cards
@@ -220,10 +224,11 @@ export default function ItemAssignToTray({
   }
 
   const [hasModuleOverrides, setHasModuleOverrides] = useState(false)
+  const [hasDifferentiationTagOverrides, setHasDifferentiationTagOverrides] = useState(false)
   const [moduleAssignees, setModuleAssignees] = useState<string[]>([])
   const [groupCategoryId, setGroupCategoryId] = useState<string | null>(defaultGroupCategoryId)
   const [overridesFetched, setOverridesFetched] = useState(
-    defaultCards !== undefined && defaultCards.length > 0
+    defaultCards !== undefined && defaultCards.length > 0,
   )
   const [blueprintDateLocks, setBlueprintDateLocks] = useState<DateLockTypes[] | undefined>(
     // On the edit pages, the ENV will contain this data, so we can initialize the lock info here. We'll fall back to
@@ -234,7 +239,7 @@ export default function ItemAssignToTray({
           .filter(([_lockType, locked]) => locked)
           .filter(([lockType]) => ['due_dates', 'availability_dates'].includes(lockType))
           .map(([lockType]) => lockType) as DateLockTypes[])
-      : undefined
+      : undefined,
   )
   const assignToCardsRef = useRef(assignToCards)
   const disabledOptionIdsRef = useRef(defaultDisabledOptionIds)
@@ -262,9 +267,9 @@ export default function ItemAssignToTray({
   }, [defaultCards, initialCardsState.length])
 
   useEffect(() => {
-    if (!ENV.FEATURES?.selective_release_edit_page || onChange === undefined) return
+    if (onChange === undefined) return
     const deletedModuleAssignees = moduleAssignees.filter(
-      override => !disabledOptionIdsRef.current.includes(override)
+      override => !disabledOptionIdsRef.current.includes(override),
     )
     const moduleOverrides = hasModuleOverrides ? defaultCards?.filter(o => o.contextModuleId) : []
     const newCards = onChange(
@@ -272,7 +277,7 @@ export default function ItemAssignToTray({
       hasModuleOverrides,
       deletedModuleAssignees,
       disabledOptionIdsRef.current,
-      moduleOverrides
+      moduleOverrides,
     )
     setAssignToCards(newCards)
   }, [assignToCards, defaultCards, hasModuleOverrides, moduleAssignees, onChange])
@@ -318,6 +323,10 @@ export default function ItemAssignToTray({
   })
 
   const focusErrors = useCallback(() => {
+    if (!ENV.ALLOW_ASSIGN_TO_DIFFERENTIATION_TAGS && hasDifferentiationTagOverrides) {
+      return true
+    }
+
     const hasErrors = assignToCards.some(card => !card.isValid)
     // If a card has errors it should not save and the respective card should be focused
     if (hasErrors) {
@@ -340,7 +349,7 @@ export default function ItemAssignToTray({
     }
     // compare original module assignees to see if they were removed for unassign_item overrides
     const deletedModuleAssignees = moduleAssignees.filter(
-      override => !disabledOptionIdsRef.current.includes(override)
+      override => !disabledOptionIdsRef.current.includes(override),
     )
 
     if (onSave !== undefined) {
@@ -348,19 +357,19 @@ export default function ItemAssignToTray({
         assignToCardsRef.current,
         hasModuleOverrides,
         deletedModuleAssignees,
-        disabledOptionIdsRef.current
+        disabledOptionIdsRef.current,
       )
       return
     }
     const filteredCards = assignToCardsRef.current.filter(
       card =>
         [null, undefined, ''].includes(card.contextModuleId) ||
-        (card.contextModuleId !== null && card.isEdited)
+        (card.contextModuleId !== null && card.isEdited),
     )
     const payload = generateDateDetailsPayload(
       filteredCards,
       hasModuleOverrides,
-      deletedModuleAssignees
+      deletedModuleAssignees,
     )
     if (itemContentId !== undefined) {
       updateModuleItem({
@@ -388,8 +397,12 @@ export default function ItemAssignToTray({
   ])
 
   const allCardsValid = useCallback(() => {
-    return assignToCardsRef.current.every(card => card.isValid)
-  }, [assignToCardsRef])
+    if (!ENV.ALLOW_ASSIGN_TO_DIFFERENTIATION_TAGS && hasDifferentiationTagOverrides) {
+      return false
+    } else {
+      return assignToCardsRef.current.every(card => card.isValid)
+    }
+  }, [assignToCardsRef, hasDifferentiationTagOverrides])
 
   const handleEntered = useCallback(() => {
     // When tray entered and the initial load already happened,
@@ -401,14 +414,14 @@ export default function ItemAssignToTray({
 
   useEffect(() => {
     if (!isTray && sectionViewRef.current?.ref) {
-      // @ts-ignore: Property 'reactComponentInstance' does not exist on type 'Element'
+      // @ts-expect-error: Property 'reactComponentInstance' does not exist on type 'Element'
       sectionViewRef.current.ref.reactComponentInstance = {
         focusErrors,
         allCardsValid,
         // Runs custom card validations with current data and returns true if all cards are valid
         allCardsValidCustom: (params: ItemAssignToCardCustomValidationArgs) =>
           !Object.values(cardsRefs.current).some(
-            c => c.current && Object.keys(c.current.runCustomValidations(params)).length !== 0
+            c => c.current && Object.keys(c.current.runCustomValidations(params)).length !== 0,
           ),
       }
     }
@@ -438,7 +451,7 @@ export default function ItemAssignToTray({
           <Alert liveRegion={getLiveRegion} variant="info" margin="small 0 0">
             <Text size="small">
               {I18n.t(
-                'Select who should be assigned and use the drop-down menus or manually enter your date and time.'
+                'Select who should be assigned and use the drop-down menus or manually enter your date and time.',
               )}
             </Text>
           </Alert>
@@ -480,7 +493,7 @@ export default function ItemAssignToTray({
     return (
       <Flex.Item data-testid="module-item-edit-tray-footer" width="100%" padding={padding}>
         <TrayFooter
-          disableSave={isPacedCourse}
+          disableSave={isPacedCourse && !isMasteryPathCourse}
           saveButtonLabel={useApplyButton ? I18n.t('Apply') : I18n.t('Save')}
           onDismiss={handleDismiss}
           onUpdate={handleUpdate}
@@ -507,8 +520,21 @@ export default function ItemAssignToTray({
         <Flex direction="column" height="100vh" width="100%">
           {Header()}
           {isPacedCourse ? (
-            <Flex.Item padding="small medium" shouldGrow={true} shouldShrink={true}>
+            <Flex.Item padding="large medium small medium" shouldGrow={true} shouldShrink={true}>
               <CoursePacingNotice courseId={courseId} />
+              {isMasteryPathCourse && (
+                <FormField id="mastery-path-toggle" label={I18n.t('Mastery Paths')}>
+                  <MasteryPathToggle
+                    overrides={assignToCards}
+                    onSync={setAssignToCards}
+                    courseId={courseId}
+                    itemType={itemType}
+                    itemContentId={itemContentId}
+                    useCards
+                    fetchOwnOverrides={false}
+                  />
+                </FormField>
+              )}
             </Flex.Item>
           ) : (
             <ItemAssignToTrayContent
@@ -539,6 +565,8 @@ export default function ItemAssignToTray({
               handleDismiss={handleDismiss}
               hasModuleOverrides={hasModuleOverrides}
               setHasModuleOverrides={setHasModuleOverrides}
+              hasDifferentiationTagOverrides={hasDifferentiationTagOverrides}
+              setHasDifferentiationTagOverrides={setHasDifferentiationTagOverrides}
               cardsRefs={cardsRefs}
               setModuleAssignees={setModuleAssignees}
               defaultGroupCategoryId={defaultGroupCategoryId}
@@ -605,6 +633,8 @@ export default function ItemAssignToTray({
           handleDismiss={handleDismiss}
           hasModuleOverrides={hasModuleOverrides}
           setHasModuleOverrides={setHasModuleOverrides}
+          hasDifferentiationTagOverrides={hasDifferentiationTagOverrides}
+          setHasDifferentiationTagOverrides={setHasDifferentiationTagOverrides}
           cardsRefs={cardsRefs}
           setModuleAssignees={setModuleAssignees}
           defaultGroupCategoryId={defaultGroupCategoryId}

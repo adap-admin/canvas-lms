@@ -16,8 +16,6 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* eslint-disable no-void */
-
 import {extend} from '@canvas/backbone/utils'
 import $ from 'jquery'
 import {map, find, filter, includes, some} from 'lodash'
@@ -28,7 +26,7 @@ import VeriCiteSettings from '../../VeriCiteSettings'
 import DateGroup from '@canvas/date-group/backbone/models/DateGroup'
 import AssignmentOverrideCollection from '../collections/AssignmentOverrideCollection'
 import DateGroupCollection from '@canvas/date-group/backbone/collections/DateGroupCollection'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import GradingPeriodsHelper from '@canvas/grading/GradingPeriodsHelper'
 import * as tz from '@instructure/moment-utils'
 import numberHelper from '@canvas/i18n/numberHelper'
@@ -36,7 +34,7 @@ import PandaPubPoller from '@canvas/panda-pub-poller'
 import {matchingToolUrls} from './LtiAssignmentHelpers'
 
 const default_interval = 3000
-const I18n = useI18nScope('models_Assignment')
+const I18n = createI18nScope('models_Assignment')
 
 const hasProp = {}.hasOwnProperty
 
@@ -251,7 +249,7 @@ Assignment.prototype.initialize = function () {
     if (!this.get('id') && this.get('post_to_sis') !== false) {
       return this.set(
         'post_to_sis',
-        !!(typeof ENV !== 'undefined' && ENV !== null ? ENV.POST_TO_SIS_DEFAULT : void 0)
+        !!(typeof ENV !== 'undefined' && ENV !== null ? ENV.POST_TO_SIS_DEFAULT : void 0),
       )
     }
   }
@@ -617,7 +615,7 @@ Assignment.prototype.moderatedGrading = function (enabled) {
 }
 
 Assignment.prototype.anonymousInstructorAnnotations = function (
-  anonymousInstructorAnnotationsBoolean
+  anonymousInstructorAnnotationsBoolean,
 ) {
   if (!(arguments.length > 0)) {
     return this.get('anonymous_instructor_annotations')
@@ -995,7 +993,15 @@ Assignment.prototype.htmlEditUrl = function () {
 }
 
 Assignment.prototype.htmlBuildUrl = function () {
-  return this.get('html_url')
+  if (this.isQuizLTIAssignment() && canManage()) {
+    let displayType = "full_width"
+    if (ENV.FEATURES.new_quizzes_navigation_updates) {
+      displayType = "full_width_with_nav"
+    }
+    return this.get('html_url') + `?display=${displayType}`
+  } else {
+    return this.get('html_url')
+  }
 }
 
 Assignment.prototype.labelId = function () {
@@ -1300,6 +1306,7 @@ Assignment.prototype.toView = function () {
     'unlockAt',
     'vericiteAvailable',
     'vericiteEnabled',
+    'isHorizonCourse',
   ]
   const hash = {
     id: this.get('id'),
@@ -1343,7 +1350,7 @@ Assignment.prototype.inGradingPeriod = function (gradingPeriod) {
   const gradingPeriodsHelper = new GradingPeriodsHelper(gradingPeriod)
   if (dateGroups) {
     return some(dateGroups.models, dateGroup =>
-      gradingPeriodsHelper.isDateInGradingPeriod(dateGroup.dueAt(), gradingPeriod.id)
+      gradingPeriodsHelper.isDateInGradingPeriod(dateGroup.dueAt(), gradingPeriod.id),
     )
   } else {
     return gradingPeriodsHelper.isDateInGradingPeriod(tz.parse(this.dueAt()), gradingPeriod.id)
@@ -1479,7 +1486,7 @@ Assignment.prototype.duplicate = function (callback) {
     '/api/v1/courses/' + course_id + '/assignments/' + assignment_id + '/duplicate',
     'POST',
     {},
-    callback
+    callback,
   )
 }
 
@@ -1503,7 +1510,7 @@ Assignment.prototype.duplicate_failed = function (callback) {
       query_string,
     'POST',
     {},
-    callback
+    callback,
   )
 }
 
@@ -1526,7 +1533,7 @@ Assignment.prototype.alignment_clone_failed = function (callback) {
       query_string,
     'POST',
     {},
-    callback
+    callback,
   )
 }
 
@@ -1545,7 +1552,7 @@ Assignment.prototype.retry_migration = function (callback) {
       '&include[]=migrated_assignment',
     'POST',
     {},
-    callback
+    callback,
   )
 }
 
@@ -1606,14 +1613,14 @@ Assignment.prototype.pollUntilFinished = function (interval, isFinished) {
           }
         })
       }
-    })(this)
+    })(this),
   )
   return poller.start()
 }
 
 Assignment.prototype.isOnlyVisibleToOverrides = function (override_flag) {
   if (!(arguments.length > 0)) {
-    if (ENV.FEATURES?.selective_release_ui_api && this.get('visible_to_everyone') != null) {
+    if (this.get('visible_to_everyone') != null) {
       return !this.get('visible_to_everyone')
     }
     return this.get('only_visible_to_overrides') || false
@@ -1702,7 +1709,7 @@ Assignment.prototype.getCheckpointDateGroup = function () {
 Assignment.prototype.subAssignmentWithoutGradedSubmission = function (checkpointTag) {
   const sub =
     this.get('submission')?.attributes?.sub_assignment_submissions?.find(
-      submission => submission.sub_assignment_tag === checkpointTag
+      submission => submission.sub_assignment_tag === checkpointTag,
     ) ?? null
   return sub == null || sub.grade == null
 }
@@ -1720,7 +1727,7 @@ Assignment.prototype.getCheckpointGroup = function (checkpoint) {
   }
 
   const checkpointIsWithoutGradedSubmission = this.subAssignmentWithoutGradedSubmission(
-    checkpoint.tag
+    checkpoint.tag,
   )
   const isOverdue = this.allowedToSubmit() && checkpointIsWithoutGradedSubmission
   const canHaveOverdueAssignment =
@@ -1733,4 +1740,9 @@ Assignment.prototype.getCheckpointGroup = function (checkpoint) {
 
   return 'past'
 }
+
+Assignment.prototype.isHorizonCourse = function () {
+  return ENV.horizon_course
+}
+
 export default Assignment

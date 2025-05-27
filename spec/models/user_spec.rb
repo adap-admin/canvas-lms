@@ -69,14 +69,6 @@ describe User do
     end
   end
 
-  context "relationships" do
-    subject { User.new }
-
-    it { is_expected.to have_many(:created_lti_registrations).class_name("Lti::Registration").with_foreign_key("created_by_id") }
-    it { is_expected.to have_many(:updated_lti_registrations).class_name("Lti::Registration").with_foreign_key("updated_by_id") }
-    it { is_expected.to have_many(:block_editor_templates).class_name("BlockEditorTemplate").inverse_of(:context) }
-  end
-
   describe "notifications" do
     describe "#daily_notification_time" do
       it "returns the users 6pm local time" do
@@ -927,21 +919,25 @@ describe User do
 
     context "discussion checkpoints" do
       before do
-        course_with_student(active_all: true)
+        root_account = Account.default
+        sub_account = root_account.sub_accounts.create!(name: "sub-account")
+        course_with_student(active_all: true, account: sub_account)
         course_with_teacher(course: @course, active_all: true)
-        @course.root_account.enable_feature!(:discussion_checkpoints)
+        # checkpoints are unlocked and disabled in the root account and enabled in the sub-account
+        root_account.allow_feature!(:discussion_checkpoints)
+        sub_account.enable_feature!(:discussion_checkpoints)
         @reply_to_topic, @reply_to_entry = graded_discussion_topic_with_checkpoints(context: @course)
       end
 
       it "does not include checkpoint submissions without recent feedback" do
-        expect(@student.recent_feedback(exclude_parent_assignment_submissions: true)).to be_empty
+        expect(@student.recent_feedback).to be_empty
       end
 
       it "includes checkpoint submissions with recent feedback" do
         @reply_to_topic.grade_student(@student, grade: 5, grader: @teacher)
         @reply_to_entry.grade_student(@student, grade: 8, grader: @teacher)
 
-        expect(@student.recent_feedback(exclude_parent_assignment_submissions: true)).to contain_exactly(
+        expect(@student.recent_feedback).to contain_exactly(
           @reply_to_topic.submission_for_student(@student),
           @reply_to_entry.submission_for_student(@student)
         )
@@ -950,7 +946,7 @@ describe User do
       it "does not include parent assignment submission with recent feedback" do
         parent_assignment_submission = @topic.assignment.grade_student(@student, grade: 10, sub_assignment_tag: "reply_to_topic", grader: @teacher)
 
-        expect(@student.recent_feedback(exclude_parent_assignment_submissions: true)).not_to include(
+        expect(@student.recent_feedback).not_to include(
           parent_assignment_submission
         )
       end
@@ -959,7 +955,7 @@ describe User do
         assignment = @course.assignments.create!(points_possible: 10)
         assignment_submission = assignment.submissions.find_by!(user: @student)
         assignment_submission.update!(last_comment_at: 1.day.ago, posted_at: nil)
-        expect(@student.recent_feedback(exclude_parent_assignment_submissions: true)).to contain_exactly(assignment_submission)
+        expect(@student.recent_feedback).to contain_exactly(assignment_submission)
       end
 
       it "includes both assignment submissions and discussion checkpoint submissions with recent feedback" do
@@ -969,7 +965,7 @@ describe User do
 
         @reply_to_topic.grade_student(@student, grade: 5, grader: @teacher)
         @reply_to_entry.grade_student(@student, grade: 8, grader: @teacher)
-        expect(@student.recent_feedback(exclude_parent_assignment_submissions: true)).to contain_exactly(
+        expect(@student.recent_feedback).to contain_exactly(
           assignment_submission,
           @reply_to_topic.submission_for_student(@student),
           @reply_to_entry.submission_for_student(@student)
@@ -1969,14 +1965,14 @@ describe User do
       expect(User.avatar_fallback_url("http://somedomain:3000/path")).to eq(
         "http://somedomain:3000/path"
       )
-      expect(User.avatar_fallback_url(nil, instance_double("ActionDispatch::Request",
+      expect(User.avatar_fallback_url(nil, instance_double(ActionDispatch::Request,
                                                            host: "foo",
                                                            protocol: "http://",
                                                            port: 80,
                                                            scheme: "http"))).to eq(
                                                              "http://foo/images/messages/avatar-50.png"
                                                            )
-      expect(User.avatar_fallback_url("/somepath", instance_double("ActionDispatch::Request",
+      expect(User.avatar_fallback_url("/somepath", instance_double(ActionDispatch::Request,
                                                                    host:
                                                                          "bar",
                                                                    protocol: "https://",
@@ -1984,21 +1980,21 @@ describe User do
                                                                    scheme: "https"))).to eq(
                                                                      "https://bar/somepath"
                                                                    )
-      expect(User.avatar_fallback_url("//somedomain/path", instance_double("ActionDispatch::Request",
+      expect(User.avatar_fallback_url("//somedomain/path", instance_double(ActionDispatch::Request,
                                                                            host: "bar",
                                                                            protocol: "https://",
                                                                            port: 443,
                                                                            scheme: "https"))).to eq(
                                                                              "https://somedomain/path"
                                                                            )
-      expect(User.avatar_fallback_url("http://somedomain/path", instance_double("ActionDispatch::Request",
+      expect(User.avatar_fallback_url("http://somedomain/path", instance_double(ActionDispatch::Request,
                                                                                 host: "bar",
                                                                                 protocol: "https://",
                                                                                 port: 443,
                                                                                 scheme: "https"))).to eq(
                                                                                   "http://somedomain/path"
                                                                                 )
-      expect(User.avatar_fallback_url("http://localhost/path", instance_double("ActionDispatch::Request",
+      expect(User.avatar_fallback_url("http://localhost/path", instance_double(ActionDispatch::Request,
                                                                                host: "bar",
                                                                                protocol: "https://",
                                                                                port: 443,
@@ -2164,6 +2160,27 @@ describe User do
       @course.enroll_user(@user2)
 
       expect(@user1.menu_courses).to eq [@course]
+    end
+
+    context "with Horizon courses" do
+      before :once do
+        @course = course_factory(active_all: true)
+        @course.account.enable_feature!(:horizon_course_setting)
+        @course.update!(horizon_course: true)
+      end
+
+      it "shows Horizon courses for non-students" do
+        teacher = user_factory(active_all: true)
+        account_admin_user(account: @course.root_account, user: teacher)
+        @course.enroll_teacher(teacher)
+        expect(teacher.menu_courses).to eq [@course]
+      end
+
+      it "hides Horizon courses for students" do
+        student = user_factory(active_all: true)
+        @course.enroll_student(student)
+        expect(student.menu_courses).to eq []
+      end
     end
 
     context "with favoriting" do
@@ -2606,11 +2623,20 @@ describe User do
         expect(events.first).to eq assignment2
       end
 
-      it "includes sub assignments when include_sub_assignments is true" do
-        @course.root_account.enable_feature!(:discussion_checkpoints)
+      it "includes sub assignments if checkpoints are enabled in the accounts they are in" do
+        # root account has checkpoints OFF and unlocked, while sub-account has checkpoints ON
+        @course.root_account.set_feature_flag!(:discussion_checkpoints, Feature::STATE_DEFAULT_OFF)
+        sub_account = @course.root_account.sub_accounts.create!(name: "Sub Account")
+        @course.update!(account: sub_account)
+        @course.account.enable_feature!(:discussion_checkpoints)
+
+        # sanity check
+        expect(@course.account.discussion_checkpoints_enabled?).to be_truthy
+        expect(@course.root_account.discussion_checkpoints_enabled?).to be_falsey
+
         reply_to_topic, reply_to_entry = graded_discussion_topic_with_checkpoints(context: @course)
         context_codes = [@user.asset_string] + @user.cached_context_codes
-        events = @user.upcoming_events(context_codes:, include_sub_assignments: true)
+        events = @user.upcoming_events(context_codes:)
         expect(events).to match_array([reply_to_topic, reply_to_entry])
       end
 
@@ -2701,33 +2727,33 @@ describe User do
     end
 
     it "returns assignments that have an override between now and end_at opt" do
-      assignments = [double, double, double, double]
-      context = double
+      user = course_with_teacher(active_all: true).user
+      assignment1 = @course.assignments.create!(title: "Assignment1")
+      assignment2 = @course.assignments.create!(title: "Assignment2")
+      assignment3 = @course.assignments.create!(title: "Assignment3")
+      assignment4 = @course.assignments.create!(title: "Assignment4")
+
       Timecop.freeze(Time.utc(2013, 3, 13, 0, 0)) do
-        user = User.new
-        allow(context).to receive(:grants_any_right?).with(user, *RoleOverride::GRANULAR_MANAGE_ASSIGNMENT_PERMISSIONS).and_return true
         due_date1 = { due_at: 1.day.from_now }
         due_date2 = { due_at: 1.week.from_now }
         due_date3 = { due_at: 2.weeks.from_now }
         due_date4 = { due_at: nil }
-        assignments.each do |assignment|
-          allow(assignment).to receive(:context).and_return(context)
-        end
-        expect(assignments.first).to receive(:dates_hash_visible_to).with(user)
-                                                                    .and_return [due_date1]
-        expect(assignments.second).to receive(:dates_hash_visible_to).with(user)
-                                                                     .and_return [due_date2]
-        expect(assignments.third).to receive(:dates_hash_visible_to).with(user)
-                                                                    .and_return [due_date3]
-        expect(assignments[3]).to receive(:dates_hash_visible_to).with(user)
-                                                                 .and_return [due_date4]
-        upcoming_assignments = user.select_upcoming_assignments(assignments, {
+
+        expect(assignment1).to receive(:formatted_dates_hash_visible_to).with(user)
+                                                                        .and_return [due_date1]
+        expect(assignment2).to receive(:formatted_dates_hash_visible_to).with(user)
+                                                                        .and_return [due_date2]
+        expect(assignment3).to receive(:formatted_dates_hash_visible_to).with(user)
+                                                                        .and_return [due_date3]
+        expect(assignment4).to receive(:formatted_dates_hash_visible_to).with(user)
+                                                                        .and_return [due_date4]
+        upcoming_assignments = user.select_upcoming_assignments(@course.assignments, {
                                                                   end_at: 1.week.from_now
                                                                 })
-        expect(upcoming_assignments).to include assignments.first
-        expect(upcoming_assignments).to include assignments.second
-        expect(upcoming_assignments).not_to include assignments.third
-        expect(upcoming_assignments).not_to include assignments[3]
+        expect(upcoming_assignments).to include assignment1
+        expect(upcoming_assignments).to include assignment2
+        expect(upcoming_assignments).not_to include assignment3
+        expect(upcoming_assignments).not_to include assignment4
       end
     end
   end
@@ -2969,6 +2995,33 @@ describe User do
 
       expect(user).not_to receive(:pseudonyms)
       expect(user.mfa_settings(pseudonym_hint: p)).to eq :required
+    end
+
+    context "with sharding" do
+      specs_require_sharding
+
+      before :once do
+        account = Account.create!(settings: { mfa_settings: :disabled })
+        @p = user.pseudonyms.create!(account:, unique_id: "user")
+        @shard1.activate do
+          account = Account.create!(settings: { mfa_settings: :required })
+          course = course_model(account:)
+          course.enroll_student(user)
+          @p2 = user.pseudonyms.create!(account:, unique_id: "user")
+        end
+      end
+
+      it "does not include deleted pseudonyms when checking associated accounts" do
+        @p2.destroy
+
+        expect(user.mfa_settings).to eq :disabled
+        expect(user.mfa_settings(pseudonym_hint: @p)).to eq :disabled
+      end
+
+      it "includes all active user pseudonyms and returns most restrictive when checking associated accounts" do
+        expect(user.mfa_settings).to eq :required
+        expect(user.mfa_settings(pseudonym_hint: @p)).to eq :required
+      end
     end
   end
 
@@ -4393,7 +4446,6 @@ describe User do
   describe "#can_create_enrollment_for?" do
     before(:once) do
       course_with_ta
-      @course.root_account.enable_feature!(:granular_permissions_manage_users)
     end
 
     it "checks permissions" do
@@ -4580,6 +4632,170 @@ describe User do
           end
         end
       end
+    end
+
+    context "with teachers_can_create_courses_anywhere" do
+      before :once do
+        @account.settings[:teachers_can_create_courses_anywhere] = true
+        @account.settings[:teachers_can_create_courses] = true
+        @account.save!
+        @other_account = @account.sub_accounts.create!
+      end
+
+      it "is :teacher for account if user has teacher enrollments" do
+        course_with_teacher(user: @user, active_all: true)
+        expect(@user.create_courses_right(@account)).to be(:teacher)
+      end
+
+      it "is not :teacher for an account if the teacher does not have enrollments" do
+        expect(@user.create_courses_right(@account)).to be_nil
+        expect(@user.create_courses_right(@other_account)).to be_nil
+      end
+
+      it "is does not leak permissions to other sub-accounts when user has teacher enrollments elsewhere" do
+        course_with_teacher(user: @user, active_all: true)
+        expect(@user.create_courses_right(@account)).to be(:teacher)
+        expect(@user.create_courses_right(@other_account)).to be_nil
+      end
+    end
+
+    context "with students_can_create_courses_anywhere" do
+      before :once do
+        @account.settings[:students_can_create_courses_anywhere] = true
+        @account.settings[:students_can_create_courses] = true
+        @account.save!
+        @other_account = @account.sub_accounts.create!
+      end
+
+      it "is :student for account if user has student enrollments" do
+        course_with_student(user: @user, active_all: true)
+        expect(@user.create_courses_right(@account)).to be(:student)
+      end
+
+      it "is not :student for an account if the student does not have enrollments" do
+        expect(@user.create_courses_right(@account)).to be_nil
+        expect(@user.create_courses_right(@other_account)).to be_nil
+      end
+
+      it "is does not leak permissions to other sub-accounts when user has student enrollments elsewhere" do
+        course_with_student(user: @user, active_all: true)
+        expect(@user.create_courses_right(@account)).to be(:student)
+        expect(@user.create_courses_right(@other_account)).to be_nil
+      end
+    end
+  end
+
+  describe "create_courses_permissions" do
+    before do
+      @account = Account.default
+      @account.enable_feature!(:create_course_subaccount_picker)
+      @account.settings[:teachers_can_create_courses] = true
+      @account.settings[:students_can_create_courses] = true
+      @account.save!
+    end
+
+    context "as a teacher" do
+      before do
+        @user = user_factory(active_all: true)
+      end
+
+      it "teachers can create without restriction" do
+        @account.settings[:teachers_can_create_courses_anywhere] = true
+        @account.save!
+        course_with_teacher_logged_in(user: @user, active_all: true)
+
+        permissions = @user.create_courses_permissions(@account)
+
+        expect(permissions[:can_create]).to be(:teacher)
+        expect(permissions[:restrict_to_mcc]).to be_falsey
+      end
+
+      it "teacher enrollments can only create in MCC" do
+        @account.settings[:teachers_can_create_courses_anywhere] = false
+        @account.save!
+        course_with_teacher_logged_in(user: @user, active_all: true)
+
+        permissions = @user.create_courses_permissions(@account)
+
+        expect(permissions[:can_create]).to be(:teacher)
+        expect(permissions[:restrict_to_mcc]).to be_truthy
+      end
+    end
+
+    context "as a student" do
+      before do
+        @user = user_factory(active_all: true)
+      end
+
+      it "students can create without restriction" do
+        @account.settings[:students_can_create_courses_anywhere] = true
+        @account.save!
+        course_with_student_logged_in(user: @user, active_all: true)
+
+        permissions = @user.create_courses_permissions(@account)
+
+        expect(permissions[:can_create]).to be(:student)
+        expect(permissions[:restrict_to_mcc]).to be_falsey
+      end
+
+      it "student enrollments can only create in MCC" do
+        @account.settings[:students_can_create_courses_anywhere] = false
+        @account.save!
+        course_with_student_logged_in(user: @user, active_all: true)
+
+        permissions = @user.create_courses_permissions(@account)
+
+        expect(permissions[:can_create]).to be(:student)
+        expect(permissions[:restrict_to_mcc]).to be_truthy
+      end
+    end
+
+    context "as non-enrolled user" do
+      before do
+        @user = user_factory(active_all: true)
+      end
+
+      it "non-enrolled users can only create in MCC" do
+        @account.settings[:no_enrollments_can_create_courses] = true
+        @account.save!
+
+        permissions = @user.create_courses_permissions(@account)
+
+        expect(permissions[:can_create]).to be(:no_enrollments)
+        expect(permissions[:restrict_to_mcc]).to be_truthy
+      end
+
+      it "non-enrolled users cannot create courses" do
+        @account.settings[:no_enrollments_can_create_courses] = false
+        @account.save!
+
+        permissions = @user.create_courses_permissions(@account)
+
+        expect(permissions[:can_create]).to be_nil
+        expect(permissions[:restrict_to_mcc]).to be_truthy
+      end
+    end
+
+    it "admin users can always create under a sub-account" do
+      @user = user_factory(active_all: true)
+      account_admin_user(account: @account, user: @user)
+
+      permissions = @user.create_courses_permissions(@account)
+
+      expect(permissions[:can_create]).to be(:admin)
+      expect(permissions[:restrict_to_mcc]).to be_falsey
+    end
+
+    it "enrolled users can create courses under a sub-account" do
+      @account.settings[:students_can_create_courses_anywhere] = true
+      @account.save!
+      @subaccount = @account.sub_accounts.create!(name: "SA")
+      course_with_student_logged_in(active_all: true, account: @subaccount)
+
+      permissions = @user.create_courses_permissions(@account)
+
+      expect(permissions[:can_create]).to be(:student)
+      expect(permissions[:restrict_to_mcc]).to be_falsey
     end
   end
 
@@ -4787,13 +5003,7 @@ describe User do
       student_in_course(active_all: true)
     end
 
-    it "includes assignment and quiz ids with the selective_release_backend flag disabled" do
-      Account.site_admin.disable_feature!(:selective_release_backend)
-      expect(@user.learning_object_visibilities(@course).keys).to contain_exactly(:assignment_ids, :quiz_ids)
-    end
-
-    it "includes all learning object ids with the selective_release_backend flag enabled" do
-      Account.site_admin.enable_feature!(:selective_release_backend)
+    it "includes all learning object ids" do
       expect(@user.learning_object_visibilities(@course).keys).to contain_exactly(:assignment_ids, :quiz_ids, :context_module_ids, :discussion_topic_ids, :wiki_page_ids)
     end
   end
@@ -4841,6 +5051,65 @@ describe User do
 
     it "returns false if user has no active student enrollments in locked down accounts" do
       expect(@user.student_in_limited_access_account?).to be false
+    end
+  end
+
+  describe "group and differentiation_tag associations" do
+    before :once do
+      @student1 = course_with_student(active_all: true).user
+      @student2 = course_with_student(active_all: true, course: @course).user
+
+      # Create non-collaborative category and groups
+      @non_collaborative_category = @course.group_categories.create!(name: "Non-Collaborative Groups", non_collaborative: true)
+      @non_collab_group1 = @course.groups.create!(name: "Non-Collab Group 1", group_category: @non_collaborative_category)
+      @non_collab_group2 = @course.groups.create!(name: "Non-Collab Group 2", group_category: @non_collaborative_category)
+      @non_collab_membership1 = @non_collab_group1.add_user(@student1)
+      @non_collab_membership1.destroy
+      @non_collab_membership2 = @non_collab_group2.add_user(@student1)
+
+      # Create collaborative category and groups
+      @collaborative_category = @course.group_categories.create!(name: "Collaborative Groups")
+      @collab_group1 = @course.groups.create!(name: "Collab Group 1", group_category: @collaborative_category)
+      @collab_group2 = @course.groups.create!(name: "Collab Group 2", group_category: @collaborative_category)
+      @collab_membership1 = @collab_group1.add_user(@student1)
+      @collab_membership1.destroy
+      @collab_membership2 = @collab_group2.add_user(@student1)
+    end
+
+    describe "group" do
+      it "only includes memberships from collaborative groups regardless of state" do
+        expect(@student1.group_memberships.pluck(:id)).to contain_exactly(@collab_membership1.id, @collab_membership2.id)
+      end
+
+      it "only includes active memberships from collaborative groups" do
+        expect(@student1.current_group_memberships.pluck(:id)).to contain_exactly(@collab_membership2.id)
+      end
+
+      it "only includes collaborative groups with non-deleted memberships" do
+        expect(@student1.groups.pluck(:id)).to contain_exactly(@collab_group2.id)
+      end
+
+      it "only includes collaborative groups with active memberships" do
+        expect(@student1.current_groups.pluck(:id)).to contain_exactly(@collab_group2.id)
+      end
+    end
+
+    describe "differentiation_tag" do
+      it "only includes memberships from non-collaborative groups regardless of state" do
+        expect(@student1.differentiation_tag_memberships.pluck(:id)).to contain_exactly(@non_collab_membership1.id, @non_collab_membership2.id)
+      end
+
+      it "only includes active memberships from non-collaborative groups" do
+        expect(@student1.current_differentiation_tag_memberships.pluck(:id)).to contain_exactly(@non_collab_membership2.id)
+      end
+
+      it "only includes non-collaborative groups with non-deleted memberships" do
+        expect(@student1.differentiation_tags.pluck(:id)).to contain_exactly(@non_collab_group2.id)
+      end
+
+      it "only includes non-collaborative groups with active memberships" do
+        expect(@student1.current_differentiation_tags.pluck(:id)).to contain_exactly(@non_collab_group2.id)
+      end
     end
   end
 end

@@ -16,98 +16,98 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {useScope as useI18nScope} from '@canvas/i18n'
-import React, {useState} from 'react'
-import {useLocation, useNavigate} from 'react-router-dom'
+import GenericErrorPage from '@canvas/generic-error-page/react'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import useBreakpoints from '@canvas/lti-apps/hooks/useBreakpoints'
-import useSimilarProducts from '../../queries/useSimilarProducts'
-import useProduct from '../../queries/useProduct'
-import {Breadcrumb} from '@instructure/ui-breadcrumb'
-import {Spinner} from '@instructure/ui-spinner'
+import {pickPreferredIntegration} from '@canvas/lti-apps/utils/pickPreferredIntegration'
+import {instructorAppsRoute} from '@canvas/lti-apps/utils/routes'
+import {IconButton} from '@instructure/ui-buttons'
 import {Flex} from '@instructure/ui-flex'
-import {Text} from '@instructure/ui-text'
-import {Link} from '@instructure/ui-link'
-import {Tag} from '@instructure/ui-tag'
-import {View} from '@instructure/ui-view'
+import {Heading} from '@instructure/ui-heading'
 import {
-  IconA11yLine,
   IconExpandStartLine,
   IconExternalLinkLine,
-  IconEyeLine,
+  IconImageLine,
   IconMessageLine,
-  IconQuizTitleLine,
 } from '@instructure/ui-icons'
-import {Button} from '@instructure/ui-buttons'
-import GenericErrorPage from '@canvas/generic-error-page/react'
+import {Img} from '@instructure/ui-img'
+import {Link} from '@instructure/ui-link'
+import {Spinner} from '@instructure/ui-spinner'
+import {Tag} from '@instructure/ui-tag'
+import {Text} from '@instructure/ui-text'
 import {TruncateText} from '@instructure/ui-truncate-text'
+import {ContextView, View} from '@instructure/ui-view'
+import React, {useState} from 'react'
+import {useLocation} from 'react-router-dom'
+import {useAppendBreadcrumb} from '../../../breadcrumbs/useAppendBreadcrumb'
+import type {Product} from '../../models/Product'
+import useProduct from '../../queries/useProduct'
+import useSimilarProducts from '../../queries/useSimilarProducts'
+import ImageCarouselModal from '../common/Carousels/ImageCarouselModal'
+import ProductCarousel from '../common/Carousels/ProductCarousel'
+import Disclaimer from '../common/Disclaimer'
 import TruncateWithTooltip from '../common/TruncateWithTooltip'
 import {stripHtmlTags} from '../common/stripHtmlTags'
-import LtiDetailModal from './LtiDetailModal'
+import ExternalLinks from './ExternalLinks'
 import IntegrationDetailModal from './IntegrationDetailModal'
-import ProductCarousel from '../common/Carousels/ProductCarousel'
-import ImageCarousel from '../common/Carousels/ImageCarousel'
-import BadgeCarousel from '../common/Carousels/BadgeCarousel'
-import Disclaimer from '../common/Disclaimer'
-import type {Product} from '../../models/Product'
-import type {UnifiedToolId} from '../../models/UnifiedToolId'
+import LtiConfigurationDetail from './LtiConfigurationDetail'
 
-const I18n = useI18nScope('lti_registrations')
+const I18n = createI18nScope('lti_registrations')
 
 type ProductDetailProps = {
-  onConfigure?: (
-    dynamicRegistrationUrl: string,
-    unifiedToolId?: UnifiedToolId,
-    onSuccessfulInstallation?: () => void
-  ) => void
+  renderConfigureButton?: (buttonWidth: 'block' | 'inline-block', product: Product) => JSX.Element
 }
 
 const ProductDetail = (props: ProductDetailProps) => {
-  const [isModalOpen, setModalOpen] = useState(false)
-  const [clickedLtiTitle, setClickedLtiTitle] = useState('')
+  const [isImageModalOpen, setImageModalOpen] = useState(false)
+  const [imageModalScreenshots, setImageModalScreenshots] = useState<string[]>([])
   const [isIntDetailModalOpen, setIntDetailModalOpen] = useState(false)
   const [intDetailTitle, setIntDetailTitle] = useState('')
   const [intDetailContent, setIntDetailContent] = useState('')
   const [isTruncated, setIsTruncated] = useState(false)
   const [showTrucatedDescription, setShowTruncatedDescription] = useState(true)
 
-  const navigate = useNavigate()
   const location = useLocation()
 
   const currentProductId = location.pathname.replace('/product_detail/', '')
   const {isDesktop, isMobile, isMaxMobile, isMaxTablet} = useBreakpoints()
   const previousPathRegexp = window.location.pathname.replace(/\product_detail.*/, '')
-  const previousPath = previousPathRegexp.endsWith('configurations/')
-    ? `${previousPathRegexp}#tab-apps`
+  const previousPath = previousPathRegexp.endsWith(`${instructorAppsRoute}/`)
+    ? `${previousPathRegexp.slice(0, -1)}#tab-apps`
     : previousPathRegexp
 
-  const {product, isLoading, isError} = useProduct({productId: currentProductId})
+  const {product, isLoading, isError} = useProduct({
+    productId: currentProductId,
+  })
+  // @ts-expect-error
+  useAppendBreadcrumb(product?.name, previousPath, !!product?.name)
+  // @ts-expect-error
   const productDescription = stripHtmlTags(product?.description)
 
-  const params = () => {
-    return {
-      filters: {companies: [{id: product?.company.id.toString(), name: product?.company.name}]},
-    }
-  }
-
-  const {otherProductsByCompany} = useSimilarProducts({params: params(), product})
+  const {otherProductsByCompany} = useSimilarProducts({
+    params: {
+      filters: {
+        companies: [{id: product?.company.id.toString(), name: product?.company.name}],
+      },
+    },
+    product,
+  })
 
   const ErrorPage = () => {
     return <GenericErrorPage errorMessage={I18n.t('Error loading product details')} />
   }
 
   const excludeCurrentProduct = otherProductsByCompany?.tools.filter(
-    (otherProducts: Product) => otherProducts.global_product_id !== currentProductId
+    (otherProducts: Product) => otherProducts.global_product_id !== currentProductId,
   )
 
-  const dynamicRegistrationInformation = product?.tool_integration_configurations?.lti_13?.find(
-    configuration => configuration.integration_type === 'lti_13_dynamic_registration'
-  )
+  const ltiConfiguration = product?.canvas_lti_configurations
+  const relevantIntegration = pickPreferredIntegration(ltiConfiguration ? ltiConfiguration : [])
 
-  const ltiDataClickHandle = (title: string) => {
-    setModalOpen(true)
-    setClickedLtiTitle(title)
+  const imageModalClickHandler = (screenshots: string[]) => {
+    setImageModalOpen(true)
+    setImageModalScreenshots(screenshots)
   }
-
   const intDetailClickHandler = (title: string, content: string) => {
     setIntDetailModalOpen(true)
     setIntDetailTitle(title)
@@ -131,28 +131,10 @@ const ProductDetail = (props: ProductDetailProps) => {
     return (
       <Flex margin={buttonMargins}>
         <Flex.Item shouldGrow={true} margin={tabletMargin}>
-          {props.onConfigure && (
-            <Button
-              display={buttonWidth}
-              color="primary"
-              interaction={dynamicRegistrationInformation ? 'enabled' : 'disabled'}
-              onClick={() => {
-                if (!dynamicRegistrationInformation) return null
-
-                props.onConfigure!(
-                  dynamicRegistrationInformation.url,
-                  // @ts-ignore
-                  dynamicRegistrationInformation.unified_tool_id,
-                  () => {
-                    // redirect to apps page
-                    navigate('/manage')
-                  }
-                )
-              }}
-            >
-              {I18n.t('Configure')}
-            </Button>
-          )}
+          {props.renderConfigureButton
+            ? // @ts-expect-error
+              props.renderConfigureButton(buttonWidth, product)
+            : null}
         </Flex.Item>
       </Flex>
     )
@@ -162,11 +144,12 @@ const ProductDetail = (props: ProductDetailProps) => {
     return (
       <div>
         {!isDesktop && (
-          <Flex.Item margin="0 0 0 small">
+          <Flex margin="medium 0 0 small">
             <div style={{borderRadius: '8px'}}>
+              {/* @ts-expect-error */}
               <img alt="" src={product.logo_url} width={80} height={80} style={{borderRadius: 8}} />
             </div>
-          </Flex.Item>
+          </Flex>
         )}
         <Flex margin={isDesktop ? 'small 0 0 0' : '0'}>
           {isDesktop && (
@@ -174,6 +157,7 @@ const ProductDetail = (props: ProductDetailProps) => {
               <div style={{borderRadius: '8px'}}>
                 <img
                   alt=""
+                  // @ts-expect-error
                   src={product.logo_url}
                   width={80}
                   height={80}
@@ -182,10 +166,9 @@ const ProductDetail = (props: ProductDetailProps) => {
               </div>
             </Flex.Item>
           )}
-          <Flex.Item shouldGrow={true} shouldShrink={true} padding="small 0 0 small">
-            <Text weight="bold" size="x-large">
-              {product.name}
-            </Text>
+          <Flex.Item shouldGrow={true} shouldShrink={true} margin="small 0 0 mediumSmall">
+            {/* @ts-expect-error */}
+            <Heading level="h1">{product.name}</Heading>
             <Flex.Item shouldGrow={true} shouldShrink={true}>
               <div style={{marginBottom: '.5rem'}}>
                 <TruncateWithTooltip
@@ -193,6 +176,7 @@ const ProductDetail = (props: ProductDetailProps) => {
                   horizontalOffset={isDesktop ? -150 : -10}
                   backgroundColor="primary"
                 >
+                  {/* @ts-expect-error */}
                   <Text>{product.tagline}</Text>
                 </TruncateWithTooltip>
               </div>
@@ -209,6 +193,7 @@ const ProductDetail = (props: ProductDetailProps) => {
       <Flex margin={isDesktop ? '0 0 0 large' : '0 0 0 small'}>
         <Flex.Item margin={isDesktop ? '0 0 0 xx-large' : '0'}>
           <Text color="secondary">
+            {/* @ts-expect-error */}
             {I18n.t('by')} {product.company.name}
           </Text>{' '}
           |{' '}
@@ -221,6 +206,7 @@ const ProductDetail = (props: ProductDetailProps) => {
       <Flex direction="column">
         <Flex.Item margin="0 0 0 small">
           <Text color="secondary">
+            {/* @ts-expect-error */}
             {I18n.t('by')} {product.company.name}
           </Text>
         </Flex.Item>
@@ -239,101 +225,7 @@ const ProductDetail = (props: ProductDetailProps) => {
     ))
   }
 
-  const Links = () => {
-    const contentDirection = isMaxMobile ? 'column' : 'row'
-    const contentMargin = 'small 0 0 0'
-
-    return (
-      <div>
-        <Flex>
-          <Flex.Item>
-            <Text weight="bold" size="large">
-              {I18n.t('External Links')}
-            </Text>
-          </Flex.Item>
-        </Flex>
-        <Flex direction={contentDirection} justifyItems="space-between" width="90%">
-          {product.company.company_url && (
-            <Flex.Item margin={contentMargin}>
-              <Link
-                href={product.company.company_url}
-                isWithinText={false}
-                renderIcon={<IconExpandStartLine />}
-              >
-                <Text weight="bold">{I18n.t('Website')}</Text>
-              </Link>
-            </Flex.Item>
-          )}
-          {product.privacy_policy_url && (
-            <Flex.Item margin={contentMargin}>
-              <Link
-                href={product.privacy_policy_url}
-                isWithinText={false}
-                renderIcon={<IconEyeLine />}
-              >
-                <Text weight="bold">{I18n.t('Privacy Policy')}</Text>
-              </Link>
-            </Flex.Item>
-          )}
-          {product.terms_of_service_url && (
-            <Flex.Item margin={contentMargin}>
-              <Link
-                href={product.terms_of_service_url}
-                isWithinText={false}
-                renderIcon={<IconQuizTitleLine />}
-              >
-                <Text weight="bold">{I18n.t('Terms of Service')}</Text>
-              </Link>
-            </Flex.Item>
-          )}
-          {product.accessibility_url && (
-            <Flex.Item margin={contentMargin}>
-              <Link
-                href={product.accessibility_url}
-                isWithinText={false}
-                renderIcon={<IconA11yLine />}
-              >
-                <Text weight="bold">{I18n.t('Accessibility')}</Text>
-              </Link>
-            </Flex.Item>
-          )}
-          {product.support_link && (
-            <Flex.Item margin={contentMargin}>
-              <Link
-                href={product.support_link}
-                isWithinText={false}
-                renderIcon={<IconMessageLine />}
-              >
-                <Text weight="bold">{I18n.t('Contact')}</Text>
-              </Link>
-            </Flex.Item>
-          )}
-        </Flex>
-      </div>
-    )
-  }
-
-  const renderLtiTitle = () => {
-    const lti = product?.tool_integration_configurations
-    const version: string[] = []
-
-    if (lti?.hasOwnProperty('lti_13')) {
-      version.push('Learning Tools Interoperability (LTI)® v.1.3 Core Specification')
-    }
-
-    if (lti?.hasOwnProperty('lti_11')) {
-      version.push('Learning Tools Interoperability (LTI)® v.1.1 Core Specification')
-    }
-
-    return version.map((title, i) => (
-      <Flex.Item margin="0 0 small 0" key={`${i + 1}`}>
-        <Link onClick={() => ltiDataClickHandle(title)} isWithinText={false}>
-          <Text weight="bold">{title}</Text>
-        </Link>
-      </Flex.Item>
-    ))
-  }
-
+  // @ts-expect-error
   const hasIntegrationResources = product?.integration_resources.resources?.length > 0
 
   const renderIntegrationResources = () => {
@@ -392,14 +284,12 @@ const ProductDetail = (props: ProductDetailProps) => {
   return (
     <div>
       {isLoading ? (
-        <Spinner renderTitle="Loading Page" role="alert" aria-busy="true" data-testid="loading" />
+        <Flex justifyItems="center">
+          <Spinner renderTitle="Loading Page" role="alert" aria-busy="true" data-testid="loading" />
+        </Flex>
       ) : (
         product && (
           <>
-            <Breadcrumb label={I18n.t('Apps')}>
-              <Breadcrumb.Link href={previousPath}>{I18n.t('Apps')}</Breadcrumb.Link>
-              <Breadcrumb.Link>{product.name}</Breadcrumb.Link>
-            </Breadcrumb>
             {renderHeader()}
             {renderBylineAndUpdatedAt()}
             <Flex
@@ -409,20 +299,45 @@ const ProductDetail = (props: ProductDetailProps) => {
               <Flex.Item margin={isDesktop ? '0 0 0 xx-large' : '0'}>{renderTags()}</Flex.Item>
             </Flex>
             {!isDesktop && renderConfigureButton()}
-            <ImageCarousel screenshots={product.screenshots} />
             <View
               as="div"
-              width={100}
-              margin="small 0 medium 0"
+              width={130}
+              margin="small 0 small 0"
               position="relative"
               withFocusOutline={!showTrucatedDescription}
             >
-              <Text weight="bold" size="large">
+              <Heading level="h2" themeOverride={{h2FontWeight: 700}}>
                 {I18n.t('Overview')}
-              </Text>
+              </Heading>
             </View>{' '}
-            <Flex>
-              <Flex.Item margin="0 0 small 0">
+            <Flex gap="x-large">
+              {product.company.company_url && (
+                <Flex.Item margin="0 small medium small">
+                  <Link
+                    href={product.company.company_url}
+                    isWithinText={false}
+                    renderIcon={<IconExpandStartLine />}
+                    target="_blank"
+                  >
+                    <Text weight="bold">{I18n.t('Website')}</Text>
+                  </Link>
+                </Flex.Item>
+              )}
+              {product.support_url && (
+                <Flex.Item margin="0 0 medium 0">
+                  <Link
+                    href={product.support_url}
+                    isWithinText={false}
+                    renderIcon={<IconMessageLine />}
+                    target="_blank"
+                  >
+                    <Text weight="bold">{I18n.t('Contact')}</Text>
+                  </Link>
+                </Flex.Item>
+              )}
+            </Flex>
+            <Flex direction="column">
+              <Flex.Item width={'90%'} margin="0 small small 0">
                 <TruncateText
                   maxLines={showTrucatedDescription ? 4 : 50}
                   truncate="word"
@@ -432,54 +347,68 @@ const ProductDetail = (props: ProductDetailProps) => {
                   <Text>{productDescription}</Text>
                 </TruncateText>
               </Flex.Item>
+
+              {isTruncated && (
+                <Link
+                  margin="0 medium medium 0"
+                  forceButtonRole={true}
+                  isWithinText={false}
+                  onClick={() => setShowTruncatedDescription(!showTrucatedDescription)}
+                  themeOverride={{
+                    focusOutlineColor: 'transparent',
+                    fontWeight: 600,
+                  }}
+                >
+                  {showTrucatedDescription ? 'See more' : 'See less'}
+                </Link>
+              )}
+              {product.screenshots.length > 0 && (
+                <Flex.Item>
+                  <IconButton
+                    size="large"
+                    themeOverride={{largeHeight: '5rem'}}
+                    screenReaderLabel="View decorative image carousel"
+                    onClick={() => {
+                      imageModalClickHandler(product?.screenshots)
+                    }}
+                  >
+                    <Img display="block" loading="lazy" src={product?.screenshots[0]}></Img>
+                  </IconButton>
+                  <div style={{position: 'relative', bottom: 30, zIndex: 10}}>
+                    <ContextView
+                      width={80}
+                      padding="xxx-small"
+                      textAlign="end"
+                      placement="bottom"
+                      themeOverride={{arrowSize: '0'}}
+                    >
+                      <Text size={product?.screenshots.length > 9 ? 'x-small' : 'small'}>
+                        <IconImageLine /> {product?.screenshots.length} images
+                      </Text>
+                    </ContextView>
+                  </div>
+                </Flex.Item>
+              )}
             </Flex>
-            {isTruncated && (
-              <Link
-                margin="0 medium medium 0"
-                forceButtonRole={true}
-                isWithinText={false}
-                onClick={() => setShowTruncatedDescription(!showTrucatedDescription)}
-                themeOverride={{
-                  focusOutlineColor: 'transparent',
-                  fontWeight: 600,
-                }}
-              >
-                {showTrucatedDescription ? 'See more' : 'See less'}
-              </Link>
-            )}
-            <Links />
-            <Flex>
-              <Flex.Item margin="medium 0 small 0">
-                <Text weight="bold" size="large">
-                  {I18n.t('Resources and Documents')}
-                </Text>
+            <ExternalLinks product={product} />
+            <LtiConfigurationDetail
+              badges={product.integration_badges}
+              integrationData={relevantIntegration}
+            />
+            <Flex margin="medium 0 0 0">
+              <Flex.Item margin="0 0 small 0">
+                <Heading level="h2" themeOverride={{h2FontWeight: 700}}>
+                  {I18n.t('Implementation Resources')}
+                </Heading>
               </Flex.Item>
             </Flex>
-            <Text weight="bold" size="medium">
-              {I18n.t('Integrations')}
-            </Text>
-            <Flex direction="column" margin="small 0 x-small 0">
-              {renderLtiTitle()}
+            <Flex direction="column" margin="0 0 large 0">
+              {hasIntegrationResources
+                ? renderIntegrationResources()
+                : I18n.t(
+                    'The tool provider did not include implementation resources for this tool.',
+                  )}
             </Flex>
-            {product.badges.length > 0 && (
-              <BadgeCarousel
-                badges={product?.badges}
-                isMaxMobile={isMaxMobile}
-                isMaxTablet={isMaxTablet}
-              />
-            )}
-            {hasIntegrationResources && (
-              <>
-                <Flex margin="small 0 0 0">
-                  <Flex.Item margin="0 0 small 0">
-                    <Text weight="bold" size="large">
-                      {I18n.t('Implementation Resources')}
-                    </Text>
-                  </Flex.Item>
-                </Flex>
-                <Flex direction="column">{renderIntegrationResources()}</Flex>
-              </>
-            )}
             {(excludeCurrentProduct?.length ?? 0) > 0 && (
               <ProductCarousel
                 products={excludeCurrentProduct ?? []}
@@ -492,17 +421,18 @@ const ProductDetail = (props: ProductDetailProps) => {
           </>
         )
       )}
-      <LtiDetailModal
-        ltiTitle={clickedLtiTitle}
-        integrationData={product?.lti_configurations}
-        isModalOpen={isModalOpen}
-        setModalOpen={setModalOpen}
-      />
       <IntegrationDetailModal
         title={intDetailTitle}
         content={intDetailContent}
         isModalOpen={isIntDetailModalOpen}
         setModalOpen={setIntDetailModalOpen}
+      />
+      <ImageCarouselModal
+        isModalOpen={isImageModalOpen}
+        setModalOpen={setImageModalOpen}
+        screenshots={imageModalScreenshots}
+        // @ts-expect-error
+        productName={product?.name}
       />
     </div>
   )

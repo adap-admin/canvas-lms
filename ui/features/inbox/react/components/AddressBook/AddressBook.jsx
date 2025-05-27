@@ -41,14 +41,14 @@ import {Text} from '@instructure/ui-text'
 import {Tag} from '@instructure/ui-tag'
 import {nanoid} from 'nanoid'
 import {AddressBookItem} from './AddressBookItem'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import React, {useEffect, useMemo, useState, useRef, useCallback, useContext} from 'react'
 import {TOTAL_RECIPIENTS} from '../../../graphql/Queries'
-import {useQuery} from '@apollo/react-hooks'
+import {useQuery} from '@apollo/client'
 
 import {AlertManagerContext} from '@canvas/alerts/react/AlertManager'
 
-const I18n = useI18nScope('conversations_2')
+const I18n = createI18nScope('conversations_2')
 
 const MOUSE_FOCUS_TYPE = 'mouse'
 const KEYBOARD_FOCUS_TYPE = 'keyboard'
@@ -128,7 +128,7 @@ export const AddressBook = ({
   const showContextSelect = useMemo(() => {
     // Legacy discussions don't allow messages to all groups/sections
     // The mutation also doesn't allow using a course groups or sections asset string as a recipient
-    const disabledContextSelectOptions = ['groups', 'sections']
+    const disabledContextSelectOptions = ['groups', 'sections', 'tags']
     let contextID = currentFilter?.context?.contextID
 
     if (!hasSelectAllFilterOption || !contextID || inputValue) {
@@ -243,7 +243,7 @@ export const AddressBook = ({
           root: null,
           rootMargin: '0px',
           threshold: 0.4,
-        }
+        },
       )
 
       if (menuItemCurrent) {
@@ -555,7 +555,7 @@ export const AddressBook = ({
       onUserFilterSelect(undefined)
     }
     newSelectedMenuItems = newSelectedMenuItems.filter(
-      menuItem => menuItem.id !== removeMenuItem.id
+      menuItem => menuItem.id !== removeMenuItem.id,
     )
     setSelectedMenuItems([...newSelectedMenuItems])
     onSelectedIdsChange([...newSelectedMenuItems])
@@ -610,9 +610,6 @@ export const AddressBook = ({
                   type="search"
                   aria-owns={popoverInstanceId.current}
                   aria-label={ariaAddressBookLabel}
-                  aria-labelledby={`address-book-form ${selectedMenuItems
-                    .map(u => `address-book-label-${u?.id}-${u?.itemType}`)
-                    .join(' ')}`}
                   aria-autocomplete="list"
                   autoComplete="off"
                   inputRef={ref => {

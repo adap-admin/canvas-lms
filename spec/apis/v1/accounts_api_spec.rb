@@ -195,6 +195,17 @@ describe "Accounts API", type: :request do
                                         "Account 2"]
     end
 
+    it "returns child accounts in order by name" do
+      json = api_call(:get,
+                      "/api/v1/accounts/#{@a1.id}/sub_accounts?order=name",
+                      { controller: "accounts",
+                        action: "sub_accounts",
+                        account_id: @a1.id.to_s,
+                        format: "json",
+                        order: "name" })
+      expect(json.pluck("name")).to eq ["Account 1", "Account 2", "implicit-access", "subby"]
+    end
+
     it "includes course count if requested" do
       2.times { course_factory(active_all: true, account: @a1.sub_accounts.find_by(name: "subby")) }
       json = api_call(:get,
@@ -1249,7 +1260,10 @@ describe "Accounts API", type: :request do
 
   describe "environment" do
     before_once do
-      Account.default.settings[:calendar_contexts_limit] = true
+      Account.site_admin.enable_feature!(:inbox_settings)
+      Account.default[:settings] = { calendar_contexts_limit: 10,
+                                     enable_inbox_signature_block: true,
+                                     enable_inbox_auto_response: true }
       Account.default.save!
     end
 
@@ -1260,7 +1274,9 @@ describe "Accounts API", type: :request do
                       {},
                       {},
                       { expected_status: 200 })
-      expect(json).to eq({ "calendar_contexts_limit" => true })
+      expect(json).to eq(
+        { "calendar_contexts_limit" => 10, "enable_inbox_signature_block" => true, "enable_inbox_auto_response" => true }
+      )
     end
 
     it "requires user session" do
@@ -2326,6 +2342,22 @@ describe "Accounts API", type: :request do
         json = api_call(:get, show_settings_path, show_settings_header, {}, { expected_status: 200 })
         expect(json["enable_as_k5_account"]).to be_nil
         expect(json["use_classic_font_in_k5"]).to be_nil
+      end
+    end
+
+    describe "Assign To Differentiation Tags" do
+      it "gets allow_assign_to_differentiation_tags setting" do
+        @a1.settings = { allow_assign_to_differentiation_tags: { value: true } }
+        @a1.save
+
+        json = api_call(:get, show_settings_path, show_settings_header, {}, { expected_status: 200 })
+        expect(json["allow_assign_to_differentiation_tags"]).to be_present
+        expect(json["allow_assign_to_differentiation_tags"]).to(be { "value" => true })
+      end
+
+      it "does not return allow_assign_to_differentiation_tags setting if it is not set" do
+        json = api_call(:get, show_settings_path, show_settings_header, {}, { expected_status: 200 })
+        expect(json["allow_assign_to_differentiation_tags"]).to be_nil
       end
     end
   end

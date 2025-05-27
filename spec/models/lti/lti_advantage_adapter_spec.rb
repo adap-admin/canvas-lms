@@ -17,13 +17,11 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_relative "../../lti_1_3_spec_helper"
-
 describe Lti::LtiAdvantageAdapter do
-  include_context "lti_1_3_spec_helper"
+  include_context "key_storage_helper"
   include Lti::RedisMessageClient
 
-  let!(:lti_user_id) { Lti::Asset.opaque_identifier_for(@student) }
+  let!(:lti_user_id) { Lti::V1p1::Asset.opaque_identifier_for(@student) }
   let(:return_url) { "http://www.platform.com/return_url" }
   let(:user) { @student }
   let(:opts) { { resource_type: "course_navigation", domain: "test.com" } }
@@ -92,6 +90,52 @@ describe Lti::LtiAdvantageAdapter do
 
     it "includes extension student_context claim in the id_token" do
       expect(params["post_payload"]["https://www.instructure.com/student_context"]).to eq({ "id" => @student.lti_id })
+    end
+  end
+
+  describe "#generate_post_payload_for_report_review" do
+    let(:login_message) { adapter.generate_post_payload_for_report_review }
+    let(:asset_processor) { lti_asset_processor_model }
+    let(:asset_report) { lti_asset_report_model(asset_processor:) }
+    let(:opts) { { asset_report: } }
+
+    it "creates a report review request" do
+      expect(params["post_payload"]["https://purl.imsglobal.org/spec/lti/claim/message_type"]).to eq "LtiReportReviewRequest"
+    end
+
+    it "includes the asset report type in the message hint" do
+      expect(params["post_payload"]["https://purl.imsglobal.org/spec/lti/claim/assetreport_type"]).to eq "originality"
+    end
+
+    it "includes the for_user claim in the id_token" do
+      expect(params["post_payload"]["https://purl.imsglobal.org/spec/lti/claim/for_user"]["user_id"]).to eq(user.lti_id)
+    end
+  end
+
+  describe "#generate_post_payload_for_asset_processor_settings" do
+    let(:login_message) { adapter.generate_post_payload_for_asset_processor_settings }
+    let(:asset_processor) { lti_asset_processor_model }
+    let(:opts) { { asset_processor: } }
+
+    it "creates a asset processor settings request" do
+      expect(params["post_payload"]["https://purl.imsglobal.org/spec/lti/claim/message_type"]).to eq "LtiAssetProcessorSettingsRequest"
+    end
+
+    it "includes the activity_id claim in the id_token" do
+      expect(params["post_payload"]["https://purl.imsglobal.org/spec/lti/claim/activity"]["id"]).to eq(asset_processor.assignment.lti_context_id)
+    end
+  end
+
+  describe "#generate_post_payload_for_eula" do
+    let(:login_message) { adapter.generate_post_payload_for_eula }
+    let(:opts) { {} }
+
+    it "creates a eula request" do
+      expect(params["post_payload"]["https://purl.imsglobal.org/spec/lti/claim/message_type"]).to eq "LtiEulaRequest"
+    end
+
+    it "includes the eulaservice" do
+      expect(params["post_payload"]["https://purl.imsglobal.org/spec/lti/claim/eulaservice"]["url"]).to eq(tool.asset_processor_eula_url)
     end
   end
 

@@ -17,7 +17,7 @@
  */
 
 import React, {useEffect, useState} from 'react'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {rangingFrom} from '@canvas/rubrics/react/RubricAssessment'
 import type {RubricCriterion, RubricRating} from '@canvas/rubrics/react/types/rubric'
 import {ScreenReaderContent} from '@instructure/ui-a11y-content'
@@ -37,7 +37,7 @@ import {DragDropContext as DragAndDrop, Droppable, Draggable} from 'react-beauti
 import type {DropResult} from 'react-beautiful-dnd'
 import {WarningModal} from './WarningModal'
 
-const I18n = useI18nScope('rubrics-criterion-modal')
+const I18n = createI18nScope('rubrics-criterion-modal')
 
 export const DEFAULT_RUBRIC_RATINGS: RubricRating[] = [
   {
@@ -125,8 +125,8 @@ export const CriterionModal = ({
     const points = isFirstIndex
       ? ratings[0].points + 1
       : isLastIndex
-      ? Math.max(ratings[index - 1].points - 1, 0)
-      : Math.round((ratings[index].points + ratings[index - 1].points) / 2)
+        ? Math.max(ratings[index - 1].points - 1, 0)
+        : Math.round((ratings[index].points + ratings[index - 1].points) / 2)
 
     const newRating = {
       id: Date.now().toString(),
@@ -331,7 +331,7 @@ export const CriterionModal = ({
               <Flex.Item shouldGrow={true}>
                 {unassessed && criterionUseRangeEnabled && !hidePoints && (
                   <Checkbox
-                    label="Enable Range"
+                    label={I18n.t('Enable Range')}
                     checked={criterionUseRange}
                     onChange={e => setCriterionUseRange(e.target.checked)}
                     data-testid="enable-range-checkbox"
@@ -391,7 +391,6 @@ export const CriterionModal = ({
                         const rangeStart = rangingFrom(ratings, index)
 
                         return (
-                          // eslint-disable-next-line react/no-array-index-key
                           <View as="div" key={`rating-row-${rating.id}-${index}`}>
                             <AddRatingRow
                               onClick={() => addRating(index)}
@@ -497,7 +496,7 @@ const RatingRow = ({
   const setNumber = (value: number) => {
     if (Number.isNaN(value)) return 0
 
-    return value < 0 ? 0 : value > 100 ? 100 : value
+    return value < 0 ? 0 : value
   }
 
   const errorMessage: FormMessage[] =
@@ -525,13 +524,14 @@ const RatingRow = ({
                   {criterionUseRange && (
                     <Flex.Item width="3.438rem" textAlign="end" margin="0 0 x-small 0">
                       <View as="span" margin="0 small 0 0">
-                        {rangeStart ? `${rangeStart} to ` : `--`}
+                        {rangeStart ? I18n.t('%{rangeStart} to ', {rangeStart}) : `--`}
                       </View>
                     </Flex.Item>
                   )}
                   {unassessed ? (
                     <Flex.Item>
                       <NumberInput
+                        allowStringValue={true}
                         renderLabel={
                           <ScreenReaderContent>{I18n.t('Rating Points')}</ScreenReaderContent>
                         }
@@ -716,7 +716,7 @@ const DragVerticalLineBreak = ({criterionUseRange}: DragVerticalLineBreakProps) 
         position: 'absolute',
         width: '1px',
         height: 'auto',
-        backgroundColor: '#C7CDD1',
+        backgroundColor: '#E8EAEC',
         left: criterionUseRange ? '13.75rem' : '10.313rem',
         top: '1.688rem',
         bottom: '1.688rem',

@@ -49,9 +49,11 @@ export interface EnvAssignmentsA2StudentView {
   REVIEWER_SUBMISSION_ID?: string | number
 
   belongs_to_unpublished_module: boolean
-
+  LTI_TOOL?: string
+  LTI_TOOL_ID?: string
   ASSIGNMENT_ID: string | number
   CONFETTI_ENABLED: boolean
+  CURRENT_USER_CAN_GRADE_SUBMISSION: boolean
   EMOJIS_ENABLED: boolean
   EMOJI_DENY_LIST: any[]
   COURSE_ID: string | number

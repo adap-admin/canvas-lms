@@ -18,7 +18,7 @@
 
 import {executeApiRequest} from '@canvas/do-fetch-api-effect/apiRequest'
 import GradeFormatHelper from '@canvas/grading/GradeFormatHelper'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import numberHelper from '@canvas/i18n/numberHelper'
 import {useCallback, useState} from 'react'
 
@@ -30,7 +30,7 @@ import {
 import {mapUnderscoreSubmission} from '../../utils/gradebookUtils'
 import type {Submission} from '../../../../api.d'
 
-const I18n = useI18nScope('enhanced_individual_gradebook_submit_score')
+const I18n = createI18nScope('enhanced_individual_gradebook_submit_score')
 
 type SubmitScoreRequestBody = {
   originator?: string
@@ -43,11 +43,11 @@ type SubmitScoreRequestBody = {
 
 export const useSubmitScore = () => {
   const [submitScoreStatus, setSubmitScoreStatus] = useState<ApiCallStatus>(
-    ApiCallStatus.NOT_STARTED
+    ApiCallStatus.NOT_STARTED,
   )
   const [submitScoreError, setSubmitScoreError] = useState<string>('')
   const [savedSubmission, setSavedSubmission] = useState<GradebookUserSubmissionDetails | null>(
-    null
+    null,
   )
 
   const submit = useCallback(
@@ -56,7 +56,7 @@ export const useSubmitScore = () => {
       submission: GradebookUserSubmissionDetails,
       gradeInput: string,
       submitScoreUrl?: string | null,
-      subAssignmentTag?: string | null
+      subAssignmentTag?: string | null,
     ) => {
       if (!submitScoreUrl) {
         setSubmitScoreError(I18n.t('Unable to submit score'))
@@ -120,7 +120,7 @@ export const useSubmitScore = () => {
         setSubmitScoreStatus(ApiCallStatus.FAILED)
       }
     },
-    []
+    [],
   )
 
   const submitExcused = useCallback(
@@ -156,7 +156,7 @@ export const useSubmitScore = () => {
         setSubmitScoreStatus(ApiCallStatus.FAILED)
       }
     },
-    []
+    [],
   )
 
   return {

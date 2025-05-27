@@ -34,10 +34,6 @@ describe Lti::IMS::DynamicRegistrationController do
 
   verifier = OpenApiSpecHelper::SchemaVerifier.new(openapi_spec)
 
-  before do
-    Account.default.root_account.enable_feature! :lti_dynamic_registration
-  end
-
   after do
     verifier.verify(request, response) if response.sent?
   end
@@ -94,6 +90,7 @@ describe Lti::IMS::DynamicRegistrationController do
           "claims" => ["iss", "sub"],
           "target_link_uri" => "https://example.com/launch",
           "https://canvas.instructure.com/lti/privacy_level" => "email_only",
+          "https://canvas.instructure.com/lti/vendor" => "Vendor",
         },
       }.merge(
         scopes ? { "scope" => scopes.join(" ") } : {}
@@ -160,6 +157,7 @@ describe Lti::IMS::DynamicRegistrationController do
           expect(created_registration.canvas_configuration["custom_fields"]).to eq({ "global_foo" => "global_bar" })
           expect(created_registration.unified_tool_id).to eq("asdf")
           expect(created_registration.registration_url).to eq("https://example.com/registration")
+          expect(created_registration.lti_registration.vendor).to eq("Vendor")
         end
 
         it "validates using the schema's to_model_attrs" do
@@ -306,10 +304,6 @@ describe Lti::IMS::DynamicRegistrationController do
     let(:account) { Account.default }
     let(:registration) { lti_ims_registration_model(account:) }
 
-    before do
-      account.enable_feature!(:lti_dynamic_registration)
-    end
-
     context "with a user session" do
       let(:user) { account_admin_user(account:) }
 
@@ -353,14 +347,6 @@ describe Lti::IMS::DynamicRegistrationController do
 
     context "without a user session" do
       it { is_expected.to be_redirect }
-    end
-
-    context "without the feature flag enabled" do
-      before do
-        account.disable_feature!(:lti_dynamic_registration)
-      end
-
-      it { is_expected.to be_not_found }
     end
   end
 
@@ -499,6 +485,45 @@ describe Lti::IMS::DynamicRegistrationController do
       get :dr_iframe, params: { account_id: Account.default.id, url: "http://testexample.com?registration_token=#{valid_jwt}" }
       expect(response).to be_successful
       expect(response.headers["Content-Security-Policy"]).to include("testexample.com")
+    end
+  end
+
+  describe "#lti_registration_by_uuid" do
+    let(:admin) { account_admin_user(account: Account.default) }
+
+    it "returns a 404 if the registration cannot be found" do
+      user_session(admin)
+      get :lti_registration_by_uuid, params: { account_id: Account.default.id, registration_uuid: "123" }
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "returns an Lti::Registration with it's configuration and overlay" do
+      user_session(admin)
+      registration = lti_ims_registration_model(account: Account.default)
+      Lti::Overlay.create!(account: Account.default, registration: registration.lti_registration, data: { "description" => "test" })
+      get :lti_registration_by_uuid, params: { account_id: Account.default.id, registration_uuid: registration.guid }
+      expect(response).to be_successful
+      expect(response.parsed_body["configuration"]).to eq(registration.lti_registration.internal_lti_configuration(include_overlay: false))
+      expect(response.parsed_body["overlay"]["data"]).to eq({ "description" => "test" })
+    end
+  end
+
+  describe "#ims_registration_by_uuid" do
+    let(:admin) { account_admin_user(account: Account.default) }
+
+    it "returns a 404 if the registration cannot be found" do
+      user_session(admin)
+      get :ims_registration_by_uuid, params: { account_id: Account.default.id, registration_uuid: "123" }
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "returns an Lti::IMS::Registration with it's configuration and overlay" do
+      user_session(admin)
+      registration = lti_ims_registration_model(account: Account.default, registration_overlay: { "description" => "test" })
+      get :ims_registration_by_uuid, params: { account_id: Account.default.id, registration_uuid: registration.guid }
+      expect(response).to be_successful
+      expect(response.parsed_body["lti_tool_configuration"].with_indifferent_access).to eq(registration.lti_tool_configuration.with_indifferent_access)
+      expect(response.parsed_body["overlay"].with_indifferent_access).to eq(registration.registration_overlay.with_indifferent_access)
     end
   end
 

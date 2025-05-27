@@ -140,7 +140,7 @@ class ContextModule < ActiveRecord::Base
   end
 
   def check_for_stale_cache_after_unlocking!
-    GuardRail.activate(:primary) { touch } if unlock_at && unlock_at < Time.now && updated_at < unlock_at
+    GuardRail.activate(:primary) { touch } if unlock_at && unlock_at < Time.zone.now && updated_at < unlock_at
   end
 
   def is_prerequisite_for?(mod)
@@ -390,29 +390,18 @@ class ContextModule < ActiveRecord::Base
   end
 
   set_policy do
-    #################### Begin legacy permission block #########################
     given do |user, session|
-      user && !context.root_account.feature_enabled?(:granular_permissions_manage_course_content) &&
-        context.grants_right?(user, session, :manage_content)
-    end
-    can :read and can :create and can :update and can :delete and can :read_as_admin
-    ##################### End legacy permission block ##########################
-
-    given do |user, session|
-      user && context.root_account.feature_enabled?(:granular_permissions_manage_course_content) &&
-        context.grants_right?(user, session, :manage_course_content_add)
+      user && context.grants_right?(user, session, :manage_course_content_add)
     end
     can :read and can :read_as_admin and can :create
 
     given do |user, session|
-      user && context.root_account.feature_enabled?(:granular_permissions_manage_course_content) &&
-        context.grants_right?(user, session, :manage_course_content_edit)
+      user && context.grants_right?(user, session, :manage_course_content_edit)
     end
     can :read and can :read_as_admin and can :update
 
     given do |user, session|
-      user && context.root_account.feature_enabled?(:granular_permissions_manage_course_content) &&
-        context.grants_right?(user, session, :manage_course_content_delete)
+      user && context.grants_right?(user, session, :manage_course_content_delete)
     end
     can :read and can :read_as_admin and can :delete
 
@@ -425,7 +414,7 @@ class ContextModule < ActiveRecord::Base
     given { |user, session| context.grants_right?(user, session, :read) && active? }
     can :read
 
-    given { |user, session| user && context.grants_any_right?(user, session, :manage_content, :manage_course_content_edit) }
+    given { |user, session| user && context.grants_right?(user, session, :manage_course_content_edit) }
     can :manage_assign_to
   end
 
@@ -563,15 +552,17 @@ class ContextModule < ActiveRecord::Base
         type: req[:type],
       }
       new_req[:min_score] = req[:min_score].to_f if req[:type] == "min_score" && req[:min_score]
+      new_req[:min_percentage] = req[:min_percentage].to_f if req[:type] == "min_percentage" && req[:min_percentage]
       new_req
     end
 
     tags = content_tags.not_deleted.index_by(&:id)
+    scoreable_types = %w[must_submit min_score min_percentage]
     validated_reqs = requirements.select do |req|
       if req[:id] && (tag = tags[req[:id]])
         if %w[must_view must_mark_done must_contribute].include?(req[:type])
           true
-        elsif %w[must_submit min_score].include?(req[:type])
+        elsif scoreable_types.include?(req[:type])
           true if tag.scoreable?
         end
       end
@@ -612,6 +603,48 @@ class ContextModule < ActiveRecord::Base
       # always return an array now because filter_tags_for_da *might* return one
       tags.to_a
     end
+  end
+
+  def content_tags_for(user, opts = {})
+    is_teacher = opts[:is_teacher] != false && grants_right?(user, :read_as_admin)
+    mastery_path_unreleased_items_block_progression = context.root_account.feature_enabled?(:mastery_path_unreleased_items_block_progression)
+
+    return content_tags_visible_to(user, opts) if !context.conditional_release || is_teacher || !mastery_path_unreleased_items_block_progression
+
+    user_graded_submissions = user.submissions.active.for_course(context).graded
+    pending_submission_ids = Progress.where(tag: "conditional_release_handler", context: user_graded_submissions).is_pending.pluck(:context_id)
+    cyoe_pending_assignment_ids = Submission.where(id: pending_submission_ids).pluck(:assignment_id)
+
+    user_ungraded_assignment_ids = user.submissions.active.for_course(context).ungraded.having_submission.pluck(:assignment_id)
+
+    course_trigger_assignments_ids = context.conditional_release_rules
+                                            .active
+                                            .joins(assignment_sets: :assignment_set_associations)
+                                            .group("conditional_release_rules.trigger_assignment_id")
+                                            .having("count(conditional_release_assignment_set_associations.id) >= 3")
+                                            .pluck(:trigger_assignment_id)
+                                            .uniq
+
+    trigger_assignment_ids = course_trigger_assignments_ids & (user_ungraded_assignment_ids + cyoe_pending_assignment_ids)
+
+    target_assignment_ids = context.conditional_release_rules
+                                   .active
+                                   .where(trigger_assignment_id: trigger_assignment_ids)
+                                   .preload(assignment_sets: :assignment_set_associations)
+                                   .flat_map(&:assignment_sets)
+                                   .flat_map(&:assignment_set_associations)
+                                   .map(&:assignment_id)
+                                   .uniq
+
+    tags = cached_active_tags.filter do |tag|
+      if tag.content_type == "Assignment"
+        target_assignment_ids.include? tag.content_id
+      else
+        target_assignment_ids.include? tag.content&.try(:assignment_id)
+      end
+    end
+
+    (tags + content_tags_visible_to(user, opts)).uniq
   end
 
   def visibility_for_user(user, session = nil)
@@ -732,7 +765,7 @@ class ContextModule < ActiveRecord::Base
       content = if params[:type] == "lti/message_handler"
                   Lti::MessageHandler.for_context(context).where(id: params[:id]).first
                 else
-                  ContextExternalTool.find_external_tool(params[:url], context, params[:id].to_i) || ContextExternalTool.new.tap { |tool| tool.id = 0 }
+                  Lti::ToolFinder.from_url(params[:url], context, preferred_tool_id: params[:id].to_i) || ContextExternalTool.new.tap { |tool| tool.id = 0 }
                 end
       added_item.attributes = {
         content:,
@@ -780,7 +813,7 @@ class ContextModule < ActiveRecord::Base
     else
       return nil unless item
 
-      title = params[:title] || (item.title rescue item.name)
+      title = params[:title] || item.try(:title) || item.name
       added_item ||= content_tags.build(context:)
       added_item.attributes = {
         content: item,
@@ -865,7 +898,7 @@ class ContextModule < ActiveRecord::Base
         action == :done
       when "must_contribute"
         action == :contributed
-      when "must_submit", "min_score"
+      when "must_submit", "min_score", "min_percentage"
         action == :scored || # rubocop:disable Style/MultipleComparison
           action == :submitted # to mark progress in the incomplete_requirements (moves from 'unlocked' to 'started')
       else
@@ -886,6 +919,8 @@ class ContextModule < ActiveRecord::Base
       t("requirements.must_submit", "must submit the assignment")
     when "min_score"
       t("requirements.min_score", "must score at least a %{score}", score: req[:min_score])
+    when "min_percentage"
+      t("requirements.min_percentage", "must score at least a %{percentage}%", percentage: req[:min_score])
     else
       nil
     end
@@ -941,7 +976,7 @@ class ContextModule < ActiveRecord::Base
   end
 
   def to_be_unlocked
-    unlock_at && unlock_at > Time.now
+    unlock_at && unlock_at > Time.zone.now
   end
 
   def migration_position
@@ -998,20 +1033,16 @@ class ContextModule < ActiveRecord::Base
   end
 
   def update_assignment_submissions(module_assignments = current_items_with_assignment)
-    if Account.site_admin.feature_enabled?(:selective_release_backend)
-      create_sub_assignment_submissions = false
-      if context.root_account.feature_enabled?(:discussion_checkpoints) && module_assignments.has_sub_assignments.any?
-        create_sub_assignment_submissions = true
-      end
-
-      module_assignments.clear_cache_keys(:availability)
-      SubmissionLifecycleManager.recompute_course(context, assignments: module_assignments, update_grades: true, create_sub_assignment_submissions:)
+    create_sub_assignment_submissions = false
+    if context.discussion_checkpoints_enabled? && module_assignments.has_sub_assignments.any?
+      create_sub_assignment_submissions = true
     end
+
+    module_assignments.clear_cache_keys(:availability)
+    SubmissionLifecycleManager.recompute_course(context, assignments: module_assignments, update_grades: true, create_sub_assignment_submissions:)
   end
 
   def current_items_with_assignment
-    return unless Account.site_admin.feature_enabled?(:selective_release_backend)
-
     module_assignments = Assignment.active.where(id: content_tags.not_deleted.where(content_type: "Assignment").select(:content_id)).pluck(:id)
 
     module_discussions_assignment_ids = DiscussionTopic.active.where(id: content_tags.not_deleted.where(content_type: "DiscussionTopic").select(:content_id)).select(:assignment_id)

@@ -39,6 +39,22 @@ describe Api::V1::Attachment do
       Canvadoc.create!(document_id: "abc123#{attachment.id}", attachment_id: attachment.id)
     end
 
+    it "hides the verifier parameter from url in the returned hash when 'disable_adding_uuid_verifier_in_api' ff is enabled" do
+      attachment.root_account.enable_feature!(:disable_adding_uuid_verifier_in_api)
+      json = attachment_json(attachment, teacher, {})
+      expect(json.fetch("url")).not_to include("verifier")
+    end
+
+    it "includes the location parameter in the url when the opts contains it" do
+      params = {
+        include: ["preview_url"],
+        location: "course_123",
+        skip_permission_checks: true
+      }
+      json = attachment_json(attachment, teacher, {}, params)
+      expect(json.fetch("url")).to include("location=course_123")
+    end
+
     it "includes the submission id in the url_opts when preview_url is included" do
       params = {
         include: ["preview_url"],
@@ -247,7 +263,7 @@ describe Api::V1::Attachment do
 
   describe "#api_attachment_preflight" do
     let_once(:context) { course_model }
-    let(:request) { instance_double("Rack::Request", { params: ActionController::Parameters.new(params), ssl?: false }) }
+    let(:request) { instance_double(Rack::Request, { params: ActionController::Parameters.new(params), ssl?: false }) }
     let(:params) { { name: "name", filename: "filename.png" } }
     let(:opts) { {} }
 

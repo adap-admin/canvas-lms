@@ -17,8 +17,6 @@
  */
 
 import React, {createContext, type ReactNode, useContext, useState} from 'react'
-import type {AuthProvider} from '../types'
-import {useNewLoginData} from '../hooks/useNewLoginData'
 
 interface NewLoginContextType {
   rememberMe: boolean
@@ -31,69 +29,35 @@ interface NewLoginContextType {
   setShowForgotPassword: (value: boolean) => void
   otpCommunicationChannelId: string | null
   setOtpCommunicationChannelId: (id: string | null) => void
-  // define optional data attributes from hook
-  enableCourseCatalog?: boolean
-  authProviders?: AuthProvider[]
-  loginHandleName?: string
-  loginLogoUrl?: string
-  loginLogoText?: string
-  bodyBgColor?: string
-  bodyBgImage?: string
-  isPreviewMode?: boolean
 }
 
 const NewLoginContext = createContext<NewLoginContextType | undefined>(undefined)
 
-interface NewLoginProviderProps {
+interface Props {
   children: ReactNode
 }
 
-export const NewLoginProvider = ({children}: NewLoginProviderProps) => {
+export const NewLoginProvider = ({children}: Props) => {
   const [rememberMe, setRememberMe] = useState(false)
   const [isUiActionPending, setIsUiActionPending] = useState(false)
   const [otpRequired, setOtpRequired] = useState(false)
   const [showForgotPassword, setShowForgotPassword] = useState(false)
   const [otpCommunicationChannelId, setOtpCommunicationChannelId] = useState<string | null>(null)
 
-  // get data attribute values from hook
-  const {
-    enableCourseCatalog,
-    authProviders,
-    loginHandleName,
-    loginLogoUrl,
-    loginLogoText,
-    bodyBgColor,
-    bodyBgImage,
-    isPreviewMode,
-  } = useNewLoginData()
+  const value: NewLoginContextType = {
+    rememberMe,
+    setRememberMe,
+    isUiActionPending,
+    setIsUiActionPending,
+    otpRequired,
+    setOtpRequired,
+    showForgotPassword,
+    setShowForgotPassword,
+    otpCommunicationChannelId,
+    setOtpCommunicationChannelId,
+  }
 
-  return (
-    <NewLoginContext.Provider
-      value={{
-        rememberMe,
-        setRememberMe,
-        isUiActionPending,
-        setIsUiActionPending,
-        otpRequired,
-        setOtpRequired,
-        showForgotPassword,
-        setShowForgotPassword,
-        otpCommunicationChannelId,
-        setOtpCommunicationChannelId,
-        // pass data attribute hook values
-        enableCourseCatalog,
-        authProviders,
-        loginHandleName,
-        loginLogoUrl,
-        loginLogoText,
-        bodyBgColor,
-        bodyBgImage,
-        isPreviewMode,
-      }}
-    >
-      {children}
-    </NewLoginContext.Provider>
-  )
+  return <NewLoginContext.Provider value={value}>{children}</NewLoginContext.Provider>
 }
 
 export const useNewLogin = (): NewLoginContextType => {

@@ -17,8 +17,9 @@
  */
 
 import React, {useEffect, useRef, useReducer, useState} from 'react'
+import {createRoot} from 'react-dom/client'
 import ReactDOM from 'react-dom'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {Modal} from '@instructure/ui-modal'
 import {View} from '@instructure/ui-view'
 import {Heading} from '@instructure/ui-heading'
@@ -27,6 +28,7 @@ import {Spinner} from '@instructure/ui-spinner'
 import {bool, func, number, string} from 'prop-types'
 import {showFlashError, showFlashSuccess} from '@canvas/alerts/react/FlashAlert'
 import {GroupContext, SPLIT, API_STATE, stateToContext} from './context'
+import {Text} from '@instructure/ui-text'
 
 import {GroupSetName} from './GroupSetName'
 import {SelfSignup} from './SelfSignup'
@@ -36,7 +38,7 @@ import {AssignmentProgress} from './AssignmentProgress'
 import doFetchApi from '@canvas/do-fetch-api-effect'
 import {Responsive} from '@instructure/ui-responsive'
 
-const I18n = useI18nScope('groups')
+const I18n = createI18nScope('groups')
 
 const INITIAL_STATE = Object.freeze({
   name: '',
@@ -86,7 +88,12 @@ function reducer(prevState, action) {
     }
     case 'selfsignup-change': {
       const {selfSignup, bySection} = action.to
-      return {...prevState, selfSignup, bySection: selfSignup ? bySection : false}
+      return {
+        ...prevState,
+        selfSignup,
+        bySection: selfSignup ? bySection : false,
+        splitGroups: selfSignup ? SPLIT.off : prevState.splitGroups,
+      }
     }
     case 'leadership-change': {
       const {enableAutoLeader, autoLeaderType} = action.to
@@ -118,14 +125,13 @@ export const CreateOrEditSetModal = ({
   context,
   contextId,
   allowSelfSignup,
-  mockApi, // used for Storybook only
 }) => {
   const [st, dispatch] = useReducer(reducer, INITIAL_STATE)
   const topElement = useRef(null)
   const creationJSON = useRef(undefined)
   const [selfSignupEndDate, setSelfSignupEndDate] = useState(null)
   const areErrors = Object.keys(st.errors).length > 0
-  const apiCall = mockApi || doFetchApi
+  const apiCall = doFetchApi
   const isApiActive = st.apiState !== API_STATE.inactive
   const isApiAssigning = st.apiState === API_STATE.assigning && creationJSON.current
 
@@ -198,7 +204,7 @@ export const CreateOrEditSetModal = ({
       else if (groupLimitIsInvalid) structureError(I18n.t('Group limit size is invalid'))
       else if (!groupLimitIsInvalid && parseInt(st.groupLimit, 10) < 2)
         structureError(
-          I18n.t('If you are going to define a limit group members, it must be greater than 1.')
+          I18n.t('If you are going to define a limit group members, it must be greater than 1.'),
         )
     } else {
       switch (st.splitGroups) {
@@ -212,7 +218,7 @@ export const CreateOrEditSetModal = ({
             structureError(
               I18n.t('Must be at least one group per section; there are %{count} sections', {
                 count: studentSectionCount,
-              })
+              }),
             )
           break
         case SPLIT.byMemberCount:
@@ -286,7 +292,7 @@ export const CreateOrEditSetModal = ({
         I18n.t('An error occurred while %{performingSomeTask}: %{errorMessage}', {
           performingSomeTask: step,
           errorMessage: e.message,
-        })
+        }),
       )()
       dispatch({ev: 'api-change', to: 'inactive'})
       onDismiss(null)
@@ -294,51 +300,49 @@ export const CreateOrEditSetModal = ({
   }
 
   const renderDialogBody = () => (
-    
-      <Responsive
-        match="media"
-        query={{
-          small: { maxWidth: 600 },
-        }}
-        props={{
-          small: {
-            direction: 'column'
-          },
-        }}
-        render={(props, matches) => {
-              return(
-                <GroupContext.Provider value={stateToContext(st)}>
-                  <GroupSetName
-                    errormsg={st.errors.name}
-                    onChange={newName => dispatch({ev: 'name-change', to: newName})}
-                    elementRef={el => {
-                      topElement.current = el
-                    }}
+    <Responsive
+      match="media"
+      query={{
+        small: {maxWidth: 600},
+      }}
+      props={{
+        small: {
+          direction: 'column',
+        },
+      }}
+      render={(props, _) => {
+        return (
+          <GroupContext.Provider value={stateToContext(st)}>
+            <GroupSetName
+              errormsg={st.errors.name}
+              onChange={newName => dispatch({ev: 'name-change', to: newName})}
+              elementRef={el => {
+                topElement.current = el
+              }}
+              {...props}
+            />
+            {allowSelfSignup && (
+              <>
+                <SelfSignup
+                  onChange={to => dispatch({ev: 'selfsignup-change', to})}
+                  selfSignupEndDateEnabled={ENV.self_signup_deadline_enabled}
+                  endDateOnChange={value => setSelfSignupEndDate(value)}
                   {...props}
-                  />
-                  {allowSelfSignup && (
-                    <>
-                      <Divider />
-                      <SelfSignup
-                        onChange={to => dispatch({ev: 'selfsignup-change', to})}
-                        selfSignupEndDateEnabled={ENV.self_signup_deadline_enabled}
-                        endDateOnChange={(value) => setSelfSignupEndDate(value)}
-                        {...props}
-                      />
-                      <Divider />
-                      <GroupStructure
-                        errormsg={st.errors.structure}
-                        onChange={to => dispatch({ev: 'structure-change', to})}
-                        {...props}
-                      />
-                      <Divider />
-                      <Leadership onChange={to => dispatch({ev: 'leadership-change', to})} {...props} />
-                    </>
-                  )}
-                  </GroupContext.Provider>
-              )
-        }}
-      />
+                />
+                <Divider />
+                <GroupStructure
+                  errormsg={st.errors.structure}
+                  onChange={to => dispatch({ev: 'structure-change', to})}
+                  {...props}
+                />
+                <Divider />
+                <Leadership onChange={to => dispatch({ev: 'leadership-change', to})} {...props} />
+              </>
+            )}
+          </GroupContext.Provider>
+        )
+      }}
+    />
   )
 
   return (
@@ -411,25 +415,25 @@ CreateOrEditSetModal.defaultProps = {
 
 // Brings up the create groupset modal and returns a Promise that resolves when it is dismissed.
 // The resolution value is either null if the dialog was dismissed without action or if an error
-// occurred, or contains the object returned by the create API call. For testing and Storybook
+// occurred, or contains the object returned by the create API call. For testing
 // purposes, it's also possible to pass in a function which will stand in for doFetchApi to mock
 // the API call process. Note that it must return a Promise that resolves to the same data
 // structure that doFetchApi returns.
 export function renderCreateDialog(div, mockApi) {
+  const root = createRoot(div)
   return new Promise(resolve => {
     function onDismiss(result) {
-      ReactDOM.render(
+      root.render(
         <CreateOrEditSetModal
           allowSelfSignup={ENV.allow_self_signup}
           mockApi={mockApi}
           closed={true}
         />,
-        div
       )
       resolve(result)
     }
     const context = ENV.context_asset_string.split('_')
-    ReactDOM.render(
+    root.render(
       <CreateOrEditSetModal
         studentSectionCount={ENV.student_section_count}
         context={context[0]}
@@ -438,7 +442,6 @@ export function renderCreateDialog(div, mockApi) {
         onDismiss={onDismiss}
         mockApi={mockApi}
       />,
-      div
     )
   })
 }

@@ -34,6 +34,6 @@ ready(() => {
 
   ReactDOM.render(
     <BlockEditorView content={block_editor_attributes} />,
-    document.getElementById('block_editor_viewer_container') as HTMLElement
+    document.getElementById('block_editor_viewer_container') as HTMLElement,
   )
 })

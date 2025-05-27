@@ -86,7 +86,7 @@ class Speedgrader
     end
 
     def keyboard_shortcuts_link
-      fxpath('//ul[@role = "menu"]//span[text() = "Keyboard Shortcuts"]')
+      fj("div[role='menu'] span:contains('Keyboard Shortcuts')")
     end
 
     def post_or_hide_grades_button
@@ -704,6 +704,46 @@ class Speedgrader
       comment_library_add_button.click
       f(".flashalert-message button").click
       Speedgrader.comment_library_close_button.click
+    end
+
+    def wait_for_speedgrader_iframe(timeout = 10)
+      wait_for(method: nil, timeout:) { f("#speedgrader_iframe") }
+    end
+
+    def wait_for_discussions_iframe(timeout = 10)
+      wait_for(method: nil, timeout:) { f("#discussion_preview_iframe") }
+    end
+
+    def wait_for_first_reply_button(timeout = 10)
+      wait_for(method: nil, timeout:) { f("[data-testid='discussions-first-reply-button']") }
+    end
+
+    # expects #speedgrader_iframe and #discussion_preview_iframe to be loaded
+    def wait_for_all_speedgrader_iframes_to_load
+      Speedgrader.wait_for_speedgrader_iframe
+      in_frame("speedgrader_iframe") do
+        Speedgrader.wait_for_discussions_iframe
+        in_frame("discussion_preview_iframe") do
+          wait_for_ajaximations
+          yield if block_given?
+        end
+      end
+    end
+
+    # the parent speedgrader_iframe is #speedgrader_iframe, this is the left pane of the speedgrader
+    def wait_for_parent_speedgrader_iframe_to_load
+      Speedgrader.wait_for_speedgrader_iframe
+      in_frame("speedgrader_iframe") do
+        wait_for_ajaximations
+        yield if block_given?
+      end
+    end
+
+    def permanently_set_to_show_replies_in_context
+      f("button[title='Settings']").click
+      fj("[class*='menuItem__label']:contains('Options')").click
+      fj("label:contains('Show replies in context')").click
+      fj(".ui-dialog-buttonset .ui-button:visible:last").click
     end
   end
 end

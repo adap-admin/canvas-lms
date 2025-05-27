@@ -53,7 +53,7 @@ describe CoursesController do
       expect(assigns[:past_enrollments]).not_to be_nil
       expect(assigns[:future_enrollments]).not_to be_nil
       expect(assigns[:js_env][:CREATE_COURSES_PERMISSIONS][:PERMISSION]).to be_nil
-      expect(assigns[:js_env][:CREATE_COURSES_PERMISSIONS][:RESTRICT_TO_MCC_ACCOUNT]).to be_falsey
+      expect(assigns[:js_env][:CREATE_COURSES_PERMISSIONS][:RESTRICT_TO_MCC_ACCOUNT]).to be_truthy
     end
 
     it "does not duplicate enrollments in variables" do
@@ -399,6 +399,66 @@ describe CoursesController do
           expect(assigns[:past_enrollments]).to be_empty
           expect(assigns[:current_enrollments]).to eq [enrollment1, enrollment2, enrollment3]
           expect(assigns[:future_enrollments]).to be_empty
+        end
+      end
+
+      context "when determining enrollment status based on course and section dates" do
+        let(:course) do
+          course = Account.default.courses.create!(
+            name: "Future Course",
+            start_at: 1.month.from_now,
+            conclude_at: 2.months.from_now,
+            restrict_enrollments_to_course_dates: true
+          )
+          course.update!(workflow_state: "available")
+          course
+        end
+        let(:section) do
+          course.course_sections.create!(
+            name: "Past Section",
+            start_at: 30.days.ago,
+            end_at: 1.day.from_now,
+            restrict_enrollments_to_section_dates: true
+          )
+        end
+        let(:student) { user_with_pseudonym(active_user: true) }
+        let(:teacher) { user_with_pseudonym(active_user: true) }
+
+        before do
+          course.enroll_student(student, section:).accept!
+          course.enroll_teacher(teacher, section:).accept!
+        end
+
+        it "shows the course as current for the student when section restrictions are enabled" do
+          section.update!(restrict_enrollments_to_section_dates: true)
+          user_session(student)
+          get_index
+          expect(assigns(:current_enrollments).map(&:course_id)).to include(course.id)
+          expect(assigns(:future_enrollments).map(&:course_id)).not_to include(course.id)
+        end
+
+        it "shows the course as future for the student when section restrictions are disabled" do
+          section.update!(restrict_enrollments_to_section_dates: false)
+          user_session(student)
+          get_index
+
+          expect(assigns(:future_enrollments).map(&:course_id)).to include(course.id)
+          expect(assigns(:current_enrollments).map(&:course_id)).not_to include(course.id)
+        end
+
+        it "always shows the course as current for the teacher regardless of section restrictions" do
+          section.update!(restrict_enrollments_to_section_dates: true)
+          user_session(teacher)
+          get_index
+
+          expect(assigns(:current_enrollments).map(&:course_id)).to include(course.id)
+          expect(assigns(:future_enrollments).map(&:course_id)).not_to include(course.id)
+
+          section.update!(restrict_enrollments_to_section_dates: false)
+          get_index
+
+          expect(assigns(:current_enrollments).map(&:course_id)).to include(course.id)
+          expect(assigns(:future_enrollments).map(&:course_id)).not_to include(course.id)
         end
       end
 
@@ -1278,6 +1338,44 @@ describe CoursesController do
       expect(flash[:notice]).to match(/Course was successfully updated./)
     end
 
+    it "allows test student to leave student view from a Canvas Career course" do
+      user_session(@teacher)
+      @fake_student = @course.student_view_student
+      session[:become_user_id] = @fake_student.id
+
+      get "show", params: { id: @course.id, leave_student_view: "/courses/#{@course.id}/modules" }
+      expect(response).to redirect_to("#{course_url(@course)}/modules")
+      expect(session[:become_user_id]).to be_nil
+    end
+
+    it "allows admin to stop acting as user from a Canvas Career course" do
+      user_session(@teacher)
+      @user = @course.student_view_student
+      session[:become_user_id] = @user.id
+
+      get "show", params: { id: @course.id, stop_acting_as_user: "/courses/#{@course.id}/modules" }
+      expect(response).to redirect_to(user_masquerade_url(@teacher.id, stop_acting_as_user: true))
+    end
+
+    it "redirects to the modules page for horizon courses" do
+      user_session(@teacher)
+      @course.account.enable_feature!(:horizon_course_setting)
+      @course.update!(horizon_course: true)
+
+      get "show", params: { id: @course.id }
+      expect(response).to redirect_to("#{course_url(@course)}/modules")
+    end
+
+    it "does not redirect to modules page for horizon courses when invitation param is present" do
+      user_session(@teacher)
+      @course.account.enable_feature!(:horizon_course_setting)
+      @course.update!(horizon_course: true)
+
+      get "show", params: { id: @course.id, invitation: "some_invitation_code" }
+      expect(response).to be_successful
+      expect(response).not_to be_redirect
+    end
+
     it "allows student view student to view unpublished courses" do
       @course.update_attribute :workflow_state, "claimed"
       user_session(@teacher)
@@ -1454,7 +1552,7 @@ describe CoursesController do
         end
 
         it "includes discussion checkpoints if discussion checkpoints enabled" do
-          @course1.root_account.enable_feature!(:discussion_checkpoints)
+          @course1.account.enable_feature!(:discussion_checkpoints)
           @reply_to_topic, @reply_to_entry = graded_discussion_topic_with_checkpoints(context: @course1)
           get "show", params: { id: @course1.id }
           expect(assigns(:upcoming_assignments)).to include @reply_to_topic
@@ -2202,8 +2300,7 @@ describe CoursesController do
         expect(assigns[:js_env][:COURSE][:latest_announcement][:message]).to eq "Welcome to the grind"
       end
 
-      it "is set with most recent visible announcement for observers with selective_release_backend" do
-        Account.site_admin.enable_feature!(:selective_release_backend)
+      it "is set with most recent visible announcement for observers" do
         @observer = course_with_observer(course: @course, active_all: true).user
         user_session(@observer)
 
@@ -2991,22 +3088,6 @@ describe CoursesController do
     end
 
     it "lets admins without course edit rights update only the syllabus body" do
-      @course.root_account.disable_feature!(:granular_permissions_manage_course_content)
-      role = custom_account_role("grade viewer", account: Account.default)
-      account_admin_user_with_role_changes(role:, role_changes: { manage_content: true })
-      user_session(@user)
-
-      name = "some name"
-      body = "some body"
-      put "update", params: { id: @course.id, course: { name:, syllabus_body: body } }
-
-      @course.reload
-      expect(@course.name).to_not eq name
-      expect(@course.syllabus_body).to eq body
-    end
-
-    it "lets admins without course edit rights update only the syllabus body (granular permissions)" do
-      @course.root_account.enable_feature!(:granular_permissions_manage_course_content)
       role = custom_account_role("grade viewer", account: Account.default)
       account_admin_user_with_role_changes(
         role:,
@@ -3021,6 +3102,33 @@ describe CoursesController do
       @course.reload
       expect(@course.name).to_not eq name
       expect(@course.syllabus_body).to eq body
+    end
+
+    context "sharding" do
+      specs_require_sharding
+
+      it "doesn't re-create attachment associations on syllabus body on save" do
+        user_session(@teacher)
+        @course.root_account.enable_feature!(:disable_file_verifiers_in_public_syllabus)
+
+        att1 = attachment_model(context: @course)
+        aa1 = AttachmentAssociation.create!(attachment: @attachment, context: @course, user: @teacher, field_name: "syllabus_body")
+        att2 = nil
+        @shard1.activate do
+          user_model
+          att2 = attachment_model(context: @user)
+        end
+        aa2 = AttachmentAssociation.create!(attachment: @attachment, context: @course, user: @user, field_name: "syllabus_body")
+
+        body = <<~HTML
+          <p><img src="/courses/#{@course.id}/files/#{att1.id}/preview" /></p>
+          <p><img src="/users/#{@user.id}/files/#{att2.id}/preview" /></p>
+        HTML
+
+        put "update", params: { id: @course.id, course: { syllabus_body: body } }
+
+        expect(AttachmentAssociation.where(context: @course).pluck(:id)).to match_array [aa1.id, aa2.id]
+      end
     end
 
     it "renders the show page with a flash on error" do
@@ -3326,36 +3434,35 @@ describe CoursesController do
 
       context "logging master courses and course pacing" do
         before do
-          Account.default.enable_feature!(:course_paces)
-          allow(InstStatsd::Statsd).to receive(:increment)
+          allow(InstStatsd::Statsd).to receive(:distributed_increment)
         end
 
         it "does not increment the counter when course pacing is not enabled" do
           put "update", params: { id: @course.id, course: { blueprint: "1" } }, format: "json"
-          expect(InstStatsd::Statsd).not_to have_received(:increment).with("course.paced.blueprint_course")
+          expect(InstStatsd::Statsd).not_to have_received(:distributed_increment).with("course.paced.blueprint_course")
         end
 
         it "increments the counter when course pacing is already enabled" do
           put "update", params: { id: @course.id, course: { enable_course_paces: "1" } }, format: "json"
           put "update", params: { id: @course.id, course: { blueprint: "1" } }, format: "json"
-          expect(InstStatsd::Statsd).to have_received(:increment).with("course.paced.blueprint_course").once
+          expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("course.paced.blueprint_course").once
         end
 
         it "increments the counter when course pacing is enabled at the same time as blueprint" do
           put "update", params: { id: @course.id, course: { blueprint: "1", enable_course_paces: "1" } }, format: "json"
-          expect(InstStatsd::Statsd).to have_received(:increment).with("course.paced.blueprint_course").once
+          expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("course.paced.blueprint_course").once
         end
 
         it "increments the counter when course pacing is enabled after blueprint has already been enabled" do
           put "update", params: { id: @course.id, course: { blueprint: "1" } }, format: "json"
           put "update", params: { id: @course.id, course: { enable_course_paces: "1" } }, format: "json"
 
-          expect(InstStatsd::Statsd).to have_received(:increment).with("course.paced.blueprint_course")
+          expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("course.paced.blueprint_course")
         end
 
         it "does not increment the count if a random course items is updated" do
           put "update", params: { id: @course.id, course: { course_format: "online" } }, format: "json"
-          expect(InstStatsd::Statsd).not_to have_received(:increment).with("course.paced.blueprint_course")
+          expect(InstStatsd::Statsd).not_to have_received(:distributed_increment).with("course.paced.blueprint_course")
         end
       end
     end
@@ -3393,7 +3500,6 @@ describe CoursesController do
 
     context "course paces" do
       before do
-        @course.account.enable_feature!(:course_paces)
         @course.enable_course_paces = true
         @course.restrict_enrollments_to_course_dates = true
         @course.save!
@@ -3575,7 +3681,7 @@ describe CoursesController do
       delete "destroy", params: { id: @course.id, event: "conclude" }
       expect(response).to be_redirect
       expect(@course.reload).to be_completed
-      expect(@course.conclude_at).to be <= Time.now
+      expect(@course.conclude_at).to be <= Time.zone.now
       expect(Auditors::Course).to receive(:record_unconcluded)
         .with(anything, anything, source: :manual)
 
@@ -4200,6 +4306,32 @@ describe CoursesController do
       expect(test_student.learning_outcome_results.active.size).to be_zero
       expect(@outcome.assessed?).to be_falsey
     end
+
+    it "removes auto grade results for the test student" do
+      user_session(@teacher)
+      post "student_view", params: { course_id: @course.id }
+      test_student = @course.student_view_student
+
+      assignment = @course.assignments.create!(workflow_state: "published")
+
+      submission = assignment.submissions.find_by(user: test_student) ||
+                   assignment.submissions.build(user: test_student)
+      submission.save! unless submission.persisted?
+
+      AutoGradeResult.create!(
+        submission:,
+        attempt: 1,
+        grade_data: { score: 4.0 },
+        grading_attempts: 1,
+        root_account_id: @course.account.root_account.id
+      )
+
+      expect(AutoGradeResult.where(submission_id: submission.id).count).to eq(1)
+
+      delete "reset_test_student", params: { course_id: @course.id }
+
+      expect(AutoGradeResult.where(submission_id: submission.id)).to be_empty
+    end
   end
 
   describe "GET #permissions" do
@@ -4479,17 +4611,17 @@ describe CoursesController do
       expect(json.pluck("name")).to match_array(["course teacher", "search teacher"])
     end
 
-    it 'does not return admin roles that do not have the "manage_content" permission' do
+    it 'does not return admin roles that do not have the "manage_course_content_add" permission' do
       user_session(@teacher)
       account_admin = user_factory(name: "less privileged account admin")
-      role = custom_account_role("manage_content", account: @course.root_account)
+      role = custom_account_role("manage_course_content_add", account: @course.root_account)
       account_admin_user(account: @course.root_account, user: account_admin, role:)
 
       get "content_share_users", params: { course_id: @course.id, search_term: "less privileged" }
       json = json_parse(response.body)
       expect(json.pluck("name")).not_to include("less privileged account admin")
 
-      role.role_overrides.create!(enabled: true, permission: "manage_content", context: @course.root_account)
+      role.role_overrides.create!(enabled: true, permission: "manage_course_content_add", context: @course.root_account)
       get "content_share_users", params: { course_id: @course.id, search_term: "less privileged" }
       json = json_parse(response.body)
       expect(json.pluck("name")).to include("less privileged account admin")

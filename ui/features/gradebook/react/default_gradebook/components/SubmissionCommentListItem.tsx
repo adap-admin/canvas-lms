@@ -1,4 +1,3 @@
-// @ts-nocheck
 /*
  * Copyright (C) 2017 - present Instructure, Inc.
  *
@@ -18,7 +17,7 @@
  */
 
 import React from 'react'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {Text} from '@instructure/ui-text'
 import {Link} from '@instructure/ui-link'
 import {Avatar} from '@instructure/ui-avatar'
@@ -29,8 +28,9 @@ import {truncateText, containsHtmlTags, formatMessage} from '@canvas/util/TextHe
 import SubmissionCommentUpdateForm from './SubmissionCommentUpdateForm'
 import sanitizeHtml from 'sanitize-html-with-tinymce'
 
-const I18n = useI18nScope('gradebook')
+const I18n = createI18nScope('gradebook')
 
+// @ts-expect-error
 function submissionCommentDate(date) {
   return DateHelper.formatDatetimeForDisplay(date, 'short')
 }
@@ -57,6 +57,7 @@ type Props = {
 export default class SubmissionCommentListItem extends React.Component<Props> {
   editButton?: HTMLElement
 
+  // @ts-expect-error
   componentDidUpdate(prevProps) {
     if (prevProps.editing && !this.props.editing) {
       this.editButton?.focus()
@@ -65,7 +66,7 @@ export default class SubmissionCommentListItem extends React.Component<Props> {
 
   handleDeleteComment = () => {
     const message = I18n.t('Are you sure you want to delete this comment?')
-    // eslint-disable-next-line no-alert, no-restricted-globals
+
     if (confirm(message)) {
       this.props.deleteSubmissionComment(this.props.id)
     }
@@ -75,6 +76,7 @@ export default class SubmissionCommentListItem extends React.Component<Props> {
     this.props.editSubmissionComment(this.props.id)
   }
 
+  // @ts-expect-error
   bindEditButton = ref => {
     this.editButton = ref
   }
@@ -135,6 +137,7 @@ export default class SubmissionCommentListItem extends React.Component<Props> {
                 <Link
                   href={this.props.authorUrl}
                   isWithinText={false}
+                  // @ts-expect-error
                   themeOverride={{mediumPaddingHorizontal: '0', mediumHeight: 'normal'}}
                   margin="none none xxx-small"
                 >

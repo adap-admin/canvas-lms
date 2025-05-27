@@ -17,3 +17,5 @@
  */
 
 export * from './components/RubricAssignmentContainer'
+export * from './components/RubricSelfAssessmentSettings'
+export * from './components/RubricSelfAssessmentSettingsWrapper'

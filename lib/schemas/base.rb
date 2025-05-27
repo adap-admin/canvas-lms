@@ -20,23 +20,45 @@
 
 module Schemas
   class Base
-    delegate :validate, :valid?, to: :schema_checker
+    class InvalidSchema < RuntimeError
+    end
+
+    def self.create_schema
+      raise "Implement self.create_schema or define @schema directly"
+    end
+
+    def self.schema
+      unless @schema
+        @schema = superclass.schema.deep_dup.with_indifferent_access
+        raise "One of your base classes must define a schema" unless @schema
+
+        create_schema
+      end
+
+      @schema
+    end
 
     class << self
-      # TODO: deprecated, use simple_validation_errors instead
-      # Remove this method if the lti_report_multiple_schema_validation_errors feature flag is turned on in production
-      def simple_validation_first_error(json_hash, error_format: :string)
-        err = new.validate(json_hash).to_a.first
-        err && simple_validation_error(err, error_format:)
-      end
+      delegate :validate, :valid?, to: :schema_checker
 
       # Returns nil if no errors
       def simple_validation_errors(json_hash, error_format: :string)
-        new.validate(json_hash).to_a.presence&.map { simple_validation_error _1, error_format: }
+        validate(json_hash).to_a.presence&.map { simple_validation_error _1, error_format: }
       end
 
-      def validation_errors(json_hash)
-        new.validate(json_hash).pluck("error")
+      def validation_errors(json_hash, allow_nil: false)
+        if allow_nil
+          json_hash = Utils::HashUtils.nested_compact(json_hash)
+        end
+        validate(json_hash).pluck("error")
+      end
+
+      def filter_and_validate!(json_hash)
+        unless schema_checker_with_filter.valid?(json_hash)
+          raise InvalidSchema, "Invalid #{name}: #{validation_errors(json_hash)}"
+        end
+
+        json_hash
       end
 
       private
@@ -54,7 +76,7 @@ module Schemas
           end
         end
 
-        if Account.site_admin.feature_enabled?(:lti_report_multiple_schema_validation_errors) && error_format == :hash
+        if error_format == :hash
           return {
             error: raw_error["error"],
             schema: raw_error["schema"],
@@ -73,16 +95,27 @@ module Schemas
           hash.slice!(*(schema[:properties] || schema["properties"]).keys.map(&:to_s))
         end
       end
-    end
 
-    private
+      def schema_checker
+        @schema_checker ||= JSONSchemer.schema(schema)
+      end
 
-    def schema_checker
-      @schema_checker ||= JSONSchemer.schema(schema)
-    end
+      def schema_checker_with_filter
+        @schema_checker_with_filter ||= JSONSchemer.schema(schema, before_property_validation: property_stripper_hook)
+      end
 
-    def schema
-      raise "Abstract method"
+      def property_stripper_hook
+        proc do |data, _property, _property_schema, parent_shema|
+          if data.is_a?(Hash) && parent_shema.is_a?(Hash) && parent_shema.key?("properties") && parent_shema["additionalProperties"].blank?
+            defined_properties = parent_shema["properties"].keys.to_set(&:to_s)
+            data.each_key do |key|
+              unless defined_properties.include?(key.to_s)
+                data.delete(key)
+              end
+            end
+          end
+        end
+      end
     end
   end
 end

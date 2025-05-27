@@ -17,10 +17,8 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_relative "../../../lti_1_3_spec_helper"
-
 describe Lti::Messages::JwtMessage do
-  include_context "lti_1_3_spec_helper"
+  include_context "key_storage_helper"
 
   let(:return_url) { "http://www.platform.com/return_url" }
   let(:user) { @student }
@@ -105,7 +103,7 @@ describe Lti::Messages::JwtMessage do
     end
 
     it 'sets the "deployment_id" claim' do
-      expect(decoded_jwt["https://purl.imsglobal.org/spec/lti/claim/deployment_id"]).to eq "#{tool.id}:#{Lti::Asset.opaque_identifier_for(tool.context)}"
+      expect(decoded_jwt["https://purl.imsglobal.org/spec/lti/claim/deployment_id"]).to eq "#{tool.id}:#{Lti::V1p1::Asset.opaque_identifier_for(tool.context)}"
     end
 
     it 'sets the "exp" claim to lti.oauth2.access_token.exp' do
@@ -623,7 +621,7 @@ describe Lti::Messages::JwtMessage do
 
     shared_examples "names and roles claim check" do
       it "sets the NRPS url using the Account#domain" do
-        expect_any_instance_of(Account).to receive(:environment_specific_domain).and_return("account_host")
+        allow_any_instance_of(Account).to receive(:environment_specific_domain).and_return("account_host")
         expect(lti_advantage_service_claim["context_memberships_url"]).to eq "polymorphic_url"
         expect(controller).to have_received(:polymorphic_url).with(
           [anything, :names_and_roles], host: "account_host"
@@ -664,15 +662,12 @@ describe Lti::Messages::JwtMessage do
 
     before do
       allow_any_instance_of(Account).to receive(:environment_specific_domain).and_return("canonical_domain")
-      allow(controller).to receive(:lti_line_item_index_url)
-        .with({ host: "canonical_domain", course_id: course.id })
-        .and_return("lti_line_item_index_url")
     end
 
     shared_examples "assignment and grade service claim check" do
       describe "AGS line items url" do
         it "sets the AGS lineitems url" do
-          expect(lti_advantage_service_claim["lineitems"]).to eq "lti_line_item_index_url"
+          expect(lti_advantage_service_claim["lineitems"]).to eq "http://canonical_domain/api/lti/courses/#{course.id}/line_items"
         end
       end
 
@@ -759,22 +754,6 @@ describe Lti::Messages::JwtMessage do
     context "when context is a group" do
       include_context "with lti advantage group context"
       it_behaves_like "all PNS claim presence and absence checks"
-    end
-
-    context "when the platform_notification_service feature flag is disabled" do
-      before do
-        context.root_account.disable_feature!(:platform_notification_service)
-      end
-
-      %w[course account group].each do |context_type|
-        context "when context is a #{context_type}" do
-          unless context_type == "course"
-            include_context "with lti advantage #{context_type} context"
-          end
-
-          it_behaves_like "absent lti advantage service claim check"
-        end
-      end
     end
   end
 
@@ -1166,6 +1145,39 @@ describe Lti::Messages::JwtMessage do
 
     it "generate_post_payload_message does not raise an error" do
       expect { jwt_message.generate_post_payload_message }.not_to raise_error
+    end
+  end
+
+  describe "#include_eulaservice_claims?" do
+    context "when the feature is enabled" do
+      before do
+        tool.context.root_account.enable_feature!(:lti_asset_processor)
+      end
+
+      it "returns true" do
+        expect(jwt_message.send(:include_eulaservice_claims?)).to be true
+      end
+    end
+
+    context "when the feature is disabled" do
+      before do
+        tool.context.root_account.disable_feature!(:lti_asset_processor)
+      end
+
+      it "returns false" do
+        expect(jwt_message.send(:include_eulaservice_claims?)).to be false
+      end
+    end
+  end
+
+  describe "#add_eulaservice_claims!" do
+    subject { decoded_jwt["https://purl.imsglobal.org/spec/lti/claim/eulaservice"] }
+
+    it "adds the EULA service claims to the message" do
+      expect(subject).to eq({
+                              "url" => "http://localhost/api/lti/asset_processor_eulas/#{tool.id}",
+                              "scope" => ["https://purl.imsglobal.org/spec/lti/scope/eula"]
+                            })
     end
   end
 end

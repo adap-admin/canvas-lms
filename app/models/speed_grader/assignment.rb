@@ -146,6 +146,8 @@ module SpeedGrader
           provisional_grader: provisional_grader_or_moderator?
         ) || []
 
+      rubric_assessments_by_user_id = current_user_rubric_assessments.group_by(&:user_id)
+
       # include all the rubric assessments if a moderator
       all_provisional_rubric_assessments =
         if grading_role == :moderator
@@ -208,10 +210,7 @@ module SpeedGrader
           end
           json[:rubric_assessments] =
             rubric_assessments_to_json(
-              rubric_assessments:
-                current_user_rubric_assessments.select do |assessment|
-                  assessment.user_id == student.id
-                end,
+              rubric_assessments: rubric_assessments_by_user_id.fetch(student.id, []),
               submissions:
             )
           json[:fake_student] = !!student.preferences[:fake_student]
@@ -279,8 +278,14 @@ module SpeedGrader
         end
       end
 
+      discussion_checkpoints_enabled = assignment.context.discussion_checkpoints_enabled?
+      if assignment.submission_types.include?("discussion_topic")
+        res[:student_entries] = assignment.discussion_topic.discussion_entries.pluck(:user_id, :id).group_by(&:first).transform_values { |entries| entries.map(&:last) }
+      end
+
       res[:submissions] =
         submissions.map do |sub|
+          sub.workflow_state = "pending_review" if sub.checkpoints_needs_grading? && discussion_checkpoints_enabled
           submission_methods = %i[
             submission_history
             late
@@ -318,7 +323,7 @@ module SpeedGrader
               submission_comments:,
               submissions:
             )
-          json[:has_postable_comments] = submission_comments.any?(&:allows_posting_submission?)
+          json[:has_postable_comments] = sub.postable_comments?
           json[:proxy_submitter] = sub.proxy_submitter&.short_name
           json[:proxy_submitter_id] = sub.proxy_submitter_id
 
@@ -350,7 +355,7 @@ module SpeedGrader
           end
 
           if quizzes_next_submission?
-            quiz_lti_submission = BasicLTI::QuizzesNextVersionedSubmission.new(assignment, sub.user)
+            quiz_lti_submission = BasicLTI::QuizzesNextVersionedSubmission.new(assignment, sub.user, submission: sub)
             json["submission_history"] =
               quiz_lti_submission.grade_history.map { |submission| { submission: } }
           elsif json["submission_history"] && (assignment.quiz.nil? || too_many)
@@ -487,6 +492,9 @@ module SpeedGrader
 
       res[:GROUP_GRADING_MODE] = assignment.grade_as_group?
       res[:quiz_lti] = assignment.quiz_lti?
+
+      merge_lti_asset_processor_data!(assignment:, response_hash: res)
+
       StringifyIds.recursively_stringify_ids(res)
     ensure
       Attachment.skip_thumbnails = nil
@@ -604,9 +612,7 @@ module SpeedGrader
       return nil unless course.filter_speed_grader_by_student_group?
 
       group_id =
-        current_user
-        .get_preference(:gradebook_settings, course.global_id)
-        &.dig("filter_rows_by", "student_group_id")
+        current_user.get_latest_preference_setting_by_key(:gradebook_settings, course.global_id, "filter_rows_by", "student_group_ids")
 
       # If we selected a group that is now deleted, don't use it
       Group.active.where(id: group_id).exists? ? group_id : nil
@@ -616,6 +622,22 @@ module SpeedGrader
       current_user
         .get_preference(:gradebook_settings, course.global_id)
         &.dig("filter_rows_by", "section_id")
+    end
+
+    def merge_lti_asset_processor_data!(assignment:, response_hash:)
+      return unless assignment.root_account.feature_enabled?(:lti_asset_processor)
+
+      submission_ids = response_hash["submissions"].pluck("id")
+      reports_by_submission = Lti::AssetReport.info_for_display_by_submission(submission_ids:)
+
+      return unless reports_by_submission.present?
+
+      response_hash[:lti_asset_processors] =
+        Lti::AssetProcessor.where(assignment:).info_for_display
+      response_hash["submissions"].each do |sub|
+        reports = reports_by_submission[sub["id"]]
+        sub[:lti_asset_reports] = reports if reports
+      end
     end
   end
 end

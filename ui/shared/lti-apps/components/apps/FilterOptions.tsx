@@ -21,16 +21,16 @@ import type {FilterItem} from '../../models/Filter'
 import {Checkbox} from '@instructure/ui-checkbox'
 import {Heading} from '@instructure/ui-heading'
 import {View} from '@instructure/ui-view'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {Link} from '@instructure/ui-link'
 import {capitalize} from 'lodash'
 
-const I18n = useI18nScope('lti_registrations')
+const I18n = createI18nScope('lti_registrations')
 
 export default function FilterOptions(props: {
   categoryName: string
   options: FilterItem[]
-  filterIds: string[]
+  filterIds: (string | undefined)[]
   setFilterValue: (filterItem: FilterItem, value: boolean) => void
   limit?: number
 }) {
@@ -47,14 +47,14 @@ export default function FilterOptions(props: {
         {props.options
           .slice(
             0,
-            props.limit ? (showMore ? props.options.length : props.limit) : props.options.length
+            props.limit ? (showMore ? props.options.length : props.limit) : props.options.length,
           )
           .map(option => {
             return (
               <View as="div" padding="0 0 x-small 0" key={option.id}>
                 <Checkbox
                   label={option.name}
-                  checked={!!props.filterIds && props.filterIds.includes(option.id)}
+                  checked={!!props.filterIds && props.filterIds.includes(option.id || '')}
                   onChange={event => {
                     props.setFilterValue(option, event.target.checked)
                   }}

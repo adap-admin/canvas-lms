@@ -21,9 +21,9 @@ import Backbone from '@canvas/backbone'
 import registrationErrors from '@canvas/normalize-registration-errors'
 import '@canvas/jquery/jquery.instructure_forms'
 import '@canvas/jquery/jquery.ajaxJSON'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 
-const I18n = useI18nScope('self_enrollment')
+const I18n = createI18nScope('self_enrollment')
 
 export default class SelfEnrollmentForm extends Backbone.View {
   static initClass() {
@@ -126,7 +126,7 @@ export default class SelfEnrollmentForm extends Backbone.View {
           case 'enroll':
             return this.enrollUrl
         }
-      })()
+      })(),
     )
   }
 
@@ -189,7 +189,7 @@ export default class SelfEnrollmentForm extends Backbone.View {
     if (
       __guard__(
         errors.user != null ? errors.user.errors.self_enrollment_code : undefined,
-        x => x[0].type
+        x => x[0].type,
       ) === 'already_enrolled'
     ) {
       // just reload if already enrolled

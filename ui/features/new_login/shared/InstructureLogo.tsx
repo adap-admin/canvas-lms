@@ -16,41 +16,47 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React from 'react'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {Img} from '@instructure/ui-img'
 import {Link} from '@instructure/ui-link'
-import {View, type ViewOwnProps} from '@instructure/ui-view'
-import {useNewLogin} from '../context/NewLoginContext'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {type ViewOwnProps} from '@instructure/ui-view'
+import React from 'react'
+import {useNewLogin, useNewLoginData} from '../context'
 
-const I18n = useI18nScope('new_login')
+const I18n = createI18nScope('new_login')
 
 const InstructureLogo = () => {
-  const {isPreviewMode, isUiActionPending} = useNewLogin()
+  const {isUiActionPending} = useNewLogin()
+  const {isPreviewMode} = useNewLoginData()
+
+  const isDisabled = isPreviewMode || isUiActionPending
 
   const handleClick = (event: React.MouseEvent<ViewOwnProps>) => {
-    if (isPreviewMode || isUiActionPending) {
+    if (isDisabled) {
       event.preventDefault()
     }
   }
 
   return (
-    <View as="div" textAlign="center">
-      <Link
-        href="https://instructure.com"
-        target="_blank"
-        aria-label={I18n.t('By Instructure')}
-        onClick={handleClick}
-      >
-        <Img
-          width="7.9375rem"
-          height="1.125rem"
-          constrain="contain"
-          src={require('../assets/images/instructure-logo.svg')}
-          alt=""
-        />
-      </Link>
-    </View>
+    <Link
+      aria-disabled={isDisabled ? 'true' : 'false'}
+      aria-label={I18n.t('By Instructure')}
+      data-testid="instructure-logo-link"
+      forceButtonRole={false}
+      href="https://instructure.com"
+      onClick={handleClick}
+    >
+      <Img
+        // Img is decorative by default
+        constrain="contain"
+        data-testid="instructure-logo-img"
+        height="1.125rem"
+        src={require('../assets/images/instructure.svg')}
+        width="7.9375rem"
+        // InstUI v10 bug: <Img /> does not focus when display="block"
+        // Semantically, this standalone image is block-level
+      />
+    </Link>
   )
 }
 

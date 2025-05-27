@@ -39,10 +39,8 @@ module AssignmentOverrideApplicator
 
     overrides = overrides_for_assignment_and_user(learning_object, user)
 
-    if Account.site_admin.feature_enabled?(:selective_release_backend)
-      is_unassigned = overrides.find { |o| o&.unassign_item? }
-      overrides = overrides.split(is_unassigned)[0]
-    end
+    is_unassigned = overrides.find { |o| o&.unassign_item? }
+    overrides = overrides.split(is_unassigned)[0]
 
     result_learning_object = assignment_with_overrides(learning_object, overrides, user)
     result_learning_object.overridden_for_user = user
@@ -88,7 +86,11 @@ module AssignmentOverrideApplicator
 
   def self.version_for_cache(learning_object)
     # don't really care about the version number unless it is an old one
-    learning_object.current_version? ? "current" : learning_object.version_number
+    if learning_object.is_a?(SimplyVersioned::InstanceMethods) && !learning_object.current_version?
+      learning_object.version_number
+    else
+      "current"
+    end
   end
 
   # determine list of overrides (of appropriate version) that apply to the
@@ -109,7 +111,9 @@ module AssignmentOverrideApplicator
         context.shard.activate do
           if (context.user_has_been_admin?(user) || context.user_has_no_enrollments?(user)) && context.grants_right?(user, :read_as_admin)
             overrides = learning_object.all_assignment_overrides
-            if learning_object.current_version?
+            if learning_object.is_a?(SimplyVersioned::InstanceMethods) && !learning_object.current_version?
+              overrides = current_override_version(learning_object, overrides)
+            else
               visible_user_ids = context.enrollments_visible_to(user).select(:user_id)
 
               overrides = if overrides.loaded?
@@ -125,8 +129,6 @@ module AssignmentOverrideApplicator
 
                             ovs + adhoc_ovs
                           end
-            else
-              overrides = current_override_version(learning_object, overrides)
             end
 
             unless ConditionalRelease::Service.enabled_in_context?(learning_object.context)
@@ -145,6 +147,13 @@ module AssignmentOverrideApplicator
           if ObserverEnrollment.observed_students(context, user).empty?
             groups = group_overrides(learning_object, user)
             overrides += groups if groups
+
+            # add differentiation tag overrides if allowed in account context
+            if learning_object.context.account.allow_assign_to_differentiation_tags?
+              diff_tags = differentiation_tag_overrides(learning_object, user)
+              overrides += diff_tags if diff_tags
+            end
+
             sections = section_overrides(learning_object, user)
             overrides += sections if sections
             everyone = course_overrides(learning_object, user)
@@ -154,7 +163,7 @@ module AssignmentOverrideApplicator
             overrides += observed if observed
           end
 
-          unless learning_object.current_version?
+          if learning_object.is_a?(SimplyVersioned::InstanceMethods) && !learning_object.current_version?
             overrides = current_override_version(learning_object, overrides)
           end
 
@@ -205,7 +214,7 @@ module AssignmentOverrideApplicator
                  AssignmentOverrideStudent.where(key => learning_object, :user_id => user).active.first
                end
     # only bother to check context_modules if no other override was found
-    if !override && Account.site_admin.feature_enabled?(:selective_release_backend) && learning_object.context_module_overrides
+    if !override && learning_object.context_module_overrides
       override = AssignmentOverrideStudent.where(context_module_id: learning_object.assignment_context_modules.select(:id), user_id: user).active.first
     end
     override
@@ -229,6 +238,17 @@ module AssignmentOverrideApplicator
       else
         learning_object.assignment_overrides.where(set_type: "Group", set_id: group.id).to_a
       end
+    end
+  end
+
+  def self.differentiation_tag_overrides(learning_object, user)
+    user_diff_tag_group_ids = user.differentiation_tags.pluck(:group_id)
+    return nil unless user_diff_tag_group_ids.any?
+
+    if learning_object.assignment_overrides.loaded?
+      learning_object.assignment_overrides.select { |o| o.set_type == "Group" && user_diff_tag_group_ids.include?(o.set_id) }
+    else
+      learning_object.assignment_overrides.where(set_type: "Group", set_id: user_diff_tag_group_ids).to_a
     end
   end
 
@@ -271,15 +291,13 @@ module AssignmentOverrideApplicator
   end
 
   def self.course_overrides(learning_object, user)
-    if Account.site_admin.feature_enabled? :selective_release_backend
-      context = learning_object.context
-      return nil if user.enrollments.active.where(course: context).empty?
+    context = learning_object.context
+    return nil if user.enrollments.active.where(course: context).empty?
 
-      if learning_object.preloaded_all_overrides
-        learning_object.preloaded_all_overrides.select { |o| o.set_type == "Course" && o.set_id == context.id }
-      else
-        learning_object.all_assignment_overrides.where(set_type: "Course", set_id: context.id)
-      end
+    if learning_object.preloaded_all_overrides
+      learning_object.preloaded_all_overrides.select { |o| o.set_type == "Course" && o.set_id == context.id }
+    else
+      learning_object.all_assignment_overrides.where(set_type: "Course", set_id: context.id)
     end
   end
 
@@ -445,7 +463,7 @@ module AssignmentOverrideApplicator
                elsif learning_object.only_visible_to_overrides && nonactive_overrides.any?
                  select_override(nonactive_overrides, attribute, comparison)
                end
-    if !selected || (Account.site_admin.feature_enabled?(:selective_release_backend) && selected.unassign_item)
+    if !selected || selected.unassign_item
       learning_object
     else
       selected

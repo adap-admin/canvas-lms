@@ -16,26 +16,26 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React, {useState, useCallback} from 'react'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import PropTypes from 'prop-types'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import React, {useState, useCallback} from 'react'
 
-import {FormFieldGroup} from '@instructure/ui-form-field'
 import {ScreenReaderContent} from '@instructure/ui-a11y-content'
-import {TextInput} from '@instructure/ui-text-input'
 import {Button} from '@instructure/ui-buttons'
 import {Checkbox} from '@instructure/ui-checkbox'
+import {FormFieldGroup} from '@instructure/ui-form-field'
 import {SimpleSelect} from '@instructure/ui-simple-select'
 import {Spinner} from '@instructure/ui-spinner'
+import {TextInput} from '@instructure/ui-text-input'
 import {View} from '@instructure/ui-view'
 
-import Modal from '@canvas/instui-bindings/react/InstuiModal'
-import CanvasAsyncSelect from '@canvas/instui-bindings/react/AsyncSelect'
-import useFetchApi from '@canvas/use-fetch-api-hook'
 import {showFlashError} from '@canvas/alerts/react/FlashAlert'
+import CanvasAsyncSelect from '@canvas/instui-bindings/react/AsyncSelect'
+import Modal from '@canvas/instui-bindings/react/InstuiModal'
+import useFetchApi from '@canvas/use-fetch-api-hook'
 import {createNewCourse, getAccountsFromEnrollments} from './utils'
 
-const I18n = useI18nScope('create_course_modal')
+const I18n = createI18nScope('create_course_modal')
 
 export const CreateCourseModal = ({
   isModalOpen,
@@ -105,8 +105,12 @@ export const CreateCourseModal = ({
   const adminFetchOpts = {
     path: '/api/v1/manageable_accounts',
     success: useCallback(accounts => {
+      // Filter out any undefined/null accounts and ensure they have names before sorting
+      const validAccounts = accounts.filter(account => account && account.name)
       setAllAccounts(
-        accounts.sort((a, b) => a.name.localeCompare(b.name, ENV.LOCALE, {sensitivity: 'base'}))
+        validAccounts.sort((a, b) =>
+          a.name.localeCompare(b.name, ENV.LOCALE, {sensitivity: 'base'}),
+        ),
       )
     }, []),
     params: {
@@ -128,11 +132,16 @@ export const CreateCourseModal = ({
   if (window.ENV.FEATURES?.enhanced_course_creation_account_fetching) {
     fetchOpts = {
       path: '/api/v1/course_creation_accounts',
+
       // eslint-disable-next-line react-hooks/rules-of-hooks
       success: useCallback(accounts => {
         setAllAccounts(
-          accounts.sort((a, b) => a.name.localeCompare(b.name, ENV.LOCALE, {sensitivity: 'base'}))
+          accounts.sort((a, b) => a.name.localeCompare(b.name, ENV.LOCALE, {sensitivity: 'base'})),
         )
+        if (accounts.length === 1) {
+          setSelectedAccount(accounts[0])
+          setAccountSearchTerm(accounts[0].name)
+        }
       }, []),
       params: {
         per_page: 100,
@@ -173,14 +182,13 @@ export const CreateCourseModal = ({
       ))
   }
 
-  const teacherHomeroomFetchOpts = {
-    path: '/api/v1/users/self/courses',
-  }
-
-  const adminHomeroomFetchOpts = {
-    path: selectedAccount
-      ? `api/v1/accounts/${selectedAccount.id}/courses`
-      : '/api/v1/users/self/courses',
+  let homeOptionPath = '/api/v1/users/self/courses'
+  if(window.ENV.FEATURES?.enhanced_course_creation_account_fetching) {
+    if(selectedAccount && selectedAccount.adminable){
+      homeOptionPath = `/api/v1/accounts/${selectedAccount.id}/courses`
+    }
+  } else if (permissions === 'admin' && selectedAccount) {
+    homeOptionPath = `/api/v1/accounts/${selectedAccount.id}/courses`
   }
 
   useFetchApi({
@@ -202,8 +210,7 @@ export const CreateCourseModal = ({
     fetchAllPages: true,
     // don't let students/users with no enrollments sync homeroom data
     forceResult: ['no_enrollments', 'student'].includes(permissions) ? [] : undefined,
-    ...(permissions === 'teacher' && teacherHomeroomFetchOpts),
-    ...(permissions === 'admin' && adminHomeroomFetchOpts),
+    path: homeOptionPath,
   })
 
   const handleHomeroomSelected = id => {

@@ -86,7 +86,7 @@ class Rubric < ActiveRecord::Base
     given { |user, session| context.grants_right?(user, session, :manage_rubrics) }
     can :read and can :create and can :delete_associations
 
-    given { |user, session| context.grants_any_right?(user, session, :manage_assignments, :manage_assignments_edit) }
+    given { |user, session| context.grants_right?(user, session, :manage_assignments_edit) }
     can :read and can :create and can :delete_associations
 
     given { |user, session| context.grants_right?(user, session, :manage) }
@@ -96,13 +96,13 @@ class Rubric < ActiveRecord::Base
     can :read
 
     # read_only means "associated with > 1 object for grading purposes"
-    given { |user, session| !read_only && rubric_associations.for_grading.count < 2 && context.grants_any_right?(user, session, :manage_assignments, :manage_assignments_edit) }
+    given { |user, session| !read_only && rubric_associations.for_grading.count < 2 && context.grants_right?(user, session, :manage_assignments_edit) }
     can :update and can :delete
 
     given { |user, session| !read_only && rubric_associations.for_grading.count < 2 && context.grants_right?(user, session, :manage_rubrics) }
     can :update and can :delete
 
-    given { |user, session| context.grants_any_right?(user, session, :manage_assignments, :manage_assignments_edit) }
+    given { |user, session| context.grants_right?(user, session, :manage_assignments_edit) }
     can :delete
 
     given { |user, session| context.grants_right?(user, session, :manage_rubrics) }
@@ -134,7 +134,7 @@ class Rubric < ActiveRecord::Base
     # remove this and 'unarchive' method when feature flag is removed
     return unless enhanced_rubrics_enabled?
 
-    InstStatsd::Statsd.increment("#{context.class.to_s.downcase}.rubrics.archived")
+    InstStatsd::Statsd.distributed_increment("#{context.class.to_s.downcase}.rubrics.archived")
     super
   end
 
@@ -214,7 +214,7 @@ class Rubric < ActiveRecord::Base
         self.title = "#{original_title} (#{cnt})"
       end
     end
-    self.context_code = "#{context_type.underscore}_#{context_id}" rescue nil
+    self.context_code = context_type && "#{context_type.underscore}_#{context_id}"
   end
 
   alias_method :destroy_permanently!, :destroy
@@ -335,7 +335,7 @@ class Rubric < ActiveRecord::Base
     self.is_manually_update = association_params[:update_if_existing]
     rubric_params[:hide_score_total] ||= association_params[:hide_score_total]
     @skip_updating_points_possible = association_params[:skip_updating_points_possible]
-    update_criteria(rubric_params)
+    update_criteria(rubric_params, association_params[:association_object])
 
     return self unless valid?
 
@@ -351,12 +351,12 @@ class Rubric < ActiveRecord::Base
     id
   end
 
-  def update_criteria(params)
+  def update_criteria(params, association_object = nil)
     if new_record?
       self.is_duplicate = ActiveModel::Type::Boolean.new.cast(params[:is_duplicate]) if params[:is_duplicate]
       without_versioning(&:save)
     end
-    data = generate_criteria(params)
+    data = generate_criteria(params, association_object)
     self.hide_score_total = params[:hide_score_total] if hide_score_total.nil? || (association_count || 0) < 2
     self.data = data.criteria
     self.button_display = params[:button_display] if params.key?(:button_display)
@@ -461,49 +461,156 @@ class Rubric < ActiveRecord::Base
   CriteriaData = Struct.new(:criteria, :points_possible, :title)
   Criterion = Struct.new(:description, :long_description, :points, :id, :criterion_use_range, :learning_outcome_id, :mastery_points, :ignore_for_scoring, :ratings, :title, :migration_id, :percentage, :order, keyword_init: true)
   Rating = Struct.new(:description, :long_description, :points, :id, :criterion_id, :migration_id, :percentage, keyword_init: true)
-  def generate_criteria(params)
+  # association_object is only needed for generating via llm
+  def generate_criteria(params, association_object = nil)
     @used_ids = {}
     valid_bools = [true, "true", "1"]
     title = params[:title] || t("context_name_rubric", "%{course_name} Rubric", course_name: context.name)
     criteria = []
-    (params[:criteria] || {}).each do |idx, criterion_data|
-      criterion = {}
-      criterion[:description] = (criterion_data[:description].presence || t("no_description", "No Description")).strip
-      # Outcomes descriptions are already html sanitized, so use that if an outcome criteria
-      # is present. Otherwise we need to sanitize the input ourselves.
-      unless criterion_data[:learning_outcome_id].present?
-        criterion[:long_description] = format_message((criterion_data[:long_description] || "").strip).first
-      end
-      criterion[:points] = criterion_data[:points].to_f || 0
-      criterion_data[:id] = criterion_data[:id].strip if criterion_data[:id]
-      criterion_data[:id] = nil if criterion_data[:id] && criterion_data[:id].empty?
-      criterion[:id] = unique_item_id(criterion_data[:id])
-      criterion[:criterion_use_range] = [true, "true"].include?(criterion_data[:criterion_use_range])
-      if criterion_data[:learning_outcome_id].present?
-        outcome = LearningOutcome.where(id: criterion_data[:learning_outcome_id]).first
-        criterion[:long_description] = outcome&.description || ""
-        if outcome
-          criterion[:learning_outcome_id] = outcome.id
-          criterion[:mastery_points] = ((criterion_data[:mastery_points] || outcome.data[:rubric_criterion][:mastery_points]).to_f rescue nil)
-          criterion[:ignore_for_scoring] = valid_bools.include?(criterion_data[:ignore_for_scoring])
+    if Canvas::Plugin.value_to_boolean(params[:criteria_via_llm]) && Rubric.ai_rubrics_enabled?(context)
+      criteria = generate_criteria_via_llm(association_object)
+    else
+      (params[:criteria] || {}).each do |idx, criterion_data|
+        criterion = {}
+        criterion[:description] = (criterion_data[:description].presence || t("no_description", "No Description")).strip
+        # Outcomes descriptions are already html sanitized, so use that if an outcome criteria
+        # is present. Otherwise we need to sanitize the input ourselves.
+        unless criterion_data[:learning_outcome_id].present?
+          criterion[:long_description] = format_message((criterion_data[:long_description] || "").strip).first
         end
-      end
+        criterion[:points] = criterion_data[:points].to_f || 0
+        criterion_data[:id] = criterion_data[:id].strip if criterion_data[:id]
+        criterion_data[:id] = nil if criterion_data[:id] && criterion_data[:id].empty?
+        criterion[:id] = unique_item_id(criterion_data[:id])
+        criterion[:criterion_use_range] = [true, "true"].include?(criterion_data[:criterion_use_range])
+        if criterion_data[:learning_outcome_id].present?
+          outcome = LearningOutcome.where(id: criterion_data[:learning_outcome_id]).first
+          criterion[:long_description] = outcome&.description || ""
+          if outcome
+            criterion[:learning_outcome_id] = outcome.id
+            criterion[:mastery_points] = (criterion_data[:mastery_points] || outcome.data&.dig(:rubric_criterion, :mastery_points))&.to_f
+            criterion[:ignore_for_scoring] = valid_bools.include?(criterion_data[:ignore_for_scoring])
+          end
+        end
 
-      ratings = (criterion_data[:ratings] || {}).values.map do |rating_data|
-        rating_data[:id] = rating_data[:id].strip if rating_data[:id]
-        criterion_rating(rating_data, criterion[:id])
+        ratings = (criterion_data[:ratings] || {}).values.map do |rating_data|
+          rating_data[:id] = rating_data[:id].strip if rating_data[:id]
+          criterion_rating(rating_data, criterion[:id])
+        end
+        criterion[:ratings] = ratings.sort_by { |r| [-1 * (r[:points] || 0), r[:description] || CanvasSort::First] }
+        criterion[:points] = criterion[:ratings].pluck(:points).max || 0
+
+        # Record both the criterion data and the original ID that was passed in
+        # (we'll use the ID when we sort the criteria below)
+        criteria.push([idx, criterion])
+      end
+      criteria = criteria.sort_by { |criterion| criterion.first&.to_i || CanvasSort::First }
+                         .map(&:second)
+    end
+    points_possible = total_points_from_criteria(criteria)&.round(POINTS_POSSIBLE_PRECISION)
+    CriteriaData.new(criteria, points_possible, title)
+  end
+
+  DEFAULT_GENERATE_OPTIONS = {
+    criteria_count: 5,
+    rating_count: 4,
+    points_per_criterion: 20,
+    use_range: false,
+  }.freeze
+  def generate_criteria_via_llm(association_object, generate_options = {})
+    unless association_object.is_a?(AbstractAssignment)
+      raise "LLM generation is only available for rubrics associated with an Assignment"
+    end
+
+    unless user
+      raise "User must be associated to rubric before LLM generation"
+    end
+
+    llm_config = LLMConfigs.config_for("rubric_create")
+    if llm_config.nil?
+      raise "No LLM config found for rubric creation"
+    end
+
+    assignment = association_object
+    dynamic_content = {
+      CONTENT: {
+        id: assignment.id,
+        title: assignment.title,
+        description: assignment.description,
+        grading_type: assignment.grading_type,
+        submission_types: assignment.submission_types,
+      }.to_json,
+      CRITERIA_COUNT: generate_options[:criteria_count] || DEFAULT_GENERATE_OPTIONS[:criteria_count],
+      RATING_COUNT: generate_options[:rating_count] || DEFAULT_GENERATE_OPTIONS[:rating_count],
+    }
+
+    prompt, options = llm_config.generate_prompt_and_options(substitutions: dynamic_content)
+
+    response = nil
+    _time = Benchmark.measure do
+      InstLLMHelper.with_rate_limit(user:, llm_config:) do
+        response = InstLLMHelper.client(llm_config.model_id).chat(
+          [{ role: "user", content: prompt }],
+          **options.symbolize_keys
+        )
+      end
+    end
+
+    # TODO: log this to the database for tracking LLM generation
+    # [
+    #   response.message[:content],
+    #   response.usage[:input_tokens],
+    #   response.usage[:output_tokens],
+    #   time.real.round(2)
+    # ]
+    # logger.info(response.message[:content])
+
+    ai_rubric = JSON.parse(response.message[:content], symbolize_names: true)
+
+    criteria = []
+    ai_rubric[:criteria].each do |criterion_data|
+      criterion = {}
+      criterion[:id] = unique_item_id
+      criterion[:description] = (criterion_data[:name].presence || t("no_description", "No Description")).strip
+      criterion[:long_description] = criterion_data[:description].presence
+
+      points = (generate_options[:points_per_criterion] || DEFAULT_GENERATE_OPTIONS[:points_per_criterion]).to_f
+      points_decrement = points / [(criterion_data[:ratings].length - 1), 1].max
+      ratings = criterion_data[:ratings].each_with_index.map do |rating_data, index|
+        {
+          description: (rating_data[:title].presence || t("no_description", "No Description")).strip,
+          long_description: rating_data[:description].presence,
+          points: (points - (points_decrement * index)).round,
+          criterion_id: criterion[:id],
+          id: unique_item_id
+        }
       end
       criterion[:ratings] = ratings.sort_by { |r| [-1 * (r[:points] || 0), r[:description] || CanvasSort::First] }
       criterion[:points] = criterion[:ratings].pluck(:points).max || 0
+      criterion[:criterion_use_range] = !!generate_options[:use_range]
 
-      # Record both the criterion data and the original ID that was passed in
-      # (we'll use the ID when we sort the criteria below)
-      criteria.push([idx, criterion])
+      criteria.push(criterion)
     end
-    criteria = criteria.sort_by { |criterion| criterion.first&.to_i || CanvasSort::First }
-                       .map(&:second)
-    points_possible = total_points_from_criteria(criteria)&.round(POINTS_POSSIBLE_PRECISION)
-    CriteriaData.new(criteria, points_possible, title)
+    criteria
+  end
+
+  def self.process_generate_criteria_via_llm(progress, course, user, association_object, generate_options)
+    rubric = course.rubrics.build(user:)
+    if rubric.grants_right?(user, :update)
+      criteria = rubric.generate_criteria_via_llm(association_object, generate_options)
+      progress.set_results({ criteria: })
+      progress.complete!
+    end
+  rescue InstLLM::ServiceQuotaExceededError, InstLLM::ThrottlingError
+    progress.set_results({ error: t("There was an error with generation capacity. Please try again later.") })
+    progress.fail!
+  rescue InstLLMHelper::RateLimitExceededError
+    progress.set_results({ error: t("You have made too many criteria generation requests. Please try again later.") })
+    progress.fail!
+  rescue
+    progress.set_results({ error: t("There was an error with the criteria generation. Please try agian later.") })
+    progress.fail!
+    raise
   end
 
   def reconstitute_criteria(criteria)
@@ -514,7 +621,7 @@ class Rubric < ActiveRecord::Base
   end
 
   def total_points_from_criteria(criteria)
-    criteria.reject { |c| c[:ignore_for_scoring] }.sum { |c| c[:points] }
+    criteria.reject { |c| c[:ignore_for_scoring] }.pluck(:points).compact.sum
   end
 
   def reconcile_criteria_models(current_user)
@@ -608,6 +715,14 @@ class Rubric < ActiveRecord::Base
   end
 
   def self.rubric_self_assessment_enabled?(context_to_check)
-    context_to_check.feature_enabled?(:enhanced_rubrics) && context_to_check.feature_enabled?(:platform_service_speedgrader)
+    return false if context_to_check.is_a?(Course) && !context_to_check.feature_enabled?(:assignments_2_student)
+
+    context_to_check.feature_enabled?(:enhanced_rubrics) && context_to_check.root_account.feature_enabled?(:rubric_self_assessment)
+  end
+
+  def self.ai_rubrics_enabled?(context_to_check)
+    return false unless context_to_check.is_a?(Course)
+
+    context_to_check.feature_enabled?(:enhanced_rubrics) && context_to_check.feature_enabled?(:ai_rubrics)
   end
 end

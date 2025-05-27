@@ -23,7 +23,7 @@
   completion_criteria ||= nil
   can_direct_share = can_do(@context, @current_user, :direct_share)
   criterion = completion_criteria && completion_criteria.find{|c| c[:id] == module_item.id}
-  show_checkpoints = @context.root_account.feature_enabled?(:discussion_checkpoints) && module_item && module_item.content_type == 'DiscussionTopic' && module_item.content.checkpoints?
+  show_checkpoints = @context.discussion_checkpoints_enabled? && module_item && module_item.content_type == 'DiscussionTopic' && module_item.content.checkpoints?
   item_restrictions ||= nil
 
   @module_item_image_tags ||= {
@@ -65,14 +65,14 @@
     <% end %>
     <%= module_item.content_type_class(@is_student) if module_item %>
     <%= 'also_assignment' if module_item && module_item.graded? %>
-    indent_<%= module_item.try_rescue(:indent) || '0' %>
+    indent_<%= @context.horizon_course? ? '0' : (module_item.try_rescue(:indent) || '0') %>
     <%= 'progression_requirement' if criterion %>
     <%= criterion[:type] if criterion %>_requirement
     <%= module_item.item_class if module_item %>
     <%= 'dupeable' if module_item&.duplicate_able? %>
   "
 >
-  <div class="ig-row <%= 'with-completion-requirements' if criterion %> <%= 'ig-published' if module_item && module_item.published? %> <%= 'student-view' if @is_student %>">
+  <div class="ig-row <%= 'with-completion-requirements' if criterion %> <%= 'ig-published' if module_item && module_item.published? %> <%= 'student-view' if @is_student %> no-estimated-duration">
     <% if @can_edit || module_item.nil? %>
     <div aria-hidden="true" class="ig-handle">
       <span
@@ -84,8 +84,8 @@
     </div>
     <% end %>
 
-    <span class="type_icon" title="<%= module_item_translated_content_type(module_item, @is_student) %>" role="none">
-      <span class="screenreader-only"><%= module_item_translated_content_type(module_item, @is_student) %></span>
+    <span class="type_icon" title="<%= module_item_translated_content_type(module_item, student: @is_student) %>" role="none">
+      <span class="screenreader-only"><%= module_item_translated_content_type(module_item, student: @is_student) %></span>
       <span class="ig-type-icon" aria-hidden="true">
         <i class="icon-document"></i>
         <i class="icon-paperclip"></i>
@@ -142,6 +142,8 @@
           <span class="position" style="display: none;"><%= module_item && module_item.position %></span>
           <span class="url" style="display: none;"><%= module_item.try(:url) if @can_view %></span>
           <span class="new_tab" style="display: none;"><%= module_item.try(:new_tab) ? '1' : '0' if @can_view %></span>
+          <span class="estimated_duration_minutes" style="display: none;"></span>
+          <span class="can_set_estimated_duration" style="display: none;"></span>
         </span>
       </div>
 
@@ -149,6 +151,7 @@
         <!-- dead code? -->
         <span class="criterion <%= 'defined' if criterion %>">
           <span class="min_score" style="display: none;"><%= (criterion && criterion[:min_score]) || nbsp %></span>
+          <span class="min_percentage" style="display: none;"><%= (criterion && criterion[:min_percentage]) || nbsp %></span>
           <span class="criterion_type" style="display: none;"><%= (criterion && criterion[:type]) || nbsp %></span>
         </span>
         <!-- /dead code -->
@@ -164,7 +167,7 @@
         <%end%>
         <div class="due_date_display ig-details__item"></div>
         <% if module_item&.graded? && (!module_item.try_rescue(:assignment).restrict_quantitative_data?(@current_user, check_extra_permissions: true))%>
-            <div class="points_possible_display ig-details__item"></div>
+          <div class="points_possible_display ig-details__item"></div>
         <%end%>
         <div class="requirement-description ig-details__item">
           <span class="completion_requirement">
@@ -177,6 +180,17 @@
               <span class="fulfilled">
                 <%= t 'min_score.fulfilled', 'Scored at least %{score}', :score => score_display %>
                 <span class="screenreader-only"><%= t 'Module item has been completed by scoring at least %{score}', :score => score_display %></span>
+              </span>
+            </span>
+            <span class="requirement_type min_percentage_requirement">
+              <% percentage_display = content_tag(:span, criterion && criterion[:min_percentage] || nbsp, class: 'min_percentage') %>
+              <span class="unfulfilled">
+                <%= t 'min_percentage.unfulfilled', 'Score at least %{score}%', :score => percentage_display %>
+                <span class="screenreader-only"><%= t 'Must score at least %{score}% to complete this module item', :score => percentage_display %></span>
+              </span>
+              <span class="fulfilled">
+                <%= t 'min_percentage.fulfilled', 'Scored at least %{score}%', :score => percentage_display %>
+                <span class="screenreader-only"><%= t 'Module item has been completed by scoring at least %{score}%', :score => percentage_display %></span>
               </span>
             </span>
             <span class="requirement_type must_view_requirement">
@@ -221,6 +235,7 @@
             </span>
           </span>
         </div> <!-- requirement description end -->
+        <div class="estimated_duration_display ig-details__item"></div>
         <div class="mc_objectives ig-details__item"></div>
       </div>
       <% if module_item && module_item.content_type == 'ContextModuleSubHeader' %>
@@ -285,7 +300,6 @@
                   <a href="<%= context_url(@context, :context_url) %>/gradebook/speed_grader?assignment_id=<%= module_item&.assignment&.present? ? module_item.assignment.id : "{{ assignment_id }}" %>" title="<%= t('SpeedGrader')%>"><%= @module_item_image_tags['speed_grader'] %> <%= t('SpeedGrader') %></a>
                 </li>
               <% end %>
-              <% if Account.site_admin.feature_enabled?(:selective_release_ui_api) %>
                 <li class="assign-to-option <%= (module_item.present? && (module_item.show_assign_to?) && module_item.content&.grants_right?(@current_user, :manage_assign_to) ) ? "" : "hidden" %>" role="presentation">
                   <a
                     class="module-item-assign-to-link"
@@ -302,7 +316,6 @@
                     <%= @module_item_image_tags['assign_to'] %> <%= t('Assign To...') %>
                   </a>
                 </li>
-              <% end %>
               <% if @can_add || module_item.nil? %>
                 <li class="dupe-option" role="presentation"><a href="/api/v1<%= context_url(@context, :context_url) %>/modules/items/<%= module_item ? module_item.id : "{{ id }}" %>/duplicate" class="duplicate_item_link" title="<%= t('Duplicate Item') %>"><%= @module_item_image_tags['duplicate'] %> <%= t('Duplicate') %></a></li>
               <% end %>
@@ -314,8 +327,10 @@
                     title="<%= t('Move this item') %>"
                   ><%= @module_item_image_tags["move_to"]%> <%= t("Move to...") %></a>
                 </li>
+                <% unless @context.horizon_course? %>
                 <li role="presentation"><a href="<%= context_url(@context, :context_url) %>/modules/items/<%= module_item ? module_item.id : "{{ id }}" %>" class="outdent_item_link" title="<%= t('Decrease indent') %>"><%= @module_item_image_tags['outdent'] %> <%= t('Decrease indent') %></a></li>
                 <li role="presentation"><a href="<%= context_url(@context, :context_url) %>/modules/items/<%= module_item ? module_item.id : "{{ id }}" %>" class="indent_item_link" title="<%= t('Increase indent') %>"><%= @module_item_image_tags['indent'] %> <%= t('Increase indent') %></a></li>
+                <% end %>
               <%end%>
               <% if can_direct_share && (!module_item || module_item.direct_shareable?) %>
                 <li role="presentation">
@@ -357,7 +372,9 @@
                 <% end %>
               <% end %>
               <% if @can_delete || module_item.nil? %>
-                <li role="presentation"><a href="<%= context_url(@context, :context_url) %>/modules/items/<%= module_item ? module_item.id : "{{ id }}" %>" class="delete_item_link delete_link" title="<%= t('Remove this item from the module') %>"><i class="icon-trash"></i> <%= t('Remove') %></a></li>
+                <% unless @context.horizon_course? && module_item && module_item.published? %>
+                  <li role="presentation"><a href="<%= context_url(@context, :context_url) %>/modules/items/<%= module_item ? module_item.id : "{{ id }}" %>" class="delete_item_link delete_link" title="<%= t('Remove this item from the module') %>"><i class="icon-trash"></i> <%= t('Remove') %></a></li>
+                <% end %>
               <% end %>
             </ul>
           <% else %>
@@ -428,7 +445,7 @@
       </div>
     <% end %>
   </div>
-  <% if @is_student && @context.root_account.feature_enabled?(:discussion_checkpoints) && module_item && module_item.content_type == 'DiscussionTopic' && module_item.content.checkpoints? %>
+  <% if @is_student && @context.discussion_checkpoints_enabled? && module_item && module_item.content_type == 'DiscussionTopic' && module_item.content.checkpoints? %>
     <div class="context_module_item indent_<%= module_item.try_rescue(:indent) || '0' %>">
       <% checkpoints = [module_item.content.reply_to_topic_checkpoint, module_item.content.reply_to_entry_checkpoint] %>
       <% checkpoints.each do |checkpoint| %>

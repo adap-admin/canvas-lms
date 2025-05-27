@@ -75,9 +75,9 @@ module Api::V1::CalendarEvent
     hash["type"] = "event"
     if event.context_type == "CourseSection"
       hash["title"] += " (#{context.name})" unless hash["title"].end_with?(" (#{context.name})")
-      hash["description"] = api_user_content(event.description, event.context.course) unless excludes.include?("description")
+      hash["description"] = api_user_content(event.description, event.context.course, location: event.asset_string) unless excludes.include?("description")
     else
-      hash["description"] = api_user_content(event.description, context) unless excludes.include?("description")
+      hash["description"] = api_user_content(event.description, context, location: event.asset_string) unless excludes.include?("description")
     end
 
     appointment_group = options[:appointment_group]
@@ -211,7 +211,7 @@ module Api::V1::CalendarEvent
     target_fields = %w[created_at updated_at title all_day all_day_date workflow_state submission_types]
     target_fields << "description" unless excludes.include?("description")
     hash = api_json(assignment, user, session, only: target_fields)
-    hash["description"] = api_user_content(hash["description"], assignment.context) unless excludes.include?("description")
+    hash["description"] = api_user_content(hash["description"], assignment.context, location: assignment.asset_string) unless excludes.include?("description")
 
     hash["id"] = "assignment_#{assignment.id}"
     hash["type"] = "assignment"
@@ -229,7 +229,12 @@ module Api::V1::CalendarEvent
     hash["start_at"] = hash["end_at"] = assignment.due_at
     hash["url"] = api_v1_calendar_event_url("assignment_#{assignment.id}")
     if assignment.applied_overrides.present?
-      hash["assignment_overrides"] = assignment.applied_overrides.map { |o| assignment_override_json(o) }
+      all_overrides = assignment.applied_overrides.map { |o| assignment_override_json(o) }
+      hash["assignment_overrides"] = if all_overrides.size > 1
+                                       all_overrides.select { |o| o["context_module_id"].nil? }
+                                     else
+                                       all_overrides
+                                     end
     end
     hash["important_dates"] = assignment.important_dates
     hash
@@ -244,11 +249,13 @@ module Api::V1::CalendarEvent
     parent_assignment_hash = assignment_json(parent_assignment, user, session, override_dates: false, submission: options[:submission])
     hash = api_json(sub_assignment, user, session, only: target_fields)
 
-    hash["description"] = api_user_content(hash["description"], sub_assignment.context) unless excludes.include?("description")
+    hash["title"] = sub_assignment.title_with_required_replies
+    hash["description"] = api_user_content(hash["description"], sub_assignment.context, location: sub_assignment.asset_string) unless excludes.include?("description")
     hash["id"] = "sub_assignment_#{sub_assignment.id}"
     hash["type"] = "sub_assignment"
 
     hash["sub_assignment"] = assignment_json(sub_assignment, user, session, override_dates: false, submission: options[:submission])
+    hash["sub_assignment"]["name"] = sub_assignment.title_with_required_replies
     hash["sub_assignment"]["sub_assignment_tag"] = sub_assignment.sub_assignment_tag
     hash["sub_assignment"]["parent_assignment_id"] = sub_assignment.parent_assignment_id
     hash["sub_assignment"]["discussion_topic"] = parent_assignment_hash["discussion_topic"]

@@ -130,6 +130,19 @@ Go ahead and do so.
 Debug configurations will already be set up.
 You can attach to the currently running web server, or run specs for the currently active spec file.
 
+Canvas also comes with the Ruby LSP rspec extension in development mode.
+
+Add the following to your VS Code settings to run rspec tests via CodeLense UI elements:
+```json
+...
+"rubyLsp.addonSettings": {
+  "Ruby LSP RSpec": {
+    "rspecCommand": "cd /usr/src/app && rspec"
+  }
+}
+...
+```
+
 ### Debugging
 
 A Ruby debug server is running in development mode on the web and job containers
@@ -174,68 +187,28 @@ docker-compose exec web pry-remote --wait
 $ docker-compose exec web bundle exec rspec spec
 ```
 
-## Running javascript tests
-
-First off, there's some general JS testing info in
-[testing_javascript.md](https://github.com/instructure/canvas-lms/blob/master/doc/testing_javascript.md).
-That will guide you on running JS tests natively.  To run them in docker, read on.
-
-First add `docker-compose/js-tests.override.yml` to your `COMPOSE_FILE` var in
-`.env`. Then prepare that container with:
-
-```
-docker-compose run --rm js-tests yarn install
-```
-
-If you run into issues with `yarn install`, either during initial setup or after
-updating master, try to fix it with a `nuke_node`:
-
-```
-docker-compose run --rm js-tests ./script/nuke_node.sh
-docker-compose run --rm js-tests yarn install
-```
-
-### QUnit Karma Tests in Headless Chrome
-
-Run all QUnit tests in watch mode with:
-
-```
-docker-compose up js-tests
-```
-
-Or, if you're iterating on something and want to just run a targeted test file
-in watch mode, set the `JSPEC_PATH` env var, e.g.:
-
-```
-export JSPEC_PATH=spec/coffeescripts/util/deparamSpec.js
-docker-compose up js-tests
-```
-
-To run a targeted test without watch mode:
-
-```
-docker-compose run --rm -e JSPEC_PATH=spec/coffeescripts/util/deparamSpec.js js-tests yarn test:karma:headless
-```
-
 ### Jest Tests
 
 Run all Jest tests with:
 
 ```
-docker-compose run --rm js-tests yarn test:jest
+docker-compose run --rm webpack yarn test:jest
 ```
 
 Or run a targeted subset of tests:
 
 ```
-docker-compose run --rm js-tests yarn test:jest ui/features/speed_grader/react/__tests__/CommentArea.test.js
+docker-compose run --rm webpack yarn test:jest ui/features/speed_grader/react/__tests__/CommentArea.test.js
 ```
 
 To run a targeted subset of tests in watch mode, use `test:jest:watch` and
 specify the paths to the test files as one or more arguments, e.g.:
 
 ```
-docker-compose run --rm js-tests yarn test:jest:watch ui/features/speed_grader/react/__tests__/CommentArea.test.js
+docker-compose run --rm webpack yarn test:jest:watch ui/features/speed_grader/react/__tests__/CommentArea.test.js
+
+
+docker-compose run --rm webpack yarn test:jest:watch ui/features/course_paces/react/components/course_pace_table/__tests__/assignment_row.test.tsx
 ```
 
 ## Selenium
@@ -312,6 +285,18 @@ Set `rich-content-service` `app-host` to `"http://rce.canvas.docker:3000"` in `c
 rich-content-service:
   app-host: "http://rce.canvas.docker:3000"
 ```
+
+### StatsD
+The optional StatsD service simply intercepts UDP traffic to port 8125 and echoes it.
+
+This is useful if you want to understand what metrics are being sent to DataDog when
+the application is running in production.
+
+To enable this service, add `docker-compose/statsd.override.yml` to your .env file
+
+Next, stop and start any running containers (a restart is not sufficient since environment variables change).
+
+Finally, tail the statsd service logs to see what metrics Canvas is recording: `docker compose logs -ft statsd`.
 
 ## Tips
 

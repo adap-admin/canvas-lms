@@ -72,6 +72,7 @@ class CanvasSchema < GraphQL::Schema
     when PostPolicy then Types::PostPolicyType
     when WikiPage then Types::PageType
     when Attachment then Types::FileType
+    when Folder then Types::FolderType
     when DiscussionTopic then Types::DiscussionType
     when DiscussionEntry then Types::DiscussionEntryType
     when Quizzes::Quiz then Types::QuizType
@@ -83,6 +84,7 @@ class CanvasSchema < GraphQL::Schema
     when LearningOutcomeGroup then Types::LearningOutcomeGroupType
     when LearningOutcome then Types::LearningOutcomeType
     when OutcomeFriendlyDescription then Types::OutcomeFriendlyDescriptionType
+    when ContextModuleProgression then Types::ModuleProgressionType
     when ContentTag
       if abstract_type&.graphql_name == "ModuleItemInterface"
         case obj.content_type
@@ -102,8 +104,10 @@ class CanvasSchema < GraphQL::Schema
 
   def self.unauthorized_object(error)
     raise GraphQL::ExecutionError,
-          I18n.t("An object of type %{graphql_type} was hidden due to insufficient scopes on access token",
-                 graphql_type: error.type.graphql_name)
+          I18n.t(
+            "An object of type %{graphql_type} was hidden due to insufficient scopes on access token",
+            graphql_type: error.type.graphql_name
+          )
   end
 
   orphan_types [Types::PageType,
@@ -122,7 +126,10 @@ class CanvasSchema < GraphQL::Schema
 
   query_analyzer(CanvasAntiabuseAnalyzer)
 
-  if Rails.env.development?
+  # This enable_deferred check is temporary. We need to simulate a release flag (before feature flags are available) and
+  # this will fit that need. As soon as this is on in prod after the release date, we will remove this whole if
+  # statement.
+  if Rails.env.development? || GraphQLTuning.enable_deferred_graphql_tuning?
     max_complexity GraphQLTuning.max_complexity
     default_page_size GraphQLTuning.default_page_size
     default_max_page_size GraphQLTuning.default_max_page_size

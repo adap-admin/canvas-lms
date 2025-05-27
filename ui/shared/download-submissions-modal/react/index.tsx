@@ -27,10 +27,10 @@ import {Text} from '@instructure/ui-text'
 import {View} from '@instructure/ui-view'
 import useBoolean from '@canvas/outcomes/react/hooks/useBoolean'
 import doFetchApi, {type DoFetchApiResults} from '@canvas/do-fetch-api-effect'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import WithBreakpoints, {type Breakpoints} from '@canvas/with-breakpoints'
 
-const I18n = useI18nScope('download_submissions_modal')
+const I18n = createI18nScope('download_submissions_modal')
 
 const DownloadSubmissionsModal = ({
   open,
@@ -52,6 +52,7 @@ const DownloadSubmissionsModal = ({
   useEffect(() => {
     if (open && !fileSize) {
       ;(() => {
+        // @ts-expect-error
         setErrorFalse()
         setDownloadProgress(1)
         doFetchApi({
@@ -63,6 +64,7 @@ const DownloadSubmissionsModal = ({
             setDownloadProgress(100)
           })
           .catch((_err: Error) => {
+            // @ts-expect-error
             setErrorTrue()
           })
       })()
@@ -80,7 +82,7 @@ const DownloadSubmissionsModal = ({
     if (downloadProgress < 90 && !fileSize) {
       const incrementProgressValue = () =>
         setDownloadProgress((prevValue: number) =>
-          prevValue < 100 && !error ? prevValue + 1 : prevValue
+          prevValue < 100 && !error ? prevValue + 1 : prevValue,
         )
       setTimeout(() => {
         incrementProgressValue()
@@ -129,6 +131,7 @@ const DownloadSubmissionsModal = ({
         <CloseButton
           placement="end"
           offset="small"
+          // @ts-expect-error
           onClick={handleCloseModal}
           screenReaderLabel={I18n.t('Close')}
         />
@@ -137,7 +140,7 @@ const DownloadSubmissionsModal = ({
       <Modal.Body>
         <Text>
           {I18n.t(
-            'Your student submissions are being gathered and compressed into a zip file. This may take some time depending on the size and number of submission files.'
+            'Your student submissions are being gathered and compressed into a zip file. This may take some time depending on the size and number of submission files.',
           )}
         </Text>
         <View as="div" margin="medium 0" borderWidth={error ? 'small' : '0'} borderColor="danger">
@@ -156,6 +159,7 @@ const DownloadSubmissionsModal = ({
         {renderProgressText()}
       </Modal.Body>
       <Modal.Footer>
+        {/* @ts-expect-error */}
         <Button onClick={handleCloseModal} margin="0 x-small 0 0">
           {I18n.t('Cancel')}
         </Button>

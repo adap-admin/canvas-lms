@@ -139,6 +139,10 @@
 #           "description": "optional: A list of users that are members in the group. Returned only if include[]=users. WARNING: this collection's size is capped (if there are an extremely large number of users in the group (thousands) not all of them will be returned).  If you need to capture all the users in a group with certainty consider using the paginated /api/v1/groups/<group_id>/memberships endpoint.",
 #           "type": "array",
 #           "items": { "$ref": "User" }
+#         },
+#         "non_collaborative": {
+#           "description": "Indicates whether this group category is non-collaborative. A value of true means these group categories rely on the manage_tags permissions and do not have collaborative features",
+#           "type": "boolean"
 #         }
 #       }
 #     }
@@ -153,6 +157,7 @@ class GroupsController < ApplicationController
   include Api::V1::GroupCategory
   include Context
   include K5Mode
+  include GroupPermissionHelper
 
   SETTABLE_GROUP_ATTRIBUTES = %w[
     name
@@ -176,8 +181,13 @@ class GroupsController < ApplicationController
   end
 
   def unassigned_members
-    category = @context.group_categories.where(id: params[:category_id]).first
+    category = @context.active_combined_group_and_differentiation_tag_categories.where(id: params[:category_id]).first
     return render json: {}, status: :not_found unless category
+
+    if category.non_collaborative? && !@context.grants_any_right?(@current_user, *RoleOverride::GRANULAR_MANAGE_TAGS_PERMISSIONS)
+      return render json: { message: "Not authorized to manage differentiation tag." },
+                    status: :unauthorized
+    end
 
     page = (params[:page] || 1).to_i
     per_page = Api.per_page_for(self, default: 15, max: 100)
@@ -265,6 +275,12 @@ class GroupsController < ApplicationController
   #   - "tabs": Include the list of tabs configured for each group.  See the
   #     {api:TabsController#index List available tabs API} for more information.
   #
+  # @argument collaboration_state [String]
+  #   Filter groups by their collaboration state:
+  #   - "all": Return both collaborative and non-collaborative groups
+  #   - "collaborative": Return only collaborative groups (default)
+  #   - "non_collaborative": Return only non-collaborative groups
+  #
   # @example_request
   #     curl https://<canvas>/api/v1/courses/1/groups \
   #          -H 'Authorization: Bearer <token>'
@@ -274,10 +290,28 @@ class GroupsController < ApplicationController
     return unless authorized_action(@context, @current_user, :read_roster)
 
     page_has_instui_topnav
-    @groups = all_groups = @context.groups.active
+    @groups = @context.combined_groups_and_differentiation_tags.active
     unless params[:filter].nil?
-      @groups = all_groups = @groups.left_outer_joins(:users).where("groups.name ILIKE :query OR users.name ILIKE :query", query: "%#{ActiveRecord::Base.sanitize_sql_like(params[:filter])}%")
+      @groups = @groups.left_outer_joins(:users).where("groups.name ILIKE :query OR users.name ILIKE :query", query: "%#{ActiveRecord::Base.sanitize_sql_like(params[:filter])}%")
     end
+    unless params[:user_id].nil?
+      @groups = @groups.left_outer_joins(:users).where({ users: { id: params[:user_id] } })
+    end
+    collaboration_state = params[:collaboration_state].presence || "collaborative"
+    case collaboration_state
+    when "collaborative"
+      @groups = @groups.where(non_collaborative: false)
+    when "non_collaborative"
+      return unless authorized_action(@context, @current_user, %i[manage_tags_add manage_tags_manage manage_tags_delete])
+
+      @groups = @groups.where(non_collaborative: true)
+    when "all"
+      # IF FAIL, EXCLUDE NON-COLLABORATIVE
+      unless @context.grants_any_right?(@current_user, *RoleOverride::GRANULAR_MANAGE_TAGS_PERMISSIONS)
+        @groups = @groups.where(non_collaborative: false)
+      end
+    end
+
     @groups = all_groups = @groups.order(GroupCategory::Bookmarker.order_by, Group::Bookmarker.order_by)
                                   .eager_load(:group_category).preload(:root_account)
 
@@ -297,6 +331,10 @@ class GroupsController < ApplicationController
     end
 
     unless api_request?
+      if @context.is_a?(Course) && @context.horizon_course?
+        redirect_to named_context_url(@context, :course_users_path)
+        return
+      end
       # The Groups end-point relies on the People's tab configuration since it's a subsection of it.
       return unless tab_enabled?(Course::TAB_PEOPLE)
 
@@ -321,8 +359,33 @@ class GroupsController < ApplicationController
 
     respond_to do |format|
       format.html do
-        @categories  = @context.group_categories.order(Arel.sql("role <> 'student_organized'"), GroupCategory.best_unicode_collation_key("name")).preload(:root_account)
+        @categories = @context.combined_group_and_differentiation_tag_categories.active.order(Arel.sql("role <> 'student_organized'"), GroupCategory.best_unicode_collation_key("name")).preload(:root_account)
+        case collaboration_state
+        when "collaborative"
+          @categories = @categories.where(non_collaborative: false)
+        when "non_collaborative"
+          @categories = @categories.where(non_collaborative: true)
+        when "all"
+          # IF FAIL, EXCLUDE NON-COLLABORATIVE
+          unless @context.grants_any_right?(@current_user, *RoleOverride::GRANULAR_MANAGE_TAGS_PERMISSIONS)
+            @categories = @categories.where(non_collaborative: false)
+          end
+        end
+
         @user_groups = @current_user.group_memberships_for(@context) if @current_user
+        if @user_groups
+          case collaboration_state
+          when "collaborative"
+            @user_groups = @user_groups.where(non_collaborative: false)
+          when "non_collaborative"
+            @user_groups = @user_groups.where(non_collaborative: true)
+          when "all"
+            # IF FAIL, EXCLUDE NON-COLLABORATIVE
+            unless @context.grants_any_right?(@current_user, *RoleOverride::GRANULAR_MANAGE_TAGS_PERMISSIONS)
+              @user_groups = @user_groups.where(non_collaborative: false)
+            end
+          end
+        end
 
         if @context.grants_any_right?(@current_user, session, *RoleOverride::GRANULAR_MANAGE_GROUPS_PERMISSIONS)
           categories_json = @categories.map { |cat| group_category_json(cat, @current_user, session, include: %w[progress_url unassigned_users_count groups_count]) }
@@ -378,7 +441,10 @@ class GroupsController < ApplicationController
                      @current_user,
                      session,
                      include: Array(params[:include]),
-                     include_inactive_users:)
+                     include_inactive_users:).tap do |json|
+            json[:group_category_name] = g.group_category.name if collaboration_state == "non_collaborative" && params[:user_id]
+            json[:is_single_tag] = g.group_category.single_tag? if collaboration_state == "non_collaborative" && params[:user_id]
+          end
         }
       end
     end
@@ -404,6 +470,8 @@ class GroupsController < ApplicationController
     find_group
     respond_to do |format|
       format.html do
+        head :unauthorized and return if @group.non_collaborative?
+
         if @group&.context
           add_crumb @group.context.short_name, named_context_url(@group.context, :context_url)
           add_crumb @group.short_name, named_context_url(@group, :context_url)
@@ -513,28 +581,53 @@ class GroupsController < ApplicationController
     if api_request?
       if params[:group_category_id]
         group_category = api_find(GroupCategory.active, params[:group_category_id])
-        return render json: {}, status: bad_request unless group_category
+        return render json: {}, status: :bad_request unless group_category
 
         @context = group_category.context
         attrs[:group_category] = group_category
-        return unless authorized_action(group_category.context, @current_user, :manage_groups_add)
+
+        non_collaborative = group_category.non_collaborative?
+
+        unless check_group_authorization(
+          context: @context,
+          current_user: @current_user,
+          action_category: :add,
+          non_collaborative:
+        )
+          return render json: { message: "Not authorized to create groups in this category" }, status: :unauthorized
+        end
       else
         @context = @domain_root_account
         attrs[:group_category] = GroupCategory.communities_for(@context)
       end
     elsif params[:group]
-      group_category_id = params[:group].delete :group_category_id
-      if group_category_id && @context.grants_right?(@current_user, session, :manage_groups_add)
-        group_category = @context.group_categories.where(id: group_category_id).first
+      group_category_id = params[:group].delete(:group_category_id)
+      if group_category_id
+        group_category = @context.active_combined_group_and_differentiation_tag_categories.where(id: group_category_id).first
         return render json: {}, status: :bad_request unless group_category
 
         attrs[:group_category] = group_category
+
+        non_collaborative = group_category.non_collaborative?
+        unless check_group_context_rights(
+          context: @context,
+          current_user: @current_user,
+          action_category: :add,
+          non_collaborative:
+        )
+          if non_collaborative
+            return render json: { message: "Not authorized to create groups in this category" }, status: :unauthorized
+          else
+            # If collaborative and not authorized, fall back to not setting the category
+            attrs[:group_category] = nil
+          end
+        end
       else
         attrs[:group_category] = nil
       end
     end
 
-    attrs.delete :storage_quota_mb unless @context.grants_right? @current_user, session, :manage_storage_quotas
+    attrs.delete :storage_quota_mb unless @context.grants_right?(@current_user, session, :manage_storage_quotas)
     @group = @context.groups.temp_record(attrs.slice(*SETTABLE_GROUP_ATTRIBUTES))
 
     if authorized_action(@group, @current_user, :create)
@@ -743,6 +836,10 @@ class GroupsController < ApplicationController
 
   def accept_invitation
     find_group
+    if @group.non_collaborative?
+      return render json: { message: "Not authorized to manage differentiation tag." }, status: :unauthorized
+    end
+
     @membership = @group.group_memberships.where(uuid: params[:uuid]).first if @group
     @membership.accept! if @membership.try(:invited?)
     if @membership.try(:active?)
@@ -845,6 +942,10 @@ class GroupsController < ApplicationController
   def public_feed
     return unless get_feed_context(only: [:group])
 
+    if @context.non_collaborative?
+      return render json: { message: "Not authorized to manage differentiation tag." }, status: :unauthorized unless @context.context.grants_any_right?(@current_user, *RoleOverride::GRANULAR_MANAGE_TAGS_PERMISSIONS)
+    end
+
     title = t(:feed_title, "%{course_or_account_name} Feed", course_or_account_name: @context.full_name)
     link = group_url(@context)
 
@@ -874,6 +975,15 @@ class GroupsController < ApplicationController
   # group, or any admin over the group.
   def create_file
     @attachment = Attachment.new(context: @context)
+
+    if params[:group_id].present?
+      group = Group.find_by(id: params[:group_id])
+      return render json: { message: "Group not found" }, status: :not_found unless group
+      return render json: { message: "Not authorized to upload file to Differentiation Tag" }, status: :unauthorized if group.non_collaborative?
+    elsif @context.is_a?(Group) || @context.is_a?(GroupCategory)
+      return render json: { message: "Not authorized to upload file to Differentiation Tag" }, status: :unauthorized if @context.non_collaborative?
+    end
+
     if authorized_action(@attachment, @current_user, :create)
       submit_assignment = value_to_boolean(params[:submit_assignment])
       opts = { check_quota: true, submit_assignment: }
@@ -917,6 +1027,9 @@ class GroupsController < ApplicationController
   # stream, in the user api.
   def activity_stream
     get_context
+    if @context.non_collaborative?
+      return render json: { message: "Not authorized to manage differentiation tag." }, status: :unauthorized unless @context.context.grants_any_right?(@current_user, *RoleOverride::GRANULAR_MANAGE_TAGS_PERMISSIONS)
+    end
     if authorized_action(@context, @current_user, :read)
       api_render_stream(contexts: [@context], paginate_url: :api_v1_group_activity_stream_url)
     end
@@ -929,6 +1042,9 @@ class GroupsController < ApplicationController
   # stream summary, in the user api.
   def activity_stream_summary
     get_context
+    if @context.non_collaborative?
+      return render json: { message: "Not authorized to manage differentiation tag." }, status: :unauthorized unless @context.context.grants_any_right?(@current_user, *RoleOverride::GRANULAR_MANAGE_TAGS_PERMISSIONS)
+    end
     if authorized_action(@context, @current_user, :read)
       api_render_stream_summary(contexts: [@context])
     end
@@ -966,7 +1082,7 @@ class GroupsController < ApplicationController
       @group = api_find(Group.active, params[:group_id])
     else
       @group = @context if @context.is_a?(Group)
-      @group ||= api_find(@context ? @context.groups : Group, params[:id])
+      @group ||= api_find(@context ? @context.combined_groups_and_differentiation_tags : Group, params[:id])
     end
   end
 end

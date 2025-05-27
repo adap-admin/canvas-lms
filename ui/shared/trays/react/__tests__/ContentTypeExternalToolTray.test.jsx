@@ -18,14 +18,20 @@
 
 import React from 'react'
 import $ from 'jquery'
-import {render, fireEvent} from '@testing-library/react'
+import {render, fireEvent, waitFor} from '@testing-library/react'
 import ContentTypeExternalToolTray from '../ContentTypeExternalToolTray'
+import {monitorLtiMessages} from '@canvas/lti/jquery/messages'
 
 describe('ContentTypeExternalToolTray', () => {
-  const tool = {id: '1', base_url: 'https://one.lti.com/', title: 'First LTI'}
+  let tool
   const onDismiss = jest.fn()
   const onExternalContentReady = jest.fn()
   const extraQueryParams = {param1: 'value1', param2: 'value2'}
+
+  beforeEach(() => {
+    tool = {id: '1', base_url: 'https://one.lti.com/', title: 'First LTI'}
+    jest.resetAllMocks()
+  })
 
   function renderTray(props) {
     return render(
@@ -41,7 +47,7 @@ describe('ContentTypeExternalToolTray', () => {
         open={true}
         extraQueryParams={extraQueryParams}
         {...props}
-      />
+      />,
     )
   }
 
@@ -53,7 +59,7 @@ describe('ContentTypeExternalToolTray', () => {
   it('calls onDismiss when close button is clicked', () => {
     const {getByText} = renderTray()
     fireEvent.click(getByText('Close'))
-    expect(onDismiss.mock.calls.length).toBe(1)
+    expect(onDismiss).toHaveBeenCalledTimes(1)
   })
 
   describe('external content message handling', () => {
@@ -67,6 +73,15 @@ describe('ContentTypeExternalToolTray', () => {
       renderTray()
       sendPostMessage({subject: 'externalContentReady'})
       expect(onExternalContentReady).toHaveBeenCalledTimes(1)
+    })
+
+    it('calls onDismiss when it receives an lti.close messages from the tool', async () => {
+      monitorLtiMessages()
+      renderTray()
+      sendPostMessage({subject: 'lti.close'})
+      await waitFor(() => {
+        expect(onDismiss).toHaveBeenCalledTimes(1)
+      })
     })
   })
 

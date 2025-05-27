@@ -759,6 +759,18 @@ describe GroupCategory do
   end
 
   context "non_collaborative group_category" do
+    it "can have the same names as a collaborative group_category" do
+      category = GroupCategory.create(name: "Test Category", context: @course)
+      expect(category).to be_valid
+      non_collaborative = GroupCategory.create(name: "Test Category", context: @course, non_collaborative: true)
+      expect(non_collaborative).to be_valid
+    end
+
+    it "can have the same names as a collaborative group_category restricted name" do
+      non_collaborative = GroupCategory.create(name: "Imported Groups", context: @course, non_collaborative: true)
+      expect(non_collaborative).to be_valid
+    end
+
     it "attribute can be set on creation but cannot be changed afterwards" do
       # Set non_collaborative on creation
       category = GroupCategory.create(name: "Test Category", context: @course, non_collaborative: true)
@@ -848,6 +860,31 @@ describe GroupCategory do
 
         expect(@category.check_policy(@teacher2) & @relevant_permissions).to eq @relevant_permissions
       end
+    end
+  end
+
+  describe "single_tag?" do
+    before do
+      @category = GroupCategory.create!(name: "test tag", context: @course)
+    end
+
+    it "returns true when there is only one group and the group name is the same as the category" do
+      Group.create!(name: "test tag", group_category: @category, context: @course)
+
+      expect(@category.single_tag?).to be true
+    end
+
+    it "returns false if there is more than one group within the category" do
+      Group.create!(name: "test tag", group_category: @category, context: @course)
+      Group.create!(name: "test tag 2", group_category: @category, context: @course)
+
+      expect(@category.single_tag?).to be false
+    end
+
+    it "returns false if group name and category name are not equals" do
+      Group.create!(name: "test tag 1", group_category: @category, context: @course)
+
+      expect(@category.single_tag?).to be false
     end
   end
 end

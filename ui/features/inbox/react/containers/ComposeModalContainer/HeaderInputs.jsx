@@ -16,16 +16,15 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+import React, {useMemo, useEffect} from 'react'
+import PropTypes from 'prop-types'
 import {ComposeInputWrapper} from '../../components/ComposeInputWrapper/ComposeInputWrapper'
 import CourseSelect from '../../components/CourseSelect/CourseSelect'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {IndividualMessageCheckbox} from '../../components/IndividualMessageCheckbox/IndividualMessageCheckbox'
 import {Button} from '@instructure/ui-buttons'
-import PropTypes from 'prop-types'
-import React, {useMemo} from 'react'
 import {reduceDuplicateCourses} from '../../../util/courses_helper'
 import {SubjectInput} from '../../components/SubjectInput/SubjectInput'
-
 import {Flex} from '@instructure/ui-flex'
 import {PresentationContent} from '@instructure/ui-a11y-content'
 import {Text} from '@instructure/ui-text'
@@ -33,16 +32,37 @@ import {AddressBookContainer} from '../AddressBookContainer/AddressBookContainer
 import {Spinner} from '@instructure/ui-spinner'
 import {Alert} from '@instructure/ui-alerts'
 
-const I18n = useI18nScope('conversations_2')
+const I18n = createI18nScope('conversations_2')
 
 const HeaderInputs = props => {
   let moreCourses
   if (!props.isReply && !props.isForward) {
     moreCourses = reduceDuplicateCourses(
       props.courses.enrollments,
-      props.courses.favoriteCoursesConnection.nodes
+      props.courses.favoriteCoursesConnection.nodes,
     )
   }
+
+  const [modalContextCourseFilter, setModalContextCourseFilter] = React.useState(
+    props.activeCourseFilter,
+  )
+
+  const isAllInDifferentiationTagSelected = useMemo(() => {
+    return props.selectedRecipients?.some(
+      recipient =>
+        recipient.name?.startsWith('All in') && recipient.id?.includes('differentiation_tag'),
+    )
+  }, [props.selectedRecipients])
+
+  useEffect(() => {
+    if (isAllInDifferentiationTagSelected && !props.sendIndividualMessages) {
+      props.onSendIndividualMessagesChange(true)
+    }
+  }, [
+    isAllInDifferentiationTagSelected,
+    props.sendIndividualMessages,
+    props.onSendIndividualMessagesChange,
+  ])
 
   const canIncludeObservers = useMemo(() => {
     if (ENV?.CONVERSATIONS?.CAN_MESSAGE_ACCOUNT_CONTEXT) {
@@ -57,7 +77,7 @@ const HeaderInputs = props => {
     return props?.courses?.enrollments.some(
       enrollment =>
         enrollment?.course.assetString === currentCourseAssetId &&
-        enrollmentsThatCanIncludeObservers.includes(enrollment.type)
+        enrollmentsThatCanIncludeObservers.includes(enrollment.type),
     )
   }, [props.activeCourseFilter, props.courses])
 
@@ -65,9 +85,11 @@ const HeaderInputs = props => {
     if (context.contextID === null && context.contextName === null) {
       props.onSelectedIdsChange([])
     }
-
+    setModalContextCourseFilter(context)
     props.onContextSelect(context)
   }
+
+  const invalidRecipient = !!props.addressBookMessages?.length
 
   return (
     <Flex direction="column" width="100%" height="100%" padding="small">
@@ -75,12 +97,12 @@ const HeaderInputs = props => {
         <ComposeInputWrapper
           title={
             <PresentationContent>
-              <Text size="small">{I18n.t('Course')}</Text>
+              <Text>{I18n.t('Course')}</Text>
             </PresentationContent>
           }
           input={
             props.isReply || props.isForward ? (
-              <Text size="small">{props.contextName}</Text>
+              <Text>{props.contextName}</Text>
             ) : (
               <CourseSelect
                 mainPage={false}
@@ -91,7 +113,7 @@ const HeaderInputs = props => {
                   groups: props.courses?.favoriteGroupsConnection.nodes,
                 }}
                 onCourseFilterSelect={onContextSelect}
-                activeCourseFilterID={props.activeCourseFilter?.contextID}
+                activeCourseFilterID={modalContextCourseFilter?.contextID}
                 courseMessages={props.courseMessages}
               />
             )
@@ -104,9 +126,15 @@ const HeaderInputs = props => {
             shouldGrow={true}
             input={
               <IndividualMessageCheckbox
-                onChange={props.onSendIndividualMessagesChange}
+                onChange={
+                  isAllInDifferentiationTagSelected || props.maxGroupRecipientsMet
+                    ? () => {}
+                    : props.onSendIndividualMessagesChange
+                }
                 checked={props.sendIndividualMessages}
-                maxGroupRecipientsMet={props.maxGroupRecipientsMet}
+                checkedAndDisabled={
+                  isAllInDifferentiationTagSelected || props.maxGroupRecipientsMet
+                }
               />
             }
           />
@@ -117,9 +145,8 @@ const HeaderInputs = props => {
           <ComposeInputWrapper
             title={
               <PresentationContent>
-                <Text id="address-book-form" size="small">
-                  {I18n.t('To')}
-                </Text>
+                <Text id="address-book-form">{I18n.t('To')}</Text>
+                <Text color={invalidRecipient ? 'danger' : 'primary'}>{' *'}</Text>
               </PresentationContent>
             }
             input={
@@ -131,7 +158,7 @@ const HeaderInputs = props => {
                   props.onSelectedIdsChange(ids)
                 }}
                 onInputValueChange={props.onAddressBookInputValueChange}
-                activeCourseFilter={props.activeCourseFilter}
+                activeCourseFilter={modalContextCourseFilter}
                 hasSelectAllFilterOption={true}
                 selectedRecipients={props.selectedRecipients}
                 addressBookMessages={props.addressBookMessages}
@@ -189,10 +216,10 @@ const HeaderInputs = props => {
         <ComposeInputWrapper
           title={
             <PresentationContent>
-              <Text size="small">{I18n.t('Subject')}</Text>
+              <Text>{I18n.t('Subject')}</Text>
             </PresentationContent>
           }
-          input={<Text size="small">{props.subject}</Text>}
+          input={<Text>{props.subject}</Text>}
         />
       ) : (
         <SubjectInput onChange={props.onSubjectChange} value={props.subject} />

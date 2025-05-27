@@ -19,7 +19,7 @@ import {Spinner} from '@instructure/ui-spinner'
 import {Text} from '@instructure/ui-text'
 import type {ChangeEvent} from 'react'
 import {Table} from '@instructure/ui-table'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {RadioInput} from '@instructure/ui-radio-input'
 import {ScreenReaderContent} from '@instructure/ui-a11y-content'
 import {Flex} from '@instructure/ui-flex'
@@ -28,21 +28,25 @@ import type {User, DuplicateUser} from './types'
 import {Alert} from '@instructure/ui-alerts'
 import doFetchApi from '@canvas/do-fetch-api-effect'
 import {TempEnrollAvatar} from './TempEnrollAvatar'
+import {IconWarningSolid} from '@instructure/ui-icons'
 
-const I18n = useI18nScope('temporary_enrollment')
+const I18n = createI18nScope('temporary_enrollment')
 
 interface Props {
   foundUsers: User[]
   duplicateUsers: Record<string, DuplicateUser[]>
-  searchFailure: Function
-  readySubmit: Function
+  searchFailure: () => void
+  readySubmit: (enrollments: User[]) => void
   canReadSIS: boolean
+  duplicateReq: boolean
 }
 
 export function TempEnrollSearchConfirmation(props: Props) {
   const [userDetails, setUserDetails] = useState<User[]>([])
   const [loading, setLoading] = useState<boolean>(false)
+  // @ts-expect-error
   const [selectedDupes, setSelectedDupes] = useState<Record<string, DuplicateUser | null>>([])
+  const [attemptedSubmit, setAttemptedSubmit] = useState(false)
 
   useEffect(() => {
     const processFoundUsers = async (users: User[]) => {
@@ -51,8 +55,10 @@ export function TempEnrollSearchConfirmation(props: Props) {
         const promises: Promise<User>[] = []
         users.forEach(user => {
           if (user.id == null) {
+            // @ts-expect-error
             promises.push(fetchUserDetails(user))
           } else {
+            // @ts-expect-error
             promises.push(user)
           }
         })
@@ -77,7 +83,6 @@ export function TempEnrollSearchConfirmation(props: Props) {
 
     const templateSelectedUsers = () => {
       const emptyMap: Record<string, DuplicateUser | null> = {}
-
       for (const duplicatePair in props.duplicateUsers) {
         emptyMap[duplicatePair] = null
       }
@@ -93,6 +98,12 @@ export function TempEnrollSearchConfirmation(props: Props) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.duplicateUsers, props.foundUsers])
+
+  useEffect(() => {
+    if (props.duplicateReq) {
+      setAttemptedSubmit(true)
+    }
+  }, [props.duplicateReq])
 
   // user_lists.json does not always return email, sis id, and login
   const fetchUserDetails = async (user: User) => {
@@ -147,16 +158,24 @@ export function TempEnrollSearchConfirmation(props: Props) {
         <Table.Cell>{dupeUser.user_name}</Table.Cell>
         <Table.Cell>{dupeUser.email}</Table.Cell>
         <Table.Cell>{dupeUser.login_id}</Table.Cell>
-        {props.canReadSIS ? <Table.Cell>{dupeUser.sis_user_id || ''}</Table.Cell> : null}
+        {props.canReadSIS ? <Table.Cell>{dupeUser.sis_user_id || ''}</Table.Cell> : <></>}
         <Table.Cell>{dupeUser.account_name || ''}</Table.Cell>
       </Table.Row>
     )
   }
 
   const renderDupeTables = (key: string, dupePair: DuplicateUser[]) => {
+    const isError = selectedDupes[key] === null && attemptedSubmit
+    const color = isError ? 'danger' : 'primary'
     return (
       <Flex.Item key={`dupepair_${key}`}>
-        <Text>{I18n.t('Possible matches for "%{key}". Select the desired one below.', {key})}</Text>
+        <Flex gap="x-small">
+          {isError ? <IconWarningSolid color="error" /> : null}
+          <Text color={color}>
+            {I18n.t('Possible matches for "%{key}". Select the desired one below.', {key})}
+            <Text color={color}> *</Text>
+          </Text>
+        </Flex>
         <Table
           caption={
             <Text>
@@ -175,7 +194,9 @@ export function TempEnrollSearchConfirmation(props: Props) {
               <Table.ColHeader id="dupesection-loginid">{I18n.t('Login ID')}</Table.ColHeader>
               {props.canReadSIS ? (
                 <Table.ColHeader id="dupesection-sisid">{I18n.t('SIS ID')}</Table.ColHeader>
-              ) : null}
+              ) : (
+                <></>
+              )}
               <Table.ColHeader id="dupesection-inst">{I18n.t('Institution')}</Table.ColHeader>
             </Table.Row>
           </Table.Head>
@@ -199,7 +220,7 @@ export function TempEnrollSearchConfirmation(props: Props) {
           </Table.RowHeader>
           <Table.Cell>{user.primary_email}</Table.Cell>
           <Table.Cell>{user.login_id}</Table.Cell>
-          {props.canReadSIS ? <Table.Cell>{user.sis_user_id}</Table.Cell> : null}
+          {props.canReadSIS ? <Table.Cell>{user.sis_user_id}</Table.Cell> : <></>}
         </Table.Row>
       )
     })
@@ -226,7 +247,7 @@ export function TempEnrollSearchConfirmation(props: Props) {
             one: 'One user is ready to be assigned temporary enrollments.',
             other: '%{count} users are ready to be assigned temporary enrollments',
           },
-          {count: userCount}
+          {count: userCount},
         )}
       </Alert>
     )
@@ -262,7 +283,9 @@ export function TempEnrollSearchConfirmation(props: Props) {
               <Table.ColHeader id="usertable-loginid">{I18n.t('Login ID')}</Table.ColHeader>
               {props.canReadSIS ? (
                 <Table.ColHeader id="usertable-sisid">{I18n.t('SIS ID')}</Table.ColHeader>
-              ) : null}
+              ) : (
+                <></>
+              )}
             </Table.Row>
           </Table.Head>
           <Table.Body>{renderFoundRows()}</Table.Body>

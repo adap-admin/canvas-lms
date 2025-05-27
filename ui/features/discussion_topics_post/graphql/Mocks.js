@@ -63,7 +63,6 @@ export const getDiscussionQueryMock = ({
         perPage,
         rootEntries,
         searchTerm,
-        sort,
         unreadBefore,
       },
     },
@@ -87,7 +86,9 @@ export const getDiscussionQueryMock = ({
           }
           if (sort === 'asc') {
             return Discussion.mock({
-              sortOrder: 'asc',
+              participant: {
+                sortOrder: 'asc',
+              },
               discussionEntriesConnection: {
                 nodes: [
                   DiscussionEntry.mock({
@@ -140,7 +141,6 @@ export const getAnonymousDiscussionQueryMock = ({
   perPage = 20,
   rootEntries = true,
   searchTerm = '',
-  sort = null,
   shouldError = false,
   unreadBefore = '',
 } = {}) => [
@@ -154,7 +154,6 @@ export const getAnonymousDiscussionQueryMock = ({
         perPage,
         rootEntries,
         searchTerm,
-        sort,
         unreadBefore,
       },
     },

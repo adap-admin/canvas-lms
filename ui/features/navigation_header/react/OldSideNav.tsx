@@ -18,7 +18,7 @@
 
 import $ from 'jquery'
 import React, {useEffect, useState, useCallback} from 'react'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {Tray} from '@instructure/ui-tray'
 import {CloseButton} from '@instructure/ui-buttons'
 import {View} from '@instructure/ui-view'
@@ -29,11 +29,11 @@ import useHoverIntent from './hooks/useHoverIntent'
 import coursesQuery from './queries/coursesQuery'
 import groupsQuery from './queries/groupsQuery'
 import NavigationBadges from './NavigationBadges'
-import {prefetchQuery} from '@canvas/query'
 import profileQuery from './queries/profileQuery'
 import getAccounts from '@canvas/api/accounts/getAccounts'
+import {queryClient} from '@canvas/query'
 
-const I18n = useI18nScope('Navigation')
+const I18n = createI18nScope('Navigation')
 
 const CoursesTray = React.lazy(() => import('./trays/CoursesTray'))
 const GroupsTray = React.lazy(() => import('./trays/GroupsTray'))
@@ -90,22 +90,34 @@ const Navigation = () => {
 
   useHoverIntent(profileNavLink, () => {
     import('./trays/ProfileTray')
-    prefetchQuery(['profile'], profileQuery)
+    queryClient.prefetchQuery({
+      queryKey: ['profile'],
+      queryFn: profileQuery,
+    })
   })
 
   useHoverIntent(coursesNavLink, () => {
     import('./trays/CoursesTray')
-    prefetchQuery(['courses'], coursesQuery)
+    queryClient.prefetchQuery({
+      queryKey: ['courses'],
+      queryFn: coursesQuery,
+    })
   })
 
   useHoverIntent(accountsNavLink, () => {
     import('./trays/AccountsTray')
-    prefetchQuery(['accounts', {pageIndex: 1}], getAccounts)
+    queryClient.prefetchQuery({
+      queryKey: ['accounts', {pageIndex: 1}],
+      queryFn: getAccounts,
+    })
   })
 
   useHoverIntent(groupsNavLink, () => {
     import('./trays/GroupsTray')
-    prefetchQuery(['groups'], groupsQuery)
+    queryClient.prefetchQuery({
+      queryKey: ['groups'],
+      queryFn: groupsQuery,
+    })
   })
 
   useEffect(() => {
@@ -139,7 +151,7 @@ const Navigation = () => {
         openTray(type_)
       }
     },
-    [activeItem, closeTray, isTrayOpen, openTray]
+    [activeItem, closeTray, isTrayOpen, openTray],
   )
 
   useEffect(() => {
@@ -175,7 +187,7 @@ const Navigation = () => {
 
     const overrideDismissUnsubscribe = tourPubSub.subscribe(
       'navigation-tray-override-dismiss',
-      tf => setOverrideDismiss(Boolean(tf))
+      tf => setOverrideDismiss(Boolean(tf)),
     )
 
     return () => {

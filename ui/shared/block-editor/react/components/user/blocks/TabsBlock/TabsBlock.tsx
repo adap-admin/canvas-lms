@@ -34,9 +34,9 @@ import {useClassNames, getContrastingColor, getEffectiveBackgroundColor} from '.
 import type {TabsBlockTab, TabsBlockProps} from './types'
 import {TabsBlockToolbar} from './TabsBlockToolbar'
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 
-const I18n = useI18nScope('block-editor/tabs-block')
+const I18n = createI18nScope('block-editor')
 
 const TabsBlock = ({tabs, variant}: TabsBlockProps) => {
   const {actions, enabled} = useEditor(state => ({
@@ -67,7 +67,7 @@ const TabsBlock = ({tabs, variant}: TabsBlockProps) => {
   const handleTabChange = useCallback(
     (
       _event: React.MouseEvent<ViewOwnProps> | React.KeyboardEvent<ViewOwnProps>,
-      tabData: {index: number}
+      tabData: {index: number},
     ) => {
       if (tabData.index === activeTabIndex) return
       setActiveTabIndex(tabData.index)
@@ -81,17 +81,18 @@ const TabsBlock = ({tabs, variant}: TabsBlockProps) => {
         }
       }, 10)
     },
-    [actions, activeTabIndex, node.dom, node.id]
+    [actions, activeTabIndex, node.dom, node.id],
   )
 
   const handleTabTitleChange = useCallback(
+    // @ts-expect-error
     e => {
       setProp((props: TabsBlockProps) => {
         if (!props.tabs) return
         props.tabs[activeTabIndex].title = e.target.value
       })
     },
-    [activeTabIndex, setProp]
+    [activeTabIndex, setProp],
   )
 
   const handleTabTitleKey = useCallback(
@@ -103,12 +104,13 @@ const TabsBlock = ({tabs, variant}: TabsBlockProps) => {
         e.preventDefault()
         e.stopPropagation()
         setEditable(false)
+        // @ts-expect-error
         document.getElementById(`tab-${tabs[activeTabIndex].id}`)?.focus()
       } else if (['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
         e.stopPropagation()
       }
     },
-    [activeTabIndex, tabs]
+    [activeTabIndex, tabs],
   )
 
   const handleTabTitleFocus = useCallback(
@@ -116,7 +118,7 @@ const TabsBlock = ({tabs, variant}: TabsBlockProps) => {
       setActiveTabIndex(tabIndex)
       actions.selectNode(node.id)
     },
-    [actions, node.id]
+    [actions, node.id],
   )
 
   const handleDeleteTab = useCallback(
@@ -128,7 +130,7 @@ const TabsBlock = ({tabs, variant}: TabsBlockProps) => {
         props.tabs = newTabs
       })
     },
-    [setProp, tabs]
+    [setProp, tabs],
   )
 
   const handleKey = useCallback(
@@ -150,7 +152,7 @@ const TabsBlock = ({tabs, variant}: TabsBlockProps) => {
         }
       }
     },
-    [blockid, editable, selected, tabs]
+    [blockid, editable, selected, tabs],
   )
 
   let color: string | undefined
@@ -176,6 +178,7 @@ const TabsBlock = ({tabs, variant}: TabsBlockProps) => {
               color="secondary"
               themeOverride={{smallHeight: '.75rem', secondaryGhostColor: color}}
               screenReaderLabel={I18n.t('Delete Tab')}
+              title={I18n.t('Delete Tab')}
               size="small"
               withBackground={false}
               withBorder={false}

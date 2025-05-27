@@ -72,7 +72,11 @@ module Types
 
     argument :for_attempt, Integer, <<~MD, required: false, default_value: nil
       What submission attempt the rubric assessment should be returned for. If not
-      specified, it will return the rubric assessment for the current submisssion
+      specified, it will return the rubric assessment for the current submission
+      or submission history.
+    MD
+    argument :for_all_attempts, Boolean, <<~MD, required: false, default_value: nil
+      it will return all rubric assessments for the current submission
       or submission history.
     MD
   end
@@ -86,6 +90,7 @@ end
 
 module Interfaces::SubmissionInterface
   include Interfaces::BaseInterface
+  include GraphQLHelpers::AnonymousGrading
 
   description "Types for submission or submission history"
 
@@ -108,6 +113,8 @@ module Interfaces::SubmissionInterface
     end
   end
   private :protect_submission_grades
+
+  field :anonymous_id, ID, null: true
 
   field :assignment, Types::AssignmentType, null: true
   def assignment
@@ -147,7 +154,7 @@ module Interfaces::SubmissionInterface
 
   field :user, Types::UserType, null: true
   def user
-    load_association(:user)
+    unless_hiding_user_for_anonymous_grading { load_association(:user) }
   end
 
   field :attempt, Integer, null: false
@@ -165,7 +172,7 @@ module Interfaces::SubmissionInterface
   end
   def comments_connection(filter:, sort_order:, include_draft_comments:)
     filter = filter.to_h
-    all_comments, for_attempt, peer_review = filter.values_at(:all_comments, :for_attempt, :peer_review)
+    filter => all_comments:, for_attempt:, peer_review:
 
     load_association(:assignment).then do
       load_association(:submission_comments).then do
@@ -230,14 +237,19 @@ module Interfaces::SubmissionInterface
         method: :excused?,
         null: true
 
-  field :submitted_at, Types::DateTimeType, null: true
-  field :graded_at, Types::DateTimeType, null: true
-  field :posted_at, Types::DateTimeType, null: true
   field :cached_due_date, Types::DateTimeType, null: true
-  field :seconds_late, Float, null: true
+  field :graded_at, Types::DateTimeType, null: true
   field :posted, Boolean, method: :posted?, null: false
-  field :state, Types::SubmissionStateType, method: :workflow_state, null: false
+  field :posted_at, Types::DateTimeType, null: true
   field :redo_request, Boolean, null: true
+  field :seconds_late, Float, null: true
+  field :state, Types::SubmissionStateType, method: :workflow_state, null: false
+  field :submitted_at, Types::DateTimeType, null: true
+
+  field :has_postable_comments, Boolean, null: false
+  def has_postable_comments # rubocop:disable Naming/PredicateName
+    Loaders::HasPostableCommentsLoader.load(submission.id)
+  end
 
   field :grade_hidden, Boolean, null: false
   def grade_hidden
@@ -273,13 +285,13 @@ module Interfaces::SubmissionInterface
     Loaders::LastCommentedByUserAtLoader.for(current_user:).load(submission.id)
   end
 
-  field :late_policy_status, LatePolicyStatusType, null: true
-  field :late, Boolean, method: :late?, null: true
-  field :missing, Boolean, method: :missing?, null: true
   field :grade_matches_current_submission,
         Boolean,
         "was the grade given on the current submission (resubmission)",
         null: true
+  field :late, Boolean, method: :late?, null: true
+  field :late_policy_status, LatePolicyStatusType, null: true
+  field :missing, Boolean, method: :missing?, null: true
   field :submission_type, Types::AssignmentSubmissionType, null: true
 
   field :attachment, Types::FileType, null: true
@@ -315,7 +327,11 @@ module Interfaces::SubmissionInterface
                     in_app: context[:in_app],
                     request: context[:request],
                     preloaded_attachments:,
-                    user: current_user
+                    user: current_user,
+                    options: {
+                      domain_root_account: context[:domain_root_account],
+                    },
+                    location: object.asset_string
                   )
                 end
             end
@@ -412,13 +428,18 @@ module Interfaces::SubmissionInterface
   end
   def rubric_assessments_connection(filter:)
     filter = filter.to_h
-    target_attempt = filter[:for_attempt] || object.attempt
+    target_attempt = filter[:for_all_attempts] ? nil : (filter[:for_attempt] || object.attempt)
 
     Promise
       .all([load_association(:assignment), load_association(:rubric_assessments)])
       .then do
-        assessments_needing_versions_loaded =
-          submission.rubric_assessments.reject { |ra| ra.artifact_attempt == target_attempt }
+        # If the target_attempt is nil, we don't need to preload because visible_rubric_assessments_for
+        # will early return and load all rubric assessments for the submission with no version checks
+        assessments_needing_versions_loaded = if target_attempt.nil?
+                                                []
+                                              else
+                                                submission.rubric_assessments.reject { |ra| ra.artifact_attempt == target_attempt }
+                                              end
 
         versionable_loader_promise =
           if assessments_needing_versions_loaded.empty?
@@ -477,33 +498,41 @@ module Interfaces::SubmissionInterface
 
   field :preview_url, String, "This field is currently under development and its return value is subject to change.", null: true
   def preview_url
-    load_association(:assignment).then do |assignment|
-      if submission.not_submitted?
-        nil
-      elsif submission.submission_type == "basic_lti_launch"
-        GraphQLHelpers::UrlHelpers.retrieve_course_external_tools_url(
-          submission.course_id,
-          assignment_id: submission.assignment_id,
-          url: submission.external_tool_url(query_params: submission.tool_default_query_params(current_user)),
-          display: "borderless",
-          host: context[:request].host_with_port
-        )
-      elsif submission.submission_type == "discussion_topic"
-        GraphQLHelpers::UrlHelpers.course_discussion_topic_url(
-          submission.course_id,
-          assignment.discussion_topic.id,
-          host: context[:request].host_with_port,
-          embed: true
-        )
-      else
-        GraphQLHelpers::UrlHelpers.course_assignment_submission_url(
-          submission.course_id,
-          submission.assignment_id,
-          submission.user_id,
-          host: context[:request].host_with_port,
-          preview: 1,
-          version: version_query_param(submission)
-        )
+    if submission.not_submitted? && !submission.partially_submitted?
+      nil
+    elsif submission.submission_type == "basic_lti_launch"
+      GraphQLHelpers::UrlHelpers.retrieve_course_external_tools_url(
+        submission.course_id,
+        assignment_id: submission.assignment_id,
+        url: submission.external_tool_url(query_params: submission.tool_default_query_params(current_user)),
+        display: "borderless",
+        host: context[:request].host_with_port
+      )
+    else
+      Loaders::AssociationLoader.for(Submission, :assignment).load(submission).then do |assignment|
+        is_discussion_topic = submission.submission_type == "discussion_topic" || submission.partially_submitted?
+        show_full_discussion = is_discussion_topic ? { show_full_discussion_immediately: true } : {}
+        if assignment.anonymize_students?
+          GraphQLHelpers::UrlHelpers.course_assignment_anonymous_submission_url(
+            submission.course_id,
+            submission.assignment_id,
+            submission.anonymous_id,
+            host: context[:request].host_with_port,
+            preview: 1,
+            version: version_query_param(submission),
+            **show_full_discussion
+          )
+        else
+          GraphQLHelpers::UrlHelpers.course_assignment_submission_url(
+            submission.course_id,
+            submission.assignment_id,
+            submission.user_id,
+            host: context[:request].host_with_port,
+            preview: 1,
+            version: version_query_param(submission),
+            **show_full_discussion
+          )
+        end
       end
     end
   end
@@ -517,7 +546,7 @@ module Interfaces::SubmissionInterface
   delegate :word_count, to: :object
 
   def version_query_param(submission)
-    if submission.attempt.present? && submission.attempt > 0
+    if submission.attempt.present? && submission.attempt > 0 && submission.submission_type != "online_quiz"
       submission.attempt - 1
     else
       submission.attempt

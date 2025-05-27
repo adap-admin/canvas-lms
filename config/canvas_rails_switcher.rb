@@ -27,7 +27,7 @@
 # 3. Create a Consul setting private/canvas/rails_version with <supported version> as the contents
 
 # the default version (corresponding to the bare Gemfile.lock) must be listed first
-SUPPORTED_RAILS_VERSIONS = %w[7.1].freeze
+SUPPORTED_RAILS_VERSIONS = %w[7.2].freeze
 
 unless defined?($canvas_rails)
   file_path = File.expand_path("RAILS_VERSION", __dir__)
@@ -40,28 +40,30 @@ unless defined?($canvas_rails)
     source = file_path
   else
     begin
-      consul_yml = File.expand_path("consul.yml", __dir__)
-      if File.exist?(consul_yml)
+      consul_environment = File.expand_path("consul_environment.txt", __dir__)
+      consul_canary = File.expand_path("consul_canary.txt", __dir__)
+      if File.exist?(consul_environment)
         # have to do the consul communication without any gems, because
         # we're in the context of loading the gemfile
         require "bundler/vendored_net_http"
-        require "yaml"
 
-        environment = YAML.safe_load_file(consul_yml).dig(ENV["RAILS_ENV"] || "development", "environment")
+        environment = File.read(consul_environment)
+        canary = (File.exist?(consul_canary) ? File.read(consul_canary).strip : nil) == "true"
 
-        keys.push(
+        keys = [
+          canary ? ["private/canvas", environment, "canary", "rails_version"].compact.join("/") : nil,
           ["private/canvas", environment, "rails_version"].compact.join("/"),
           ["private/canvas", "rails_version"].compact.join("/"),
+          canary ? ["global/private/canvas", environment, "canary", "rails_version"].compact.join("/") : nil,
           ["global/private/canvas", environment, "rails_version"].compact.join("/"),
           ["global/private/canvas", "rails_version"].compact.join("/")
-        )
-        keys.uniq!
+        ].compact.uniq
 
         result = nil
         Gem::Net::HTTP.start("localhost", 8500, connect_timeout: 1, read_timeout: 1) do |http|
           keys.each do |key|
             result = http.request_get("/v1/kv/#{key}?stale&raw")
-            result = nil unless result.is_a?(Net::HTTPSuccess)
+            result = nil unless result.is_a?(Gem::Net::HTTPSuccess)
             if result
               source = "the Consul key #{key}"
               break
@@ -75,7 +77,8 @@ unless defined?($canvas_rails)
                       else
                         SUPPORTED_RAILS_VERSIONS.first
                       end
-    rescue
+    rescue => e
+      puts "Error Loading Rails Version: #{e.class}: #{e.message}\n\t#{e.backtrace.join("\n\t")}" # rubocop:disable Rails/Output -- rails is not available here
       $canvas_rails = SUPPORTED_RAILS_VERSIONS.first
     end
   end

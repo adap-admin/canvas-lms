@@ -15,9 +15,9 @@
  * You should have received a copy of the GNU Affero General Public License along
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import PropTypes from 'prop-types'
-import React from 'react'
+import React, {createRef} from 'react'
 import omit from 'lodash/omit'
 import omitBy from 'lodash/omitBy'
 import {Grid} from '@instructure/ui-grid'
@@ -29,20 +29,32 @@ import {TextInput} from '@instructure/ui-text-input'
 import {ScreenReaderContent} from '@instructure/ui-a11y-content'
 import {ToggleDetails} from '@instructure/ui-toggle-details'
 
-const I18n = useI18nScope('react_developer_keys')
+const I18n = createI18nScope('react_developer_keys')
+
+const validationMessage = [
+  {text: I18n.t('Please enter a valid URL (e.g. https://example.com)'), type: 'error'},
+]
 
 export default class AdditionalSettings extends React.Component {
   constructor(props) {
     super(props)
-
     this.state = {
+      isIconUrlValid: true,
       additionalSettings: {
         ...omit(props.additionalSettings, ['settings']),
         ...props.additionalSettings.settings,
       },
       custom_fields: this.customFieldsToString(props.custom_fields),
     }
+    if (!this.state.additionalSettings.domain) {
+      this.state.additionalSettings.domain = ''
+    }
+    if (!this.state.additionalSettings.tool_id) {
+      this.state.additionalSettings.tool_id = ''
+    }
   }
+
+  iconUrlRef = createRef()
 
   customFieldsToString = customFields =>
     Object.keys(customFields)
@@ -60,27 +72,41 @@ export default class AdditionalSettings extends React.Component {
 
   generateToolConfigurationPart = () => {
     const {custom_fields, additionalSettings} = this.state
-    const extension = {
-      platform: 'canvas.instructure.com',
-      settings: {
-        ...omitBy(omit(additionalSettings, ['domain', 'tool_id', 'privacy_level']), s => !s),
-      },
-    }
-    if (additionalSettings.domain) {
-      extension.domain = additionalSettings.domain
-    }
-    if (additionalSettings.tool_id) {
-      extension.tool_id = additionalSettings.tool_id
-    }
-    extension.privacy_level = additionalSettings.privacy_level || 'anonymous'
     return {
-      extensions: [extension],
+      extensions: [
+        {
+          platform: 'canvas.instructure.com',
+          settings: {
+            ...omitBy(omit(additionalSettings, ['domain', 'tool_id', 'privacy_level']), s => !s),
+          },
+          privacy_level: additionalSettings.privacy_level || 'anonymous',
+          domain: additionalSettings.domain,
+          tool_id: additionalSettings.tool_id,
+        },
+      ],
       custom_fields: this.customFieldsToObject(custom_fields),
     }
   }
 
+  validateUrlField = (fieldValue, fieldStateKey, fieldRef) => {
+    if (fieldValue && !URL.canParse(fieldValue)) {
+      this.setState({[fieldStateKey]: false})
+      if (this.isValid) {
+        fieldRef.current.focus()
+        this.isValid = false
+      }
+    } else {
+      this.setState({[fieldStateKey]: true})
+    }
+  }
+
   valid = () => {
-    return true
+    const {icon_url} = this.state.additionalSettings
+    this.isValid = true
+
+    this.validateUrlField(icon_url, 'isIconUrlValid', this.iconUrlRef)
+
+    return this.isValid
   }
 
   handleDomainChange = e => {
@@ -96,6 +122,7 @@ export default class AdditionalSettings extends React.Component {
   handleIconUrlChange = e => {
     const value = e.target.value
     this.setState(state => ({additionalSettings: {...state.additionalSettings, icon_url: value}}))
+    this.validateUrlField(value, 'isIconUrlValid', this.iconUrlRef)
   }
 
   handleTextChange = e => {
@@ -105,7 +132,7 @@ export default class AdditionalSettings extends React.Component {
 
   handleSelectionHeightChange = e => {
     const value = e.target.value
-    const numVal = parseInt(value, 10)
+    const numVal = Number.parseInt(value, 10)
     this.setState(state => ({
       additionalSettings: {
         ...state.additionalSettings,
@@ -123,7 +150,7 @@ export default class AdditionalSettings extends React.Component {
 
   handleSelectionWidthChange = e => {
     const value = e.target.value
-    const numVal = parseInt(value, 10)
+    const numVal = Number.parseInt(value, 10)
     this.setState(state => ({
       additionalSettings: {
         ...state.additionalSettings,
@@ -139,6 +166,7 @@ export default class AdditionalSettings extends React.Component {
 
   render() {
     const {additionalSettings, custom_fields} = this.state
+    const {showMessages} = this.props
 
     return (
       <View as="div" margin="medium 0">
@@ -175,7 +203,11 @@ export default class AdditionalSettings extends React.Component {
                       name="settings_icon_url"
                       value={additionalSettings.icon_url}
                       renderLabel={I18n.t('Icon Url')}
+                      inputRef={ref => {
+                        this.iconUrlRef.current = ref
+                      }}
                       onChange={this.handleIconUrlChange}
+                      messages={showMessages && !this.state.isIconUrlValid ? validationMessage : []}
                     />
                   </Grid.Col>
                   <Grid.Col>
@@ -256,6 +288,7 @@ AdditionalSettings.propTypes = {
     }),
   }),
   custom_fields: PropTypes.object,
+  showMessages: PropTypes.bool,
 }
 
 AdditionalSettings.defaultProps = {

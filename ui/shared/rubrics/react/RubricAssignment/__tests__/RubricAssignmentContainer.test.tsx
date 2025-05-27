@@ -37,6 +37,7 @@ jest.mock('../queries', () => ({
   addRubricToAssignment: jest.fn(),
   getGradingRubricContexts: jest.fn(),
   getGradingRubricsForContext: jest.fn(),
+  getRubricSelfAssessmentSettings: jest.fn(),
 }))
 
 describe('RubricAssignmentContainer Tests', () => {
@@ -45,18 +46,40 @@ describe('RubricAssignmentContainer Tests', () => {
       Promise.resolve({
         rubric: RUBRIC,
         rubricAssociation: RUBRIC_ASSOCIATION,
-      })
+      }),
     )
 
     queryClient.setQueryData(['fetchGradingRubricContexts', '1'], RUBRIC_CONTEXTS)
     queryClient.setQueryData(
       ['fetchGradingRubricsForContext', '1', 'course_2'],
-      RUBRICS_FOR_CONTEXT
+      RUBRICS_FOR_CONTEXT,
     )
+
+    const rubricSelfAssessmentSettings = {
+      canUpdateRubricSelfAssessment: true,
+      rubricSelfAssessmentEnabled: true,
+    }
+
+    queryClient.setQueryData(
+      ['assignment-self-assessment-settings', '1', RUBRIC.id],
+      rubricSelfAssessmentSettings,
+    )
+
+    queryClient.setQueryData(
+      ['assignment-self-assessment-settings', '1', '1'],
+      rubricSelfAssessmentSettings,
+    )
+
+    queryClient.setDefaultOptions({
+      queries: {
+        retry: false,
+      },
+    })
   })
 
   afterEach(() => {
     jest.clearAllMocks()
+    queryClient.clear()
   })
 
   const renderComponent = (props: Partial<RubricAssignmentContainerProps> = {}) => {
@@ -67,11 +90,10 @@ describe('RubricAssignmentContainer Tests', () => {
         courseId="1"
         contextAssetString="course_1"
         canManageRubrics={true}
-        canUpdateSelfAssessment={true}
-        rubricSelfAssessmentEnabled={false}
         rubricSelfAssessmentFFEnabled={true}
+        aiRubricsEnabled={true}
         {...props}
-      />
+      />,
     )
   }
 
@@ -93,6 +115,7 @@ describe('RubricAssignmentContainer Tests', () => {
       const {getByTestId} = renderComponent()
       getByTestId('create-assignment-rubric-button').click()
       expect(getByTestId('rubric-assignment-create-modal')).toHaveTextContent('Create Rubric')
+      expect(getByTestId('rubric-criteria-builder-header')).toHaveTextContent('Criteria Builder')
       expect(getByTestId('save-rubric-button')).toBeDisabled()
     })
 
@@ -113,7 +136,7 @@ describe('RubricAssignmentContainer Tests', () => {
 
       await new Promise(resolve => setTimeout(resolve, 0))
       expect(document.querySelector('#flash_screenreader_holder')?.textContent).toEqual(
-        'Rubric saved successfully'
+        'Rubric saved successfully',
       )
       expect(getByTestId('preview-assignment-rubric-button')).toBeInTheDocument()
       expect(getByTestId('edit-assignment-rubric-button')).toBeInTheDocument()
@@ -130,10 +153,11 @@ describe('RubricAssignmentContainer Tests', () => {
     }
 
     it('will render the rubric title, edit, preview, and remove buttons when rubric is attached to assignment', () => {
-      const {getByTestId} = getAssociatedComponent()
+      const {getByTestId, getByText} = getAssociatedComponent()
       expect(getByTestId('preview-assignment-rubric-button')).toBeInTheDocument()
       expect(getByTestId('edit-assignment-rubric-button')).toBeInTheDocument()
       expect(getByTestId('remove-assignment-rubric-button')).toBeInTheDocument()
+      expect(getByText('Rubric 1')).toBeInTheDocument() // Check for the text directly
     })
 
     it('will not render the edit button when can_manage_rubrics is false', () => {
@@ -147,7 +171,7 @@ describe('RubricAssignmentContainer Tests', () => {
       expect(getByTestId('remove-assignment-rubric-button')).toBeInTheDocument()
     })
 
-    it('should render the create modal when the edit button is clicked', () => {
+    it('should render the edit modal when the edit button is clicked', () => {
       const {getByTestId} = renderComponent({
         assignmentRubric: RUBRIC,
         assignmentRubricAssociation: RUBRIC_ASSOCIATION,
@@ -157,12 +181,26 @@ describe('RubricAssignmentContainer Tests', () => {
       expect(getByTestId('rubric-form-title')).toHaveValue('Rubric 1')
     })
 
-    it('should remove the rubric from the assignment when the remove button is clicked', async () => {
+    it('should render the delete confirm modal when the remove button is clicked', async () => {
+      const {getByTestId, queryByTestId} = renderComponent({
+        assignmentRubric: RUBRIC,
+        assignmentRubricAssociation: RUBRIC_ASSOCIATION,
+      })
+      expect(queryByTestId('delete-confirm-btn')).not.toBeInTheDocument()
+
+      fireEvent.click(getByTestId('remove-assignment-rubric-button'))
+      await new Promise(resolve => setTimeout(resolve, 0))
+      expect(getByTestId('delete-confirm-btn')).toBeInTheDocument()
+    })
+
+    it('should remove the rubric from the assignment when the delete confirm modal is confirmed', async () => {
       const {getByTestId} = renderComponent({
         assignmentRubric: RUBRIC,
         assignmentRubricAssociation: RUBRIC_ASSOCIATION,
       })
       fireEvent.click(getByTestId('remove-assignment-rubric-button'))
+      expect(getByTestId('delete-confirm-modal')).toBeInTheDocument()
+      fireEvent.click(getByTestId('delete-confirm-btn'))
       await new Promise(resolve => setTimeout(resolve, 0))
       expect(getByTestId('create-assignment-rubric-button')).toBeInTheDocument()
       expect(getByTestId('find-assignment-rubric-button')).toBeInTheDocument()
@@ -175,7 +213,7 @@ describe('RubricAssignmentContainer Tests', () => {
       })
       fireEvent.click(getByTestId('preview-assignment-rubric-button'))
       const rubricTray = document.querySelector(
-        '[role="dialog"][aria-label="Rubric Assessment Tray"]'
+        '[role="dialog"][aria-label="Rubric Assessment Tray"]',
       )
       expect(rubricTray).toBeInTheDocument()
       expect(getByTestId('traditional-criterion-1-ratings-0')).toBeInTheDocument()
@@ -200,7 +238,7 @@ describe('RubricAssignmentContainer Tests', () => {
 
       getByTestId('edit-assignment-rubric-button').click()
       getByTestId('copy-edit-cancel-btn').click()
-      expect(queryByTestId('rubric-assignment-create-modal')).not.toBeInTheDocument()
+      expect(queryByTestId('rubric-assignment-create-modal')).toBeNull()
     })
 
     it('should continue to the edit modal when the user confirms in the copy edit modal', () => {
@@ -225,25 +263,35 @@ describe('RubricAssignmentContainer Tests', () => {
       })
 
       it('self assessment settings should be enabled when rubricSelfAssessmentEnabled is true', () => {
+        queryClient.setQueryData(['assignment-self-assessment-settings', '1', RUBRIC.id], {
+          canUpdateRubricSelfAssessment: true,
+          rubricSelfAssessmentEnabled: false,
+        })
         const {getByTestId} = getAssociatedComponent()
         expect(getByTestId('rubric-self-assessment-checkbox')).toBeEnabled()
         expect(getByTestId('rubric-self-assessment-checkbox')).not.toBeChecked()
       })
 
-      it('self assessment settings should be disabled when rubricSelfAssessmentEnabled is false', () => {
+      it('self assessment settings should be disabled when canUpdateRubricSelfAssessment is false', () => {
+        queryClient.setQueryData(['assignment-self-assessment-settings', '1', RUBRIC.id], {
+          canUpdateRubricSelfAssessment: false,
+          rubricSelfAssessmentEnabled: false,
+        })
         const {getByTestId} = renderComponent({
           assignmentRubric: RUBRIC,
           assignmentRubricAssociation: RUBRIC_ASSOCIATION,
-          canUpdateSelfAssessment: false,
         })
         expect(getByTestId('rubric-self-assessment-checkbox')).not.toBeEnabled()
       })
 
       it('self assessment should be checked when rubricSelfAssessmentEnabled is true', () => {
+        queryClient.setQueryData(['assignment-self-assessment-settings', '1', RUBRIC.id], {
+          canUpdateRubricSelfAssessment: true,
+          rubricSelfAssessmentEnabled: true,
+        })
         const {getByTestId} = renderComponent({
           assignmentRubric: RUBRIC,
           assignmentRubricAssociation: RUBRIC_ASSOCIATION,
-          rubricSelfAssessmentEnabled: true,
         })
         expect(getByTestId('rubric-self-assessment-checkbox')).toBeChecked()
       })
@@ -258,7 +306,7 @@ describe('RubricAssignmentContainer Tests', () => {
       expect(getByTestId('rubric-search-tray')).toBeInTheDocument()
 
       const comboBox = getByTestId('rubric-context-select') as HTMLInputElement
-      expect(comboBox.value).toEqual('Account 1 (Account)')
+      expect(comboBox.value).toEqual('Course 1 (Course)')
 
       fireEvent.click(comboBox)
       expect(getByText('Course 1 (Course)')).toBeInTheDocument()
@@ -272,7 +320,7 @@ describe('RubricAssignmentContainer Tests', () => {
       expect(getByTestId('rubric-search-tray')).toBeInTheDocument()
 
       const comboBox = getByTestId('rubric-context-select') as HTMLInputElement
-      expect(comboBox.value).toEqual('Account 1 (Account)')
+      expect(comboBox.value).toEqual('Course 1 (Course)')
 
       fireEvent.click(comboBox)
 
@@ -300,7 +348,7 @@ describe('RubricAssignmentContainer Tests', () => {
       expect(getByTestId('rubric-search-tray')).toBeInTheDocument()
 
       const comboBox = getByTestId('rubric-context-select') as HTMLInputElement
-      expect(comboBox.value).toEqual('Account 1 (Account)')
+      expect(comboBox.value).toEqual('Course 1 (Course)')
 
       fireEvent.click(comboBox)
 

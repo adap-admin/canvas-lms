@@ -148,7 +148,11 @@ module Importers
             return tool
           end
         elsif tool.url.present?
-          match_domain = URI.parse(tool.url).host rescue nil
+          begin
+            match_domain = URI.parse(tool.url).host
+          rescue URI::InvalidURIError
+            # ignore
+          end
 
           if domain && match_domain == domain
             # turn the matched tool into a domain only tool
@@ -175,12 +179,7 @@ module Importers
       url, domain, settings = extract_for_translation(hash)
       return unless domain
 
-      tool_contexts = ContextExternalTool.contexts_to_search(migration.context)
-      return unless tool_contexts.present?
-
-      tools = ContextExternalTool.active.where(context: tool_contexts)
-
-      tools.each do |tool|
+      Lti::ContextToolFinder.all_tools_for(migration.context).each do |tool|
         # check if tool is compatible
         next unless matching_settings?(migration, hash, tool, settings, true)
 
@@ -203,7 +202,11 @@ module Importers
       url = hash[:url].presence
 
       domain = hash[:domain]
-      domain ||= (URI.parse(url).host rescue nil) if url
+      begin
+        domain ||= URI.parse(url).host if url
+      rescue URI::InvalidURIError
+        # ignore
+      end
 
       settings = create_tool_settings(hash).with_indifferent_access.except(:custom_fields, :vendor_extensions)
 
@@ -222,7 +225,7 @@ module Importers
       return false if hash[:privacy_level] && tool.privacy_level != hash[:privacy_level]
       return false if migration.migration_type == "canvas_cartridge_importer" && hash[:title] && tool.name != hash[:title]
 
-      if preexisting_tool && (((hash[:consumer_key] || "fake") == "fake") && ((hash[:shared_secret] || "fake") == "fake"))
+      if preexisting_tool && ((hash[:consumer_key] || "fake") == "fake") && ((hash[:shared_secret] || "fake") == "fake")
         # we're matching to existing tools; go with their config if we don't have a real one
         ignore_key_check = true
       end

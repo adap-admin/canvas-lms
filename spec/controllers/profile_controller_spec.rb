@@ -79,6 +79,22 @@ describe ProfileController do
         expect(assigns(:user_data)[:common_contexts][1]["id"]).to eql(group.id)
         expect(assigns(:user_data)[:common_contexts][1]["roles"]).to eql(["Member"])
       end
+
+      it "does not include differentiation Tags in @user_data" do
+        user_session(@teacher)
+        student_in_course(user: @user, active_all: true)
+
+        @non_collaborative_group_category = @course.group_categories.create!(name: "Test non collaborative", non_collaborative: true)
+        @non_collaborative_group = @course.groups.create!(name: "Non Collaborative group", group_category: @non_collaborative_group_category)
+        @non_collaborative_group.add_user(@user, "accepted")
+        @non_collaborative_group.add_user(@teacher, "accepted")
+
+        get "show", params: { user_id: @user.id }
+        # Expect that the non-collaborative group is not included in the common contexts
+        # The only common_context included is the course
+        expect(assigns(:user_data)[:common_contexts].size).to be(1)
+        expect(assigns(:user_data)[:common_contexts][0]["id"]).to eql(@course.id)
+      end
     end
   end
 
@@ -302,17 +318,17 @@ describe ProfileController do
 
     it "lets you set visibility on user_services" do
       @user.user_services.create! service: "skype", service_user_name: "user", service_user_id: "user", visible: true
-      @user.user_services.create! service: "twitter", service_user_name: "user", service_user_id: "user", visible: false
+      @user.user_services.create! service: "diigo", service_user_name: "user", service_user_id: "user", visible: false
 
       put "update_profile",
           params: { user_profile: { bio: "..." },
-                    user_services: { twitter: "1", skype: "false" } },
+                    user_services: { diigo: "1", skype: "false" } },
           format: "json"
       expect(response).to be_successful
 
       @user.reload
       expect(@user.user_services.where(service: "skype").first.visible?).to be_falsey
-      expect(@user.user_services.where(service: "twitter").first.visible?).to be_truthy
+      expect(@user.user_services.where(service: "diigo").first.visible?).to be_truthy
     end
 
     it "lets you set your profile links" do
@@ -471,21 +487,21 @@ describe ProfileController do
         end
       end
 
-      context "is_eligible_for_token_regeneration" do
-        it "should be 'true' if the user is eligible for token regeneration" do
+      context "can_update_tokens" do
+        it "should be 'true' if the user has permission to update tokens" do
           user_session(@user)
           get "settings"
 
-          expect(assigns[:js_env][:is_eligible_for_token_regeneration]).to be true
+          expect(assigns[:js_env][:PERMISSIONS][:can_update_tokens]).to be true
         end
 
-        it "should be 'false' if the user is NOT eligible for token regeneration" do
+        it "should be 'false' if the user does not have permission to update tokens" do
           @user.account.change_root_account_setting!(:limit_personal_access_tokens, true)
           @user.account.enable_feature!(:admin_manage_access_tokens)
           user_session(@user)
           get "settings"
 
-          expect(assigns[:js_env][:is_eligible_for_token_regeneration]).to be false
+          expect(assigns[:js_env][:PERMISSIONS][:can_update_tokens]).to be false
         end
       end
 

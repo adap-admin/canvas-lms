@@ -21,12 +21,6 @@
 class DiscussionTopicParticipant < ActiveRecord::Base
   include Workflow
 
-  module SortOrder
-    DESC = "desc"
-    ASC = "asc"
-    TYPES = SortOrder.constants.map { |c| SortOrder.const_get(c) }
-  end
-
   belongs_to :discussion_topic
   belongs_to :user
 
@@ -52,7 +46,7 @@ class DiscussionTopicParticipant < ActiveRecord::Base
   end
 
   def check_planner_cache
-    if id_before_last_save.nil? ||
+    if previously_new_record? ||
        (unread_entry_count_before_last_save == 0 && unread_entry_count > 0) ||
        (unread_entry_count_before_last_save > 0 && unread_entry_count == 0)
       PlannerHelper.clear_planner_cache(user)

@@ -111,16 +111,10 @@ exports[`ActAsModal renders with panda svgs, user avatar, table, and proceed but
               textAlign="center"
               withVisualDebug={false}
             >
-              <Avatar
-                color="default"
+              <ForwardRef
                 data-fs-exclude={true}
-                display="inline-block"
-                hasInverseColor={false}
                 margin="medium 0 x-small 0"
                 name="foo"
-                onImageLoaded={[Function]}
-                shape="circle"
-                showBorder="auto"
                 size="small"
                 src="testImageUrl"
               />

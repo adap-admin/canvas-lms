@@ -16,15 +16,15 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import type {SetState, GetState} from 'zustand'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import type {StoreApi} from 'zustand'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {asJson, consumePrefetchedXHR} from '@canvas/util/xhr'
 import {maxAssignmentCount, otherGradingPeriodAssignmentIds} from '../Gradebook.utils'
 import type {GradebookStore} from './index'
 import type {GradingPeriodAssignmentMap} from '../gradebook.d'
 import type {AssignmentGroup, Assignment, AssignmentMap, SubmissionType} from '../../../../../api.d'
 
-const I18n = useI18nScope('gradebook')
+const I18n = createI18nScope('gradebook')
 
 export type AssignmentsState = {
   gradingPeriodAssignments: GradingPeriodAssignmentMap
@@ -33,16 +33,16 @@ export type AssignmentsState = {
   fetchGradingPeriodAssignments: () => Promise<GradingPeriodAssignmentMap>
   loadAssignmentGroupsForGradingPeriods: (
     params: AssignmentLoaderParams,
-    selectedPeriodId: string
+    selectedPeriodId: string,
   ) => Promise<AssignmentGroup[] | undefined>
   loadAssignmentGroups: (
     hideZeroPointQuizzes: boolean,
-    currentGradingPeriodId?: string
+    currentGradingPeriodId?: string,
   ) => Promise<AssignmentGroup[] | undefined>
   fetchAssignmentGroups: (
     params: AssignmentLoaderParams,
     isSelectedGradingPeriodId: boolean,
-    gradingPeriodIds?: string[]
+    gradingPeriodIds?: string[],
   ) => Promise<AssignmentGroup[] | undefined>
   recentlyLoadedAssignmentGroups: {
     assignmentGroups: AssignmentGroup[]
@@ -66,8 +66,8 @@ type AssignmentLoaderParams = {
 export const normalizeGradingPeriodId = (id?: string) => (id === '0' ? null : id)
 
 export default (
-  set: SetState<GradebookStore>,
-  get: GetState<GradebookStore>
+  set: StoreApi<GradebookStore>['setState'],
+  get: StoreApi<GradebookStore>['getState'],
 ): AssignmentsState => ({
   gradingPeriodAssignments: {},
 
@@ -134,7 +134,7 @@ export default (
 
   loadAssignmentGroups: (
     hideZeroPointQuizzes: boolean = false,
-    selectedGradingPeriodId?: string
+    selectedGradingPeriodId?: string,
   ) => {
     const include = [
       'assignment_group_id',
@@ -143,6 +143,7 @@ export default (
       'grades_published',
       'post_manually',
       'checkpoints',
+      'has_rubric',
     ]
 
     if (get().hasModules) {
@@ -177,7 +178,7 @@ export default (
     const {otherAssignmentIds, otherGradingPeriodIds} = otherGradingPeriodAssignmentIds(
       get().gradingPeriodAssignments,
       selectedAssignmentIds,
-      selectedPeriodId
+      selectedPeriodId,
     )
 
     const path = `/api/v1/courses/${get().courseId}/assignment_groups`
@@ -213,7 +214,7 @@ export default (
   fetchAssignmentGroups: (
     params: AssignmentLoaderParams,
     isSelectedGradingPeriodId: boolean,
-    gradingPeriodIds?: string[]
+    gradingPeriodIds?: string[],
   ): Promise<undefined | AssignmentGroup[]> => {
     set({isAssignmentGroupsLoading: true})
 

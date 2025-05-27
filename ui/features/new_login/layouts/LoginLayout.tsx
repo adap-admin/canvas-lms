@@ -16,22 +16,16 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React from 'react'
-import {
-  AppNavBar,
-  ContentLayout,
-  FooterLinks,
-  GlobalStyle,
-  InstructureLogo,
-  LoginLogo,
-} from '../shared'
 import {Flex} from '@instructure/ui-flex'
-import {Outlet, ScrollRestoration} from 'react-router-dom'
 import {View} from '@instructure/ui-view'
-import {useNewLogin} from '../context/NewLoginContext'
+import React from 'react'
+import {Outlet, ScrollRestoration} from 'react-router-dom'
+import {useNewLoginData} from '../context'
+import {AppNavBar, FooterLinks, GlobalStyle, InstructureLogo, LoginLogo} from '../shared'
+import ContentLayout from './ContentLayout'
 
 export const LoginLayout = () => {
-  const {loginLogoUrl} = useNewLogin()
+  const {loginLogoUrl} = useNewLoginData()
 
   return (
     <>
@@ -44,7 +38,7 @@ export const LoginLayout = () => {
             <AppNavBar />
           </Flex.Item>
 
-          <Flex.Item shouldGrow={true}>
+          <Flex.Item shouldGrow={true} overflowX="hidden">
             <ContentLayout>
               <Flex direction="column" gap="large">
                 {loginLogoUrl && (
@@ -58,9 +52,12 @@ export const LoginLayout = () => {
                 </View>
 
                 <View as="footer">
-                  <Flex direction="column" gap="large">
+                  <Flex direction="column" gap="medium">
                     <FooterLinks />
-                    <InstructureLogo />
+
+                    <Flex.Item align="center" overflowX="visible" overflowY="visible">
+                      <InstructureLogo />
+                    </Flex.Item>
                   </Flex>
                 </View>
               </Flex>

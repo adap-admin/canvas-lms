@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /*
  * Copyright (C) 2019 - present Instructure, Inc.
  *
@@ -24,7 +23,7 @@ import {toQueryString} from '@instructure/query-string-encoding'
 import type {QueryParameterRecord} from '@instructure/query-string-encoding/index.d'
 import z from 'zod'
 
-const jsonRegEx = new RegExp('^application/json', 'i')
+const jsonRegEx = /^application\/json/i
 
 function constructRelativeUrl({
   path,
@@ -41,6 +40,7 @@ function constructRelativeUrl({
 // https://fetch.spec.whatwg.org/#requestinit
 interface RequestInit {
   signal?: AbortSignal
+  cache?: RequestCache
 }
 
 export type DoFetchApiOpts = {
@@ -58,6 +58,15 @@ export type DoFetchApiResults<T> = {
   json?: T
   response: Response
   link?: Links
+}
+
+export class FetchApiError extends Error {
+  response: Response
+
+  constructor(message: string, response: Response) {
+    super(message)
+    this.response = response
+  }
 }
 
 export default async function doFetchApi<T = unknown>({
@@ -96,11 +105,10 @@ export default async function doFetchApi<T = unknown>({
     credentials,
   })
   if (!response.ok) {
-    const err = new Error(
-      `doFetchApi received a bad response: ${response.status} ${response.statusText}`
+    throw new FetchApiError(
+      `doFetchApi received a bad response: ${response.status} ${response.statusText}`,
+      response,
     )
-    Object.assign(err, {response}) // in case anyone wants to check it for something
-    throw err
   }
   const linkHeader = response.headers.get('Link')
   const contentType = response.headers.get('Content-Type') ?? ''
@@ -121,7 +129,7 @@ export type SafelyFetchResults<T> = {
 
 export async function safelyFetch<T = unknown>(
   {path, method = 'GET', headers = {}, params = {}, signal, body}: DoFetchApiOpts,
-  schema: z.Schema<T>
+  schema: z.Schema<T>,
 ): Promise<SafelyFetchResults<T>> {
   if (!schema) {
     throw new Error('safelyFetch requires a schema')

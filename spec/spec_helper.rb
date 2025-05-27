@@ -160,14 +160,18 @@ module RSpec::Core::Hooks
   end
 end
 
-Time.class_eval do
-  def compare_with_round(other)
-    other = Time.at(other.to_i, other.usec) if other.respond_to?(:usec)
-    Time.at(to_i, usec).compare_without_round(other)
+module TimeComparisonWithRounding
+  # ignore nanoseconds, since the database doesn't persist them
+  def <=>(other)
+    other = other.change(usec: other.usec) if other.respond_to?(:usec)
+    if nsec % 1_000 == 0
+      super
+    else
+      change(usec:) <=> other
+    end
   end
-  alias_method :compare_without_round, :<=>
-  alias_method :<=>, :compare_with_round
 end
+Time.prepend(TimeComparisonWithRounding)
 
 # we use ivars too extensively for factories; prevent them from
 # being propagated to views in view specs
@@ -429,6 +433,7 @@ RSpec.configure do |config|
   config.raise_errors_for_deprecations!
   config.color = true
   config.order = :random
+  config.filter_run_when_matching :focus
 
   # The Pact specs have prerequisite setup steps so we exclude them by default
   config.filter_run_excluding :pact_live_events if ENV.fetch("RUN_LIVE_EVENTS_CONTRACT_TESTS", "0") == "0"
@@ -505,6 +510,7 @@ RSpec.configure do |config|
     MultiCache.reset
     TermsOfService.skip_automatic_terms_creation = true
     LiveEvents.clear_context!
+    PageView.reset_cache! if PageView.respond_to?(:reset_cache!)
     $spec_api_tokens = {}
 
     remove_user_session
@@ -584,15 +590,44 @@ RSpec.configure do |config|
       GuardRail.activate(:deploy) { CanvasCache::Redis.redis.flushdb(failsafe: nil) }
     end
     CanvasCache::Redis.redis_used = false
+    @last_error_report_id = ErrorReport.maximum(:id)
   end
 
-  if Canvas::Plugin.value_to_boolean(ENV["N_PLUS_ONE_DETECTION"])
-    config.before do
-      Prosopite.scan
+  class ErrorReportExceptionWrapper
+    class ExceptionClassWrapper < SimpleDelegator
+      attr_reader :name
+
+      def initialize(klass, name)
+        super(klass)
+        @name = name
+      end
     end
 
-    config.after do
-      Prosopite.finish
+    def initialize(error_report)
+      @error_report = error_report
+      @klass = ExceptionClassWrapper.new(self.class, error_report.category)
+    end
+
+    delegate :message, to: :@error_report
+
+    def class
+      @klass
+    end
+
+    def cause; end
+
+    def backtrace
+      @error_report.backtrace.split("\n")
+    end
+  end
+
+  config.after do |example|
+    if %i[controller request].include?(example.metadata[:type]) &&
+       example.exception &&
+       !(errors = @last_error_report_id.nil? ? ErrorReport.all.to_a : ErrorReport.where("id>?", @last_error_report_id).to_a).empty?
+      errors.each do |er|
+        example.set_exception(ErrorReportExceptionWrapper.new(er))
+      end
     end
   end
 
@@ -777,7 +812,7 @@ RSpec.configure do |config|
     BACKENDS = %w[FileSystem S3].map { |backend| AttachmentFu::Backends.const_get(:"#{backend}Backend") }.freeze
 
     class As # :nodoc:
-      private(*instance_methods.grep_v(/(^__|^\W|^binding$|^untaint$)/)) # rubocop:disable Style/AccessModifierDeclarations
+      private(*instance_methods.grep_v(/(^__|^\W|^binding$|^untaint$|^object_id$)/)) # rubocop:disable Style/AccessModifierDeclarations
 
       def initialize(subject, ancestor)
         @subject = subject
@@ -883,7 +918,7 @@ RSpec.configure do |config|
     end
   end
 
-  def run_job(job)
+  def run_job(job) # rubocop:disable Rails/Delegate
     Delayed::Testing.run_job(job)
   end
 
@@ -926,9 +961,7 @@ RSpec.configure do |config|
       @code.to_s
     end
 
-    def [](arg)
-      @headers[arg]
-    end
+    delegate :[], to: :@headers
 
     def content_type
       self["content-type"]
@@ -1019,18 +1052,6 @@ I18n.backend.class.prepend(I18nStubs)
 
 Rails.root.glob("{gems,vendor}/plugins/*/spec_canvas/spec_helper.rb") { |file| require file }
 
-Shoulda::Matchers.configure do |config|
-  config.integrate do |with|
-    with.test_framework :rspec
-    with.library :active_record
-    with.library :active_model
-    # Disable the action_controller matchers until shoulda-matchers supports new compound matchers
-    # with.library :action_controller
-    # Or, choose the following (which implies all of the above):
-    # with.library :rails
-  end
-end
-
 module DeveloperKeyStubs
   @@original_get_special_key = DeveloperKey.method(:get_special_key)
 
@@ -1078,3 +1099,21 @@ Mime::SET.select { |t| t.to_s.end_with?("+json") }.map(&:ref).each do |type|
 end
 
 # rubocop:enable Lint/ConstantDefinitionInBlock
+
+module FileUpdateCheckerIgnoreTimecop
+  private
+
+  # Prevent Timecop from interfering with file update checking or we
+  # can see weird Zeitwerk issues due to inappropriate constant reloading.
+  def max_mtime(...)
+    if Timecop.travelled? || Timecop.frozen?
+      Timecop.return do
+        super
+      end
+    else
+      super
+    end
+  end
+end
+
+ActiveSupport::FileUpdateChecker.prepend(FileUpdateCheckerIgnoreTimecop)

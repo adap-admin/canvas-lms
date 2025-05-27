@@ -53,9 +53,9 @@ import {isCaretAtBoldText, isCaretAtStyledText, getCaretPosition} from '../../..
 import {ColorModal} from '../../common/ColorModal'
 import {type TextBlockProps} from './types'
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 
-const I18n = useI18nScope('block-editor/text-block')
+const I18n = createI18nScope('block-editor')
 
 // NOTE: This component uses document.execCommand which is deprecated, but there
 //       (1) is still supported by browsers, and
@@ -80,10 +80,10 @@ const TextBlockToolbar = () => {
   const [isBold, setIsBold] = useState(isCaretAtBoldText())
   const [isItalic, setIsItalic] = useState(isCaretAtStyledText('font-style', 'italic'))
   const [isUnderline, setIsUnderline] = useState(
-    isCaretAtStyledText('text-decoration-line', 'underline')
+    isCaretAtStyledText('text-decoration-line', 'underline'),
   )
   const [isStrikeThrough, setIsStrikeThrough] = useState(
-    isCaretAtStyledText('text-decoration-line', 'line-through')
+    isCaretAtStyledText('text-decoration-line', 'line-through'),
   )
 
   useEffect(() => {
@@ -130,14 +130,14 @@ const TextBlockToolbar = () => {
 
   const handleFontSizeChange = useCallback(
     (
-      e: React.MouseEvent<ViewOwnProps, MouseEvent>,
+      _e: any,
       value: MenuItemProps['value'] | MenuItemProps['value'][],
       _selected: MenuItemProps['selected'],
-      _args: MenuItem
+      _args: MenuItem,
     ) => {
       setProp((prps: TextBlockProps) => (prps.fontSize = value as string))
     },
-    [setProp]
+    [setProp],
   )
 
   const handleColorChange = useCallback(
@@ -145,7 +145,7 @@ const TextBlockToolbar = () => {
       setProp((prps: TextBlockProps) => (prps.color = color))
       setColorModalOpen(false)
     },
-    [setProp]
+    [setProp],
   )
 
   const handleColorButtonClick = useCallback(() => {
@@ -159,7 +159,8 @@ const TextBlockToolbar = () => {
   return (
     <>
       <IconButton
-        screenReaderLabel="Bold"
+        screenReaderLabel={I18n.t('Bold')}
+        title={I18n.t('Bold')}
         size="small"
         withBackground={false}
         withBorder={isBold}
@@ -169,6 +170,7 @@ const TextBlockToolbar = () => {
       </IconButton>
       <IconButton
         screenReaderLabel={I18n.t('Italic')}
+        title={I18n.t('Italic')}
         size="small"
         withBackground={false}
         withBorder={isItalic}
@@ -178,6 +180,7 @@ const TextBlockToolbar = () => {
       </IconButton>
       <IconButton
         screenReaderLabel={I18n.t('Underline')}
+        title={I18n.t('Underline')}
         size="small"
         withBackground={false}
         withBorder={isUnderline}
@@ -187,6 +190,7 @@ const TextBlockToolbar = () => {
       </IconButton>
       <IconButton
         screenReaderLabel={I18n.t('Strikethrough')}
+        title={I18n.t('Strikethrough')}
         size="small"
         withBackground={false}
         withBorder={isStrikeThrough}
@@ -223,6 +227,7 @@ const TextBlockToolbar = () => {
         withBackground={false}
         withBorder={false}
         screenReaderLabel={I18n.t('Color')}
+        title={I18n.t('Color')}
         onClick={handleColorButtonClick}
       >
         <IconTextColorLine />

@@ -16,10 +16,10 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {generateActionTemplates} from '../generateActionTemplates'
 
-const I18n = useI18nScope('permissions_templates_34')
+const I18n = createI18nScope('permissions_templates_34')
 
 export const template = generateActionTemplates(
   [
@@ -30,10 +30,23 @@ export const template = generateActionTemplates(
   ],
   [
     {
-      description: I18n.t('Allows user to create new differentiated tags'),
+      title: I18n.t('Allows'),
+      description: I18n.t('This permission controls the ability to:'),
+    },
+    {
+      description: I18n.t('Create new differentiation tags'),
+    },
+    {
+      description: I18n.t('Add users to differentiation tags'),
+    },
+    {
+      title: I18n.t('Warning'),
+      description: I18n.t(
+        'This permission does not allow a user to edit a differentiation tag after it has been created.',
+      ),
     },
   ],
   [
     // course "OTHER CONSIDERATIONS"
-  ]
+  ],
 )

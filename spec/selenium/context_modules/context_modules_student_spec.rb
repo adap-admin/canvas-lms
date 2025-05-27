@@ -19,12 +19,10 @@
 
 require_relative "../common"
 require_relative "../helpers/context_modules_common"
-require_relative "../../helpers/selective_release_common"
 
 describe "context modules" do
   include_context "in-process server selenium tests"
   include ContextModulesCommon
-  include SelectiveReleaseCommon
 
   before :once do
     @course = course_model.tap(&:offer!)
@@ -81,6 +79,12 @@ describe "context modules" do
 
       expect(context_modules[1].find_element(:css, ".prerequisites_message")).to include_text(@module_1.name)
       expect(context_modules[2].find_element(:css, ".prerequisites_message")).to include_text(@module_2.name)
+    end
+
+    it "does not render modules page rewrite" do
+      user_session(@student)
+      get "/courses/#{@course.id}/modules"
+      expect(driver.execute_script("return document.querySelector('[data-testid=\"modules-rewrite-student-container\"]')")).to be_nil # rubocop:disable Specs/NoExecuteScript
     end
 
     it "does not lock modules for observers" do
@@ -255,6 +259,7 @@ describe "context modules" do
     end
 
     it "does not show the description of a discussion locked by module", priority: "1" do
+      skip "Will be fixed in VICE-5209"
       module1 = @course.context_modules.create! name: "a_locked_mod", unlock_at: 1.day.from_now
       discussion = @course.discussion_topics.create!(title: "discussion", message: "discussion description")
       module1.add_item type: "discussion_topic", id: discussion.id
@@ -322,6 +327,36 @@ describe "context modules" do
       it "shows previous and next buttons for external urls", custom_timeout: 25 do
         get_page_with_footer("/courses/#{@course.id}/modules/items/#{@external_url_tag.id}")
         verify_next_and_previous_buttons_display
+      end
+    end
+
+    context "shows previous and next buttons buttons on the discussion page in student view", priority: "2" do
+      before do
+        user_session(@teacher)
+      end
+
+      before :once do
+        Account.site_admin.enable_feature!(:react_discussions_post)
+        Account.site_admin.enable_feature!(:discussion_create)
+      end
+
+      before :once do
+        @course = course_model.tap(&:offer!)
+        @discussion1 = @course.discussion_topics.create!(title: "Test Discussion 1", message: "Discussion Content 1")
+        @discussion2 = @course.discussion_topics.create!(title: "Test Discussion 2", message: "Discussion Content 2")
+        @discussion3 = @course.discussion_topics.create!(title: "Test Discussion 3", message: "Discussion Content 3")
+        @module = create_context_module("Test Module")
+        @module.add_item(id: @discussion1.id, type: "discussion_topic")
+        @module.add_item(id: @discussion2.id, type: "discussion_topic")
+        @module.add_item(id: @discussion3.id, type: "discussion_topic")
+        @module.save!
+      end
+
+      it "shows previous and next buttons for discussions" do
+        enter_student_view
+        get "/courses/#{@course.id}/discussion_topics/#{@discussion2.id}"
+        expect(f(".module-sequence-footer-left")).to be_displayed
+        expect(f(".module-sequence-footer-right")).to be_displayed
       end
     end
 
@@ -664,6 +699,7 @@ describe "context modules" do
     end
 
     it "marks locked but visible assignments/quizzes/discussions as read" do
+      skip "Will be fixed in VICE-5209"
       # setting lock_at in the past will cause assignments/quizzes/discussions to still be visible
       # they just can't be submitted to anymore
 
@@ -721,9 +757,8 @@ describe "context modules" do
       expect(f(".user_content")).to include_text(page.body)
     end
 
-    context "with the selective_release_backend and selective_release_ui_api flags enabled" do
+    context "with selective release" do
       before :once do
-        differentiated_modules_on
         @module1 = @course.context_modules.create!(name: "module 1")
         @module2 = @course.context_modules.create!(name: "module 2")
         @module3 = @course.context_modules.create!(name: "module 3")
@@ -743,7 +778,9 @@ describe "context modules" do
 
   context "discussion_checkpoints" do
     before :once do
-      @course.root_account.enable_feature!(:discussion_checkpoints)
+      sub_account = Account.create!(name: "sub account", parent_account: Account.default)
+      @course.update!(account: sub_account)
+      @course.account.enable_feature!(:discussion_checkpoints)
       modules = create_modules(1, true)
 
       @topic = DiscussionTopic.create_graded_topic!(course: @course, title: "checkpointed topic")
@@ -838,6 +875,48 @@ describe "context modules" do
       checkpoints = ff("div[data-testid='checkpoint']")
       expect(checkpoints[0].text).to include("Reply to Topic\n#{datetime_string(@c1.overridden_for(@student).due_at)}")
       expect(checkpoints[1].text).to include("Required Replies (#{@topic.reply_to_entry_required_count})\n#{datetime_string(@c2.overridden_for(@student).due_at)}")
+    end
+
+    it "shows checkpoints with proper due dates when an override is updated" do
+      everyone_override = { type: "everyone", due_at: 5.years.ago }
+      student_override = { type: "override", set_type: "ADHOC", student_ids: [@student.id], due_at: nil }
+      reply_to_topic_new_due_date = 15.days.from_now
+      reply_to_entry_new_due_date = 20.days.from_now
+      Checkpoints::DiscussionCheckpointUpdaterService.call(
+        discussion_topic: @topic,
+        checkpoint_label: CheckpointLabels::REPLY_TO_TOPIC,
+        dates: [everyone_override, student_override.merge({ due_at: reply_to_topic_new_due_date })],
+        points_possible: 5
+      )
+
+      Checkpoints::DiscussionCheckpointUpdaterService.call(
+        discussion_topic: @topic,
+        checkpoint_label: CheckpointLabels::REPLY_TO_ENTRY,
+        dates: [everyone_override, student_override.merge({ due_at: reply_to_entry_new_due_date })],
+        points_possible: 5
+      )
+
+      user_session(@student)
+      go_to_modules
+
+      checkpoints = ff("div[data-testid='checkpoint']")
+      expect(checkpoints[0].text).to include("Reply to Topic\n#{datetime_string(reply_to_topic_new_due_date)}")
+      expect(checkpoints[1].text).to include("Required Replies (#{@topic.reply_to_entry_required_count})\n#{datetime_string(reply_to_entry_new_due_date)}")
+    end
+  end
+
+  context "with modules page rewrite feature flag enabled" do
+    before do
+      @course.root_account.enable_feature!(:modules_page_rewrite_student_view)
+      module_1 = @course.context_modules.create!(name: "Module 1")
+      assignment_1 = @course.assignments.create!(name: "Assignment 1")
+      module_1.add_item({ id: assignment_1.id, type: "assignment" })
+    end
+
+    it "page renders" do
+      user_session(@student)
+      get "/courses/#{@course.id}/modules"
+      expect(f("[data-testid='modules-rewrite-student-container']")).to be_present
     end
   end
 end

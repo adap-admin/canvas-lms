@@ -22,7 +22,7 @@ module Schemas
   # Represents the "internal" JSON schema used to configure an LTI 1.3 tool,
   # as stored in Lti::ToolConfiguration and used in Lti::Registration.
   class InternalLtiConfiguration < Base
-    VALID_DISPLAY_TYPES = %w[default full_width full_width_in_context in_nav_context borderless].freeze
+    VALID_DISPLAY_TYPES = %w[default full_width full_width_in_context full_width_with_nav in_nav_context borderless].freeze
 
     # Transforms a hash conforming to the LtiConfiguration schema into
     # a hash conforming to the InternalLtiConfiguration schema.
@@ -71,16 +71,11 @@ module Schemas
         .with_indifferent_access.compact
     end
 
-    def schema
-      self.class.schema
-    end
-
     def self.schema
       {
         type: "object",
         required: %w[
           title
-          description
           target_link_uri
           oidc_initiation_url
           redirect_uris
@@ -101,13 +96,17 @@ module Schemas
           placements: placements_schema,
           # vendor_extensions: extensions with platform != "canvas.instructure.com", only currently copied during content migration. not present on 1.3 tools.
         }
-      }.freeze
+      }
+    end
+
+    def self.allowed_base_properties
+      schema[:properties].keys
     end
 
     def self.base_properties
       {
         title: { type: "string", description: "Overridable by 'text' in settings and placements" },
-        description: { type: "string", description: "Displayed only in assignment_selection and link_selection" },
+        description: { type: "string", description: "Displayed only in assignment_selection, link_selection, and ActivityAssetProcessor" },
         custom_fields: { oneOf: [{ type: "object" }, { type: "string" }], description: "Overridable in settings and placements. String for legacy purposes." },
         target_link_uri: { type: "string", description: "Overridable in settings and placements" },
         oidc_initiation_url: { type: "string" },

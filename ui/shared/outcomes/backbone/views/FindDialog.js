@@ -16,7 +16,7 @@
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 //
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
 import OutcomeGroup from '../models/OutcomeGroup'
 import Progress from '@canvas/progress/backbone/models/Progress'
@@ -28,7 +28,7 @@ import instructionsTemplate from '../../jst/findInstructions.handlebars'
 import '@canvas/rails-flash-notifications'
 import '@canvas/jquery/jquery.disableWhileLoading'
 
-const I18n = useI18nScope('outcomesFindDialog')
+const I18n = createI18nScope('outcomesFindDialog')
 
 // Creates a popup dialog similar to the main outcomes browser minus the toolbar.
 export default class FindDialog extends DialogBaseView {
@@ -38,8 +38,9 @@ export default class FindDialog extends DialogBaseView {
       title: this.title,
       width: 1000,
       resizable: true,
-      close() {
-        $('.find_outcome').focus()
+      close: () => {
+        $('#create-from-outcome').focus()
+        this?.content?.innerView?.render()
       },
       buttons: [
         {
@@ -105,7 +106,9 @@ export default class FindDialog extends DialogBaseView {
     const model = this.sidebar.selectedModel()
     // add optional attributes for use in logic elsewhere
     if (this.content.setQuizMastery) {
-      model.quizMasteryLevel = parseFloat(this.$el.find('#outcome_mastery_at').val()) || 0
+      const quizMasteryLevel = this.content.innerView.validateOutcomeMasteryAtInput()
+      if (quizMasteryLevel == null) return
+      model.quizMasteryLevel = quizMasteryLevel
     }
     if (this.content.useForScoring) {
       model.useForScoring = this.$el.find('#outcome_use_for_scoring').prop('checked')
@@ -160,9 +163,9 @@ export default class FindDialog extends DialogBaseView {
           $.flashError(
             I18n.t(
               'flash.importError',
-              'An error occurred while importing. Please try again later.'
-            )
-          )
+              'An error occurred while importing. Please try again later.',
+            ),
+          ),
         )
     }
   }
@@ -181,6 +184,11 @@ export default class FindDialog extends DialogBaseView {
       canShow = false
     }
     $('.ui-dialog-buttonpane .btn-primary').toggle(canShow)
+  }
+
+  show() {
+    this.dialog.dialog('open')
+    this.$el.closest('.ui-dialog').find('.ui-dialog-titlebar-close').focus()
   }
 
   cleanup() {

@@ -58,9 +58,34 @@ shared_examples_for "learning object with due dates" do
         override.title = nil
         override.save!
 
-        dates_hash = overridable.dates_hash_visible_to(@teacher)
+        dates_hash = overridable.formatted_dates_hash_visible_to(@teacher)
         expect(dates_hash.size).to eq 3
         expect(dates_hash.pluck(:title)).to eq [nil, "Summer session", "2 students"]
+      end
+
+      context "differentiation tags" do
+        before do
+          course.account.enable_feature!(:assign_to_differentiation_tags)
+          course.account.tap do |a|
+            a.settings[:allow_assign_to_differentiation_tags] = { value: true }
+            a.save!
+          end
+        end
+
+        it "returns active differentiaiton tag overrides (includes override title)" do
+          diff_tag_category = course.group_categories.create!(name: "Differentiation Tags", non_collaborative: true)
+          diff_tag = course.groups.create!(name: "Tag 1", group_category: diff_tag_category, non_collaborative: true)
+
+          override.set = diff_tag
+          override.title = diff_tag.name
+          override.save!
+
+          response = overridable.all_dates_visible_to(@teacher)
+          expect(response.size).to eq 3
+
+          diff_tag_override = response.find { |r| r[:set_type] == "Group" }
+          expect(diff_tag_override[:title]).to eq diff_tag.name
+        end
       end
     end
 
@@ -69,6 +94,36 @@ shared_examples_for "learning object with due dates" do
         course_with_student({ course:, active_all: true })
         override.delete
         expect(overridable.all_dates_visible_to(@student).size).to eq 1
+      end
+
+      context "differentiation tags" do
+        before do
+          course.account.enable_feature!(:assign_to_differentiation_tags)
+          course.account.tap do |a|
+            a.settings[:allow_assign_to_differentiation_tags] = { value: true }
+            a.save!
+          end
+        end
+
+        it "returns active differentiaiton tag overrides (excludes override title)" do
+          student = course_with_student({ course:, active_all: true }).user
+          diff_tag_category = course.group_categories.create!(name: "Differentiation Tags", non_collaborative: true)
+          diff_tag = course.groups.create!(name: "Tag 1", group_category: diff_tag_category, non_collaborative: true)
+          diff_tag.add_user(student, "accepted")
+
+          diff_tag_override = assignment_override_model(overridable_type => overridable)
+          diff_tag_override.set = diff_tag
+          diff_tag_override.set_type = "Group"
+          diff_tag_override.title = diff_tag.name
+          diff_tag_override.override_due_at(18.days.from_now)
+          diff_tag_override.save!
+
+          response = overridable.all_dates_visible_to(student)
+          expect(response.size).to eq 1
+
+          override = response.first
+          expect(override[:title]).to be_nil
+        end
       end
     end
 
@@ -122,7 +177,7 @@ shared_examples_for "learning object with due dates" do
     end
   end
 
-  describe "#dates_hash_visible_to" do
+  describe "#formatted_dates_hash_visible_to" do
     before do
       override.set = course.default_section
       override.override_due_at(7.days.from_now)
@@ -132,11 +187,11 @@ shared_examples_for "learning object with due dates" do
     end
 
     it "only returns active overrides" do
-      expect(overridable.dates_hash_visible_to(@teacher).size).to eq 2
+      expect(overridable.formatted_dates_hash_visible_to(@teacher).size).to eq 2
     end
 
     it "includes the original date as a hash" do
-      dates_hash = overridable.dates_hash_visible_to(@teacher)
+      dates_hash = overridable.formatted_dates_hash_visible_to(@teacher)
       expect(dates_hash.size).to eq 2
 
       dates_hash.sort_by! { |d| d[:title].to_s }
@@ -150,12 +205,75 @@ shared_examples_for "learning object with due dates" do
       override2.override_due_at(8.days.from_now)
       override2.save!
 
-      dates_hash = overridable.dates_hash_visible_to(@teacher)
+      dates_hash = overridable.formatted_dates_hash_visible_to(@teacher)
       expect(dates_hash.size).to eq 2
 
       dates_hash.sort_by! { |d| d[:title] }
       expect(dates_hash[0][:title]).to eq "Summer session"
       expect(dates_hash[1][:title]).to eq "value for name"
+    end
+
+    context "with module overrides" do
+      before do
+        student_in_course(course:)
+        @module1 = course.context_modules.create!(name: "Module 1")
+        overridable.context_module_tags.create! context_module: @module1, context: course, tag_type: "context_module"
+
+        @module_adhoc_override = @module1.assignment_overrides.create!
+        override_student = @module_adhoc_override.assignment_override_students.build
+        override_student.user = @student
+        override_student.save!
+      end
+
+      it "returns the module overrides" do
+        dates_hash = overridable.formatted_dates_hash_visible_to(@teacher)
+        expect(dates_hash.size).to eq 2
+        expect(dates_hash[0][:set_type]).to eq "CourseSection"
+        expect(dates_hash[1][:set_type]).to eq "ADHOC"
+        expect(dates_hash[1][:id]).to eq @module_adhoc_override.id
+      end
+
+      it "does not repeat overridden module overrides" do
+        # Create module override for default section
+        @module1.assignment_overrides.create!(set: course.default_section)
+        adhoc_override = overridable.assignment_overrides.create!(due_at: 7.days.from_now)
+        # Create ADHOC override on the overridable
+        override_student = adhoc_override.assignment_override_students.build
+        override_student.user = @student
+        override_student.save!
+
+        # both module overrides should be overridden by the object's overrides
+        dates_hash = overridable.formatted_dates_hash_visible_to(@teacher)
+        expect(dates_hash.size).to eq 2
+        expect(dates_hash[0][:set_type]).to eq "CourseSection"
+        expect(dates_hash[0][:id]).to eq override.id
+        expect(dates_hash[1][:set_type]).to eq "ADHOC"
+        expect(dates_hash[1][:id]).to eq adhoc_override.id
+      end
+
+      it "includes course overrides" do
+        course_override = overridable.assignment_overrides.create!(set: course, due_at: 7.days.from_now)
+
+        dates_hash = overridable.formatted_dates_hash_visible_to(@teacher)
+        expect(dates_hash.size).to eq 3
+        expect(dates_hash[0][:set_type]).to eq "CourseSection"
+        expect(dates_hash[0][:id]).to eq override.id
+        expect(dates_hash[1][:set_type]).to eq "Course"
+        expect(dates_hash[1][:id]).to eq course_override.id
+        expect(dates_hash[2][:set_type]).to eq "ADHOC"
+        expect(dates_hash[2][:id]).to eq @module_adhoc_override.id
+      end
+
+      it "does not include unassigned module overrides" do
+        unassigned_override = overridable.assignment_overrides.create!(unassign_item: true)
+        override_student = unassigned_override.assignment_override_students.build
+        override_student.user = @student
+        override_student.save!
+        dates_hash = overridable.formatted_dates_hash_visible_to(@teacher)
+        expect(dates_hash.size).to eq 1
+        expect(dates_hash[0][:set_type]).to eq "CourseSection"
+        expect(dates_hash[0][:id]).to eq override.id
+      end
     end
   end
 
@@ -284,7 +402,6 @@ shared_examples_for "all learning objects" do
       end
 
       it "works with an ADHOC context module override" do
-        Account.site_admin.enable_feature!(:selective_release_backend)
         module1 = @course.context_modules.create!(name: "Module 1")
         overridable.context_module_tags.create! context_module: module1, context: @course, tag_type: "context_module"
 
@@ -467,7 +584,6 @@ shared_examples_for "all learning objects" do
 
   describe "all_assignment_overrides" do
     before do
-      Account.site_admin.enable_feature!(:selective_release_backend)
       student_in_course(course:)
       override.override_lock_at(7.days.from_now)
       override.set_type = "ADHOC"
@@ -504,16 +620,10 @@ shared_examples_for "all learning objects" do
       @tag1.destroy
       expect(overridable.all_assignment_overrides).not_to include(@module_override)
     end
-
-    it "does not include context module overrides without the flag" do
-      Account.site_admin.disable_feature!(:selective_release_backend)
-      expect(overridable.all_assignment_overrides).not_to include(@module_override)
-    end
   end
 
   describe "visible_to_everyone" do
     before do
-      Account.site_admin.enable_feature!(:selective_release_backend)
       student_in_course(course:)
 
       @module1 = @course.context_modules.create!(name: "Module 1")

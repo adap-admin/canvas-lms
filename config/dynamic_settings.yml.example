@@ -49,6 +49,7 @@ development:
         internal_tool_domain_allowlist:
           - 'docker'
           - 'localhost'
+        canvas_apps_lti_usage_url: "https://example.com" # Change this to your own URL if need be
       math-man:
         base_url: 'http://mathman.docker'
         use_for_svg: 'false'
@@ -91,11 +92,10 @@ development:
       bedrock.yml: |-
         bedrock_region: us-west-2
         vault_credential_path: sts/testaccount/sts/bedrock-dev
-      # sagemaker configuration for translations
-      sagemaker.yml: |
-        endpoint_name: translation-endpoint-dev
+      # AWS translation configuration for translations
+      translation.yml: |
         translation_region: us-west-2
-        vault_credential_path: sts/testaccount/sts/sagemaker-dev
+        vault_credential_path: sts/testaccount/sts/translation-dev
       # datadog_apm.yml: |
       #   sample_rate: 0.0
       #   host_sample_rate: 0.0
@@ -145,6 +145,8 @@ development:
       #   sampling_rate: '0.0'
       #   queue_url: ''
       #   region: 'us-west-2'
+      # ams.yml: |
+      #   launch_url: http://ams-ux.inseng.test:5173/src/remote-adapter.js
   store:
     canvas:
       lti-keys:

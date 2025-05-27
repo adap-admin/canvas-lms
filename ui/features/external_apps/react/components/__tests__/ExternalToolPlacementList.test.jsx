@@ -27,12 +27,13 @@ describe('ExternalToolPlacementList', () => {
     app_type: 'ContextExternalTool',
     version: '1.3',
     context: 'account',
+    context_id: 1,
     ...overrides,
   })
 
   const renderComponent = (overrides = {}) => {
     return render(
-      <ExternalToolPlacementList tool={tool()} onToggleSuccess={() => {}} {...overrides} />
+      <ExternalToolPlacementList tool={tool()} onToggleSuccess={() => {}} {...overrides} />,
     )
   }
 
@@ -72,7 +73,7 @@ describe('ExternalToolPlacementList', () => {
 
   describe('with 1.3 tool in an editable context', () => {
     beforeAll(() => {
-      window.ENV.PERMISSIONS = {create_tool_manually: true, edit_tool_manually: true}
+      window.ENV.PERMISSIONS = {edit_tool_manually: true}
       window.ENV.CONTEXT_BASE_URL = '/accounts/1'
 
       store.togglePlacements.mockImplementation(({onSuccess}) => onSuccess())
@@ -190,9 +191,31 @@ describe('ExternalToolPlacementList', () => {
     })
   })
 
+  describe('with 1.1 tool in non-editable context', () => {
+    beforeAll(() => {
+      window.ENV.PERMISSIONS = {edit_tool_manually: true}
+      window.ENV.CONTEXT_BASE_URL = '/accounts/2'
+    })
+
+    afterAll(() => {
+      delete window.ENV.PERMISSIONS
+      delete window.ENV.CONTEXT_BASE_URL
+    })
+
+    it('does not show toggle buttons', () => {
+      const {queryByRole} = renderComponent({
+        tool: tool({
+          version: '1.1',
+          not_selectable: false,
+        }),
+      })
+      expect(queryByRole('button', {name: /Placement active/})).not.toBeInTheDocument()
+    })
+  })
+
   describe('with 1.1 tool in an editable context', () => {
     beforeAll(() => {
-      window.ENV.PERMISSIONS = {create_tool_manually: true, edit_tool_manually: true}
+      window.ENV.PERMISSIONS = {edit_tool_manually: true}
       window.ENV.CONTEXT_BASE_URL = '/accounts/1'
 
       store.togglePlacements.mockImplementation(({onSuccess}) => onSuccess())
@@ -281,7 +304,7 @@ describe('ExternalToolPlacementList', () => {
           expect.objectContaining({
             tool: expect.objectContaining({homework_submission: {enabled: true}}),
             placements: ['homework_submission'],
-          })
+          }),
         )
       })
 
@@ -320,7 +343,7 @@ describe('ExternalToolPlacementList', () => {
             expect.objectContaining({
               tool: expect.objectContaining({not_selectable: true}),
               placements: [],
-            })
+            }),
           )
         })
 
@@ -337,7 +360,7 @@ describe('ExternalToolPlacementList', () => {
             expect.objectContaining({
               tool: expect.objectContaining({not_selectable: true}),
               placements: ['assignment_selection'],
-            })
+            }),
           )
         })
       })
@@ -355,7 +378,7 @@ describe('ExternalToolPlacementList', () => {
           expect.objectContaining({
             tool: expect.objectContaining({homework_submission: {enabled: false}}),
             placements: ['homework_submission'],
-          })
+          }),
         )
       })
 
@@ -407,7 +430,7 @@ describe('ExternalToolPlacementList', () => {
         })
         fireEvent.click(getByRole('button', {name: /Placement active/}))
         expect(store.togglePlacements).toHaveBeenCalledWith(
-          expect.objectContaining({placements: ['assignment_selection']})
+          expect.objectContaining({placements: ['assignment_selection']}),
         )
       })
     })

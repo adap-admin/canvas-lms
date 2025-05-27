@@ -17,10 +17,8 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_relative "../../../lti_1_3_spec_helper"
-
 RSpec.shared_context "lti_advantage_shared_examples" do
-  include_context "lti_1_3_spec_helper"
+  include_context "key_storage_helper"
 
   let(:return_url) { "http://www.platform.com/return_url" }
   let(:opts) { { resource_type: "course_navigation" } }
@@ -38,17 +36,20 @@ RSpec.shared_context "lti_advantage_shared_examples" do
     allow(request).to receive_messages(url: "https://localhost", host: "/my/url", scheme: "https")
     request
   end
+  let(:expander_opts) do
+    {
+      current_user: user,
+      tool:,
+      assignment:,
+      collaboration:
+    }
+  end
   let(:expander) do
     Lti::VariableExpander.new(
       course.root_account,
       course,
       controller,
-      {
-        current_user: user,
-        tool:,
-        assignment:,
-        collaboration:
-      }
+      expander_opts
     )
   end
   let(:collaboration) { nil }

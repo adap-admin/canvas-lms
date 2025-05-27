@@ -18,20 +18,18 @@
 
 import {showFlashAlert} from '@canvas/alerts/react/FlashAlert'
 import GenericErrorPage from '@canvas/generic-error-page/react'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import errorShipUrl from '@canvas/images/ErrorShip.svg'
-import {Button} from '@instructure/ui-buttons'
 import {Flex} from '@instructure/ui-flex'
-import {Modal} from '@instructure/ui-modal'
 import {ProgressBar} from '@instructure/ui-progress'
 import {Spinner} from '@instructure/ui-spinner'
-import React from 'react'
+import React, {useCallback} from 'react'
 import type {AccountId} from '../model/AccountId'
 import type {UnifiedToolId} from '../model/UnifiedToolId'
-import type {LtiImsRegistrationId} from '../model/lti_ims_registration/LtiImsRegistrationId'
 import {RegistrationModalBody} from '../registration_wizard/RegistrationModalBody'
 import type {DynamicRegistrationWizardService} from './DynamicRegistrationWizardService'
 import {
+  isReviewingState,
   mkUseDynamicRegistrationWizardState,
   type DynamicRegistrationWizardState,
 } from './DynamicRegistrationWizardState'
@@ -42,8 +40,13 @@ import {PlacementsConfirmationWrapper} from './components/PlacementsConfirmation
 import {PrivacyConfirmationWrapper} from './components/PrivacyConfirmationWrapper'
 import {ReviewScreenWrapper} from './components/ReviewScreenWrapper'
 import {isUnsuccessful} from '../../common/lib/apiResult/ApiResult'
+import {Footer} from '../registration_wizard_forms/Footer'
+import type {LtiRegistrationId} from '../model/LtiRegistrationId'
+import {Header} from '../registration_wizard_forms/Header'
+import {isLtiPlacementWithIcon} from '../model/LtiPlacement'
+import type {LtiPlacement} from '../model/LtiPlacement'
 
-const I18n = useI18nScope('lti_registrations')
+const I18n = createI18nScope('lti_registrations')
 
 export type DynamicRegistrationWizardProps = {
   dynamicRegistrationUrl: string
@@ -52,7 +55,7 @@ export type DynamicRegistrationWizardProps = {
   unregister: () => void
   onSuccessfulRegistration: () => void
   service: DynamicRegistrationWizardService
-  registrationId?: LtiImsRegistrationId
+  registrationId?: LtiRegistrationId
 }
 
 export const DynamicRegistrationWizard = (props: DynamicRegistrationWizardProps) => {
@@ -79,12 +82,35 @@ export const DynamicRegistrationWizard = (props: DynamicRegistrationWizardProps)
     loadRegistration,
   ])
 
+  const editing = !!props.registrationId
+
   const state = dynamicRegistrationWizardState.state
+
+  const onCancel = useCallback(async () => {
+    props.unregister()
+    if (!editing && isReviewingState(state)) {
+      const result = await dynamicRegistrationWizardState.deleteKey(
+        state._type,
+        accountId,
+        state.registration.id,
+      )
+
+      if (isUnsuccessful(result)) {
+        showFlashAlert({
+          message: I18n.t(
+            'Something went wrong deleting the registration. It can still be deleted manually on the Manage page.',
+          ),
+          type: 'error',
+        })
+      }
+    }
+  }, [editing, state, dynamicRegistrationWizardState, accountId, props])
 
   switch (state._type) {
     case 'RequestingToken':
       return (
         <>
+          <Header onClose={onCancel} editing={editing} />
           {progressBar(state)}
           <RegistrationModalBody>
             <Flex
@@ -99,19 +125,19 @@ export const DynamicRegistrationWizard = (props: DynamicRegistrationWizardProps)
               <Flex.Item>{I18n.t('Loading')}</Flex.Item>
             </Flex>
           </RegistrationModalBody>
-          <Modal.Footer>
-            <Button color="secondary" type="submit" onClick={props.unregister}>
-              {I18n.t('Cancel')}
-            </Button>
-            <Button margin="small" color="primary" type="submit" disabled={true}>
-              {I18n.t('Next')}
-            </Button>
-          </Modal.Footer>
+          <Footer
+            currentScreen="first"
+            onPreviousClicked={onCancel}
+            onNextClicked={() => {}}
+            disableNextButton={true}
+            reviewing={false}
+          />
         </>
       )
     case 'WaitingForTool':
       return (
         <>
+          <Header onClose={onCancel} editing={editing} />
           {progressBar(state)}
           <RegistrationModalBody padding="none">
             <iframe
@@ -129,19 +155,19 @@ export const DynamicRegistrationWizard = (props: DynamicRegistrationWizardProps)
               data-testid="dynamic-reg-wizard-iframe"
             />
           </RegistrationModalBody>
-          <Modal.Footer>
-            <Button color="secondary" type="submit" onClick={props.unregister}>
-              {I18n.t('Cancel')}
-            </Button>
-            <Button margin="small" color="primary" type="submit" disabled={true}>
-              {I18n.t('Next')}
-            </Button>
-          </Modal.Footer>
+          <Footer
+            reviewing={false}
+            currentScreen="first"
+            onPreviousClicked={onCancel}
+            onNextClicked={() => {}}
+            disableNextButton={true}
+          />
         </>
       )
     case 'LoadingRegistration':
       return (
         <>
+          <Header onClose={onCancel} editing={editing} />
           {progressBar(state)}
           <RegistrationModalBody>
             <Flex
@@ -161,6 +187,7 @@ export const DynamicRegistrationWizard = (props: DynamicRegistrationWizardProps)
     case 'PermissionConfirmation':
       return (
         <>
+          <Header onClose={onCancel} editing={editing} />
           {progressBar(state)}
           <RegistrationModalBody>
             <PermissionConfirmationWrapper
@@ -168,106 +195,84 @@ export const DynamicRegistrationWizard = (props: DynamicRegistrationWizardProps)
               overlayStore={state.overlayStore}
             />
           </RegistrationModalBody>
-          <Modal.Footer>
-            <Button
-              margin="small"
-              color="secondary"
-              type="submit"
-              disabled={false}
-              onClick={async () => {
-                props.unregister()
-                if (!props.registrationId) {
-                  const result = await dynamicRegistrationWizardState.deleteKey(
-                    state._type,
-                    state.registration.developer_key_id
-                  )
-                  if (isUnsuccessful(result)) {
-                    showFlashAlert({
-                      message: I18n.t(
-                        'Something went wrong deleting the registration. The registration can still be deleted manually on the Manage page.'
-                      ),
-                      type: 'error',
-                    })
-                  }
+          <Footer
+            reviewing={state.reviewing}
+            currentScreen="first"
+            onPreviousClicked={async () => {
+              props.unregister()
+              if (!props.registrationId) {
+                const result = await dynamicRegistrationWizardState.deleteKey(
+                  state._type,
+                  accountId,
+                  state.registration.id,
+                )
+                if (isUnsuccessful(result)) {
+                  showFlashAlert({
+                    message: I18n.t(
+                      'Something went wrong deleting the registration. The registration can still be deleted manually on the Manage page.',
+                    ),
+                    type: 'error',
+                  })
                 }
-              }}
-            >
-              {I18n.t('Cancel')}
-            </Button>
-            <Button
-              margin="small"
-              color="primary"
-              type="submit"
-              onClick={() => {
-                if (state.reviewing) {
-                  dynamicRegistrationWizardState.transitionToConfirmationState(
-                    state._type,
-                    'Reviewing'
-                  )
-                } else {
-                  dynamicRegistrationWizardState.transitionToConfirmationState(
-                    state._type,
-                    'PrivacyLevelConfirmation'
-                  )
-                }
-              }}
-            >
-              {state.reviewing ? I18n.t('Back to Review') : I18n.t('Next')}
-            </Button>
-          </Modal.Footer>
+              }
+            }}
+            onNextClicked={() => {
+              if (state.reviewing) {
+                dynamicRegistrationWizardState.transitionToConfirmationState(
+                  state._type,
+                  'Reviewing',
+                )
+              } else {
+                dynamicRegistrationWizardState.transitionToConfirmationState(
+                  state._type,
+                  'PrivacyLevelConfirmation',
+                )
+              }
+            }}
+          />
         </>
       )
     case 'PrivacyLevelConfirmation':
       return (
         <>
+          <Header onClose={onCancel} editing={editing} />
           {progressBar(state)}
           <RegistrationModalBody>
             <PrivacyConfirmationWrapper
               overlayStore={state.overlayStore}
-              toolName={state.registration.client_name}
+              toolName={state.registration.name}
             />
           </RegistrationModalBody>
-          <Modal.Footer>
-            <Button
-              margin="small"
-              color="secondary"
-              type="submit"
-              onClick={() => {
+          <Footer
+            currentScreen="intermediate"
+            reviewing={state.reviewing}
+            onPreviousClicked={() => {
+              dynamicRegistrationWizardState.transitionToConfirmationState(
+                state._type,
+                'PermissionConfirmation',
+                false,
+              )
+            }}
+            onNextClicked={() => {
+              if (state.reviewing) {
                 dynamicRegistrationWizardState.transitionToConfirmationState(
                   state._type,
-                  'PermissionConfirmation',
-                  false
+                  'Reviewing',
                 )
-              }}
-            >
-              {I18n.t('Previous')}
-            </Button>
-            <Button
-              margin="small"
-              color="primary"
-              type="submit"
-              onClick={() => {
-                if (state.reviewing) {
-                  dynamicRegistrationWizardState.transitionToConfirmationState(
-                    state._type,
-                    'Reviewing'
-                  )
-                } else {
-                  dynamicRegistrationWizardState.transitionToConfirmationState(
-                    state._type,
-                    'PlacementsConfirmation'
-                  )
-                }
-              }}
-            >
-              {state.reviewing ? I18n.t('Back to Review') : I18n.t('Next')}
-            </Button>
-          </Modal.Footer>
+              } else {
+                dynamicRegistrationWizardState.transitionToConfirmationState(
+                  state._type,
+                  'PlacementsConfirmation',
+                )
+              }
+            }}
+          />
         </>
       )
     case 'PlacementsConfirmation':
       return (
         <>
+          <Header onClose={onCancel} editing={editing} />
           {progressBar(state)}
           <RegistrationModalBody>
             <PlacementsConfirmationWrapper
@@ -275,47 +280,36 @@ export const DynamicRegistrationWizard = (props: DynamicRegistrationWizardProps)
               overlayStore={state.overlayStore}
             />
           </RegistrationModalBody>
-          <Modal.Footer>
-            <Button
-              margin="small"
-              color="secondary"
-              type="submit"
-              onClick={() => {
+          <Footer
+            reviewing={state.reviewing}
+            currentScreen="intermediate"
+            onPreviousClicked={() => {
+              dynamicRegistrationWizardState.transitionToConfirmationState(
+                state._type,
+                'PrivacyLevelConfirmation',
+                false,
+              )
+            }}
+            onNextClicked={() => {
+              if (state.reviewing) {
                 dynamicRegistrationWizardState.transitionToConfirmationState(
                   state._type,
-                  'PrivacyLevelConfirmation',
-                  false
+                  'Reviewing',
                 )
-              }}
-            >
-              {I18n.t('Previous')}
-            </Button>
-            <Button
-              margin="small"
-              color="primary"
-              type="submit"
-              onClick={() => {
-                if (state.reviewing) {
-                  dynamicRegistrationWizardState.transitionToConfirmationState(
-                    state._type,
-                    'Reviewing'
-                  )
-                } else {
-                  dynamicRegistrationWizardState.transitionToConfirmationState(
-                    state._type,
-                    'NamingConfirmation'
-                  )
-                }
-              }}
-            >
-              {state.reviewing ? I18n.t('Back to Review') : I18n.t('Next')}
-            </Button>
-          </Modal.Footer>
+              } else {
+                dynamicRegistrationWizardState.transitionToConfirmationState(
+                  state._type,
+                  'NamingConfirmation',
+                )
+              }
+            }}
+          />
         </>
       )
     case 'NamingConfirmation':
       return (
         <>
+          <Header onClose={onCancel} editing={editing} />
           {progressBar(state)}
           <RegistrationModalBody>
             <NamingConfirmationWrapper
@@ -323,47 +317,45 @@ export const DynamicRegistrationWizard = (props: DynamicRegistrationWizardProps)
               overlayStore={state.overlayStore}
             />
           </RegistrationModalBody>
-          <Modal.Footer>
-            <Button
-              margin="small"
-              color="secondary"
-              type="submit"
-              onClick={() => {
+          <Footer
+            currentScreen="intermediate"
+            reviewing={state.reviewing}
+            onPreviousClicked={() => {
+              dynamicRegistrationWizardState.transitionToConfirmationState(
+                state._type,
+                'PlacementsConfirmation',
+                false,
+              )
+            }}
+            onNextClicked={() => {
+              if (state.reviewing) {
                 dynamicRegistrationWizardState.transitionToConfirmationState(
                   state._type,
-                  'PlacementsConfirmation',
-                  false
+                  'Reviewing',
                 )
-              }}
-            >
-              {I18n.t('Previous')}
-            </Button>
-            <Button
-              margin="small"
-              color="primary"
-              type="submit"
-              onClick={() => {
-                if (state.reviewing) {
+              } else {
+                const placements = state.registration.configuration.placements.map(p => p.placement)
+                const disabledPlacements =
+                  state.overlayStore.getState().state.overlay.disabled_placements ?? []
+                const enabledPlacements = placements.filter(p => !disabledPlacements.includes(p))
+
+                if (enabledPlacements.some(p => isLtiPlacementWithIcon(p))) {
                   dynamicRegistrationWizardState.transitionToConfirmationState(
                     state._type,
-                    'Reviewing'
+                    'IconConfirmation',
                   )
                 } else {
-                  dynamicRegistrationWizardState.transitionToConfirmationState(
-                    state._type,
-                    'IconConfirmation'
-                  )
+                  dynamicRegistrationWizardState.transitionToReviewingState(state._type)
                 }
-              }}
-            >
-              {state.reviewing ? I18n.t('Back to Review') : I18n.t('Next')}
-            </Button>
-          </Modal.Footer>
+              }
+            }}
+          />
         </>
       )
     case 'IconConfirmation':
       return (
         <>
+          <Header onClose={onCancel} editing={editing} />
           {progressBar(state)}
           <IconConfirmationWrapper
             overlayStore={state.overlayStore}
@@ -379,6 +371,7 @@ export const DynamicRegistrationWizard = (props: DynamicRegistrationWizardProps)
     case 'Reviewing':
       return (
         <>
+          <Header onClose={onCancel} editing={editing} />
           {progressBar(state)}
           <ReviewScreenWrapper
             overlayStore={state.overlayStore}
@@ -387,68 +380,70 @@ export const DynamicRegistrationWizard = (props: DynamicRegistrationWizardProps)
               dynamicRegistrationWizardState.transitionToConfirmationState
             }
           />
-          <Modal.Footer>
-            <Button
-              color="secondary"
-              type="submit"
-              onClick={() => {
+          <Footer
+            currentScreen="last"
+            reviewing={state.reviewing}
+            onPreviousClicked={() => {
+              const placements = state.registration.configuration.placements.map(p => p.placement)
+              const disabledPlacements =
+                state.overlayStore.getState().state.overlay.disabled_placements ?? []
+              const enabledPlacements = placements.filter(p => !disabledPlacements.includes(p))
+
+              if (enabledPlacements.some(p => isLtiPlacementWithIcon(p))) {
                 dynamicRegistrationWizardState.transitionToConfirmationState(
                   state._type,
                   'IconConfirmation',
-                  false
+                  false,
                 )
-              }}
-            >
-              {I18n.t('Previous')}
-            </Button>
-            <Button
-              margin="small"
-              color="primary"
-              type="submit"
-              onClick={() => {
-                if (registrationId) {
-                  dynamicRegistrationWizardState.updateAndClose(
-                    accountId,
-                    state.registration.id,
-                    state.registration.lti_registration_id,
-                    state.overlayStore.getState().state.registration,
-                    state.overlayStore.getState().state.adminNickname ??
-                      state.registration.client_name,
-                    props.onSuccessfulRegistration
-                  )
-                } else {
-                  dynamicRegistrationWizardState.enableAndClose(
-                    accountId,
-                    state.registration.id,
-                    state.registration.lti_registration_id,
-                    state.registration.developer_key_id,
-                    state.overlayStore.getState().state.registration,
-                    state.overlayStore.getState().state.adminNickname ??
-                      state.registration.client_name,
-                    props.onSuccessfulRegistration
-                  )
-                }
-              }}
-            >
-              {registrationId ? I18n.t('Update App') : I18n.t('Install App')}
-            </Button>
-          </Modal.Footer>
+              } else {
+                dynamicRegistrationWizardState.transitionToConfirmationState(
+                  state._type,
+                  'NamingConfirmation',
+                  false,
+                )
+              }
+            }}
+            onNextClicked={() => {
+              if (registrationId) {
+                dynamicRegistrationWizardState.updateAndClose(
+                  accountId,
+                  registrationId,
+                  state.overlayStore.getState().state.overlay,
+                  state.overlayStore.getState().state.adminNickname ?? state.registration.name,
+                  props.onSuccessfulRegistration,
+                )
+              } else {
+                dynamicRegistrationWizardState.enableAndClose(
+                  accountId,
+                  state.registration.id,
+                  state.overlayStore.getState().state.overlay,
+                  state.overlayStore.getState().state.adminNickname ?? state.registration.name,
+                  props.onSuccessfulRegistration,
+                )
+              }
+            }}
+            updating={!!registrationId}
+          />
         </>
       )
     case 'DeletingDevKey':
       return (
-        <RegistrationModalBody>
-          <Flex justifyItems="center" alignItems="center" height="100%">
-            <Flex.Item>
-              <Spinner renderTitle={I18n.t('Deleting App')} />
-            </Flex.Item>
-            <Flex.Item>{I18n.t('Deleting App')}</Flex.Item>
-          </Flex>
-        </RegistrationModalBody>
+        <>
+          <Header onClose={onCancel} editing={editing} />
+          <RegistrationModalBody>
+            <Flex justifyItems="center" alignItems="center" height="100%">
+              <Flex.Item>
+                <Spinner renderTitle={I18n.t('Deleting App')} />
+              </Flex.Item>
+              <Flex.Item>{I18n.t('Deleting App')}</Flex.Item>
+            </Flex>
+          </RegistrationModalBody>
+        </>
       )
     case 'Enabling':
       return (
         <>
+          <Header onClose={onCancel} editing={editing} />
           {progressBar(state)}
           <RegistrationModalBody>
             <Flex justifyItems="center" alignItems="center" height="100%">
@@ -463,6 +458,7 @@ export const DynamicRegistrationWizard = (props: DynamicRegistrationWizardProps)
     case 'Updating':
       return (
         <>
+          <Header onClose={onCancel} editing={editing} />
           {progressBar(state)}
           <RegistrationModalBody>
             <Flex justifyItems="center" alignItems="center" height="100%">
@@ -476,14 +472,17 @@ export const DynamicRegistrationWizard = (props: DynamicRegistrationWizardProps)
       )
     case 'Error':
       return (
-        <RegistrationModalBody>
-          <GenericErrorPage
-            imageUrl={errorShipUrl}
-            errorSubject={I18n.t('Dynamic Registration error')}
-            errorCategory="Dynamic Registration"
-            errorMessage={state.message}
-          />
-        </RegistrationModalBody>
+        <>
+          <Header onClose={onCancel} editing={editing} />
+          <RegistrationModalBody>
+            <GenericErrorPage
+              imageUrl={errorShipUrl}
+              errorSubject={I18n.t('Dynamic Registration error')}
+              errorCategory="Dynamic Registration"
+              errorMessage={state.message}
+            />
+          </RegistrationModalBody>
+        </>
       )
   }
 }

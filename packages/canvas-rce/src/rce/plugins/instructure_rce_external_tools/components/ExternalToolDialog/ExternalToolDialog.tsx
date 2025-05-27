@@ -1,5 +1,3 @@
-/* eslint-disable  */
-// @ts-nocheck
 // TODO: we get complaints about <Overlay> because it can be either a Modal or a Tray
 // and they have different props. I don't have time to fix this the right way now.
 /*
@@ -22,7 +20,6 @@
 
 import {replaceTags} from '../../helpers/tags'
 import React, {createRef} from 'react'
-import {Alert} from '@instructure/ui-alerts'
 import {Spinner} from '@instructure/ui-spinner'
 import {Flex} from '@instructure/ui-flex'
 import ToolLaunchIframe from '../util/ToolLaunchIframe'
@@ -31,7 +28,7 @@ import {RceLti11ContentItem} from '../../lti11-content-items/RceLti11ContentItem
 import formatMessage from '../../../../../format-message'
 import {ExternalToolsEnv} from '../../ExternalToolsEnv'
 import {RceToolWrapper} from '../../RceToolWrapper'
-import {instuiPopupMountNode} from '../../../../../util/fullscreenHelpers'
+import {instuiPopupMountNodeFn} from '../../../../../util/fullscreenHelpers'
 import {ExternalToolDialogTray} from './ExternalToolDialogTray'
 import {ExternalToolDialogModal} from './ExternalToolDialogModal'
 import {showFlashAlert} from '../../../../../common/FlashAlert'
@@ -39,9 +36,7 @@ import {parseUrlOrNull} from '../../../../../util/url-util'
 
 export interface ExternalToolDialogProps {
   env: ExternalToolsEnv
-
   iframeAllowances: string
-
   resourceSelectionUrlOverride?: string | null
 }
 
@@ -56,17 +51,11 @@ export default class ExternalToolDialog extends React.Component<
   state: ExternalToolDialogState = {
     open: false,
     button: null,
-    infoAlert: null,
     form: EMPTY_FORM,
     iframeLoaded: false,
   }
 
   formRef = createRef<HTMLFormElement>()
-
-  beforeInfoAlertRef = createRef<HTMLDivElement>()
-
-  afterInfoAlertRef = createRef<HTMLDivElement>()
-
   iframeRef = createRef<HTMLIFrameElement>()
 
   open(button: RceToolWrapper): void {
@@ -97,7 +86,7 @@ export default class ExternalToolDialog extends React.Component<
       const canvasOrigin = env.canvasOrigin
 
       urlStr = `${canvasOrigin}/${contextType}s/${contextId}/external_tools/${encodeURIComponent(
-        button.id
+        button.id,
       )}/resource_selection`
     }
     this.setState({
@@ -144,6 +133,7 @@ export default class ExternalToolDialog extends React.Component<
     if (contentItems.length === 1 && contentItems[0]['@type'] === 'lti_replace') {
       const code = contentItems[0].text
 
+      // @ts-expect-error
       env.rceWrapper?.setCode(code)
     } else {
       contentItems.forEach(contentData => {
@@ -152,9 +142,10 @@ export default class ExternalToolDialog extends React.Component<
             ...contentData,
             class: 'lti-embed',
           },
-          env
+          env,
         ).codePayload
 
+        // @ts-expect-error
         env.rceWrapper?.insertCode(code)
       })
     }
@@ -174,6 +165,7 @@ export default class ExternalToolDialog extends React.Component<
   }
 
   handlePostedMessage = (ev: Pick<MessageEvent, 'origin' | 'data'>) => {
+    // messages from Canvas in the tool launch frame
     if (ev.origin === this.resourceSelectionOrigin) {
       const data = ev.data as Record<string, unknown> | null | undefined
 
@@ -185,12 +177,19 @@ export default class ExternalToolDialog extends React.Component<
         // where events are also described/used
         this.handleExternalContentReady(ev.data)
       }
+    } else {
+      // messages from the tool
+      const data = ev.data as Record<string, unknown> | null | undefined
+
+      if (data?.subject === 'lti.close') {
+        this.handleClose()
+      }
     }
   }
 
   handleClose = () => {
     const msg = formatMessage('Are you sure you want to cancel? Changes you made may not be saved.')
-    // eslint-disable-next-line no-alert
+
     if (window.confirm(msg)) {
       this.close()
     }
@@ -208,10 +207,6 @@ export default class ExternalToolDialog extends React.Component<
     window.dispatchEvent(new Event('resize'))
   }
 
-  handleInfoAlertFocus = (ev: {target: Element}) => this.setState({infoAlert: ev.target})
-
-  handleInfoAlertBlur = () => this.setState({infoAlert: null})
-
   calcIFrameHeight = () => {
     if (this.state.button?.use_tray) {
       return '100%'
@@ -221,7 +216,7 @@ export default class ExternalToolDialog extends React.Component<
     const modalMaxHeight = '95'
     const modalHeaderHeightWithPadding = '5.5rem'
     const complexHeightWithDVH = `min(${iFrameHeight}px, calc(${modalMaxHeight}dvh - ${modalHeaderHeightWithPadding}))`
-    if(CSS.supports('height', complexHeightWithDVH)) {
+    if (CSS.supports('height', complexHeightWithDVH)) {
       return complexHeightWithDVH
     } else {
       return `${iFrameHeight}px`
@@ -249,11 +244,13 @@ export default class ExternalToolDialog extends React.Component<
           <input
             type="hidden"
             name="com_instructure_course_canvas_resource_type"
+            // @ts-expect-error
             value={props.env.rceWrapper?.getResourceIdentifiers().resourceType}
           />
           <input
             type="hidden"
             name="com_instructure_course_canvas_resource_id"
+            // @ts-expect-error
             value={props.env.rceWrapper?.getResourceIdentifiers().resourceId}
           />
           {state.form.parent_frame_context != null && (
@@ -266,29 +263,13 @@ export default class ExternalToolDialog extends React.Component<
         </form>
         <Overlay
           open={state.open}
-          mountNode={instuiPopupMountNode}
+          mountNode={instuiPopupMountNodeFn()}
           label={label}
           onOpen={this.handleOpen}
           onClose={this.handleRemove}
           onCloseButton={this.handleClose}
           name={state.button?.title ?? ' '}
         >
-          <div
-            ref={this.beforeInfoAlertRef}
-            tabIndex={0} // eslint-disable-line jsx-a11y/no-noninteractive-tabindex
-            onFocus={this.handleInfoAlertFocus}
-            onBlur={this.handleInfoAlertBlur}
-            className={
-              this.beforeInfoAlertRef.current != null &&
-              state.infoAlert === this.beforeInfoAlertRef.current
-                ? ''
-                : 'screenreader-only'
-            }
-          >
-            <Alert margin="small">
-              {formatMessage('The following content is partner provided')}
-            </Alert>
-          </div>
           {!state.iframeLoaded && (
             <Flex alignItems="center" justifyItems="center">
               <Flex.Item>
@@ -300,7 +281,6 @@ export default class ExternalToolDialog extends React.Component<
               </Flex.Item>
             </Flex>
           )}
-
           <ToolLaunchIframe
             title={label}
             ref={this.iframeRef}
@@ -309,7 +289,7 @@ export default class ExternalToolDialog extends React.Component<
             id="external_tool_button_frame"
             style={{
               height: this.calcIFrameHeight(),
-              width: state.button?.use_tray ? '100%' : state.button?.width ?? 800,
+              width: state.button?.use_tray ? '100%' : (state.button?.width ?? 800),
               border: '0',
               display: 'block',
               visibility: state.iframeLoaded ? 'visible' : 'hidden',
@@ -317,36 +297,15 @@ export default class ExternalToolDialog extends React.Component<
             allow={props.iframeAllowances}
             onLoad={() => this.setState({iframeLoaded: true})}
           />
-          <div
-            ref={this.afterInfoAlertRef}
-            tabIndex={0} // eslint-disable-line jsx-a11y/no-noninteractive-tabindex
-            onFocus={this.handleInfoAlertFocus}
-            onBlur={this.handleInfoAlertBlur}
-            style={
-              this.afterInfoAlertRef.current != null &&
-              state.infoAlert === this.afterInfoAlertRef.current ? {} : {bottom: '0'}
-            }
-            className={
-              this.afterInfoAlertRef.current != null &&
-              state.infoAlert === this.afterInfoAlertRef.current
-                ? ''
-                : 'screenreader-only'
-            }
-          >
-            <Alert margin="small">
-              {formatMessage('The preceding content is partner provided')}
-            </Alert>
-          </div>
         </Overlay>
       </>
     )
   }
-} 
+}
 
 interface ExternalToolDialogState {
   open: boolean
   button: RceToolWrapper | null
-  infoAlert: Element | null
   form: ExternalToolDialogForm
   iframeLoaded: boolean
 }

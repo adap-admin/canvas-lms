@@ -24,6 +24,7 @@ import EditView from './backbone/views/EditView'
 import SectionCollection from '@canvas/sections/backbone/collections/SectionCollection'
 import DueDateList from '@canvas/due-dates/backbone/models/DueDateList'
 import DueDateOverride from '@canvas/due-dates'
+import MasteryPathToggle from '@canvas/mastery-path-toggle'
 import AssignmentGroupSelector from '@canvas/assignments/backbone/views/AssignmentGroupSelector'
 import GradingTypeSelector from '@canvas/assignments/backbone/views/GradingTypeSelector'
 import GroupCategorySelector from '@canvas/groups/backbone/views/GroupCategorySelector'
@@ -31,8 +32,19 @@ import PeerReviewsSelector from '@canvas/assignments/backbone/views/PeerReviewsS
 import '@canvas/grading-standards'
 import LockManager from '@canvas/blueprint-courses/react/components/LockManager/index'
 import renderEditAssignmentsApp from './react/index'
+import {renderEnhancedRubrics} from './react/AssignmentRubric'
 
 ready(() => {
+  window.addEventListener('load', () => {
+    const params = new URLSearchParams(window.location.search)
+    const targetId = params.get('scrollTo')
+    const target = document.getElementById(targetId)
+
+    if (target) {
+      target.scrollIntoView({behavior: 'smooth'})
+    }
+  })
+
   if (ENV.ASSIGNMENT_EDIT_ENHANCEMENTS_TEACHER_VIEW) {
     const div = document.createElement('div')
     renderEditAssignmentsApp(document.getElementById('content').appendChild(div))
@@ -52,7 +64,7 @@ ready(() => {
     const dueDateList = new DueDateList(
       assignment.get('assignment_overrides'),
       sectionList,
-      assignment
+      assignment,
     )
 
     const assignmentGroupSelector = new AssignmentGroupSelector({
@@ -71,6 +83,7 @@ ready(() => {
       groupCategories:
         (typeof ENV !== 'undefined' && ENV !== null ? ENV.GROUP_CATEGORIES : undefined) || [],
       inClosedGradingPeriod: assignment.inClosedGradingPeriod(),
+      showNewErrors: true,
     })
     const peerReviewsSelector = new PeerReviewsSelector({
       parentModel: assignment,
@@ -81,8 +94,8 @@ ready(() => {
       model: assignment,
       assignmentGroupSelector,
       gradingTypeSelector,
-      groupCategorySelector,
-      peerReviewsSelector,
+      ...(!ENV.horizon_course && {groupCategorySelector}),
+      ...(!ENV.horizon_course && {peerReviewsSelector}),
       views: {
         'js-assignment-overrides': new DueDateOverride({
           model: dueDateList,
@@ -93,7 +106,10 @@ ready(() => {
           inPacedCourse: assignment.inPacedCourse(),
           isModuleItem: ENV.IS_MODULE_ITEM,
           courseId: assignment.courseID(),
-          groupCategorySelector,
+          ...(!ENV.horizon_course && {groupCategorySelector}),
+        }),
+        'js-assignment-overrides-mastery-path': new MasteryPathToggle({
+          model: dueDateList,
         }),
       },
       lockedItems: assignment.id ? lockedItems : {}, // if no id, creating a new assignment
@@ -109,5 +125,10 @@ ready(() => {
       },
     })
     editHeaderView.render()
+    renderEnhancedRubrics()
   }
 })
+
+export function Component() {
+  return null
+}

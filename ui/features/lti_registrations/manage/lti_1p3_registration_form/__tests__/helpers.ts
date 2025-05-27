@@ -20,13 +20,22 @@ import type {InternalLtiConfiguration} from '../../model/internal_lti_configurat
 import {LtiScopes} from '@canvas/lti/model/LtiScope'
 
 export const mockInternalConfiguration = (
-  overrides?: Partial<InternalLtiConfiguration>
+  overrides?: Partial<InternalLtiConfiguration>,
 ): InternalLtiConfiguration => {
   return {
     title: 'title',
     description: 'description',
     target_link_uri: 'https://example.com',
     oidc_initiation_url: 'https://example.com/oidc',
+    public_jwk_url: 'https://example.com/jwk',
+    launch_settings: {
+      text: 'Default Title',
+    },
+    redirect_uris: ['https://example.com/redirect1'],
+    oidc_initiation_urls: {},
+    privacy_level: 'anonymous',
+    tool_id: 'tool_id',
+    domain: 'example.com',
     custom_fields: {
       foo: 'bar',
     },

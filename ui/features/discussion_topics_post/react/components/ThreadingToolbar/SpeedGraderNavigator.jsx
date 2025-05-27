@@ -16,14 +16,14 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import React, {useState, useRef, useContext} from 'react'
 import {Flex} from '@instructure/ui-flex'
 import {Button} from '@instructure/ui-buttons'
 import useSpeedGrader from '../../hooks/useSpeedGrader'
 import {DiscussionManagerUtilityContext, SearchContext} from '../../utils/constants'
 
-const I18n = useI18nScope('speed_grader')
+const I18n = createI18nScope('speed_grader')
 
 const visuallyHiddenStyles = {
   border: 0,
@@ -77,16 +77,24 @@ export const SpeedGraderNavigator = () => {
   return (
     <div
       ref={containerRef}
-      id={'speedgrader-navigator'}
+      id="speedgrader-navigator"
       style={isVisible ? {} : visuallyHiddenStyles}
       aria-hidden={!isVisible}
       onFocus={handleFocus}
       onBlur={handleBlur}
     >
       <Flex as="nav" justifyItems="start">
-        {renderButton(handlePreviousStudentReply, "previous-in-speedgrader", I18n.t('Previous in SpeedGrader'))}
-        {renderButton(handleNextStudentReply, "next-in-speedgrader", I18n.t('Next in SpeedGrader'))}
-        {renderButton(handleJumpFocusToSpeedGrader, "jump-to-speedgrader-navigation", I18n.t('Jump to SpeedGrader Navigation'))}
+        {renderButton(
+          handlePreviousStudentReply,
+          'previous-in-speedgrader',
+          I18n.t('Previous in SpeedGrader'),
+        )}
+        {renderButton(handleNextStudentReply, 'next-in-speedgrader', I18n.t('Next in SpeedGrader'))}
+        {renderButton(
+          handleJumpFocusToSpeedGrader,
+          'jump-to-speedgrader-navigation',
+          I18n.t('Jump to SpeedGrader Navigation'),
+        )}
       </Flex>
     </div>
   )

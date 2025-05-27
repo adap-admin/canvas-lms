@@ -21,14 +21,14 @@ describe Checkpoints::DiscussionCheckpointCreatorService do
   describe ".call" do
     before(:once) do
       course = course_model
-      course.root_account.enable_feature!(:discussion_checkpoints)
+      course.account.enable_feature!(:discussion_checkpoints)
       @topic = DiscussionTopic.create_graded_topic!(course:, title: "graded topic")
     end
 
     let(:service) { Checkpoints::DiscussionCheckpointCreatorService }
 
     it "raises a FlagDisabledError when the checkpoints feature flag is disabled" do
-      @topic.context.root_account.disable_feature!(:discussion_checkpoints)
+      @topic.context.account.disable_feature!(:discussion_checkpoints)
 
       expect do
         service.call(
@@ -124,7 +124,7 @@ describe Checkpoints::DiscussionCheckpointCreatorService do
     end
 
     it "syncs unlock_at and lock_at fields to the latest created checkpoint" do
-      now = Time.now.change(usec: 0)
+      now = Time.zone.now.change(usec: 0)
       first_unlock_at = 1.day.from_now(now)
       first_lock_at = 3.days.from_now(now)
       second_unlock_at = 2.days.from_now(now)
@@ -248,7 +248,7 @@ describe Checkpoints::DiscussionCheckpointCreatorService do
       end
 
       it "can create a combination of overrides and 'everyone' dates" do
-        now = Time.now.change(usec: 0)
+        now = Time.zone.now.change(usec: 0)
         new_section = @topic.course.course_sections.create!
         student1 = student_in_course(course: @topic.course, active_all: true).user
         student2 = student_in_course(course: @topic.course, active_all: true, section: new_section).user
@@ -271,6 +271,50 @@ describe Checkpoints::DiscussionCheckpointCreatorService do
           # are stored on the checkpoint submissions.
           expect(checkpoint.parent_assignment.submissions.find_by(user: student1).cached_due_date).to be_nil
           expect(checkpoint.parent_assignment.submissions.find_by(user: student2).cached_due_date).to be_nil
+        end
+      end
+
+      context "differentiation tags" do
+        before do
+          account = @topic.course.account
+          account.enable_feature!(:assign_to_differentiation_tags)
+          account.tap do |a|
+            a.settings[:allow_assign_to_differentiation_tags] = { value: true }
+            a.save!
+          end
+
+          @differentiation_tag_category = @topic.course.group_categories.create!(name: "Differentiation Tag Category", non_collaborative: true)
+          @diff_tag1 = @topic.course.groups.create!(name: "Diff Tag 1", group_category: @differentiation_tag_category, non_collaborative: true)
+        end
+
+        it "can create differentiation tag overrides" do
+          checkpoint = service.call(
+            discussion_topic: @topic,
+            checkpoint_label: CheckpointLabels::REPLY_TO_TOPIC,
+            dates: [{ type: "override", set_type: "Group", set_id: @diff_tag1.id, due_at: 2.days.from_now }],
+            points_possible: 6
+          )
+
+          aggregate_failures do
+            expect(checkpoint.assignment_overrides.count).to eq 1
+            expect(checkpoint.assignment_overrides.first[:set_type]).to eq "Group"
+            expect(checkpoint.assignment_overrides.first[:set_id]).to eq @diff_tag1.id
+            expect(checkpoint.parent_assignment.only_visible_to_overrides).to be true
+          end
+        end
+
+        it "cannot create differentiation tag overrides when the account setting is disabled" do
+          account = @topic.course.account
+          account.update!(settings: { allow_assign_to_differentiation_tags: false })
+
+          expect do
+            service.call(
+              discussion_topic: @topic,
+              checkpoint_label: CheckpointLabels::REPLY_TO_TOPIC,
+              dates: [{ type: "override", set_type: "Group", set_id: @diff_tag1.id, due_at: 2.days.from_now }],
+              points_possible: 6
+            )
+          end.to raise_error(Checkpoints::GroupAssignmentRequiredError)
         end
       end
 

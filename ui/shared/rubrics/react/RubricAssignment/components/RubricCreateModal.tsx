@@ -17,7 +17,7 @@
  */
 
 import React from 'react'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {Modal} from '@instructure/ui-modal'
 import {CloseButton} from '@instructure/ui-buttons'
 import {Heading} from '@instructure/ui-heading'
@@ -26,12 +26,13 @@ import {RubricForm} from '@canvas/rubrics/react/RubricForm'
 import type {Rubric, RubricAssociation} from '../../types/rubric'
 import type {SaveRubricResponse} from '../../../../../features/rubrics/queries/RubricFormQueries'
 
-const I18n = useI18nScope('rubrics-form')
+const I18n = createI18nScope('rubrics-form')
 
 type RubricCreateModalProps = {
   isOpen: boolean
   rubric?: Rubric
   rubricAssociation?: RubricAssociation
+  aiRubricsEnabled: boolean
   onDismiss: () => void
   onSaveRubric: (savedRubricResponse: SaveRubricResponse) => void
 }
@@ -39,6 +40,7 @@ export const RubricCreateModal = ({
   isOpen,
   rubric,
   rubricAssociation,
+  aiRubricsEnabled,
   onDismiss,
   onSaveRubric,
 }: RubricCreateModalProps) => {
@@ -63,12 +65,16 @@ export const RubricCreateModal = ({
             rubric={rubric}
             rubricAssociation={rubricAssociation}
             courseId={ENV.COURSE_ID}
+            // @ts-expect-error
             assignmentId={ENV.ASSIGNMENT_ID}
             onCancel={onDismiss}
             onSaveRubric={onSaveRubric}
+            // @ts-expect-error
             canManageRubrics={ENV.PERMISSIONS?.manage_rubrics}
+            // @ts-expect-error
             criterionUseRangeEnabled={ENV.FEATURES.rubric_criterion_range}
             hideHeader={true}
+            aiRubricsEnabled={aiRubricsEnabled}
             rootOutcomeGroup={ENV.ROOT_OUTCOME_GROUP}
             showAdditionalOptions={true}
           />

@@ -25,6 +25,7 @@ const queryClient = new QueryClient()
 
 describe('SideNav', () => {
   beforeEach(() => {
+    // @ts-expect-error
     window.ENV.current_user = {
       id: '',
       avatar_image_url: 'testSrc',
@@ -33,6 +34,7 @@ describe('SideNav', () => {
       html_url: '',
       pronouns: '',
     }
+    // @ts-expect-error
     window.ENV.SETTINGS = {
       collapse_global_nav: false,
     }
@@ -45,8 +47,8 @@ describe('SideNav', () => {
       render(
         <MockedQueryClientProvider client={queryClient}>
           <SideNav />
-        </MockedQueryClientProvider>
-      )
+        </MockedQueryClientProvider>,
+      ),
     ).not.toThrow()
   })
 
@@ -54,7 +56,7 @@ describe('SideNav', () => {
     render(
       <MockedQueryClientProvider client={queryClient}>
         <SideNav />
-      </MockedQueryClientProvider>
+      </MockedQueryClientProvider>,
     )
     const sideNavContainer = screen.getByTestId('sidenav-container')
     expect(sideNavContainer).toHaveStyle('height: 100%;')
@@ -64,7 +66,7 @@ describe('SideNav', () => {
     render(
       <MockedQueryClientProvider client={queryClient}>
         <SideNav />
-      </MockedQueryClientProvider>
+      </MockedQueryClientProvider>,
     )
     const sideNavHeaderLogo = screen.getByTestId('sidenav-header-logo')
     expect(sideNavHeaderLogo).toBeInTheDocument()
@@ -76,7 +78,7 @@ describe('SideNav', () => {
     render(
       <MockedQueryClientProvider client={queryClient}>
         <SideNav />
-      </MockedQueryClientProvider>
+      </MockedQueryClientProvider>,
     )
     const avatarComponent = screen.getByTestId('sidenav-user-avatar')
     expect(avatarComponent).toHaveAttribute('src', 'testSrc')
@@ -86,7 +88,7 @@ describe('SideNav', () => {
     render(
       <MockedQueryClientProvider client={queryClient}>
         <SideNav />
-      </MockedQueryClientProvider>
+      </MockedQueryClientProvider>,
     )
     const sideNavContainer = screen.getByTestId('sidenav-container')
     fireEvent.click(sideNavContainer)
@@ -99,6 +101,7 @@ describe('SideNav', () => {
     })
 
     afterEach(() => {
+      // @ts-expect-error
       window.ENV.active_brand_config = null
     })
 
@@ -106,7 +109,7 @@ describe('SideNav', () => {
       render(
         <MockedQueryClientProvider client={queryClient}>
           <SideNav />
-        </MockedQueryClientProvider>
+        </MockedQueryClientProvider>,
       )
       const sideNavHeaderImage = screen.getByTestId('sidenav-brand-logomark')
       expect(sideNavHeaderImage).toBeInTheDocument()
@@ -126,7 +129,7 @@ describe('SideNav', () => {
       render(
         <MockedQueryClientProvider client={queryClient}>
           <SideNav />
-        </MockedQueryClientProvider>
+        </MockedQueryClientProvider>,
       )
       expect(screen.getByText('Subjects')).toBeInTheDocument()
       expect(screen.getAllByText('Home')).toHaveLength(2)
@@ -140,7 +143,7 @@ describe('SideNav', () => {
       render(
         <MockedQueryClientProvider client={queryClient}>
           <SideNav />
-        </MockedQueryClientProvider>
+        </MockedQueryClientProvider>,
       )
       expect(screen.getByTestId('HelpInfo')).toBeInTheDocument()
     })
@@ -149,7 +152,7 @@ describe('SideNav', () => {
       render(
         <MockedQueryClientProvider client={queryClient}>
           <SideNav />
-        </MockedQueryClientProvider>
+        </MockedQueryClientProvider>,
       )
       expect(screen.getByTestId('HelpFolder')).toBeInTheDocument()
     })
@@ -159,7 +162,7 @@ describe('SideNav', () => {
       render(
         <MockedQueryClientProvider client={queryClient}>
           <SideNav />
-        </MockedQueryClientProvider>
+        </MockedQueryClientProvider>,
       )
       expect(screen.getByTestId('HelpCog')).toBeInTheDocument()
     })
@@ -168,7 +171,7 @@ describe('SideNav', () => {
       render(
         <MockedQueryClientProvider client={queryClient}>
           <SideNav />
-        </MockedQueryClientProvider>
+        </MockedQueryClientProvider>,
       )
       expect(screen.getByTestId('HelpLifePreserver')).toBeInTheDocument()
     })
@@ -177,7 +180,7 @@ describe('SideNav', () => {
       render(
         <MockedQueryClientProvider client={queryClient}>
           <SideNav />
-        </MockedQueryClientProvider>
+        </MockedQueryClientProvider>,
       )
       expect(screen.getByTestId('HelpQuestion')).toBeInTheDocument()
     })
@@ -202,17 +205,17 @@ describe('SideNav', () => {
       render(
         <MockedQueryClientProvider client={queryClient}>
           <SideNav externalTools={externalTools} />
-        </MockedQueryClientProvider>
+        </MockedQueryClientProvider>,
       )
       expect(screen.getByText('Tool 1')).toBeInTheDocument()
       expect(screen.getByText('Tool 2')).toBeInTheDocument()
       expect(screen.getByText('Tool 1').closest('a')).toHaveAttribute(
         'href',
-        'http://tool1.com&toolId=tool-1'
+        'http://tool1.com&toolId=tool-1',
       )
       expect(screen.getByText('Tool 2').closest('a')).toHaveAttribute(
         'href',
-        'http://tool2.com&toolId=tool-2'
+        'http://tool2.com&toolId=tool-2',
       )
     })
 
@@ -236,7 +239,7 @@ describe('SideNav', () => {
       render(
         <MockedQueryClientProvider client={queryClient}>
           <SideNav externalTools={externalTools} />
-        </MockedQueryClientProvider>
+        </MockedQueryClientProvider>,
       )
       expect(screen.getByText(valid_tool_id_derived_from_label)).toBeInTheDocument()
       expect(screen.queryByAltText('img2.png')).not.toBeInTheDocument()
@@ -256,12 +259,12 @@ describe('SideNav', () => {
       render(
         <MockedQueryClientProvider client={queryClient}>
           <SideNav externalTools={externalTools} />
-        </MockedQueryClientProvider>
+        </MockedQueryClientProvider>,
       )
       expect(screen.getByText('Tool 1')).toBeInTheDocument()
       expect(screen.getByText('Tool 1').closest('a')).toHaveAttribute(
         'href',
-        'https://custom.example.com&toolId=tool-1'
+        'https://custom.example.com&toolId=tool-1',
       )
     })
 
@@ -277,12 +280,12 @@ describe('SideNav', () => {
       render(
         <MockedQueryClientProvider client={queryClient}>
           <SideNav externalTools={externalTools} />
-        </MockedQueryClientProvider>
+        </MockedQueryClientProvider>,
       )
       expect(screen.getByText('Tool 2')).toBeInTheDocument()
       expect(screen.getByText('Tool 2').closest('a')).toHaveAttribute(
         'href',
-        'https://global.example.com&toolId=tool-2'
+        'https://global.example.com&toolId=tool-2',
       )
     })
 
@@ -298,7 +301,7 @@ describe('SideNav', () => {
       render(
         <MockedQueryClientProvider client={queryClient}>
           <SideNav externalTools={externalTools} />
-        </MockedQueryClientProvider>
+        </MockedQueryClientProvider>,
       )
       expect(screen.getByText('Tool 3')).toBeInTheDocument()
       expect(screen.getByText('Tool 3').closest('a')).toHaveAttribute('href', '#&toolId=tool-3')
@@ -316,12 +319,12 @@ describe('SideNav', () => {
       render(
         <MockedQueryClientProvider client={queryClient}>
           <SideNav externalTools={externalTools} />
-        </MockedQueryClientProvider>
+        </MockedQueryClientProvider>,
       )
       expect(await screen.findByText('Tool with Null Image')).toBeInTheDocument()
       expect(screen.getByText('Tool with Null Image').closest('a')).toHaveAttribute(
         'href',
-        'http://tool-null-image.com&toolId=tool-with-null-image'
+        'http://tool-null-image.com&toolId=tool-with-null-image',
       )
       const fallbackIcon = screen.getByTestId('IconExternalLinkLine')
       expect(fallbackIcon).toBeInTheDocument()

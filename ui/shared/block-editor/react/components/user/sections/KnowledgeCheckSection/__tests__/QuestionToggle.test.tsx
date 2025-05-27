@@ -56,12 +56,13 @@ describe('QuestionToggle', () => {
     fireEvent.click(getByText('Is this true or false?'))
     expect(getByTestId(`question-toggle-${testSupportedQuestion.id}`)).toHaveAttribute(
       'aria-expanded',
-      'true'
+      'true',
     )
     expect(getByText('Is this true or false?')).toBeInTheDocument()
   })
 
   it('disables interaction for unsupported question types', () => {
+    // @ts-expect-error
     const {getByText} = renderComponent(testUnsupportedQuestion)
     fireEvent.click(getByText('Why should we categorize things?'))
     expect(mockOnSelect).toHaveBeenCalledWith(null)

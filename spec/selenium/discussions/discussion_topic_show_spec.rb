@@ -20,10 +20,8 @@ require_relative "../common"
 require_relative "../helpers/context_modules_common"
 require_relative "../helpers/items_assign_to_tray"
 require_relative "pages/discussion_page"
-require_relative "../../helpers/selective_release_common"
 
 describe "Discussion Topic Show" do
-  include SelectiveReleaseCommon
   include_context "in-process server selenium tests"
 
   context "when Discussions Redesign feature flag is ON" do
@@ -75,7 +73,7 @@ describe "Discussion Topic Show" do
 
       f("button[data-testid='discussion-post-menu-trigger']").click
       fj("span[role='menuitem']:contains('Show Rubric')").click
-      f(".find_rubric_link").click
+      f("div.links.displaying.pull-right a.find_rubric_link").click
 
       expect(fj(".select_rubric_link:contains(#{rubric.title})")).to be_present
       expect(ffj(".rubrics_dialog_rubric:visible").count).to eq 1
@@ -251,6 +249,12 @@ describe "Discussion Topic Show" do
         )
       end
 
+      it "does not show the switch to individual posts button" do
+        user_session(@teacher)
+        get "/courses/#{@course.id}/discussion_topics/#{@checkpointed_discussion.id}"
+        expect(f("body")).not_to contain_css("button#switch-to-individual-posts-link")
+      end
+
       it "lets students see the checkpoints tray" do
         user_session(@student)
         get "/courses/#{@course.id}/discussion_topics/#{@checkpointed_discussion.id}"
@@ -332,7 +336,6 @@ describe "Discussion Topic Show" do
       include ContextModulesCommon
 
       before :once do
-        differentiated_modules_on
         @discussion = @course.discussion_topics.create!(
           title: "Discussion 1",
           discussion_type: "threaded",
@@ -797,6 +800,19 @@ describe "Discussion Topic Show" do
       end
     end
 
+    context "Horizon course" do
+      before do
+        Account.site_admin.enable_feature!(:horizon_course_setting)
+        @course.horizon_course = true
+        @course.save!
+      end
+
+      it "does not navigate to discussions" do
+        get "/courses/#{@course.id}/discussion_topics/#{@topic.id}"
+        expect(element_exists?(".discussion-reply-box")).to be_falsey
+      end
+    end
+
     context "when Discussion Summary feature flag is ON" do
       before do
         Account.default.enable_feature!(:discussion_summary)
@@ -832,133 +848,22 @@ describe "Discussion Topic Show" do
         )
 
         Discussion.click_summarize_button
+        Discussion.click_summary_generate_button
 
         expect(Discussion.summary_text).to include_text("refined_summary_1")
         expect(Discussion.summary_like_button).to be_present
         expect(Discussion.summary_dislike_button).to be_present
         expect(Discussion.summary_generate_button).to be_present
-        expect(Discussion.summary_disable_button).to be_present
-        expect(f("body")).not_to contain_css(Discussion.summarize_button_selector)
+        expect(Discussion.summarize_button).to include_text("Turn Off Summary")
+
+        scroll_into_view Discussion.summary_like_button
 
         Discussion.click_summary_like_button
         Discussion.click_summary_dislike_button
-        Discussion.click_summary_disable_button
+        Discussion.click_summarize_button
 
         expect(f("body")).not_to contain_css(Discussion.summary_text_selector)
         expect(Discussion.summarize_button).to be_present
-      end
-
-      it "generates a new summary if discussion has changed" do
-        expect(@inst_llm).to receive(:chat).and_return(
-          InstLLM::Response::ChatResponse.new(
-            model: "model",
-            message: { role: :assistant, content: "raw_summary_1" },
-            stop_reason: "stop_reason",
-            usage: {
-              input_tokens: 10,
-              output_tokens: 20,
-            }
-          )
-        )
-        expect(@inst_llm).to receive(:chat).and_return(
-          InstLLM::Response::ChatResponse.new(
-            model: "model",
-            message: { role: :assistant, content: "refined_summary_1" },
-            stop_reason: "stop_reason",
-            usage: {
-              input_tokens: 10,
-              output_tokens: 20,
-            }
-          )
-        )
-
-        Discussion.click_summarize_button
-
-        expect(Discussion.summary_text).to include_text("refined_summary_1")
-
-        get "/courses/#{@course.id}/discussion_topics/#{@topic.id}"
-
-        expect(Discussion.summary_text).to include_text("refined_summary_1")
-
-        @topic.discussion_entries.create!(user: @student, message: "reply to topic")
-
-        expect(@inst_llm).to receive(:chat).and_return(
-          InstLLM::Response::ChatResponse.new(
-            model: "model",
-            message: { role: :assistant, content: "raw_summary_2" },
-            stop_reason: "stop_reason",
-            usage: {
-              input_tokens: 10,
-              output_tokens: 20,
-            }
-          )
-        )
-        expect(@inst_llm).to receive(:chat).and_return(
-          InstLLM::Response::ChatResponse.new(
-            model: "model",
-            message: { role: :assistant, content: "refined_summary_2" },
-            stop_reason: "stop_reason",
-            usage: {
-              input_tokens: 10,
-              output_tokens: 20,
-            }
-          )
-        )
-
-        get "/courses/#{@course.id}/discussion_topics/#{@topic.id}"
-
-        expect(Discussion.summary_text).to include_text("refined_summary_2")
-      end
-
-      it "generates a new summary if locale has changed" do
-        expect(@inst_llm).to receive(:chat).and_return(
-          InstLLM::Response::ChatResponse.new(
-            model: "model",
-            message: { role: :assistant, content: "raw_summary_1" },
-            stop_reason: "stop_reason",
-            usage: {
-              input_tokens: 10,
-              output_tokens: 20,
-            }
-          )
-        )
-        expect(@inst_llm).to receive(:chat).and_return(
-          InstLLM::Response::ChatResponse.new(
-            model: "model",
-            message: { role: :assistant, content: "refined_summary_1" },
-            stop_reason: "stop_reason",
-            usage: {
-              input_tokens: 10,
-              output_tokens: 20,
-            }
-          )
-        )
-
-        Discussion.click_summarize_button
-
-        expect(Discussion.summary_text).to include_text("refined_summary_1")
-
-        get "/courses/#{@course.id}/discussion_topics/#{@topic.id}"
-
-        expect(Discussion.summary_text).to include_text("refined_summary_1")
-
-        @teacher.update!(locale: "es")
-
-        expect(@inst_llm).to receive(:chat).and_return(
-          InstLLM::Response::ChatResponse.new(
-            model: "model",
-            message: { role: :assistant, content: "refined_summary_2" },
-            stop_reason: "stop_reason",
-            usage: {
-              input_tokens: 10,
-              output_tokens: 20,
-            }
-          )
-        )
-
-        get "/courses/#{@course.id}/discussion_topics/#{@topic.id}"
-
-        expect(Discussion.summary_text).to include_text("refined_summary_2")
       end
 
       it "allows teacher to generate a summary with user input" do
@@ -986,6 +891,7 @@ describe "Discussion Topic Show" do
         )
 
         Discussion.click_summarize_button
+        Discussion.click_summary_generate_button
 
         expect(Discussion.summary_text).to include_text("refined_summary_1")
 
@@ -1024,6 +930,7 @@ describe "Discussion Topic Show" do
         expect(@inst_llm).to receive(:chat).and_raise(InstLLM::ThrottlingError)
 
         Discussion.click_summarize_button
+        Discussion.click_summary_generate_button
 
         expect(Discussion.summary_error).to include_text("Sorry, the service is currently busy. Please try again later.")
       end

@@ -169,15 +169,14 @@ describe "report helper" do
     end
 
     it "allows aborting" do
-      account_report.workflow_state = "deleted"
-      account_report.save!
-      expect { report.write_report(["header"]) { |csv| csv << "hi" } }.to raise_error(/aborted/)
+      allow(account_report).to receive(:stopped?).and_return(true)
+      expect { report.write_report(["header"]) { |csv| csv << "hi" } }.to raise_error(AccountReports::ReportHelper::ReportStopped)
     end
   end
 
   describe "timezone_strftime" do
     it "formats DateTime" do
-      date_time = DateTime.new(2003, 9, 13)
+      date_time = Time.zone.local(2003, 9, 13)
       formatted = report.timezone_strftime(date_time, "%d-%b")
       expect(formatted).to eq "13-Sep"
     end

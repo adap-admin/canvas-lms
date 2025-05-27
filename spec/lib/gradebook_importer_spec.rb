@@ -92,7 +92,6 @@ describe GradebookImporter do
     it "expects and deals with invalid upload files" do
       user = user_model
       progress = Progress.create!(tag: "test", context: @user)
-      upload = GradebookUpload.new
       upload = GradebookUpload.create!(course: gradebook_course, user: gradebook_user, progress:)
       expect do
         GradebookImporter.create_from(progress, upload, user, invalid_gradebook_contents)
@@ -288,7 +287,7 @@ describe GradebookImporter do
     context "when assignment checkpoints are present" do
       before(:once) do
         @course = course_factory(active_course: true)
-        @course.root_account.enable_feature!(:discussion_checkpoints)
+        @course.account.enable_feature!(:discussion_checkpoints)
         @reply_to_topic, @reply_to_entry = graded_discussion_topic_with_checkpoints(context: @course)
       end
 

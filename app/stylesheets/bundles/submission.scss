@@ -23,7 +23,7 @@
 @import "components/emoji";
 
 body.is-inside-submission-frame {
-  background-color: #f5f5f5;
+  background-color: #F2F4F4;
 }
 
 .ic-Layout-wrapper {
@@ -224,6 +224,26 @@ body.is-inside-submission-frame {
   .turnitin_similarity_score, .turnitin_similarity_score:hover {
     color: $ic-color-dark;
   }
+}
+
+.submission_description {
+  width: 600px;
+  margin: 10px auto;
+  p {
+    button {
+      background: none;
+      color: var(--ic-link-color);
+      border: none;
+      padding: 0;
+      font: inherit;
+      text-decoration: none;
+      &:hover {
+        color: var(--ic-link-color);
+        text-decoration: underline;
+      }
+    }
+  }
+
 }
 
 #add_comment_form {

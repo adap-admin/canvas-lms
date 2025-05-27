@@ -41,6 +41,7 @@ class Types::MutationType < Types::ApplicationObjectType
   field :add_conversation_message, mutation: Mutations::AddConversationMessage
   field :create_conversation, mutation: Mutations::CreateConversation
   field :create_group_in_set, mutation: Mutations::CreateGroupInSet
+  field :create_group_set, mutation: Mutations::CreateGroupSet
   field :hide_assignment_grades, mutation: Mutations::HideAssignmentGrades
   field :hide_assignment_grades_for_sections, mutation: Mutations::HideAssignmentGradesForSections
   field :post_assignment_grades, mutation: Mutations::PostAssignmentGrades
@@ -87,6 +88,7 @@ class Types::MutationType < Types::ApplicationObjectType
   field :mark_submission_comments_read, mutation: Mutations::MarkSubmissionCommentsRead
   field :move_outcome_links, mutation: Mutations::MoveOutcomeLinks
   field :post_draft_submission_comment, mutation: Mutations::PostDraftSubmissionComment
+  field :save_rubric_assessment, mutation: Mutations::SaveRubricAssessment
   field :set_friendly_description, mutation: Mutations::SetFriendlyDescription
   field :set_module_item_completion, mutation: Mutations::SetModuleItemCompletion
   field :set_override_status, mutation: Mutations::SetOverrideStatus
@@ -103,6 +105,8 @@ class Types::MutationType < Types::ApplicationObjectType
   field :update_discussion_sort_order, mutation: Mutations::UpdateDiscussionSortOrder
   field :update_discussion_thread_read_state, mutation: Mutations::UpdateDiscussionThreadReadState
   field :update_discussion_topic, mutation: Mutations::UpdateDiscussionTopic
+  field :update_gradebook_group_filter, mutation: Mutations::UpdateGradebookGroupFilter
+  field :update_discussion_topic_participant, mutation: Mutations::UpdateDiscussionTopicParticipant
   field :update_internal_setting, mutation: Mutations::UpdateInternalSetting
   field :update_learning_outcome, mutation: Mutations::UpdateLearningOutcome
   field :update_learning_outcome_group, mutation: Mutations::UpdateLearningOutcomeGroup
@@ -115,6 +119,7 @@ class Types::MutationType < Types::ApplicationObjectType
   field :update_split_screen_view_deeply_nested_alert, mutation: Mutations::UpdateSplitScreenViewDeeplyNestedAlert
   field :update_submission_grade, mutation: Mutations::UpdateSubmissionGrade
   field :update_submission_grade_status, mutation: Mutations::UpdateSubmissionGradeStatus
+  field :update_submission_sticker, mutation: Mutations::UpdateSubmissionSticker
   field :update_submission_student_entered_score, mutation: Mutations::UpdateSubmissionStudentEnteredScore
   field :update_submissions_read_state, mutation: Mutations::UpdateSubmissionsReadState
   field :update_user_discussions_splitscreen_view, mutation: Mutations::UpdateUserDiscussionsSplitscreenView
@@ -127,5 +132,6 @@ class Types::MutationType < Types::ApplicationObjectType
     IN ACTIVE DEVELOPMENT, USE AT YOUR OWN RISK: Submit homework on an assignment.
   MD
 
+  field :auto_grade_submission, mutation: Mutations::AutoGradeSubmission
   field :update_rubric_archived_state, mutation: Mutations::UpdateRubricArchivedState
 end

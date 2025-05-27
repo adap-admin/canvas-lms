@@ -30,7 +30,8 @@ describe Canvas::Security::PasswordPolicy do
            open: StringIO.new("password1\npassword2\npassword3"),
            root_account: account)
   end
-  let(:cache_key) { "common_passwords_set_#{policy[:common_passwords_attachment_id]}" }
+  let(:redis) { Canvas.redis }
+  let(:cache_key) { "common_passwords:{#{account.global_id}}/#{policy[:common_passwords_attachment_id]}" }
 
   before do
     account.enable_feature!(:password_complexity)
@@ -114,6 +115,16 @@ describe Canvas::Security::PasswordPolicy do
       expect(@pseudonym).to be_valid
     end
 
+    it "does not raise or error when password is shorter than or equal to max_sequence" do
+      pseudonym_with_policy(max_sequence: 4)
+      @pseudonym.password = @pseudonym.password_confirmation = "abc"
+      expect { @pseudonym.valid? }.not_to raise_error
+      expect(@pseudonym.errors[:password]).not_to include("sequence")
+      @pseudonym.password = @pseudonym.password_confirmation = "abcd"
+      expect { @pseudonym.valid? }.not_to raise_error
+      expect(@pseudonym.errors[:password]).not_to include("sequence")
+    end
+
     it "rejects passwords longer than 255 characters" do
       pseudonym_with_policy({})
       @pseudonym.password = @pseudonym.password_confirmation = "a" * 255
@@ -160,6 +171,13 @@ describe Canvas::Security::PasswordPolicy do
       it "is invalid when the password is a member of the provided dictionary" do
         pseudonym_with_policy(policy)
         @pseudonym.password = @pseudonym.password_confirmation = "password1"
+        expect(@pseudonym).not_to be_valid
+      end
+
+      it "is invalid when the password dictionary member check returns nil" do
+        allow(described_class).to receive(:check_password_membership).and_return(nil)
+        pseudonym_with_policy(policy)
+        @pseudonym.password = @pseudonym.password_confirmation = "Password!"
         expect(@pseudonym).not_to be_valid
       end
 
@@ -249,7 +267,6 @@ describe Canvas::Security::PasswordPolicy do
     it "adds passwords to the Redis set" do
       passwords = %w[password1 password2 password3]
       described_class.add_password_membership(cache_key, passwords)
-      redis = Canvas.redis
 
       passwords.each do |password|
         expect(redis.sismember(cache_key, password)).to be_truthy
@@ -275,12 +292,23 @@ describe Canvas::Security::PasswordPolicy do
       new_cache_key = "common_passwords_set_2"
       passwords = %w[password4 password5 password6]
       described_class.add_password_membership(new_cache_key, passwords)
-      redis = Canvas.redis
 
       passwords.each do |password|
         expect(redis.sismember(cache_key, password)).to be_falsey
         expect(redis.sismember(new_cache_key, password)).to be_truthy
       end
+    end
+
+    it "returns nil when an error occurs" do
+      allow(redis).to receive(:srandmember).with(cache_key).and_raise(Redis::BaseConnectionError)
+      expect(described_class.check_password_membership(cache_key, "password1", policy)).to be_nil
+    end
+
+    it "returns nil when a Redis::Distributed::CannotDistribute error occurs" do
+      allow(redis).to receive(:sismember).with(cache_key, "password1").and_raise(
+        Redis::Distributed::CannotDistribute.new(:sismember)
+      )
+      expect(described_class.check_password_membership(cache_key, "password1", policy)).to be_nil
     end
   end
 end

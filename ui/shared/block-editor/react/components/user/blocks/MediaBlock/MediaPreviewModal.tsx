@@ -17,15 +17,15 @@
  */
 
 import React from 'react'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {Modal} from '@instructure/ui-modal'
 import {CloseButton} from '@instructure/ui-buttons'
 import {Heading} from '@instructure/ui-heading'
 import CanvasMediaPlayer from '@canvas/canvas-media-player'
-import StudioMediaPlayer from '@canvas/canvas-studio-player'
+import CanvasStudioPlayer from '@canvas/canvas-studio-player'
 import {type GlobalEnv} from '@canvas/global/env/GlobalEnv'
 
-const I18n = useI18nScope('block-editor/media-block')
+const I18n = createI18nScope('block-editor')
 
 declare const ENV: GlobalEnv & {FEATURES: {consolidated_media_player_iframe: boolean}}
 
@@ -54,7 +54,7 @@ export const MediaPreviewModal = ({
           {ENV.FEATURES?.consolidated_media_player_iframe ? (
             <CanvasMediaPlayer type="video" is_attachment={true} attachment_id={attachmentId} />
           ) : (
-            <StudioMediaPlayer
+            <CanvasStudioPlayer
               media_id=""
               type="video"
               is_attachment={true}

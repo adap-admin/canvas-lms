@@ -18,7 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require_relative "../lti_1_3_spec_helper"
+require_relative "../lti_1_3_tool_configuration_spec_helper"
 require_relative "../lib/token_scopes/last_known_accepted_scopes"
 require_relative "../lib/token_scopes/spec_helper"
 
@@ -44,29 +44,14 @@ describe DeveloperKey do
     )
   end
 
+  let(:public_jwk) do
+    key_hash = CanvasSecurity::RSAKeyPair.new.public_jwk.to_h
+    key_hash["kty"] = key_hash["kty"].to_s
+    key_hash
+  end
+
   describe "#tokens_expire_in" do
     let(:developer_key) { DeveloperKey.new }
-
-    context "when the client is public" do
-      before do
-        allow(developer_key).to receive(:public_client?).and_return(true)
-      end
-
-      it "returns the token TTL from settings" do
-        expect(developer_key.tokens_expire_in).to eq(120.minutes)
-      end
-    end
-
-    context "when the client is a mobile app" do
-      before do
-        allow(developer_key).to receive(:mobile_app?).and_return(true)
-        allow(Canvas::Plugin).to receive(:find).with("sessions").and_return(double(settings: { mobile_timeout: 240 }))
-      end
-
-      it "returns the mobile timeout from session settings" do
-        expect(developer_key.tokens_expire_in).to eq(240.minutes)
-      end
-    end
 
     context "when the client is neither public nor a mobile app" do
       before do
@@ -75,6 +60,57 @@ describe DeveloperKey do
 
       it "returns nil" do
         expect(developer_key.tokens_expire_in).to be_nil
+      end
+    end
+
+    context "when the client is public but not a mobile app" do
+      before do
+        allow(developer_key).to receive_messages(public_client?: true, mobile_app?: false)
+      end
+
+      it "returns the public client token TTL from settings" do
+        expect(developer_key.tokens_expire_in).to eq(120.minutes)
+      end
+    end
+
+    context "when the client is a public mobile app" do
+      before do
+        allow(developer_key).to receive_messages(public_client?: true, mobile_app?: true)
+      end
+
+      context "with plugin configuration available" do
+        it "returns the mobile timeout from session settings" do
+          allow(Canvas::Plugin).to receive(:find).with("sessions").and_return(double(settings: { mobile_timeout: 45 }))
+          expect(developer_key.tokens_expire_in).to eq(45.minutes)
+        end
+      end
+
+      context "without plugin configuration" do
+        it "falls back to the mobile_public_client_token_ttl_days setting" do
+          allow(Canvas::Plugin).to receive(:find).with("sessions").and_return(double(settings: {}))
+          allow(Setting).to receive(:get).with("mobile_public_client_token_ttl_days", "90").and_return("30")
+          expect(developer_key.tokens_expire_in).to eq(30.days)
+        end
+      end
+    end
+
+    context "when the client is a confidential mobile app" do
+      before do
+        allow(developer_key).to receive_messages(public_client?: false, mobile_app?: true)
+      end
+
+      context "with plugin configuration available" do
+        it "returns the mobile timeout from session settings" do
+          allow(Canvas::Plugin).to receive(:find).with("sessions").and_return(double(settings: { mobile_timeout: 60 }))
+          expect(developer_key.tokens_expire_in).to eq(60.minutes)
+        end
+      end
+
+      context "without plugin configuration" do
+        it "returns nil (no expiration)" do
+          allow(Canvas::Plugin).to receive(:find).with("sessions").and_return(double(settings: {}))
+          expect(developer_key.tokens_expire_in).to be_nil
+        end
       end
     end
   end
@@ -138,34 +174,36 @@ describe DeveloperKey do
     let(:service_user) { user_model }
     let(:root_account) { account_model }
 
-    context "when 'site_admin_service_auth' is enabled" do
-      before { Account.site_admin.enable_feature!(:site_admin_service_auth) }
+    context "when the service user association is not set" do
+      let(:key_attributes) { { service_user: nil } }
 
-      context "and the service user association is not set" do
-        let(:key_attributes) { { service_user: nil } }
+      it { is_expected.to be false }
+    end
+
+    context "when the service user association is set" do
+      let(:key_attributes) { { service_user: } }
+
+      context "and the key is a site admin key" do
+        let(:key_attributes) { { service_user:, account: nil } }
 
         it { is_expected.to be false }
+
+        context "and the key allows service user client credentials" do
+          let(:key_attributes) { { service_user:, account: nil, authorized_flows: ["service_user_client_credentials"] } }
+
+          it { is_expected.to be true }
+        end
       end
 
-      context "and the service user association is set" do
-        let(:key_attributes) { { service_user: } }
+      context "and the key is not a site admin key" do
+        let(:key_attributes) { super().merge(account: root_account) }
 
-        context "and the key is a site admin key" do
-          let(:key_attributes) { { service_user:, account: nil } }
+        it { is_expected.to be false }
 
-          it { is_expected.to be false }
+        context "and the key allows service user client credentials" do
+          let(:key_attributes) { super().merge(authorized_flows: ["service_user_client_credentials"]) }
 
-          context "and the key is an internal service" do
-            let(:key_attributes) { { service_user:, account: nil, internal_service: true } }
-
-            it { is_expected.to be true }
-          end
-        end
-
-        context "and the key is not a site admin key" do
-          let(:key_attributes) { super().merge(account: root_account) }
-
-          it { is_expected.to be false }
+          it { is_expected.to be true }
         end
       end
     end
@@ -214,11 +252,6 @@ describe DeveloperKey do
   end
 
   describe "default values for is_lti_key" do
-    let(:public_jwk) do
-      key_hash = CanvasSecurity::RSAKeyPair.new.public_jwk.to_h
-      key_hash["kty"] = key_hash["kty"].to_s
-      key_hash
-    end
     let(:public_jwk_url) { "https://hello.world.com" }
 
     it "throws error if public jwk and public jwk are absent" do
@@ -236,11 +269,18 @@ describe DeveloperKey do
 
   describe "external tool management" do
     specs_require_sharding
-    include_context "lti_1_3_spec_helper"
+
+    def lti_key_for_account(account)
+      account.shard.activate do
+        lti_developer_key_model(account:).tap do |developer_key|
+          lti_tool_configuration_model(developer_key:)
+        end
+      end
+    end
 
     let(:shard_1_account) { @shard1.activate { account_model } }
-    let(:developer_key) { Account.site_admin.shard.activate { dev_key_model_1_3(account: Account.site_admin) } }
-    let(:shard_2_dev_key) { @shard2.activate { dev_key_model_1_3(account: shard_2_account) } }
+    let(:developer_key) { lti_key_for_account(Account.site_admin) }
+    let(:shard_2_dev_key) { lti_key_for_account(shard_2_account) }
     let(:shard_1_tool) do
       tool = nil
       @shard1.activate do
@@ -284,7 +324,7 @@ describe DeveloperKey do
     end
 
     describe "instrumentation" do
-      let(:developer_key) { @shard1.activate { dev_key_model_1_3(account: shard_1_account) } }
+      let(:developer_key) { lti_key_for_account(shard_1_account) }
 
       def enable_external_tools
         developer_key.enable_external_tools!(account)
@@ -295,8 +335,7 @@ describe DeveloperKey do
 
       before do
         developer_key
-        Account.site_admin.shard.activate { tool_configuration }
-        allow(InstStatsd::Statsd).to receive(:increment)
+        allow(InstStatsd::Statsd).to receive(:distributed_increment)
         allow(InstStatsd::Statsd).to receive(:timing)
       end
 
@@ -307,7 +346,7 @@ describe DeveloperKey do
       context "when method succeeds" do
         it "increments success count" do
           enable_external_tools
-          expect(InstStatsd::Statsd).to have_received(:increment).with("developer_key.manage_external_tools.count", any_args)
+          expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("developer_key.manage_external_tools.count", any_args)
         end
 
         it "tracks success timing" do
@@ -330,7 +369,7 @@ describe DeveloperKey do
 
         it "increments error count" do
           manage_external_tools
-          expect(InstStatsd::Statsd).to have_received(:increment).with("developer_key.manage_external_tools.error.count", any_args)
+          expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("developer_key.manage_external_tools.error.count", any_args)
         end
 
         it "tracks success timing" do
@@ -391,7 +430,6 @@ describe DeveloperKey do
     describe "#disable_external_tools!" do
       before do
         developer_key
-        Account.site_admin.shard.activate { tool_configuration }
         shard_1_tool
         shard_2_tool
         disable_external_tools
@@ -439,7 +477,6 @@ describe DeveloperKey do
     describe "#enable_external_tools!" do
       before do
         developer_key
-        Account.site_admin.shard.activate { tool_configuration }
         shard_1_tool.update!(workflow_state: "disabled")
         shard_2_tool.update!(workflow_state: "disabled")
         @shard1.activate do
@@ -484,6 +521,7 @@ describe DeveloperKey do
       end
 
       let(:new_title) { "New Title!" }
+      let(:tool_configuration) { developer_key.tool_configuration }
 
       before do
         developer_key
@@ -514,8 +552,8 @@ describe DeveloperKey do
       end
 
       context "when non-site admin key" do
-        let(:developer_key) { @shard1.activate { dev_key_model_1_3(account: shard_1_account) } }
-        let(:shard_2_dev_key) { @shard2.activate { dev_key_model_1_3(account: shard_2_account) } }
+        let(:developer_key) { lti_key_for_account(shard_1_account) }
+        let(:shard_2_dev_key) { lti_key_for_account(shard_2_account) }
         let(:shard_1_tool) do
           tool = nil
           @shard1.activate do
@@ -548,8 +586,6 @@ describe DeveloperKey do
           tool
         end
 
-        let(:tool_configuration) { developer_key.tool_configuration }
-
         before do
           update_external_tools
           run_jobs
@@ -580,7 +616,7 @@ describe DeveloperKey do
           ContextExternalTool
             .where(id: tool.id)
             .update_all(context_id: Course.last&.id.to_i + 1, context_type: "Course")
-          developer_key.tool_configuration.configuration["oidc_initiation_url"] = "example.com"
+          developer_key.tool_configuration.oidc_initiation_url = "example.com"
           developer_key.tool_configuration.save!
           update_external_tools
           run_jobs
@@ -595,7 +631,7 @@ describe DeveloperKey do
         it "retries the job" do
           expect(subject).to receive(:delay).and_raise(PG::ConnectionBad)
           expect do
-            subject.send(:manage_external_tools_multi_shard, {}, :update_tools_on_active_shard, account_model, Time.now)
+            subject.send(:manage_external_tools_multi_shard, {}, :update_tools_on_active_shard, account_model, Time.zone.now)
           end.to raise_error(Delayed::RetriableError)
         end
       end
@@ -606,7 +642,7 @@ describe DeveloperKey do
         it "retries the job" do
           expect(subject).to receive(:delay).and_raise(PG::ConnectionBad)
           expect do
-            subject.send(:manage_external_tools_multi_shard_in_region, {}, :update_tools_on_active_shard, account_model, Time.now)
+            subject.send(:manage_external_tools_multi_shard_in_region, {}, :update_tools_on_active_shard, account_model, Time.zone.now)
           end.to raise_error(Delayed::RetriableError)
         end
       end
@@ -656,7 +692,6 @@ describe DeveloperKey do
 
   describe "site_admin_lti scope" do
     specs_require_sharding
-    include_context "lti_1_3_spec_helper"
 
     context "when root account and site admin keys exist" do
       subject do
@@ -688,10 +723,7 @@ describe DeveloperKey do
       let(:lti_site_admin_key) do
         Account.site_admin.shard.activate do
           k = DeveloperKey.create!(skip_lti_sync: true)
-          Lti::ToolConfiguration.create!(
-            developer_key: k,
-            settings: settings.merge(public_jwk: tool_config_public_jwk)
-          )
+          lti_tool_configuration_model(developer_key: k)
           k
         end
       end
@@ -903,7 +935,8 @@ describe DeveloperKey do
       end
 
       describe "after_update" do
-        include_context "lti_1_3_spec_helper"
+        let_once(:developer_key) { lti_developer_key_model(account:) }
+        let_once(:tool_configuration) { lti_tool_configuration_model(developer_key:, lti_registration: developer_key.lti_registration) }
 
         let(:user) { user_model }
         let(:developer_key_with_scopes) do
@@ -944,52 +977,6 @@ describe DeveloperKey do
           developer_key_with_scopes.update!(scopes: valid_scopes.push("url:PUT|/api/v1/courses/:course_id/quizzes/:id"))
           expect(developer_key_with_scopes.access_tokens).to match_array [access_token]
         end
-
-        context "updates lti_registration" do
-          let(:lti_registration) do
-            Lti::Registration.create!(developer_key: developer_key_with_scopes,
-                                      name: "test_tool",
-                                      admin_nickname: "the_test_tool",
-                                      vendor: "test",
-                                      account_id: account.id,
-                                      created_by: user,
-                                      updated_by: user)
-          end
-
-          before do
-            developer_key_with_scopes.update!(is_lti_key: true, public_jwk:, skip_lti_sync: true, lti_registration:)
-          end
-
-          it "updates the corresponding lti registration" do
-            developer_key_with_scopes.update!(skip_lti_sync: false, name: "new tool name")
-            expect(developer_key_with_scopes.lti_registration.reload.admin_nickname).to eq "new tool name"
-          end
-
-          it "does not update the corresponding lti registration if skip_lti_sync is true" do
-            developer_key_with_scopes.update!(skip_lti_sync: true, name: "new tool name")
-            expect(developer_key_with_scopes.lti_registration.reload.admin_nickname).to_not eq "new tool name"
-          end
-
-          it "sets the lti_registration.manual_configuration if the dev key has a tool_configuration" do
-            expect(developer_key_with_scopes.lti_registration.manual_configuration)
-              .to eq(developer_key_with_scopes.tool_configuration)
-          end
-
-          context "when the developer key has an Lti::IMS::Registration for a configuration" do
-            let(:developer_key_with_ims_registration) do
-              dk = dev_key_model_1_3
-              # This is necessary because a TC is created automatically; clean this up with INTEROP-8943
-              dk.tool_configuration = nil
-              dk.ims_registration = lti_ims_registration_model
-              dk.save!
-              dk
-            end
-
-            it "does not set lti_registration.manual_configuration" do
-              expect(developer_key_with_ims_registration.lti_registration.manual_configuration).to be_nil
-            end
-          end
-        end
       end
 
       it "raises an error if scopes contain invalid scopes" do
@@ -1010,7 +997,13 @@ describe DeveloperKey do
     end
 
     context "when site admin" do
-      let(:key) { Shard.default.activate { dev_key_model_1_3(account: Account.site_admin) } }
+      let(:key) do
+        Shard.default.activate do
+          lti_developer_key_model(account: Account.site_admin).tap do |key|
+            lti_tool_configuration_model(developer_key: key)
+          end
+        end
+      end
 
       it "creates a binding on save" do
         expect(key.developer_key_account_bindings.find_by(account: Account.site_admin)).to be_present
@@ -1023,21 +1016,16 @@ describe DeveloperKey do
           )
         end
 
-        include_context "lti_1_3_spec_helper"
         specs_require_sharding
 
         context "when developer key is an LTI key" do
           let(:shard_1_account) { @shard1.activate { account_model } }
           let(:shard_2_account) { @shard2.activate { account_model } }
           let(:shard_1_tool) do
-            t = @shard1.activate { key.lti_registration.new_external_tool(shard_1_account) }
-            t.save!
-            t
+            @shard1.activate { key.lti_registration.new_external_tool(shard_1_account) }
           end
           let(:shard_2_tool) do
-            t = @shard2.activate { key.lti_registration.new_external_tool(shard_2_account) }
-            t.save!
-            t
+            @shard2.activate { key.lti_registration.new_external_tool(shard_2_account) }
           end
 
           before do
@@ -1055,9 +1043,7 @@ describe DeveloperKey do
           context "when tools are installed at the course level" do
             let(:shard_1_course) { shard_1_account.shard.activate { course_model(account: shard_1_account) } }
             let(:shard_1_course_tool) do
-              t = @shard1.activate { key.lti_registration.new_external_tool(shard_1_course) }
-              t.save!
-              t
+              @shard1.activate { key.lti_registration.new_external_tool(shard_1_course) }
             end
 
             before do
@@ -1083,18 +1069,17 @@ describe DeveloperKey do
       describe "destroy_external_tools!" do
         subject { ContextExternalTool.active }
 
-        include_context "lti_1_3_spec_helper"
         specs_require_sharding
 
         let(:account) { account_model }
-        let(:developer_key) { dev_key_model_1_3(account:) }
+        let(:developer_key) { lti_developer_key_model(account:) }
+        let(:tool_configuration) { lti_tool_configuration_model(developer_key:) }
         let(:tool) do
-          t = developer_key.lti_registration.new_external_tool(account)
-          t.save!
-          t
+          developer_key.lti_registration.new_external_tool(account)
         end
 
         before do
+          tool_configuration
           tool
         end
 
@@ -1108,9 +1093,7 @@ describe DeveloperKey do
           context "when tools are installed at the course level" do
             let(:course) { course_model(account:) }
             let(:course_tool) do
-              t = developer_key.lti_registration.new_external_tool(course)
-              t.save!
-              t
+              developer_key.lti_registration.new_external_tool(course)
             end
 
             before { course_tool }
@@ -1126,7 +1109,8 @@ describe DeveloperKey do
     end
 
     describe "after_save" do
-      include_context "lti_1_3_spec_helper"
+      let_once(:developer_key) { lti_developer_key_model(account:) }
+      let_once(:tool_configuration) { lti_tool_configuration_model(developer_key:, lti_registration: developer_key.lti_registration) }
 
       before do
         developer_key_not_saved.tool_configuration = tool_configuration.dup
@@ -1174,13 +1158,93 @@ describe DeveloperKey do
     end
   end
 
+  describe "destroy" do
+    subject { developer_key.destroy }
+
+    # Introduces canvas_lti_configuration and internal_lti_configuration
+    include_context "lti_1_3_tool_configuration_spec_helper"
+
+    let_once(:admin) { account_admin_user(account:) }
+    let_once(:account) { account_model }
+    let_once(:developer_key) { developer_key_model(account:) }
+
+    it "marks the key as deleted" do
+      subject
+      expect(developer_key.reload).to be_deleted
+    end
+
+    context "with an LTI developer key" do
+      let_once(:lti_registration) do
+        Lti::CreateRegistrationService.call(
+          account:,
+          created_by: admin,
+          registration_params:,
+          configuration_params: internal_lti_configuration
+        )
+      end
+      let_once(:developer_key) { lti_registration.developer_key }
+      let(:registration_params) do
+        {
+          name: "Test LTI Registration",
+        }
+      end
+
+      it "deletes all associated objects" do
+        subject
+        expect(lti_registration.reload).to be_deleted
+        expect(developer_key.reload.tool_configuration).to be_nil
+        expect(developer_key.developer_key_account_bindings.all?(&:deleted?)).to be true
+      end
+
+      context "and the key has tools associated with it" do
+        let_once(:course) { course_model(account:) }
+        let_once(:course_tool) { lti_registration.new_external_tool(course) }
+        let_once(:account_tool) { lti_registration.new_external_tool(account) }
+
+        it "destroys the tools in a job" do
+          # Force rails to reset/refetch these from the database
+          # to mimic what might actually happen when someone calls destroy on a singular
+          # developer key.
+          developer_key.reset_tool_configuration
+          developer_key.reset_lti_registration
+          developer_key.reset_ims_registration
+          subject
+          run_jobs
+          expect(course_tool.reload).to be_deleted
+          expect(account_tool.reload).to be_deleted
+        end
+      end
+    end
+
+    context "with a dynamic registration developer key" do
+      let_once(:lti_registration) { developer_key.lti_registration }
+      let_once(:ims_registration) { developer_key.ims_registration }
+      let_once(:developer_key) { dev_key_model_dyn_reg(account:) }
+
+      it "marks the lti registration and ims registration as deleted" do
+        subject
+        expect(lti_registration.reload).to be_deleted
+        expect(ims_registration.reload).to be_deleted
+        expect(developer_key.reload).to be_deleted
+      end
+
+      context "and the key has tools associated with it" do
+        let_once(:course) { course_model(account:) }
+        let_once(:course_tool) { lti_registration.new_external_tool(course) }
+        let_once(:account_tool) { lti_registration.new_external_tool(account) }
+
+        it "destroys the tools in a job" do
+          subject
+          run_jobs
+          expect(course_tool.reload).to be_deleted
+          expect(account_tool.reload).to be_deleted
+        end
+      end
+    end
+  end
+
   describe "associations" do
     let(:developer_key_account_binding) { developer_key_saved.developer_key_account_bindings.first }
-
-    it { is_expected.to belong_to(:service_user) }
-
-    it { is_expected.to belong_to(:lti_registration).class_name("Lti::Registration").dependent(:destroy).inverse_of(:developer_key) }
-    it { is_expected.to have_one(:ims_registration).class_name("Lti::IMS::Registration").dependent(:destroy).inverse_of(:developer_key) }
 
     it "destroys developer key account bindings when destroyed" do
       binding_id = developer_key_account_binding.id
@@ -1200,6 +1264,17 @@ describe DeveloperKey do
       expect(developer_key_saved.context_external_tools).to match_array [
         tool
       ]
+    end
+
+    it "destroys an lti ims registration when destroyed" do
+      account = account_model
+      key = dev_key_model_dyn_reg(account:)
+
+      expect(key.destroy).to be true
+      key.reload
+      expect(key).to be_deleted
+      expect(key.lti_registration).to be_deleted
+      expect(key.ims_registration).to be_deleted
     end
   end
 
@@ -1542,6 +1617,83 @@ describe DeveloperKey do
     end
   end
 
+  describe "redirect_uri_matches?" do
+    it "returns true when the URI exactly matches a URI in redirect_uris" do
+      developer_key_not_saved.redirect_uris = ["https://example.com/callback", "http://example.org/cb"]
+      expect(developer_key_not_saved.redirect_uri_matches?("https://example.com/callback")).to be true
+      expect(developer_key_not_saved.redirect_uri_matches?("https://exAmple.com:443/cb")).to be true
+      expect(developer_key_not_saved.redirect_uri_matches?("http://exAmple.org:80/cb")).to be true
+    end
+
+    it "returns false when the URI doesn't match any in redirect_uris" do
+      developer_key_not_saved.redirect_uris = ["https://example.com/callback"]
+      expect(developer_key_not_saved.redirect_uri_matches?("https://example2.com/different")).to be false
+      expect(developer_key_not_saved.redirect_uri_matches?("https://different.com/callback")).to be false
+      expect(developer_key_not_saved.redirect_uri_matches?("http://example.com/callback")).to be false
+    end
+
+    it "returns false when both the redirect uris and the input url is invalid" do
+      developer_key_not_saved.redirect_uris = ["string"]
+      expect(developer_key_not_saved.redirect_uri_matches?("string")).to be false
+    end
+
+    it "returns true when the normalized site matches a URI in redirect_uris" do
+      developer_key_not_saved.redirect_uris = ["https://example.com/callback"]
+      expect(developer_key_not_saved.redirect_uri_matches?("https://example.com/callback?param=value")).to be true
+    end
+
+    it "returns false when the site matches but the scheme doesn't" do
+      developer_key_not_saved.redirect_uris = ["https://example.com/callback"]
+      expect(developer_key_not_saved.redirect_uri_matches?("http://example.com/callback")).to be false
+    end
+
+    it "returns false when the port doesn't match" do
+      developer_key_not_saved.redirect_uris = ["https://example.com:8080/callback"]
+      expect(developer_key_not_saved.redirect_uri_matches?("https://example.com/callback")).to be false
+    end
+
+    it "returns false for invalid URIs" do
+      developer_key_not_saved.redirect_uris = ["https://example.com/callback"]
+      expect(developer_key_not_saved.redirect_uri_matches?("not a uri")).to be false
+    end
+
+    it "returns false when redirect_uri is blank" do
+      developer_key_not_saved.redirect_uris = ["https://example.com/callback"]
+      expect(developer_key_not_saved.redirect_uri_matches?("")).to be false
+      expect(developer_key_not_saved.redirect_uri_matches?(nil)).to be false
+    end
+
+    it "returns true when the site matches including port" do
+      developer_key_not_saved.redirect_uris = ["http://example.com/callback"]
+      expect(developer_key_not_saved.redirect_uri_matches?("http://example.com:80/different_path")).to be true
+    end
+  end
+
+  describe "authorized_flows" do
+    it "defaults to []" do
+      key = DeveloperKey.create!(name: "Test", email: "test@test.com", redirect_uri: "http://test.com", account_id: account.id)
+      expect(key.authorized_flows).to eq([])
+    end
+
+    it "allows only allowed authorized flows" do
+      key = DeveloperKey.new(name: "Test", email: "test@test.com", redirect_uri: "http://test.com", account_id: account.id, authorized_flows: ["service_user_client_credentials"])
+      key.validate
+      expect(key.errors[:authorized_flows]).to be_empty
+    end
+
+    it "rejects invalid authorized flows" do
+      key = DeveloperKey.new(name: "Test", email: "test@test.com", redirect_uri: "http://test.com", account_id: account.id, authorized_flows: ["foo", "service_user_client_credentials"])
+      key.validate
+      expect(key.errors[:authorized_flows].join).to match(/contains invalid values: foo/)
+    end
+
+    it "rejects duplicate authorized flows" do
+      key = DeveloperKey.new(name: "Test", email: "test@test.com", redirect_uri: "http://test.com", account_id: account.id, authorized_flows: ["service_user_client_credentials", "service_user_client_credentials"])
+      key.validate
+      expect(key.errors[:authorized_flows].join).to match(/contains duplicate values/)
+    end
+  end
+
   context "Account scoped keys" do
     shared_examples "authorized_for_account?" do
       it "allows access to its own account" do
@@ -1608,7 +1760,7 @@ describe DeveloperKey do
   end
 
   it "doesn't allow the default key to be deleted" do
-    expect { DeveloperKey.default.destroy }.to raise_error "Please never delete the default developer key"
+    expect { DeveloperKey.default.destroy }.to raise_error "Please don't turn off the default developer key"
     expect { DeveloperKey.default.deactivate }.to raise_error "Please never delete the default developer key"
   end
 

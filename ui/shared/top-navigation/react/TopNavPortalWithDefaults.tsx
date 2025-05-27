@@ -17,29 +17,20 @@
  */
 
 import React from 'react'
-import TopNavPortal from './TopNavPortal'
-import {type ITopNavProps} from '@canvas/top-navigation/react/TopNav'
-import type {ItemChild} from '@instructure/ui-top-nav-bar/types/TopNavBar/props'
+import type {ITopNavProps} from '@canvas/top-navigation/react/TopNav'
 import {IconStudentViewLine} from '@instructure/ui-icons'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import axios from 'axios'
-import type {EnvCommon} from '@canvas/global/env/EnvCommon'
 import {TopNavBar} from '@instructure/ui-top-nav-bar'
 import {createRoot} from 'react-dom/client'
+import {TopNavPortalBase, type WithProps, type Crumb, getMountPoint} from './TopNavPortalBase'
+import type {ItemChild} from '@instructure/ui-top-nav-bar/types/TopNavBar/props'
 
-const I18n = useI18nScope('discussions_v2')
+const I18n = createI18nScope('discussions_v2')
 const STUDENT_VIEW_URL_TEMPLATE = '/courses/{courseId}/student_view?redirect_to_referer=1'
-type Crumb = Exclude<EnvCommon['breadcrumbs'], undefined>[number]
-const getMountPoint = (): HTMLElement | null => document.getElementById('react-instui-topnav')
-interface WithProps extends ITopNavProps {
-  actionItems?: ItemChild[]
-  currentPageName?: string
-  useStudentView?: boolean
-  courseId?: number
-}
-
+type EnvCommon = import('@canvas/global/env/EnvCommon').EnvCommon
 const isStudent = () => {
-  // @ts-ignore
+  // @ts-expect-error
   return window.ENV.current_user_roles?.includes('student') && !window.ENV.PERMISSIONS?.manage
 }
 
@@ -50,28 +41,32 @@ const handleStudentViewClick = (studentViewUrl: string) => {
       window.location.reload()
     })
     .catch(error => {
-      // eslint-disable-next-line no-console
       console.error('Error loading student view', error)
     })
 }
 
 const handleBreadCrumbSetter = (
   {getCrumbs, setCrumbs}: {getCrumbs: () => Crumb[]; setCrumbs: (crumbs: Crumb[]) => void},
-  currentPageName?: string
+  currentPageName?: string,
 ) => {
   const existingCrumbs: Crumb[] = getCrumbs()
   const allCrumbs = currentPageName
-    ? [...existingCrumbs, {name: currentPageName, url: ''}] : existingCrumbs
+    ? [...existingCrumbs, {name: currentPageName, url: ''}]
+    : existingCrumbs
   setCrumbs(allCrumbs)
 }
 
 const addStudentViewActionItem = (courseId?: number) => {
-  // @ts-ignore
-  const cId: number = courseId || window.ENV?.course?.id || window.ENV?.COURSE_ID
+  // @ts-expect-error
+  const cId: number =
+    courseId || window.ENV?.course?.id || window.ENV?.COURSE_ID || window.ENV?.course_id
   if (!cId) {
     return null
   }
   const studentViewUrl = STUDENT_VIEW_URL_TEMPLATE.replace('{courseId}', String(cId))
+  const buttonLabel = window.ENV?.horizon_course
+    ? I18n.t('View as Learner')
+    : I18n.t('View as Student')
   return (
     <TopNavBar.Item
       id="student-view"
@@ -81,7 +76,7 @@ const addStudentViewActionItem = (courseId?: number) => {
       renderIcon={IconStudentViewLine}
       onClick={() => handleStudentViewClick(studentViewUrl)}
     >
-      {I18n.t('View as Student')}
+      {buttonLabel}
     </TopNavBar.Item>
   )
 }
@@ -101,8 +96,8 @@ const addTutorialActionItem = () => {
 }
 
 const tutorialEnabled = () => {
-  // @ts-ignore
   const env = window.ENV
+  // @ts-expect-error
   const new_user_tutorial_on_off = env?.NEW_USER_TUTORIALS_ENABLED_AT_ACCOUNT?.is_enabled
   return env?.NEW_USER_TUTORIALS?.is_enabled && new_user_tutorial_on_off
 }
@@ -141,7 +136,17 @@ const withDefaults = (Component: React.FC<ITopNavProps>) => {
   }
 }
 
-const TopNavPortalWithDefaults = withDefaults(TopNavPortal)
+const TopNavPortalWithDefaults = withDefaults(TopNavPortalBase)
+
+export const addCrumbs = (newCrumbs: Crumb[], oldCrumbs?: Crumb[]): Crumb[] => {
+  const crumbs: Crumb[] = oldCrumbs || window.ENV.breadcrumbs || []
+  newCrumbs.forEach(crumb => {
+    if (!crumbs.some(c => c.name === crumb.name)) {
+      crumbs.push(crumb)
+    }
+  })
+  return crumbs
+}
 export const initializeTopNavPortalWithDefaults = (props?: WithProps): void => {
   const mountPoint = getMountPoint()
   if (mountPoint) {

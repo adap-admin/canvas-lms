@@ -94,16 +94,8 @@ describe CourseProgress do
                              })
     end
 
-    it "only runs item visibility methods once with selective_release_backend enabled" do
-      Account.site_admin.enable_feature!(:selective_release_backend)
-      expect(AssignmentVisibility::AssignmentVisibilityService).to receive(:visible_assignment_ids_in_course_by_user).once.and_call_original
-      progress = CourseProgress.new(@course, @user).to_json
-      expect(progress[:requirement_count]).to eq 5
-    end
-
     it "only runs item visibility methods once" do
-      Account.site_admin.disable_feature!(:selective_release_backend)
-      expect(AssignmentStudentVisibility).to receive(:visible_assignment_ids_in_course_by_user).once.and_call_original
+      expect(AssignmentVisibility::AssignmentVisibilityService).to receive(:visible_assignment_ids_in_course_by_user).once.and_call_original
       progress = CourseProgress.new(@course, @user).to_json
       expect(progress[:requirement_count]).to eq 5
     end
@@ -167,6 +159,20 @@ describe CourseProgress do
                                next_requirement_url: "course_context_modules_item_redirect_url(:course_id => #{@course.id}, :id => #{@tag.id}, :host => HostUrl.context_host(Course.find(#{@course.id}))",
                                completed_at: nil
                              })
+    end
+
+    describe("when the student cannot be evalualated for the course") do
+      it "returns partial progress for student" do
+        allow_any_instance_of(ContextModule).to receive(:evaluate_for).and_return(nil)
+        progress = CourseProgress.new(@course, @user).to_json
+
+        expect(progress).to eq({
+                                 requirement_count: 5,
+                                 requirement_completed_count: 0,
+                                 next_requirement_url: nil,
+                                 completed_at: nil
+                               })
+      end
     end
 
     describe "#current_module" do

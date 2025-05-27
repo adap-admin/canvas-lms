@@ -61,6 +61,7 @@ class UserPreferenceValue < ActiveRecord::Base
   add_user_preference :module_links_default_new_tab
   add_user_preference :viewed_auto_subscribed_account_calendars
   add_user_preference :text_editor_preference
+  add_user_preference :files_ui_version
 
   def self.settings
     @preference_settings ||= {}
@@ -227,6 +228,10 @@ class UserPreferenceValue < ActiveRecord::Base
         end
         preferences[gb_pref_key] = new_gb_prefs
       end
+    end
+
+    def get_latest_preference_setting_by_key(key, sub_key, setting, setting_key)
+      get_preference(key, sub_key)&.dig(setting, setting_key)&.last
     end
   end
 end

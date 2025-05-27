@@ -193,10 +193,8 @@ module Importers
           item.submission_types = "not_graded"
         end
       end
-      if hash[:assignment_group_migration_id]
-        item.assignment_group = context.assignment_groups.active.where(migration_id: hash[:assignment_group_migration_id]).first
-      end
-      item.assignment_group ||= context.assignment_groups.active.where(name: t(:imported_assignments_group, "Imported Assignments")).first_or_create
+
+      item.assignment_group = assignment_group(hash, context)
 
       if item.points_possible.to_i < 0
         item.points_possible = 0
@@ -294,7 +292,7 @@ module Importers
           # the quiz is published because it has an assignment
           q.assignment = item
           q.generate_quiz_data
-          q.published_at = Time.now
+          q.published_at = Time.zone.now
           q.workflow_state = "available"
           q.save
         end
@@ -418,7 +416,7 @@ module Importers
 
     def self.handle_sub_assignments(assignment_hash, parent_item, migration)
       return unless assignment_hash[:sub_assignments].present?
-      return unless parent_item.context.root_account.feature_enabled?(:discussion_checkpoints)
+      return unless parent_item.context.discussion_checkpoints_enabled?
 
       parent_item.has_sub_assignments = true
 
@@ -498,7 +496,7 @@ module Importers
             # In some cases the tool ID in the source context does not match the
             # tool ID from the destination context. This check should help find
             # a matching tool correctly.
-            tool = ContextExternalTool.find_external_tool(hash[:external_tool_url], context, tool_id)
+            tool = Lti::ToolFinder.from_url(hash[:external_tool_url], context, preferred_tool_id: tool_id)
 
             # If no match is found in the first search, fall back on using the tool ID
             # provided in the migration hash if a tool with that ID is present
@@ -507,7 +505,7 @@ module Importers
 
             tag.content_id = tool&.id
           elsif hash[:external_tool_migration_id]
-            tool = context.context_external_tools.where(migration_id: hash[:external_tool_migration_id]).first
+            tool = Lti::ContextToolFinder.only_for(context).where(migration_id: hash[:external_tool_migration_id]).first
             tag.content_id = tool.id if tool
           end
           if hash[:external_tool_data_json]
@@ -634,7 +632,7 @@ module Importers
         item.save_without_broadcasting!
         return item
       end
-      shift_options = CourseContentImporter.shift_date_options(migration.course, migration.date_shift_options)
+      shift_options = CourseContentImporter.shift_date_options_from_migration(migration)
 
       original_due_at = item.due_at
       original_lock_at = item.lock_at
@@ -646,7 +644,7 @@ module Importers
       item.lock_at = CourseContentImporter.shift_date(item.lock_at, shift_options) if item.lock_at
       item.unlock_at = CourseContentImporter.shift_date(item.unlock_at, shift_options) if item.unlock_at
       item.peer_reviews_due_at = CourseContentImporter.shift_date(item.peer_reviews_due_at, shift_options) if item.peer_reviews_due_at
-      item.needs_update_cached_due_dates = item.update_cached_due_dates?
+      item.needs_update_cached_due_dates ||= item.update_cached_due_dates?
 
       if item.invalid? && CourseContentImporter.error_on_dates?(item, ATTRIBUTES_FOR_DATE_SHIFT)
         migration.add_warning(t("Couldn't adjust dates on assignment %{name} (ID %{id})", name: item.title, id: item.id&.to_s))
@@ -665,6 +663,20 @@ module Importers
 
       item.save_without_broadcasting!
       item
+    end
+
+    def self.assignment_group(hash, context)
+      return context.assignment_groups.active.where(migration_id: hash[:assignment_group_migration_id]).first if hash[:assignment_group_migration_id]
+
+      if wiki_page_mastery_path_no_assignment_group?(hash, context)
+        return nil
+      end
+
+      context.assignment_groups.active.where(name: t(:imported_assignments_group, "Imported Assignments")).first_or_create
+    end
+
+    def self.wiki_page_mastery_path_no_assignment_group?(hash, context)
+      hash[:submission_types] == "wiki_page" && Account.site_admin.feature_enabled?(:wiki_page_mastery_path_no_assignment_group) && context.conditional_release?
     end
   end
 end

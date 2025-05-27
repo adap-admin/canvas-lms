@@ -17,8 +17,6 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_relative "../../lti_1_3_spec_helper"
-
 describe Lti::Overlay do
   let(:account) { account_model }
   let(:updated_by) { user_model }
@@ -91,6 +89,19 @@ describe Lti::Overlay do
       end
     end
 
+    context "with a nil attribute" do
+      let(:data) { { domain: nil } }
+
+      it "succeeds" do
+        expect { Lti::Overlay.create!(registration:, account:, updated_by:, data:) }.not_to raise_error
+      end
+
+      it "does not store it" do
+        overlay = Lti::Overlay.create!(registration:, account:, updated_by:, data:)
+        expect(overlay.data).not_to have_key("domain")
+      end
+    end
+
     context "with all valid attributes" do
       it "succeeds" do
         expect { Lti::Overlay.create!(registration:, account:, updated_by:, data:) }.not_to raise_error
@@ -113,7 +124,9 @@ describe Lti::Overlay do
   describe "self.apply_to" do
     subject { Lti::Overlay.apply_to(data, internal_config) }
 
-    let(:internal_config) { tool_configuration.reload.internal_lti_configuration }
+    let(:developer_key) { lti_developer_key_model(account:) }
+    let(:tool_configuration) { lti_tool_configuration_model(developer_key:, lti_registration: developer_key.lti_registration) }
+    let(:internal_config) { tool_configuration.reload.internal_lti_configuration.with_indifferent_access }
     let(:data) do
       {
         title: "Hello world!",
@@ -123,8 +136,6 @@ describe Lti::Overlay do
         oidc_initiation_url: "https://example.com/initiate",
         domain: "example.com",
         privacy_level: "email_only",
-        redirect_uris: ["https://example.com/launch"],
-        public_jwk_url: "https://example.com/jwks",
         disabled_scopes: [TokenScopes::LTI_AGS_SCORE_SCOPE],
         disabled_placements: ["course_navigation"],
         placements: {
@@ -135,9 +146,6 @@ describe Lti::Overlay do
       }
     end
     let(:root_keys) { Schemas::Lti::Overlay::ROOT_KEYS }
-
-    # Introduces tool configuration for overlay testing
-    include_context "lti_1_3_spec_helper"
 
     it "overlays top-level keys properly" do
       expect(subject.slice(root_keys)).to eq(data.slice(root_keys).with_indifferent_access)
@@ -188,44 +196,6 @@ describe Lti::Overlay do
       end
     end
 
-    context "overlaying scopes" do
-      let(:scopes) { [TokenScopes::LTI_AGS_SHOW_PROGRESS_SCOPE, TokenScopes::LTI_ACCOUNT_LOOKUP_SCOPE] }
-      let(:data) do
-        {
-          scopes: [TokenScopes::LTI_UPDATE_PUBLIC_JWK_SCOPE]
-        }
-      end
-
-      it "adds the scopes defined on the overlay" do
-        expect(subject[:scopes]).to include(TokenScopes::LTI_UPDATE_PUBLIC_JWK_SCOPE)
-      end
-
-      context "there are duplicated scopes" do
-        let(:data) do
-          {
-            scopes: [TokenScopes::LTI_UPDATE_PUBLIC_JWK_SCOPE, TokenScopes::LTI_UPDATE_PUBLIC_JWK_SCOPE]
-          }
-        end
-
-        it "doesn't include duplicate scopes" do
-          expect(subject[:scopes]).to eq(subject[:scopes].uniq)
-        end
-      end
-
-      context "there are scopes that are in both the disabled and scopes field" do
-        let(:data) do
-          {
-            scopes: scopes.dup,
-            disabled_scopes: scopes.dup
-          }
-        end
-
-        it "doesn't include those scopes" do
-          expect(subject[:scopes]).not_to include(*data[:scopes])
-        end
-      end
-    end
-
     context "overlaying launch_settings" do
       let(:data) do
         {
@@ -263,6 +233,10 @@ describe Lti::Overlay do
         course = subject[:placements].find { |p| p[:placement] == "course_navigation" }
         expect(course[:default]).to eq("disabled")
         expect(course[:icon_url]).to eq("https://example.com/totally_different")
+      end
+
+      it "doesn't modify the original placement config" do
+        expect { subject }.not_to change { internal_config[:placements].find { |p| p[:placement] == "course_navigation" } }
       end
     end
 

@@ -193,7 +193,6 @@ describe PlannerController do
       end
 
       it "differentiated modules: only shows section specific announcements to students who can view them" do
-        Account.site_admin.enable_feature! :selective_release_backend
         a1 = @course.announcements.create!(message: "for the defaults")
         a1.update!(only_visible_to_overrides: true)
         a1.assignment_overrides.create!(set: @course.default_section)
@@ -231,13 +230,18 @@ describe PlannerController do
       context "ungraded discussions" do
         before do
           @discussion = discussion_topic_model(context: @course, title: "discussion ghost", delayed_post_at: 3.days.ago, lock_at: 3.days.from_now, todo_date: 1.day.from_now)
+          @graded_discussion = discussion_topic_model(context: @course, title: "graded discussion", user: @teacher, todo_date: 1.day.from_now)
+          @graded_discussion.assignment = assignment_model(course: @course)
+          @graded_discussion.save!
           PlannerOverride.create!(plannable_id: @discussion.id, plannable_type: DiscussionTopic, user_id: @student.id)
         end
 
-        it "includes ungraded discussions for students" do
+        it "includes ungraded discussions but not graded ones" do
           get :index, params: { filter: "all_ungraded_todo_items", context_codes: ["course_#{@course.id}"] }
           response_json = json_parse(response.body)
-          expect(response_json.pluck("plannable").pluck("title")).to include @discussion.title
+          titles = response_json.pluck("plannable").pluck("title")
+          expect(titles).to include @discussion.title
+          expect(titles).not_to include @graded_discussion.title
         end
 
         context "delayed post discussion" do
@@ -1058,9 +1062,12 @@ describe PlannerController do
         end
 
         it "shows new activity when a new discussion topic has been created" do
-          # the queries behind this be expensive, there is a 1.minute cache on some of them, we'll do our first get
+          # the queries behind this be expensive, there is a 1.week cache on some of them, we'll do our first get
           # in a time longer ago than the cache length
-          Timecop.freeze(2.minutes.ago) do
+          # (note that caching is based on contexts_cache_key --
+          # Context.last_updated_at(...) with second precision -- which can be
+          # depend on spec timing and be flaky)
+          Timecop.freeze(8.days.ago) do
             get :index, params: { start_date: @start_date, end_date: @end_date }
           end
           discussion_topic_model(context: @course, todo_date: 1.day.from_now)
@@ -1360,7 +1367,7 @@ describe PlannerController do
       end
 
       context "date ranges" do
-        let(:start_date) { Time.parse("2020-01-1T00:00:00") }
+        let(:start_date) { Time.zone.parse("2020-01-1T00:00:00") }
         let(:end_date) { Time.parse("2020-01-1T23:59:59Z") }
 
         it "only returns items between (inclusive) the specified dates" do
@@ -1375,8 +1382,11 @@ describe PlannerController do
       end
 
       context "discussion checkpoints FF" do
+        let(:root_account) { Account.default }
+
         before :once do
-          @course.root_account.enable_feature!(:discussion_checkpoints)
+          root_account.enable_feature!(:discussion_checkpoints)
+          course_with_student(active_all: true, account: root_account)
           @reply_to_topic, @reply_to_entry = graded_discussion_topic_with_checkpoints(context: @course)
         end
 
@@ -1384,7 +1394,7 @@ describe PlannerController do
           user_session(@student)
         end
 
-        it "includes discussion checkpoints when FF enabled" do
+        it "includes discussion checkpoints from accounts with FF enabled" do
           get :index
           response_json = json_parse(response.body)
           items = response_json.map { |i| [i["plannable_type"], i["plannable"]["id"]] }
@@ -1392,8 +1402,8 @@ describe PlannerController do
           expect(items).to include ["sub_assignment", @reply_to_entry.id]
         end
 
-        it "does not include discussion checkpoints when FF disabled" do
-          @course.root_account.disable_feature!(:discussion_checkpoints)
+        it "does not include discussion checkpoints from accounts with FF disabled" do
+          root_account.disable_feature!(:discussion_checkpoints)
           get :index
           response_json = json_parse(response.body)
           items = response_json.map { |i| [i["plannable_type"], i["plannable"]["id"]] }
@@ -1411,6 +1421,54 @@ describe PlannerController do
           expect(res["plannable"]["read_state"]).to eq "unread"
           expect(res["plannable_type"]).to eq "sub_assignment"
           expect(res["new_activity"]).to be true
+        end
+
+        context "sub-accounts" do
+          before :once do
+            @sub_account1 = root_account.sub_accounts.create!(name: "sub-account")
+            @sub_account2 = root_account.sub_accounts.create!(name: "sub-account")
+            root_account.allow_feature!(:discussion_checkpoints)
+            @sub_account1.enable_feature!(:discussion_checkpoints)
+            course_with_student(active_all: true, account: @sub_account1, user: @student)
+            @reply_to_topic1, @reply_to_entry1 = graded_discussion_topic_with_checkpoints(context: @course)
+            @assignment_sub1 = @course.assignments.create!(title: "Assignment in sub_account1", due_at: 1.week.from_now)
+
+            @sub_account2.enable_feature!(:discussion_checkpoints)
+            course_with_student(active_all: true, account: @sub_account2, user: @student)
+            @reply_to_topic2, @reply_to_entry2 = graded_discussion_topic_with_checkpoints(context: @course)
+            @assignment_sub2 = @course.assignments.create!(title: "Assignment in sub_account2", due_at: 2.weeks.from_now)
+          end
+
+          it "includes sub_assignments only from sub-accounts with FF enabled" do
+            # sub_account1 has FF disabled, sub_account2 has FF enabled
+            @sub_account1.disable_feature!(:discussion_checkpoints)
+            get :index
+            response_json = json_parse(response.body)
+            items = response_json.map { |i| [i["plannable_type"], i["plannable"]["id"]] }
+            expect(items.size).to eq 4
+            expect(items).not_to include ["sub_assignment", @reply_to_topic1.id]
+            expect(items).not_to include ["sub_assignment", @reply_to_entry1.id]
+            expect(items).to include ["sub_assignment", @reply_to_topic2.id]
+            expect(items).to include ["sub_assignment", @reply_to_entry2.id]
+            # regular assignments are always included regardless of the FF setting
+            expect(items).to include ["assignment", @assignment_sub1.id]
+            expect(items).to include ["assignment", @assignment_sub2.id]
+
+            # sub_account1 has FF enabled, sub_account2 has FF disabled
+            @sub_account1.enable_feature!(:discussion_checkpoints)
+            @sub_account2.disable_feature!(:discussion_checkpoints)
+            get :index
+            response_json = json_parse(response.body)
+            items = response_json.map { |i| [i["plannable_type"], i["plannable"]["id"]] }
+            expect(items.size).to eq 4
+            expect(items).to include ["sub_assignment", @reply_to_topic1.id]
+            expect(items).to include ["sub_assignment", @reply_to_entry1.id]
+            expect(items).not_to include ["sub_assignment", @reply_to_topic2.id]
+            expect(items).not_to include ["sub_assignment", @reply_to_entry2.id]
+            # regular assignments are always included regardless of the FF setting
+            expect(items).to include ["assignment", @assignment_sub1.id]
+            expect(items).to include ["assignment", @assignment_sub2.id]
+          end
         end
       end
     end

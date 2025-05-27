@@ -23,6 +23,10 @@ class OutcomesController < ApplicationController
   include Api::V1::Role
 
   before_action :require_context, except: [:build_outcomes]
+
+  include HorizonMode
+  before_action :load_canvas_career, only: [:index, :show]
+
   add_crumb(proc { t "#crumbs.outcomes", "Outcomes" }, except: [:destroy, :build_outcomes]) { |c| c.send :named_context_url, c.instance_variable_get(:@context), :context_outcomes_path }
   before_action { |c| c.active_tab = "outcomes" }
   before_action :rce_js_env, only: [:show, :index]
@@ -143,7 +147,7 @@ class OutcomesController < ApplicationController
     @outcomes = if @user == @context
                   LearningOutcome.has_result_for(@user).active
                 else
-                  @context.available_outcomes
+                  @context.is_a?(Course) ? @context.associated_outcomes : @context.available_outcomes
                 end
     @results = LearningOutcomeResult.active.for_user(@user).for_outcome_ids(@outcomes.map(&:id)).order(assessed_at: :asc) # .for_context_codes(@codes)
 
@@ -162,7 +166,7 @@ class OutcomesController < ApplicationController
 
     @account_contexts = @context.associated_accounts
     @current_outcomes = @context.linked_learning_outcomes
-    @outcomes = Canvas::ICU.collate_by(@context.available_outcomes, &:title)
+    @outcomes = Canvas::ICU.collate_by(@context.is_a?(Course) ? @context.associated_outcomes : @context.available_outcomes, &:title)
     if params[:unused]
       @outcomes -= @current_outcomes
     end
@@ -226,7 +230,7 @@ class OutcomesController < ApplicationController
     if @result.artifact.is_a?(Submission)
       @submission = @result.artifact
       redirect_to named_context_url(@result.context, :context_assignment_submission_url, @submission.assignment_id, @submission.user_id)
-    elsif @result.artifact.is_a?(RubricAssessment) && @result.artifact.artifact && @result.artifact.artifact.is_a?(Submission)
+    elsif @result.artifact.is_a?(RubricAssessment) && @result.artifact.artifact.is_a?(Submission)
       @submission = @result.artifact.artifact
       redirect_to named_context_url(@result.context, :context_assignment_submission_url, @submission.assignment_id, @submission.user_id)
     elsif @result.artifact.is_a?(Quizzes::QuizSubmission) && @result.associated_asset

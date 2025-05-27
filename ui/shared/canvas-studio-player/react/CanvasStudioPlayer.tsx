@@ -15,15 +15,22 @@
  * You should have received a copy of the GNU Affero General Public License along
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-import React, {useCallback, useEffect, useRef, useState} from 'react'
-import {useScope as useI18nScope} from '@canvas/i18n'
-import {LoadingIndicator, sizeMediaPlayer} from '@instructure/canvas-media'
-import {StudioPlayer} from '@instructure/studio-player'
+import React, {CSSProperties, useCallback, useEffect, useRef, useState} from 'react'
+import {useScope as createI18nScope} from '@canvas/i18n'
+import {
+  captionLanguageForLocale,
+  LoadingIndicator,
+  sizeMediaPlayer,
+} from '@instructure/canvas-media'
+import {CaptionMetaData, StudioPlayer} from '@instructure/studio-player'
 import {Alert} from '@instructure/ui-alerts'
 import {Flex} from '@instructure/ui-flex'
 import {Spinner} from '@instructure/ui-spinner'
+import getCookie from '@instructure/get-cookie'
 import {asJson, defaultFetchOptions} from '@canvas/util/xhr'
 import {type GlobalEnv} from '@canvas/global/env/GlobalEnv.d'
+import {type MediaSource} from 'api'
+import {type MediaInfo, MediaTrack} from './types'
 
 declare const ENV: GlobalEnv & {
   locale?: string
@@ -31,12 +38,48 @@ declare const ENV: GlobalEnv & {
   SHOW_MEDIA_SOURCE_BE_PATIENT_MSG_AFTER_ATTEMPTS?: number
 }
 
-const I18n = useI18nScope('CanvasMediaPlayer')
+const I18n = createI18nScope('CanvasMediaPlayer')
 
-const byBitrate = (a: {bitrate: string}, b: {bitrate: string}) =>
-  parseInt(a.bitrate, 10) - parseInt(b.bitrate, 10)
+const byBitrate = (a: {bitrate: number}, b: {bitrate: number}) => a.bitrate - b.bitrate
 
 const liveRegion = () => window?.top?.document.getElementById('flash_screenreader_holder')
+
+type CanvasMediaSource = MediaSource & {
+  bitrate: string
+}
+
+const convertMediaSource = (source: CanvasMediaSource) => {
+  return {
+    src: source.url,
+    type: source.content_type as any,
+    width: parseInt(source.width) ?? undefined,
+    height: parseInt(source.height) ?? undefined,
+    bitrate: parseInt(source.bitrate) ?? undefined,
+  }
+}
+
+const convertAndSortMediaSources = (sources: CanvasMediaSource[] | string) => {
+  if (!Array.isArray(sources)) {
+    return sources
+  }
+  return sources.map(convertMediaSource).sort(byBitrate)
+}
+
+const convertMediaTracksIfNeeded = (
+  tracks: MediaTrack[] | CaptionMetaData[],
+): CaptionMetaData[] => {
+  return tracks.map(track => {
+    if ('src' in track) return track
+    return {
+      locale: track.locale,
+      language: captionLanguageForLocale(track.locale),
+      inherited: track.inherited,
+      label: captionLanguageForLocale(track.locale),
+      src: track.url,
+      type: 'srt',
+    }
+  })
+}
 
 // It can take a while for notorious to process a newly uploaded video
 // Each attempt to get the media_sources is 2**n seconds after the previous attempt
@@ -44,18 +87,27 @@ const liveRegion = () => window?.top?.document.getElementById('flash_screenreade
 const DEFAULT_MAX_RETRY_ATTEMPTS = 11
 const DEFAULT_SHOW_BE_PATIENT_MSG_AFTER_ATTEMPTS = 3
 
-interface CanvasStudioPlayerProps {
-  media_id: string
-  // TODO: we've asked studio to export definitions for PlayerSrc and CaptionMetaData
-  media_sources?: any[]
-  media_tracks?: any[]
+interface BaseCanvasStudioPlayerProps {
+  // TODO: we've asked studio to export definitions for PlayerSrc
+  media_sources?: string | any[]
+  media_tracks?: MediaTrack[] | CaptionMetaData[]
   type?: 'audio' | 'video'
   MAX_RETRY_ATTEMPTS?: number
   SHOW_BE_PATIENT_MSG_AFTER_ATTEMPTS?: number
   aria_label?: string
   is_attachment?: boolean
-  attachment_id?: string
+  show_loader?: boolean
+  maxHeight?: null | string
+  mediaFetchCallback?: (mediaInfo: MediaInfo) => void
+  explicitSize?: {width: number | string; height: number | string}
+  hideUploadCaptions?: boolean
+  isInverseVariant?: boolean
 }
+
+type CanvasStudioPropsWithMediaIdOrAttachmentId =
+  | (BaseCanvasStudioPlayerProps & {media_id: string; attachment_id?: undefined})
+  | (BaseCanvasStudioPlayerProps & {media_id?: undefined; attachment_id: string})
+  | (BaseCanvasStudioPlayerProps & {media_id: string; attachment_id: string})
 
 // The main difference between CanvasMediaPlayer and CanvasStudioPlayer
 // besides the media package we use
@@ -63,32 +115,30 @@ interface CanvasStudioPlayerProps {
 export default function CanvasStudioPlayer({
   media_id,
   media_sources = [],
-  media_tracks,
+  media_tracks: media_captions,
   type = 'video',
   MAX_RETRY_ATTEMPTS = DEFAULT_MAX_RETRY_ATTEMPTS,
   SHOW_BE_PATIENT_MSG_AFTER_ATTEMPTS = DEFAULT_SHOW_BE_PATIENT_MSG_AFTER_ATTEMPTS,
   aria_label = '',
   is_attachment = false,
   attachment_id = '',
-}: CanvasStudioPlayerProps) {
-  const sorted_sources = Array.isArray(media_sources)
-    ? media_sources.sort(byBitrate)
-    : media_sources
-  const tracks = Array.isArray(media_tracks)
-    ? media_tracks.map(t => ({
-        locale: t.language,
-        language: t.label,
-        inherited: t.inherited,
-        label: t.label,
-        src: t.src,
-      }))
+  show_loader = false,
+  explicitSize,
+  hideUploadCaptions = false,
+  isInverseVariant = false,
+}: CanvasStudioPropsWithMediaIdOrAttachmentId) {
+  const [mediaId, setMediaId] = useState(media_id)
+  const captions: CaptionMetaData[] | undefined = Array.isArray(media_captions)
+    ? convertMediaTracksIfNeeded(media_captions)
     : undefined
-  const [mediaSources, setMediaSources] = useState(sorted_sources)
-  const [mediaTracks] = useState(tracks)
+  const [mediaSources, setMediaSources] = useState(() => convertAndSortMediaSources(media_sources))
+  const [mediaCaptions, setMediaCaptions] = useState<CaptionMetaData[] | undefined>(captions)
   const [retryAttempt, setRetryAttempt] = useState(0)
   const [mediaObjNetworkErr, setMediaObjNetworkErr] = useState(null)
-  const [containerWidth, setContainerWidth] = useState(0)
-  const [containerHeight, setContainerHeight] = useState(0)
+  const [containerWidth, setContainerWidth] = useState(explicitSize?.width || 0)
+  const [containerHeight, setContainerHeight] = useState(explicitSize?.height || 0)
+  const [isLoading, setIsLoading] = useState(true)
+  const [canAddCaptions, setCanAddCaptions] = useState(false)
   // the ability to set these makes testing easier
   // hint: set these values in a conditional breakpoint in
   // media_player_iframe_content.js where the CanvasStudioPlayer is rendered
@@ -97,23 +147,24 @@ export default function CanvasStudioPlayer({
   const retryAttempts = ENV.MAX_MEDIA_SOURCE_RETRY_ATTEMPTS || MAX_RETRY_ATTEMPTS
   const showBePatientMsgAfterAttempts =
     ENV.SHOW_MEDIA_SOURCE_BE_PATIENT_MSG_AFTER_ATTEMPTS || SHOW_BE_PATIENT_MSG_AFTER_ATTEMPTS
-
   const containerRef = useRef<any>(null)
 
-  const boundingBox = useCallback(() => {
-    // @ts-expect-error
-    const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement
-    const isEmbedded =
+  function isEmbedded(): boolean {
+    return (
       window.frameElement?.tagName === 'IFRAME' ||
       window.location !== window?.top?.location ||
       !containerRef.current
-    if (isFullscreen || isEmbedded) {
+    )
+  }
+
+  const boundingBox = useCallback(() => {
+    const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement
+    if (isFullscreen || isEmbedded()) {
       return {
         width: window.innerWidth,
         height: window.innerHeight,
       }
     }
-
     // media_player_iframe_content.js includes a 16px top/bottom margin
     return {
       width: containerRef?.current?.clientWidth,
@@ -123,46 +174,92 @@ export default function CanvasStudioPlayer({
 
   const handlePlayerSize = useCallback(
     (_event: any) => {
-      const player = window.document.body.querySelector('video')
-      const {width, height} = sizeMediaPlayer(player, type, boundingBox())
-      setContainerHeight(height)
-      setContainerWidth(width)
+      if (explicitSize) {
+        return
+      }
+
+      const updateContainerSize = (width: number, height: number) => {
+        setContainerWidth(width)
+        setContainerHeight(height)
+      }
+
+      const boundingBoxDimensions = boundingBox()
+
+      if (isEmbedded()) {
+        updateContainerSize(boundingBoxDimensions.width, boundingBoxDimensions.height)
+      } else if (Array.isArray(mediaSources)) {
+        const player = {
+          videoHeight: mediaSources[0]?.height || 0,
+          videoWidth: mediaSources[0]?.width || 0,
+        }
+        const {width, height} = sizeMediaPlayer(player, type, boundingBoxDimensions)
+        updateContainerSize(width, height)
+      }
     },
-    [type, boundingBox]
+    [type, boundingBox, mediaSources, explicitSize],
   )
 
   const fetchSources = useCallback(
     async function () {
       const url = attachment_id
         ? `/media_attachments/${attachment_id}/info`
-        : `/media_objects/${media_id}/info`
+        : `/media_objects/${mediaId}/info`
       let resp
       try {
+        setIsLoading(true)
         setMediaObjNetworkErr(null)
         resp = await asJson(fetch(url, defaultFetchOptions()))
       } catch (e: any) {
-        // eslint-disable-next-line no-console
         console.warn(`Error getting ${url}`, e.message)
         setMediaObjNetworkErr(e)
+        setIsLoading(false)
         return
       }
+      if (resp?.media_id && !mediaId) {
+        setMediaId(resp.media_id)
+      }
+      if (typeof resp?.can_add_captions === 'boolean') {
+        setCanAddCaptions(resp.can_add_captions)
+      }
       if (resp?.media_sources?.length) {
-        setMediaSources(resp.media_sources.sort(byBitrate))
+        setMediaSources(convertAndSortMediaSources(resp.media_sources))
+        if (!media_captions) {
+          setMediaCaptions(convertMediaTracksIfNeeded(resp.media_tracks))
+        }
+        setIsLoading(false)
       } else {
         setRetryAttempt(retryAttempt + 1)
       }
     },
-    [attachment_id, media_id, retryAttempt]
+    [attachment_id, mediaId, retryAttempt, media_captions],
   )
+
+  const deleteCaption = useCallback(async (caption: CaptionMetaData) => {
+    const confirmed = confirm(I18n.t('Are you sure you want to delete this track?'))
+    if (!confirmed) {
+      return
+    }
+
+    await fetch(caption.src, {
+      method: 'DELETE',
+      headers: {
+        'X-CSRF-Token': getCookie('_csrf_token'),
+      },
+    })
+    setMediaCaptions(prev => prev?.filter(c => c.src !== caption.src))
+  }, [])
 
   useEffect(() => {
     // if we just uploaded the media, notorious may still be processing it
     // and we don't have its media_sources yet
     let retryTimerId = 0
     if (!mediaSources.length && retryAttempt <= retryAttempts) {
-      retryTimerId = window.setTimeout(() => {
-        fetchSources()
-      }, 2 ** retryAttempt * 1000)
+      retryTimerId = window.setTimeout(
+        () => {
+          fetchSources()
+        },
+        2 ** retryAttempt * 1000,
+      )
     }
 
     return () => {
@@ -181,7 +278,6 @@ export default function CanvasStudioPlayer({
   }, [handlePlayerSize])
 
   const includeFullscreen =
-    // @ts-expect-error
     (document.fullscreenEnabled || document.webkitFullscreenEnabled) && type === 'video'
 
   function renderNoPlayer() {
@@ -208,7 +304,7 @@ export default function CanvasStudioPlayer({
         // @ts-expect-error
         <Alert key="giveupalert" variant="info" margin="x-small" liveRegion={liveRegion}>
           {I18n.t(
-            'Giving up on retrieving media sources. This issue will probably resolve itself eventually.'
+            'Giving up on retrieving media sources. This issue will probably resolve itself eventually.',
           )}
         </Alert>
       )
@@ -257,43 +353,78 @@ export default function CanvasStudioPlayer({
   }
 
   useEffect(() => {
-    if (mediaSources.length) {
-      const player = {
-        videoHeight: mediaSources[0].height,
-        videoWidth: mediaSources[0].width,
-      }
-      const {width, height} = sizeMediaPlayer(player, type, boundingBox())
-      setContainerWidth(width)
-      setContainerHeight(height)
+    handlePlayerSize({})
+  }, [mediaSources, type, boundingBox, handlePlayerSize])
+
+  function renderLoader() {
+    if (retryAttempt >= showBePatientMsgAfterAttempts) {
+      setIsLoading(false)
+      return
     }
-  }, [mediaSources, type, boundingBox])
+    return <Spinner renderTitle={I18n.t('Loading media')} size="small" margin="small" />
+  }
+
+  const containerStyle: Partial<CSSProperties> = {
+    height: containerHeight,
+    width: containerWidth,
+    // in a modal of variant "inverse" some menu labels get white text
+    // which makes them invisible
+    color: isInverseVariant ? '#000000' : undefined,
+  }
+
+  const hideCaptionButtons = hideUploadCaptions || !canAddCaptions
 
   return (
-    <div
-      style={{height: containerHeight, width: containerWidth}}
-      ref={containerRef}
-      data-tracks={JSON.stringify(mediaTracks)}
-    >
-      {mediaSources.length ? (
-        <StudioPlayer
-          src={mediaSources}
-          captions={mediaTracks}
-          hideFullScreen={!includeFullscreen}
-          title={getAriaLabel()}
-        />
+    <>
+      {isLoading && show_loader ? (
+        renderLoader()
       ) : (
-        renderNoPlayer()
+        <div
+          data-testid={'canvas-studio-player'}
+          style={containerStyle}
+          ref={containerRef}
+          data-captions={JSON.stringify(mediaCaptions)}
+        >
+          {mediaSources.length ? (
+            <StudioPlayer
+              src={mediaSources}
+              captions={mediaCaptions}
+              hideFullScreen={!includeFullscreen}
+              title={getAriaLabel()}
+              onCaptionsDelete={hideCaptionButtons ? undefined : deleteCaption}
+              kebabMenuElements={
+                hideCaptionButtons
+                  ? undefined
+                  : [
+                      {
+                        id: 'upload-cc',
+                        text: I18n.t('Upload Captions'),
+                        icon: 'transcript',
+                        onClick: () => {
+                          const src = Array.isArray(mediaSources)
+                            ? mediaSources[0].src
+                            : mediaSources
+                          import('../../mediaelement/UploadMediaTrackForm').then(
+                            ({default: UploadMediaTrackForm}) => {
+                              new UploadMediaTrackForm(
+                                mediaId,
+                                src,
+                                attachment_id as any,
+                                false,
+                                99000,
+                              )
+                            },
+                          )
+                        },
+                      },
+                    ]
+              }
+            />
+          ) : (
+            renderNoPlayer()
+          )}
+        </div>
       )}
-    </div>
+    </>
   )
-}
-
-export function formatTracksForMediaPlayer(tracks: any[]) {
-  return tracks.map((track: {id: any; media_object_id: any; locale: any; kind: any}) => ({
-    id: track.id,
-    src: `/media_objects/${track.media_object_id}/media_tracks/${track.id}`,
-    label: track.locale,
-    type: track.kind,
-    language: track.locale,
-  }))
 }

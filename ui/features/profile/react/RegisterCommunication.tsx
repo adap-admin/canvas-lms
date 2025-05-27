@@ -20,7 +20,7 @@ import React, {useState} from 'react'
 import {useForm, Controller} from 'react-hook-form'
 import * as z from 'zod'
 import {zodResolver} from '@hookform/resolvers/zod'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {Heading} from '@instructure/ui-heading'
 import {Modal} from '@instructure/ui-modal'
 import {Button, CloseButton} from '@instructure/ui-buttons'
@@ -29,9 +29,9 @@ import {TextInput} from '@instructure/ui-text-input'
 import {Checkbox} from '@instructure/ui-checkbox'
 import {Flex} from '@instructure/ui-flex'
 import {Text} from '@instructure/ui-text'
-import {focusFiled, getFormErrorMessage} from '@canvas/forms/react/react-hook-form/utils'
+import {getFormErrorMessage} from '@canvas/forms/react/react-hook-form/utils'
 
-const I18n = useI18nScope('profile')
+const I18n = createI18nScope('profile')
 
 export enum Tab {
   EMAIL = 'email',
@@ -88,7 +88,7 @@ const RegisterCommunication = ({
   onSubmit,
 }: RegisterCommunicationProps) => {
   const [selectedTab, setSelectedTab] = useState<Tab>(
-    availableTabs.includes(initiallySelectedTab) ? initiallySelectedTab : availableTabs[0]
+    availableTabs.includes(initiallySelectedTab) ? initiallySelectedTab : availableTabs[0],
   )
   const currentConfig = configByTab[selectedTab]
   const {
@@ -96,6 +96,7 @@ const RegisterCommunication = ({
     control,
     reset,
     handleSubmit,
+    setFocus,
   } = useForm({
     defaultValues,
     resolver: zodResolver(currentConfig.validationSchema),
@@ -114,10 +115,10 @@ const RegisterCommunication = ({
       await onSubmit?.(
         address,
         selectedTab,
-        selectedTab === Tab.EMAIL ? values.enableEmailLogin : undefined
+        selectedTab === Tab.EMAIL ? values.enableEmailLogin : undefined,
       )
     } catch {
-      focusFiled(control, selectedTab)
+      setFocus(selectedTab)
     }
   }
 
@@ -174,7 +175,7 @@ const RegisterCommunication = ({
                         {...field}
                         label={I18n.t(
                           'labels.enable_login_for_email',
-                          'I want to log in to Canvas using this email address'
+                          'I want to log in to Canvas using this email address',
                         )}
                         value="medium"
                       />
@@ -210,7 +211,7 @@ const RegisterCommunication = ({
                 />
                 <Text>
                   {I18n.t(
-                    'SMS is only used for Multi-Factor Authentication (if enabled for your account).'
+                    'SMS is only used for Multi-Factor Authentication (if enabled for your account).',
                   )}
                 </Text>
               </Flex>

@@ -54,6 +54,40 @@ describe "courses/settings" do
     end
   end
 
+  describe "crosslisted sections" do
+    it "does not display anything related to crosslisted sections" do
+      @course.course_sections.create!
+      view_context(@course, @user)
+      assign(:current_user, @user)
+      render
+      expect(response).not_to have_tag("div.course_section_crosslist")
+    end
+
+    it "display info on crosslisted sections" do
+      @subaccount.courses.create!
+      @course.course_sections.create!
+      @course.course_sections.last.update(nonxlist_course_id: @subaccount.courses.last.id)
+      view_context(@course, @user)
+      assign(:current_user, @user)
+      render
+
+      expect(response).to have_tag("div.course_section_crosslist")
+      expect(response).to include "Section Crosslisted From:"
+    end
+
+    it "display read only info for section in original course" do
+      @subaccount.courses.create!
+      @course.course_sections.create!
+      CourseSection.last.update(course_id: @subaccount.courses.last.id, nonxlist_course_id: @course.id)
+      view_context(@course, @user)
+      assign(:current_user, @user)
+      render
+
+      expect(response).to have_tag("div.course_section_crosslist")
+      expect(response).to include "Section Crosslisted To:"
+    end
+  end
+
   describe "sis_source_id edit box" do
     it "does not show to teacher" do
       view_context(@course, @user)
@@ -95,8 +129,9 @@ describe "courses/settings" do
       assign(:current_user, admin)
       assign(:publishing_enabled, true)
       render
-      expect(response.body).to match(/<a href="#tab-grade-publishing" id="tab-grade-publishing-link">/)
-      expect(response.body).to match(/<div id="tab-grade-publishing">/)
+      html = Nokogiri::HTML(response.body)
+      expect(html.at_css("#tab-grade-publishing-mount")["id"]).to eq("tab-grade-publishing-mount")
+      expect(html.at_css("div#tab-grade-publishing-mount")).not_to be_nil
     end
 
     it "does not show grade export when disabled" do
@@ -105,8 +140,9 @@ describe "courses/settings" do
       assign(:current_user, admin)
       assign(:publishing_enabled, false)
       render
-      expect(response.body).not_to match(/<a href="#tab-grade-publishing" id="tab-grade-publishing-link">/)
-      expect(response.body).not_to match(/<div id="tab-grade-publishing">/)
+      html = Nokogiri::HTML(response.body)
+      expect(html.at_css("#tab-grade-publishing")).to be_nil
+      expect(html.at_css("#tab-grade-publishing-mount")).to be_nil
     end
   end
 

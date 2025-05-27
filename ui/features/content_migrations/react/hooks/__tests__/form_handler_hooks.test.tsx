@@ -22,6 +22,10 @@ import type {onSubmitMigrationFormCallback, QuestionBankSettings} from '../../co
 
 describe('from handler hooks', () => {
   const mockOnSubmit: onSubmitMigrationFormCallback = jest.fn()
+  const createMockFileInputRef = () =>
+    ({
+      current: {focus: jest.fn()},
+    }) as unknown as React.RefObject<HTMLInputElement>
 
   afterEach(() => {
     jest.clearAllMocks()
@@ -34,27 +38,10 @@ describe('from handler hooks', () => {
       expect(result.current.file).toBeNull()
       expect(result.current.fileError).toBe(false)
       expect(result.current.questionBankSettings).toBeNull()
-      expect(result.current.questionBankError).toBe(false)
     })
 
     describe('question banks', () => {
-      it('should have true questionBankError on empty question bank name', () => {
-        const {result} = renderHook(() => useSubmitHandlerWithQuestionBank(mockOnSubmit))
-        const settings: QuestionBankSettings = {question_bank_name: ''}
-
-        act(() => {
-          result.current.setQuestionBankSettings(settings)
-        })
-
-        act(() => {
-          result.current.handleSubmit({settings: {}})
-        })
-
-        expect(result.current.questionBankSettings).toEqual(settings)
-        expect(result.current.questionBankError).toBe(true)
-      })
-
-      it('should have false questionBankError on not empty question bank name', () => {
+      it('should use question bank name', () => {
         const {result} = renderHook(() => useSubmitHandlerWithQuestionBank(mockOnSubmit))
         const settings: QuestionBankSettings = {question_bank_name: 'Valid Name'}
 
@@ -67,7 +54,6 @@ describe('from handler hooks', () => {
         })
 
         expect(result.current.questionBankSettings?.question_bank_name).toBe('Valid Name')
-        expect(result.current.questionBankError).toBe(false)
       })
     })
 
@@ -98,6 +84,38 @@ describe('from handler hooks', () => {
 
         expect(result.current.fileError).toBe(false)
       })
+
+      it('should move focus to fileInputRef on missing file submission', () => {
+        const fileInputRef = createMockFileInputRef()
+        const {result} = renderHook(() =>
+          useSubmitHandlerWithQuestionBank(mockOnSubmit, fileInputRef),
+        )
+        const formData = {settings: {}}
+
+        act(() => {
+          result.current.handleSubmit(formData)
+        })
+
+        expect(fileInputRef.current?.focus).toHaveBeenCalled()
+      })
+
+      it('should not move focus to fileInputRef on existing file submission', () => {
+        const fileInputRef = createMockFileInputRef()
+        const {result} = renderHook(() =>
+          useSubmitHandlerWithQuestionBank(mockOnSubmit, fileInputRef),
+        )
+        const formData = {settings: {}}
+
+        act(() => {
+          result.current.setFile(new File(['content'], 'test.txt'))
+        })
+
+        act(() => {
+          result.current.handleSubmit(formData)
+        })
+
+        expect(fileInputRef.current?.focus).not.toHaveBeenCalled()
+      })
     })
 
     describe('formData', () => {
@@ -116,7 +134,6 @@ describe('from handler hooks', () => {
         })
 
         expect(result.current.fileError).toBe(false)
-        expect(result.current.questionBankError).toBe(false)
         expect(mockOnSubmit).toHaveBeenCalledWith(
           {
             settings: {question_bank_name: 'Valid Name', extra_info: 'extra'},
@@ -126,7 +143,7 @@ describe('from handler hooks', () => {
               no_redirect: true,
             },
           },
-          file
+          file,
         )
       })
 
@@ -145,7 +162,6 @@ describe('from handler hooks', () => {
         })
 
         expect(result.current.fileError).toBe(true)
-        expect(result.current.questionBankError).toBe(true)
         expect(mockOnSubmit).not.toHaveBeenCalled()
       })
     })
@@ -186,6 +202,38 @@ describe('from handler hooks', () => {
 
         expect(result.current.fileError).toBe(false)
       })
+
+      it('should move focus to fileInputRef on missing file submission', () => {
+        const fileInputRef = createMockFileInputRef()
+        const {result} = renderHook(() =>
+          useSubmitHandlerWithQuestionBank(mockOnSubmit, fileInputRef),
+        )
+        const formData = {settings: {}}
+
+        act(() => {
+          result.current.handleSubmit(formData)
+        })
+
+        expect(fileInputRef.current?.focus).toHaveBeenCalled()
+      })
+
+      it('should not move focus to fileInputRef on existing file submission', () => {
+        const fileInputRef = createMockFileInputRef()
+        const {result} = renderHook(() =>
+          useSubmitHandlerWithQuestionBank(mockOnSubmit, fileInputRef),
+        )
+        const formData = {settings: {}}
+
+        act(() => {
+          result.current.setFile(new File(['content'], 'test.txt'))
+        })
+
+        act(() => {
+          result.current.handleSubmit(formData)
+        })
+
+        expect(fileInputRef.current?.focus).not.toHaveBeenCalled()
+      })
     })
 
     describe('formData', () => {
@@ -212,7 +260,7 @@ describe('from handler hooks', () => {
               no_redirect: true,
             },
           },
-          file
+          file,
         )
       })
 

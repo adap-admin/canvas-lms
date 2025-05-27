@@ -17,9 +17,9 @@
  */
 
 import {type LtiPrivacyLevel, LtiPrivacyLevels} from './LtiPrivacyLevel'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 
-const I18n = useI18nScope('external_tools')
+const I18n = createI18nScope('external_tools')
 
 export const LtiPrivacyLevelTranslations: Record<LtiPrivacyLevel, string> = {
   [LtiPrivacyLevels.Public]: I18n.t('All user data'),
@@ -30,10 +30,10 @@ export const LtiPrivacyLevelTranslations: Record<LtiPrivacyLevel, string> = {
 
 const LtiPrivacyLevelDescriptions: Record<LtiPrivacyLevel, string> = {
   [LtiPrivacyLevels.Public]: I18n.t(
-    'Includes: Canvas ID, Name, First Name, Last Name, SIS ID, Avatar, and Email Address'
+    'Includes: Canvas ID, Name, First Name, Last Name, SIS ID, Avatar, and Email Address',
   ),
   [LtiPrivacyLevels.NameOnly]: I18n.t(
-    'Includes: Canvas ID, Name, First Name, Last Name, SIS ID, and Avatar'
+    'Includes: Canvas ID, Name, First Name, Last Name, SIS ID, and Avatar',
   ),
   [LtiPrivacyLevels.EmailOnly]: I18n.t('Includes: Canvas ID and Email Address'),
   [LtiPrivacyLevels.Anonymous]: I18n.t('Includes: Canvas ID'),

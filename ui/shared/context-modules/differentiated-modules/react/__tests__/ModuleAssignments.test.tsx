@@ -62,7 +62,7 @@ describe('ModuleAssignments', () => {
     render(
       <MockedQueryProvider>
         <ModuleAssignments {...props} {...overrides} />
-      </MockedQueryProvider>
+      </MockedQueryProvider>,
     )
 
   it('displays sections and students as options', async () => {
@@ -112,7 +112,9 @@ describe('ModuleAssignments', () => {
 
   it('shows SIS ID on existing options', async () => {
     const {findByTestId, findByText, getByTitle} = renderComponent({
-      defaultValues: [{id: 'student-2', group: 'Students', overrideId: '1234', value: 'Peter'}],
+      defaultValues: [
+        {id: 'student-2', sisID: 'peter002', group: 'Students', overrideId: '1234', value: 'Peter'},
+      ],
     })
     const moduleAssignments = await findByTestId('assignee_selector')
     act(() => moduleAssignments.click())
@@ -140,6 +142,6 @@ describe('ModuleAssignments', () => {
     const {getAllByTestId, getByText} = renderComponent({defaultValues})
     expect(getByText(defaultValues[0].value)).toBeInTheDocument()
     expect(getByText(defaultValues[1].value)).toBeInTheDocument()
-    expect(getAllByTestId('assignee_selector_selected_option').length).toBe(defaultValues.length)
+    expect(getAllByTestId('assignee_selector_selected_option')).toHaveLength(defaultValues.length)
   })
 })

@@ -31,17 +31,30 @@ const mockUser = {
 
 const mockAccountId = '123'
 
+const futureDate = () => {
+  const date = new Date()
+  date.setDate(date.getDate() + 1)
+  return date
+}
+
+const pastDate = () => {
+  const date = new Date()
+  date.setDate(date.getDate() - 1)
+  return date
+}
+
 describe('CreateDSRModal', () => {
   const afterSave = jest.fn()
 
   const renderComponent = (props = {}) =>
     render(
       <CreateDSRModal accountId={mockAccountId} user={mockUser} afterSave={afterSave} {...props}>
+        {}
         <button title="Create DSR Request for John Doe" />
-      </CreateDSRModal>
+      </CreateDSRModal>,
     )
 
-  it('uses the user\'s name in the default report name', () => {
+  it("uses the user's name in the default report name", () => {
     axios.get.mockResolvedValueOnce({status: 204, data: {}})
 
     const {getByTitle, getByTestId} = renderComponent()
@@ -95,7 +108,7 @@ describe('CreateDSRModal', () => {
 
     await waitFor(() => {
       expect(
-        getByText((_, element) => element.textContent === 'Latest DSR: In progress')
+        getByText((_, element) => element.textContent === 'Latest DSR: In progress'),
       ).toBeInTheDocument()
       expect(queryByText('Download:')).not.toBeInTheDocument()
     })
@@ -115,9 +128,66 @@ describe('CreateDSRModal', () => {
 
     await waitFor(() => {
       expect(
-        getByText((_, element) => element.textContent === 'Latest DSR: Failed')
+        getByText((_, element) => element.textContent === 'Latest DSR: Failed'),
       ).toBeInTheDocument()
       expect(queryByText('Download:')).not.toBeInTheDocument()
+    })
+  })
+
+  it('blocks creation when the previous report is still running', async () => {
+    axios.get.mockResolvedValueOnce({
+      status: 200,
+      data: {
+        progress_status: 'running',
+      },
+    })
+
+    const {getByTitle, getByTestId, getByText} = renderComponent()
+    fireEvent.click(getByTitle('Create DSR Request for John Doe'))
+
+    await waitFor(() => {
+      const submitButton = getByTestId('submit-button')
+      expect(submitButton).toBeDisabled()
+      const tooltip = getByText('A request is already in progress')
+      expect(tooltip).toBeInTheDocument()
+    })
+  })
+
+  it('blocks creation when the previous report has not expired', async () => {
+    axios.get.mockResolvedValueOnce({
+      status: 200,
+      data: {
+        progress_status: 'completed',
+        expires_at: futureDate().toISOString(),
+      },
+    })
+
+    const {getByTitle, getByTestId, getByText} = renderComponent()
+    fireEvent.click(getByTitle('Create DSR Request for John Doe'))
+
+    await waitFor(() => {
+      const submitButton = getByTestId('submit-button')
+      expect(submitButton).toBeDisabled()
+      const tooltip = getByText(/The previous request expires/)
+      expect(tooltip).toBeInTheDocument()
+    })
+  })
+
+  it('does not block creation if the previous report is not running nor expired', async () => {
+    axios.get.mockResolvedValueOnce({
+      status: 200,
+      data: {
+        progress_status: 'completed',
+        expires_at: pastDate().toISOString(),
+      },
+    })
+
+    const {getByTitle, getByTestId} = renderComponent()
+    fireEvent.click(getByTitle('Create DSR Request for John Doe'))
+
+    await waitFor(() => {
+      const submitButton = getByTestId('submit-button')
+      expect(submitButton).toBeEnabled()
     })
   })
 })

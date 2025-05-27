@@ -22,7 +22,7 @@ describe PageView do
   before do
     # sets both @user and @course (@user is a teacher in @course)
     course_model(account: Account.default.manually_created_courses_account)
-    @page_view = PageView.new { |p| p.assign_attributes({ created_at: Time.now, url: "http://test.one/", session_id: "phony", context: @course, controller: "courses", action: "show", user_request: true, render_time: 0.01, user_agent: "None", account_id: Account.default.id, request_id: "abcde", interaction_seconds: 5, user: @user }) }
+    @page_view = PageView.new { |p| p.assign_attributes({ created_at: Time.zone.now, url: "http://test.one/", session_id: "phony", context: @course, controller: "courses", action: "show", user_request: true, render_time: 0.01, user_agent: "None", account_id: Account.default.id, request_id: "abcde", interaction_seconds: 5, user: @user }) }
   end
 
   describe "sharding" do
@@ -74,7 +74,7 @@ describe PageView do
       it "does nothing if not enabled" do
         Setting.set("page_views_store_active_user_counts", "false")
         expect(@page_view.store).to be_truthy
-        expect(Canvas.redis.smembers(PageView.user_count_bucket_for_time(Time.now))).to eq []
+        expect(Canvas.redis.smembers(PageView.user_count_bucket_for_time(Time.zone.now))).to eq []
       end
 
       it "stores if enabled" do
@@ -344,6 +344,37 @@ describe PageView do
           end
         end
       end
+    end
+  end
+
+  describe ".app_name" do
+    specs_require_sharding
+
+    before do
+      @attributes = valid_page_view_attributes.stringify_keys
+    end
+
+    it "when developer_key_id obtained return app name" do
+      @attributes["developer_key_id"] = "10000000000001"
+      pv = PageView.from_attributes(@attributes)
+      allow(DeveloperKey).to receive(:find_cached).and_return(double(name: "Test App"))
+
+      expect(pv.app_name).to eq "Test App"
+    end
+
+    it "when developer_key_id not obtained return nil" do
+      @attributes["developer_key_id"] = nil
+      pv = PageView.from_attributes(@attributes)
+
+      expect(pv.app_name).to be_nil
+    end
+
+    it "when non-existing developer_key_id obtained return the key id" do
+      @attributes["developer_key_id"] = "99000000000001"
+      pv = PageView.from_attributes(@attributes)
+      allow(DeveloperKey).to receive(:find_cached).and_raise(ActiveRecord::RecordNotFound)
+
+      expect(pv.app_name).to eq "99000000000001"
     end
   end
 

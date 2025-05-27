@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-nocheck
 /*
  * Copyright (C) 2021 - present Instructure, Inc.
@@ -26,7 +27,9 @@ import {
   MARK_SUBMISSION_COMMENT_READ,
 } from '@canvas/assignments/graphql/student/Mutations'
 import {mockAssignmentAndSubmission, mockQuery} from '@canvas/assignments/graphql/studentMocks'
-import {MockedProvider} from '@apollo/react-testing'
+import {ApolloClient, gql} from '@apollo/client'
+import {createCache} from '@canvas/apollo-v3'
+import {MockedProvider} from '@apollo/client/testing'
 import {act, fireEvent, render, waitFor} from '@testing-library/react'
 import React from 'react'
 import StudentViewContext from '../Context'
@@ -148,18 +151,19 @@ const getDefaultPropsWithReviewerSubmission = async (workflowState: string) => {
 
 describe('CommentsTrayBody', () => {
   beforeAll(() => {
+    ENV.current_user = {id: '1'}
     $('body').append('<div role="alert" id=flash_screenreader_holder />')
   })
 
   beforeEach(() => {
-    // @ts-ignore
+    // @ts-expect-error
     window.ENV = {...originalENV, RICH_CONTENT_APP_HOST: '', JWT: '123'}
     mockedSetOnFailure = jest.fn().mockResolvedValue({})
     mockedSetOnSuccess = jest.fn().mockResolvedValue({})
   })
 
   afterEach(() => {
-    // @ts-ignore
+    // @ts-expect-error
     window.ENV = originalENV
   })
 
@@ -181,7 +185,7 @@ describe('CommentsTrayBody', () => {
       const mockMutation = jest.fn().mockResolvedValue({data: {markSubmissionCommentsRead: {}}})
       const mocks = [
         await mockSubmissionCommentQuery(overrides),
-        await mockMarkSubmissionCommentsRead({newData: mockMutation}),
+        await mockMarkSubmissionCommentsRead({newData: () => mockMutation()}),
       ]
 
       render(mockContext(<CommentsTrayBody {...props} />, mocks))
@@ -195,7 +199,7 @@ describe('CommentsTrayBody', () => {
       jest.useFakeTimers()
 
       const props = await mockAssignmentAndSubmission({
-        // @ts-ignore
+        // @ts-expect-error
         Submission: {unreadCommentCount: 1},
       })
       const overrides = {
@@ -207,18 +211,18 @@ describe('CommentsTrayBody', () => {
       const mockMutation = jest.fn().mockResolvedValue({data: {markSubmissionCommentsRead: {}}})
       const mocks = [
         await mockSubmissionCommentQuery(overrides),
-        await mockMarkSubmissionCommentsRead({newData: mockMutation}),
+        await mockMarkSubmissionCommentsRead({newData: () => mockMutation()}),
       ]
 
       render(
         mockContext(
-          // @ts-ignore
+          // @ts-expect-error
           <StudentViewContext.Provider value={{isObserver: true, allowChangesToSubmission: false}}>
             <MockedProvider mocks={mocks}>
               <CommentsTrayBody {...props} />
             </MockedProvider>
-          </StudentViewContext.Provider>
-        )
+          </StudentViewContext.Provider>,
+        ),
       )
 
       await act(() => jest.runAllTimers())
@@ -250,7 +254,7 @@ describe('CommentsTrayBody', () => {
       await act(() => jest.runAllTimers())
 
       expect(mockedSetOnFailure).toHaveBeenCalledWith(
-        'There was a problem marking submission comments as read'
+        'There was a problem marking submission comments as read',
       )
     })
 
@@ -284,7 +288,7 @@ describe('CommentsTrayBody', () => {
       await act(() => jest.runAllTimers())
 
       expect(mockedSetOnSuccess).toHaveBeenCalledWith(
-        'All submission comments have been marked as read'
+        'All submission comments have been marked as read',
       )
     })
   })
@@ -309,15 +313,15 @@ describe('CommentsTrayBody', () => {
         },
       ])
       const {queryByText} = render(
-        // @ts-ignore
+        // @ts-expect-error
         <StudentViewContext.Provider value={{allowChangesToSubmission: true, isObserver: false}}>
           <MockedProvider mocks={mocks}>
             <CommentsTrayBody {...props} />
           </MockedProvider>
-        </StudentViewContext.Provider>
+        </StudentViewContext.Provider>,
       )
       await waitFor(() =>
-        expect(queryByText('All comments are sent to the whole group.')).toBeInTheDocument()
+        expect(queryByText('All comments are sent to the whole group.')).toBeInTheDocument(),
       )
     })
 
@@ -339,15 +343,15 @@ describe('CommentsTrayBody', () => {
         },
       ])
       const {queryByText} = render(
-        // @ts-ignore
+        // @ts-expect-error
         <StudentViewContext.Provider value={{allowChangesToSubmission: true, isObserver: false}}>
           <MockedProvider mocks={mocks}>
             <CommentsTrayBody {...props} />
           </MockedProvider>
-        </StudentViewContext.Provider>
+        </StudentViewContext.Provider>,
       )
       await waitFor(() =>
-        expect(queryByText('All comments are sent to the whole group.')).not.toBeInTheDocument()
+        expect(queryByText('All comments are sent to the whole group.')).not.toBeInTheDocument(),
       )
     })
 
@@ -355,15 +359,15 @@ describe('CommentsTrayBody', () => {
       const mocks = [await mockSubmissionCommentQuery()]
       const props = await mockAssignmentAndSubmission()
       const {queryByText} = render(
-        // @ts-ignore
+        // @ts-expect-error
         <StudentViewContext.Provider value={{allowChangesToSubmission: true, isObserver: false}}>
           <MockedProvider mocks={mocks}>
             <CommentsTrayBody {...props} />
           </MockedProvider>
-        </StudentViewContext.Provider>
+        </StudentViewContext.Provider>,
       )
       await waitFor(() =>
-        expect(queryByText('All comments are sent to the whole group.')).not.toBeInTheDocument()
+        expect(queryByText('All comments are sent to the whole group.')).not.toBeInTheDocument(),
       )
     })
   })
@@ -378,7 +382,7 @@ describe('CommentsTrayBody', () => {
       const {queryByText} = render(mockContext(<CommentContent {...commentProps} />))
 
       expect(
-        queryByText("This is where you can leave a comment and view your instructor's feedback.")
+        queryByText("This is where you can leave a comment and view your instructor's feedback."),
       ).toBeNull()
     })
 
@@ -389,13 +393,13 @@ describe('CommentsTrayBody', () => {
       const {getByText, getByTestId} = render(
         <MockedProvider mocks={mocks}>
           <CommentsTrayBody {...props} />
-        </MockedProvider>
+        </MockedProvider>,
       )
 
       await waitFor(() =>
         expect(
-          getByText('You may not see all comments for this assignment until grades are posted.')
-        ).toBeInTheDocument()
+          getByText('You may not see all comments for this assignment until grades are posted.'),
+        ).toBeInTheDocument(),
       )
       expect(getByTestId('svg-placeholder-container')).toBeInTheDocument()
     })
@@ -412,13 +416,13 @@ describe('CommentsTrayBody', () => {
       const {getByText, queryByTestId} = render(
         <MockedProvider mocks={mocks}>
           <CommentsTrayBody {...props} />
-        </MockedProvider>
+        </MockedProvider>,
       )
 
       await waitFor(() =>
         expect(
-          getByText('You may not see all comments for this assignment until grades are posted.')
-        ).toBeInTheDocument()
+          getByText('You may not see all comments for this assignment until grades are posted.'),
+        ).toBeInTheDocument(),
       )
       expect(queryByTestId('svg-placeholder-container')).toBeNull()
     })
@@ -426,12 +430,12 @@ describe('CommentsTrayBody', () => {
 
   it('renders error alert when data returned from mutation fails', async () => {
     const mocks = await Promise.all([mockSubmissionCommentQuery(), mockCreateSubmissionComment()])
-    // @ts-ignore
+    // @ts-expect-error
     mocks[1].error = new Error('aw shucks')
     const props = await mockAssignmentAndSubmission()
 
     const {getByPlaceholderText, getByText} = render(
-      mockContext(<CommentsTrayBody {...props} />, mocks)
+      mockContext(<CommentsTrayBody {...props} />, mocks),
     )
     const textArea = await waitFor(() => getByPlaceholderText('Submit a Comment'))
     fireEvent.change(textArea, {target: {value: 'lion'}})
@@ -439,7 +443,7 @@ describe('CommentsTrayBody', () => {
     fireEvent.click(getByText('Send Comment'))
 
     await waitFor(() =>
-      expect(mockedSetOnFailure).toHaveBeenCalledWith('Error sending submission comment')
+      expect(mockedSetOnFailure).toHaveBeenCalledWith('Error sending submission comment'),
     )
   })
 
@@ -449,7 +453,7 @@ describe('CommentsTrayBody', () => {
     const {getByTestId} = render(
       <MockedProvider mocks={mocks}>
         <CommentsTrayBody {...props} />
-      </MockedProvider>
+      </MockedProvider>,
     )
     await waitFor(() => expect(getByTestId('comments-container')).toBeInTheDocument())
   })
@@ -469,7 +473,7 @@ describe('CommentsTrayBody', () => {
     const {getByText} = render(
       <MockedProvider mocks={mocks}>
         <CommentsTrayBody {...props} />
-      </MockedProvider>
+      </MockedProvider>,
     )
 
     expect(await waitFor(() => getByText('Load Previous Comments'))).toBeInTheDocument()
@@ -490,7 +494,7 @@ describe('CommentsTrayBody', () => {
     const {queryByText} = render(
       <MockedProvider mocks={mocks}>
         <CommentsTrayBody {...props} />
-      </MockedProvider>
+      </MockedProvider>,
     )
 
     expect(queryByText('Load Previous Comments')).not.toBeInTheDocument()
@@ -506,22 +510,23 @@ describe('CommentsTrayBody', () => {
     }
 
     const cursorMock = await mockSubmissionCommentQuery(overrides, {cursor: 'Hello World'})
+    const cursorMockWrapper = jest.fn().mockReturnValue(cursorMock.result)
 
     const mocks = [
       await mockSubmissionCommentQuery(overrides),
-      {...cursorMock, result: undefined, newData: jest.fn().mockResolvedValue(cursorMock.result)},
+      {...cursorMock, result: cursorMockWrapper},
     ]
     const props = await mockAssignmentAndSubmission()
 
     const {getByText} = render(
       <MockedProvider mocks={mocks}>
         <CommentsTrayBody {...props} />
-      </MockedProvider>
+      </MockedProvider>,
     )
 
     const loadMoreButton = await waitFor(() => getByText('Load Previous Comments'))
     fireEvent.click(loadMoreButton)
-    expect(mocks[1].newData).toHaveBeenCalled()
+    await waitFor(() => expect(cursorMockWrapper).toHaveBeenCalled())
   })
 
   it('renders CommentTextArea when the student can make changes to the submission', async () => {
@@ -530,7 +535,7 @@ describe('CommentsTrayBody', () => {
     const {getByLabelText} = render(
       <MockedProvider mocks={mocks}>
         <CommentsTrayBody {...props} />
-      </MockedProvider>
+      </MockedProvider>,
     )
     expect(await waitFor(() => getByLabelText('Comment input box'))).toBeInTheDocument()
   })
@@ -539,12 +544,12 @@ describe('CommentsTrayBody', () => {
     const mocks = [await mockSubmissionCommentQuery()]
     const props = await mockAssignmentAndSubmission()
     const {queryByLabelText} = render(
-      // @ts-ignore
+      // @ts-expect-error
       <StudentViewContext.Provider value={{allowChangesToSubmission: false}}>
         <MockedProvider mocks={mocks}>
           <CommentsTrayBody {...props} />
         </MockedProvider>
-      </StudentViewContext.Provider>
+      </StudentViewContext.Provider>,
     )
     expect(await waitFor(() => queryByLabelText('Comment input box'))).not.toBeInTheDocument()
   })
@@ -553,12 +558,12 @@ describe('CommentsTrayBody', () => {
     const mocks = [await mockSubmissionCommentQuery()]
     const props = await mockAssignmentAndSubmission()
     const {queryByLabelText} = render(
-      // @ts-ignore
+      // @ts-expect-error
       <StudentViewContext.Provider value={{allowChangesToSubmission: false, isObserver: true}}>
         <MockedProvider mocks={mocks}>
           <CommentsTrayBody {...props} />
         </MockedProvider>
-      </StudentViewContext.Provider>
+      </StudentViewContext.Provider>,
     )
     expect(await waitFor(() => queryByLabelText('Comment input box'))).not.toBeInTheDocument()
   })
@@ -567,7 +572,7 @@ describe('CommentsTrayBody', () => {
     const mocks = await Promise.all([mockSubmissionCommentQuery(), mockCreateSubmissionComment()])
     const props = await mockAssignmentAndSubmission()
     const {getByPlaceholderText, getByText} = render(
-      mockContext(<CommentsTrayBody {...props} />, mocks)
+      mockContext(<CommentsTrayBody {...props} />, mocks),
     )
     const textArea = await waitFor(() => getByPlaceholderText('Submit a Comment'))
     fireEvent.change(textArea, {target: {value: 'lion'}})
@@ -579,7 +584,7 @@ describe('CommentsTrayBody', () => {
     const mocks = await Promise.all([mockSubmissionCommentQuery(), mockCreateSubmissionComment()])
     const props = await mockAssignmentAndSubmission()
     const {findByPlaceholderText, getByText, findByText} = render(
-      mockContext(<CommentsTrayBody {...props} />, mocks)
+      mockContext(<CommentsTrayBody {...props} />, mocks),
     )
     const textArea = await findByPlaceholderText('Submit a Comment')
     fireEvent.change(textArea, {target: {value: 'lion'}})
@@ -592,7 +597,7 @@ describe('CommentsTrayBody', () => {
     const mocks = await Promise.all([mockSubmissionCommentQuery(), mockCreateSubmissionComment()])
     const props = await mockAssignmentAndSubmission()
     const {getByPlaceholderText, getByText, findByText} = render(
-      mockContext(<CommentsTrayBody {...props} />, mocks)
+      mockContext(<CommentsTrayBody {...props} />, mocks),
     )
     const textArea = await waitFor(() => getByPlaceholderText('Submit a Comment'))
     fireEvent.change(textArea, {target: {value: 'lion'}})
@@ -618,8 +623,8 @@ describe('CommentsTrayBody', () => {
 
   it('renders error when query errors', async () => {
     const mocks = [await mockSubmissionCommentQuery()]
-    // @ts-ignore
-    mocks[0].error = new Error('aw shucks')
+    // @ts-expect-error
+    mocks[0].result = {errors: new Error('aw shucks')}
     const props = await mockAssignmentAndSubmission()
     const {getByText} = render(mockContext(<CommentsTrayBody {...props} />, mocks))
 
@@ -634,8 +639,8 @@ describe('CommentsTrayBody', () => {
 
     expect(
       await waitFor(() =>
-        getByText("This is where you can leave a comment and view your instructor's feedback.")
-      )
+        getByText("This is where you can leave a comment and view your instructor's feedback."),
+      ),
     ).toBeInTheDocument()
   })
 
@@ -873,15 +878,15 @@ describe('CommentsTrayBody', () => {
       const {getByText, getByTestId} = render(
         <MockedProvider mocks={mocks}>
           <CommentsTrayBody {...props} />
-        </MockedProvider>
+        </MockedProvider>,
       )
 
       await waitFor(() =>
         expect(
           getByText(
-            'Add a comment to complete your peer review. You will only see comments written by you.'
-          )
-        ).toBeInTheDocument()
+            'Add a comment to complete your peer review. You will only see comments written by you.',
+          ),
+        ).toBeInTheDocument(),
       )
       expect(getByTestId('svg-placeholder-container')).toBeInTheDocument()
     })
@@ -894,11 +899,11 @@ describe('CommentsTrayBody', () => {
       const {getByText, getByTestId} = render(
         <MockedProvider mocks={mocks}>
           <CommentsTrayBody {...props} />
-        </MockedProvider>
+        </MockedProvider>,
       )
 
       await waitFor(() =>
-        expect(getByText('You will only see comments written by you.')).toBeInTheDocument()
+        expect(getByText('You will only see comments written by you.')).toBeInTheDocument(),
       )
       expect(getByTestId('svg-placeholder-container')).toBeInTheDocument()
     })
@@ -923,7 +928,7 @@ describe('CommentsTrayBody', () => {
       const props = await getDefaultPropsWithReviewerSubmission('completed')
       props.isPeerReviewEnabled = true
       const {findByPlaceholderText, getByText, findByText, queryByTestId} = render(
-        mockContext(<CommentsTrayBody {...props} />, mocks)
+        mockContext(<CommentsTrayBody {...props} />, mocks),
       )
       const textArea = await findByPlaceholderText('Submit a Comment')
       fireEvent.change(textArea, {target: {value: 'lion'}})
@@ -942,7 +947,7 @@ describe('CommentsTrayBody', () => {
       props.isPeerReviewEnabled = true
       props.reviewerSubmission.assignedAssessments[1].workflowState = 'completed'
       const {findByPlaceholderText, getByText, findByText, queryByTestId} = render(
-        mockContext(<CommentsTrayBody {...props} />, mocks)
+        mockContext(<CommentsTrayBody {...props} />, mocks),
       )
       const textArea = await findByPlaceholderText('Submit a Comment')
       fireEvent.change(textArea, {target: {value: 'lion'}})
@@ -961,7 +966,7 @@ describe('CommentsTrayBody', () => {
       props.isPeerReviewEnabled = true
       props.reviewerSubmission.assignedAssessments[1].assetSubmissionType = null
       const {findByPlaceholderText, getByText, findByText, queryByTestId} = render(
-        mockContext(<CommentsTrayBody {...props} />, mocks)
+        mockContext(<CommentsTrayBody {...props} />, mocks),
       )
       const textArea = await findByPlaceholderText('Submit a Comment')
       fireEvent.change(textArea, {target: {value: 'lion'}})
@@ -982,7 +987,7 @@ describe('CommentsTrayBody', () => {
       props.isPeerReviewEnabled = true
       props.reviewerSubmission.assignedAssessments[1].workflowState = 'completed'
       const {findByPlaceholderText, getByText, queryByTestId} = render(
-        mockContext(<CommentsTrayBody {...props} />, mocks)
+        mockContext(<CommentsTrayBody {...props} />, mocks),
       )
       const textArea = await findByPlaceholderText('Submit a Comment')
       fireEvent.change(textArea, {target: {value: 'lion'}})
@@ -1000,7 +1005,7 @@ describe('CommentsTrayBody', () => {
       props.isPeerReviewEnabled = true
       props.assignment.rubric = {}
       const {findByPlaceholderText, getByText, queryByTestId} = render(
-        mockContext(<CommentsTrayBody {...props} />, mocks)
+        mockContext(<CommentsTrayBody {...props} />, mocks),
       )
       const textArea = await findByPlaceholderText('Submit a Comment')
       fireEvent.change(textArea, {target: {value: 'lion'}})
@@ -1021,7 +1026,7 @@ describe('CommentsTrayBody', () => {
       }
       props.isPeerReviewEnabled = true
       const {findByPlaceholderText, getByText} = render(
-        mockContext(<CommentsTrayBody {...props} />, mocks)
+        mockContext(<CommentsTrayBody {...props} />, mocks),
       )
       const textArea = await findByPlaceholderText('Submit a Comment')
       fireEvent.change(textArea, {target: {value: 'lion'}})
@@ -1029,5 +1034,108 @@ describe('CommentsTrayBody', () => {
       await waitFor(() => expect(onSuccessfulPeerReviewMockFunction).toHaveBeenCalled())
       expect(props.reviewerSubmission.assignedAssessments[0].workflowState).toEqual('completed')
     })
+  })
+})
+
+describe('Submission Draft and Comment Behavior', () => {
+  let client
+
+  beforeEach(() => {
+    const cache = createCache()
+    client = new ApolloClient({
+      cache,
+      uri: '/api/graphql',
+    })
+  })
+
+  function writeToCache(client, query, data) {
+    client.writeQuery({
+      query,
+      data,
+    })
+  }
+
+  function readFromCache(client, query) {
+    return client.cache.readQuery({
+      query,
+    })
+  }
+
+  // Test case
+  it('allows sending a comment after discarding a submission draft', async () => {
+    const submissionId = 'test-submission-id'
+
+    const submissionQuery = gql`
+    query GetSubmission {
+      node(id: "${submissionId}") {
+        __typename
+        submissionHistoriesConnection(filter: { includeCurrentSubmission: false }) {
+          nodes {
+            id
+          }
+        }
+      }
+    }
+  `
+
+    const commentQuery = gql`
+        query GetComments {
+          node(id: "${submissionId}") {
+            __typename
+            commentsConnection(filter: { forAttempt: 1, peerReview: false }, last: 20) {
+              nodes {
+                id
+                content
+              }
+            }
+          }
+        }
+        `
+
+    // Mock creating a submission draft
+    writeToCache(client, submissionQuery, {
+      node: {
+        __typename: 'Submission',
+        submissionHistoriesConnection: {
+          __typename: 'SubmissionHistoryConnection',
+          nodes: [{id: 'draft-1'}],
+        },
+      },
+    })
+
+    // Verify draft exists in cache
+    let cacheData = readFromCache(client, submissionQuery)
+    expect(cacheData.node.submissionHistoriesConnection.nodes).toHaveLength(1)
+
+    // Mock discarding the draft
+    writeToCache(client, submissionQuery, {
+      node: {
+        __typename: 'Submission',
+        submissionHistoriesConnection: {
+          __typename: 'SubmissionHistoryConnection',
+          nodes: [],
+        },
+      },
+    })
+
+    // Verify draft is removed from cache
+    cacheData = readFromCache(client, submissionQuery)
+    expect(cacheData.node.submissionHistoriesConnection.nodes).toHaveLength(0)
+
+    // Mock sending a comment
+    writeToCache(client, commentQuery, {
+      node: {
+        __typename: 'Submission',
+        commentsConnection: {
+          __typename: 'CommentConnection',
+          nodes: [{id: 'comment-1', content: 'This is a comment'}],
+        },
+      },
+    })
+
+    // Verify comment is added to cache
+    cacheData = readFromCache(client, commentQuery)
+    expect(cacheData.node.commentsConnection.nodes).toHaveLength(1)
+    expect(cacheData.node.commentsConnection.nodes[0].content).toBe('This is a comment')
   })
 })

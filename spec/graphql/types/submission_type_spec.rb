@@ -639,12 +639,75 @@ describe Types::SubmissionType do
       @submission3 = assignment.submit_homework(@student, body: "Attempt 3")
     end
 
-    let(:submission_history_type) { GraphQLTypeTester.new(@submission3, current_user: @teacher) }
+    let(:submission_history_type) { GraphQLTypeTester.new(@submission3, current_user: @teacher, request: ActionDispatch::TestRequest.create) }
+
+    describe "orderBy" do
+      it "allows ordering the histories by attempt, ascending" do
+        expect(
+          submission_history_type.resolve("submissionHistoriesConnection(orderBy: { field: attempt, direction: ascending }) { nodes { attempt }}")
+        ).to eq [1, 2, 3]
+      end
+
+      it "allows ordering the histories by attempt, descending" do
+        expect(
+          submission_history_type.resolve("submissionHistoriesConnection(orderBy: { field: attempt, direction: descending }) { nodes { attempt }}")
+        ).to eq [3, 2, 1]
+      end
+
+      it "falls back to comparing by version id if two histories have the same attempt" do
+        v3 = @submission3.versions.find_by(number: 3)
+        model = v3.model
+        model.attempt = 1
+        model.updated_at = @submission3.versions.find_by(number: 1).model.updated_at
+        v3.update!(yaml: model.attributes.to_yaml)
+
+        aggregate_failures do
+          expect(
+            submission_history_type.resolve("submissionHistoriesConnection(orderBy: { field: attempt, direction: ascending }) { nodes { body }}")
+          ).to eq ["Attempt 1", "Attempt 3", "Attempt 2"]
+
+          expect(
+            submission_history_type.resolve("submissionHistoriesConnection(orderBy: { field: attempt, direction: descending }) { nodes { body }}")
+          ).to eq ["Attempt 2", "Attempt 3", "Attempt 1"]
+        end
+      end
+
+      it "does not allow ordering by unupported fields" do
+        expect do
+          submission_history_type.resolve("submissionHistoriesConnection(orderBy: { field: body, direction: ascending }) { nodes { attempt }}")
+        end.to raise_error(GraphQLTypeTester::Error)
+      end
+
+      it "does not allow ordering by unsupported directions" do
+        expect do
+          submission_history_type.resolve("submissionHistoriesConnection(orderBy: { field: attempt, direction: asc }) { nodes { attempt }}")
+        end.to raise_error(GraphQLTypeTester::Error)
+      end
+
+      it "requires field to be specified" do
+        expect do
+          submission_history_type.resolve("submissionHistoriesConnection(orderBy: { direction: ascending }) { nodes { attempt }}")
+        end.to raise_error(GraphQLTypeTester::Error)
+      end
+
+      it "requires direction to be specified" do
+        expect do
+          submission_history_type.resolve("submissionHistoriesConnection(orderBy: { field: attempt }) { nodes { attempt }}")
+        end.to raise_error(GraphQLTypeTester::Error)
+      end
+    end
 
     it "returns the submission histories" do
       expect(
         submission_history_type.resolve("submissionHistoriesConnection { nodes { attempt }}")
       ).to eq [1, 2, 3]
+    end
+
+    it "allows fetching anonymousId on histories" do
+      anon_id = @submission3.anonymous_id
+      expect(
+        submission_history_type.resolve("submissionHistoriesConnection { nodes { anonymousId }}")
+      ).to eq [anon_id, anon_id, anon_id]
     end
 
     it "properly handles cursors for submission histories" do
@@ -825,6 +888,22 @@ describe Types::SubmissionType do
         )
       ).to eq [[], [@rubric_assessment.id.to_s], []]
     end
+
+    it "returns empty assessments if there is not a matching rubric assessment for the latest attempt" do
+      @assignment.submit_homework(@student, body: "bar", submitted_at: 1.hour.since)
+      @assignment.submit_homework(@student, body: "bar2", submitted_at: 1.hour.since)
+      expect(
+        submission_type.resolve("rubricAssessmentsConnection { nodes { _id } }")
+      ).to eq []
+    end
+
+    it "returns all assessment if for_all_attempts is true" do
+      @assignment.submit_homework(@student, body: "bar", submitted_at: 1.hour.since)
+      @assignment.submit_homework(@student, body: "bar2", submitted_at: 1.hour.since)
+      expect(
+        submission_type.resolve("rubricAssessmentsConnection(filter: {forAllAttempts: true}) { nodes { _id } }")
+      ).to eq [@rubric_assessment.id.to_s]
+    end
   end
 
   describe "turnitin_data" do
@@ -931,6 +1010,11 @@ describe Types::SubmissionType do
   describe "previewUrl" do
     let(:preview_url) { submission_type.resolve("previewUrl") }
 
+    let(:quiz) do
+      quiz_with_submission
+      @quiz
+    end
+
     it "returns the preview URL when a student has submitted" do
       @assignment.submit_homework(@student, body: "test")
       expected_url = "http://test.host/courses/#{@course.id}/assignments/#{@assignment.id}/submissions/#{@student.id}?preview=1&version=0"
@@ -1002,7 +1086,18 @@ describe Types::SubmissionType do
       end
     end
 
-    context "whent the assignment is a discussion topic" do
+    it "includes a 'version' query param that corresponds to the submission version number when it's an old quiz" do
+      @quiz_assignment = quiz.assignment
+      @quiz_submission = @quiz_assignment.submission_for_student(@student)
+      quiz_submission_type_for_teacher = GraphQLTypeTester.new(@quiz_submission, current_user: @teacher, request: ActionDispatch::TestRequest.create)
+      expected_url = "http://test.host/courses/#{@course.id}/assignments/#{@quiz_assignment.id}/submissions/#{@student.id}?preview=1&version=1"
+      aggregate_failures do
+        expect(@quiz_submission.attempt).to eq 1
+        expect(quiz_submission_type_for_teacher.resolve("previewUrl")).to eq expected_url
+      end
+    end
+
+    context "when the assignment is a discussion topic" do
       before do
         @assignment.update!(submission_types: "discussion_topic")
         @discussion_topic = @assignment.discussion_topic
@@ -1010,7 +1105,19 @@ describe Types::SubmissionType do
 
       it "returns the preview URL for the discussion topic" do
         @discussion_topic.discussion_entries.create!(user: @student, message: "I have a lot to say about this topic")
-        expect(preview_url).to eq "http://test.host/courses/#{@course.id}/discussion_topics/#{@discussion_topic.id}?embed=true"
+        expect(preview_url).to eq "http://test.host/courses/#{@course.id}/assignments/#{@assignment.id}/submissions/#{@student.id}?preview=1&show_full_discussion_immediately=true&version=0"
+      end
+    end
+
+    context "when the assignment is anonymous" do
+      before do
+        @assignment.update!(anonymous_grading: true)
+      end
+
+      it "returns the preview URL for the submission" do
+        @assignment.submit_homework(@student, body: "test")
+        @submission.update!(posted_at: nil)
+        expect(preview_url).to eq "http://test.host/courses/#{@course.id}/assignments/#{@assignment.id}/anonymous_submissions/#{@submission.anonymous_id}?preview=1&version=0"
       end
     end
   end
@@ -1018,7 +1125,48 @@ describe Types::SubmissionType do
   describe "wordCount" do
     it "returns the word count" do
       @submission.update!(body: "word " * 100)
+      run_jobs
       expect(submission_type.resolve("wordCount")).to eq 100
+    end
+  end
+
+  describe "anonymous grading" do
+    before do
+      @assignment.update!(anonymous_grading: true)
+      @submission.update!(posted_at: nil)
+    end
+
+    it "returns the anonymous id" do
+      expect(submission_type.resolve("anonymousId")).to eq @submission.anonymous_id
+    end
+
+    it "does not show the user to a grader when an assignment is actively anonymous" do
+      expect(submission_type.resolve("userId")).to be_nil
+    end
+  end
+
+  describe "enrollments" do
+    let(:other_section) { @course.course_sections.create! name: "other section" }
+    let(:other_teacher) do
+      @course.enroll_teacher(user_factory, section: other_section, limit_privileges_to_course_section: true).user
+    end
+
+    it "works" do
+      expect(
+        submission_type.resolve(
+          "enrollmentsConnection { nodes { _id } }",
+          current_user: @teacher
+        )
+      ).to match_array @course.enrollments.where(user_id: @submission.user_id).map(&:to_param)
+    end
+
+    it "doesn't return users not visible to current_user" do
+      expect(
+        submission_type.resolve(
+          "enrollmentsConnection { nodes { _id } }",
+          current_user: other_teacher
+        )
+      ).to be_empty
     end
   end
 end

@@ -16,8 +16,6 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* eslint-disable no-void */
-
 import React from 'react'
 import ReactDOM from 'react-dom'
 import {extend} from '@canvas/backbone/utils'
@@ -26,9 +24,9 @@ import {Spinner} from '@instructure/ui-spinner'
 import CollectionView from '@canvas/backbone-collection-view'
 import template from '../../jst/paginatedCollection.handlebars'
 import {View} from '@instructure/ui-view'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 
-const I18n = useI18nScope('pagination')
+const I18n = createI18nScope('pagination')
 
 extend(PaginatedCollectionView, CollectionView)
 
@@ -85,11 +83,11 @@ PaginatedCollectionView.prototype.initialize = function () {
   PaginatedCollectionView.__super__.initialize.apply(this, arguments)
   // the drawer is not always loaded when PaginatedCollectionView is initalized
   // such as when the page is cached
-  window.addEventListener( "load", () => {
+  window.addEventListener('load', () => {
     if (document.getElementById('drawer-layout-content')) {
       this.resetScrollContainer(document.getElementById('drawer-layout-content'))
     }
-  });
+  })
   return this.initScrollContainer()
 }
 
@@ -118,7 +116,7 @@ PaginatedCollectionView.prototype.attachCollection = function () {
         return function () {
           return setTimeout(_this.checkScroll)
         }
-      })(this)
+      })(this),
     )
   } else {
     return this.listenTo(this.collection, 'fetch', this.hideLoadingIndicator)
@@ -173,8 +171,7 @@ PaginatedCollectionView.prototype.checkScroll = function () {
     const fetchPromise = this.collection.fetch({
       page: 'next',
     })
-    if(this.collection.lastRequests)
-      this.collection.lastRequests.push(fetchPromise)
+    if (this.collection.lastRequests) this.collection.lastRequests.push(fetchPromise)
     return fetchPromise
   } else {
     return this.hideLoadingIndicator()
@@ -218,7 +215,7 @@ PaginatedCollectionView.prototype.showLoadingIndicator = function () {
       <View padding="x-small" textAlign="center" as="div" display="block">
         <Spinner delay={300} size="x-small" renderTitle={() => I18n.t('Loading')} />
       </View>,
-      node
+      node,
     )
   }
   return ref != null ? ref.show() : void 0

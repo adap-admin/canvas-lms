@@ -28,6 +28,10 @@ module Types
       When true, this filter takes precedence over the include_concluded and include_deactivated filters.
     MD
 
+    argument :apply_gradebook_group_filter, Boolean, <<~MD, required: false
+      Filters submissions for users in a specific group applied in the Gradebook.
+    MD
+
     argument :include_unsubmitted, Boolean, required: false
 
     argument :representatives_only, Boolean, <<~MD, required: false
@@ -57,6 +61,16 @@ module Types
 
     argument :user_id, ID, <<~MD, required: false
       Return only submissions related to the given user_id
+      There is no character restriction on this field
+    MD
+
+    argument :user_representative_id, ID, <<~MD, required: false
+      Return only submissions related to group representative for the user_id
+      There is no character restriction on this field
+    MD
+
+    argument :anonymous_id, ID, <<~MD, required: false
+      Return only submissions related to the given anonymous_id
       There is no character restriction on this field
     MD
 

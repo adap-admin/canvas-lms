@@ -19,11 +19,11 @@
 import React from 'react'
 import {IconArrowNestLine} from '@instructure/ui-icons'
 import {View} from '@instructure/ui-view'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import type {Assignment, Checkpoint} from '../../../api.d'
 import {datetimeString} from '@canvas/datetime/date-functions'
 
-const I18n = useI18nScope('assignment')
+const I18n = createI18nScope('assignment')
 
 const REPLY_TO_TOPIC: string = 'reply_to_topic'
 const REPLY_TO_ENTRY: string = 'reply_to_entry'
@@ -88,7 +88,7 @@ const CheckpointItem = React.memo(({checkpoint, assignment}: CheckpointProps) =>
     } else {
       // if it's not reply to topic, it must be reply to entry
       const translatedReplyToEntryRequiredCount = I18n.n(
-        assignment.discussion_topic.reply_to_entry_required_count
+        assignment.discussion_topic.reply_to_entry_required_count,
       )
       return I18n.t('Required Replies (%{requiredReplies})', {
         requiredReplies: translatedReplyToEntryRequiredCount,

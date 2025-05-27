@@ -26,6 +26,7 @@ describe Api::V1::PlannerItem do
     teacher_in_course active_all: true
     @reviewer = student_in_course(course: @course, active_all: true).user
     @student = student_in_course(course: @course, active_all: true).user
+    @account = @course.root_account
     for_course = { course: @course }
 
     assignment_quiz [], for_course
@@ -247,7 +248,7 @@ describe Api::V1::PlannerItem do
 
     context "dicussion checkpoints" do
       before :once do
-        @course.root_account.enable_feature!(:discussion_checkpoints)
+        @course.account.enable_feature!(:discussion_checkpoints)
         course_with_student(active_all: true)
         @checkpoint_topic, @checkpoint_entry = graded_discussion_topic_with_checkpoints(context: @course)
       end
@@ -477,7 +478,7 @@ describe Api::V1::PlannerItem do
         before do
           course_with_student(active_all: true)
           course_with_teacher(course: @course, active_all: true)
-          @course.root_account.enable_feature!(:discussion_checkpoints)
+          @course.account.enable_feature!(:discussion_checkpoints)
           @reply_to_topic, @reply_to_entry = graded_discussion_topic_with_checkpoints(context: @course, title: "Discussion with Checkpoints")
         end
 
@@ -585,7 +586,7 @@ describe Api::V1::PlannerItem do
       before do
         course_with_student(active_all: true)
         course_with_teacher(course: @course, active_all: true)
-        @course.root_account.enable_feature!(:discussion_checkpoints)
+        @course.account.enable_feature!(:discussion_checkpoints)
         @reply_to_topic, @reply_to_entry = graded_discussion_topic_with_checkpoints(context: @course, title: "Discussion with Checkpoints")
       end
 
@@ -637,7 +638,7 @@ describe Api::V1::PlannerItem do
     end
 
     it "links to a graded discussion with checkpoints submission if appropriate" do
-      @course.root_account.enable_feature!(:discussion_checkpoints)
+      @course.account.enable_feature!(:discussion_checkpoints)
       @checkpoint_topic, _checkpoint_entry = graded_discussion_topic_with_checkpoints(context: @course)
       expect(api.planner_item_json(@checkpoint_topic, @student, session)[:html_url]).to eq "named_context_url"
       graded_submission_model(assignment: @checkpoint_topic, user: @student).update(score: 5)

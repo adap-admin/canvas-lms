@@ -17,8 +17,7 @@
  */
 
 import React, {useState} from 'react'
-import {useScope as useI18nScope} from '@canvas/i18n'
-import {QueryProvider} from '@canvas/query'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import type {SaveRubricResponse} from '@canvas/rubrics/react/RubricForm/queries/RubricFormQueries'
 import {View} from '@instructure/ui-view'
 import {Button, IconButton} from '@instructure/ui-buttons'
@@ -34,13 +33,17 @@ import {Text} from '@instructure/ui-text'
 import {RubricCreateModal} from './RubricCreateModal'
 import type {Rubric, RubricAssociation} from '../../types/rubric'
 import {RubricAssessmentTray} from '../../RubricAssessment'
-import {addRubricToAssignment, removeRubricFromAssignment, type AssignmentRubric} from '../queries'
+import {addRubricToAssignment, AssignmentRubric, removeRubricFromAssignment} from '../queries'
 import {RubricSearchTray} from './RubricSearchTray'
 import {showFlashError, showFlashSuccess} from '@canvas/alerts/react/FlashAlert'
 import {CopyEditConfirmModal} from './CopyEditConfirmModal'
 import {RubricSelfAssessmentSettings} from './RubricSelfAssessmentSettings'
+import {DeleteConfirmModal} from './DeleteConfirmModal'
+import {Tooltip} from '@instructure/ui-tooltip'
+import {queryClient} from '@canvas/query'
+import {QueryClientProvider} from '@tanstack/react-query'
 
-const I18n = useI18nScope('enhanced-rubrics-assignment-container')
+const I18n = createI18nScope('enhanced-rubrics-assignment-container')
 
 export type RubricAssignmentContainerProps = {
   accountMasterScalesEnabled: boolean
@@ -48,11 +51,10 @@ export type RubricAssignmentContainerProps = {
   assignmentRubric?: AssignmentRubric
   assignmentRubricAssociation?: RubricAssociation
   canManageRubrics: boolean
-  canUpdateSelfAssessment: boolean
   contextAssetString: string
   courseId: string
-  rubricSelfAssessmentEnabled: boolean
   rubricSelfAssessmentFFEnabled: boolean
+  aiRubricsEnabled: boolean
 }
 export const RubricAssignmentContainer = ({
   accountMasterScalesEnabled,
@@ -60,11 +62,10 @@ export const RubricAssignmentContainer = ({
   assignmentRubric,
   assignmentRubricAssociation,
   canManageRubrics,
-  canUpdateSelfAssessment,
   contextAssetString,
   courseId,
-  rubricSelfAssessmentEnabled,
   rubricSelfAssessmentFFEnabled,
+  aiRubricsEnabled,
 }: RubricAssignmentContainerProps) => {
   const [rubric, setRubric] = useState(assignmentRubric)
   const [rubricAssociation, setRubricAssociation] = useState(assignmentRubricAssociation)
@@ -74,10 +75,13 @@ export const RubricAssignmentContainer = ({
   const [searchPreviewRubric, setSearchPreviewRubric] = useState<Rubric>()
   const [canUpdateRubric, setCanUpdateRubric] = useState(assignmentRubric?.can_update)
   const [copyEditConfirmModalOpen, setCopyEditConfirmModalOpen] = useState(false)
+  const [isDeleteConfirmModalOpen, setIsDeleteConfirmModalOpen] = useState(false)
+  const [criteriaViaLlm, setCriteriaViaLlm] = useState(false)
 
   const handleSaveRubric = (savedRubricResponse: SaveRubricResponse) => {
     setRubric(savedRubricResponse.rubric)
     setRubricAssociation(savedRubricResponse.rubricAssociation)
+    setCanUpdateRubric(savedRubricResponse.rubric.canUpdate)
     setRubricCreateModalOpen(false)
   }
 
@@ -86,6 +90,7 @@ export const RubricAssignmentContainer = ({
       await removeRubricFromAssignment(courseId, rubricAssociation?.id)
       setRubric(undefined)
       setRubricAssociation(undefined)
+      setIsDeleteConfirmModalOpen(false)
     }
   }
 
@@ -95,7 +100,7 @@ export const RubricAssignmentContainer = ({
         courseId,
         assignmentId,
         rubricId,
-        updatedAssociation
+        updatedAssociation,
       )
       setRubric(response.rubric)
       setCanUpdateRubric(response.rubric.can_update)
@@ -117,7 +122,7 @@ export const RubricAssignmentContainer = ({
   }
 
   return (
-    <QueryProvider>
+    <QueryClientProvider client={queryClient}>
       <View
         as="div"
         display="inline-block"
@@ -135,6 +140,7 @@ export const RubricAssignmentContainer = ({
 
             <Button
               margin="0 0 0 xx-large"
+              // @ts-expect-error
               renderIcon={IconEyeLine}
               data-testid="preview-assignment-rubric-button"
               onClick={() => setIsPreviewTrayOpen(true)}
@@ -142,49 +148,69 @@ export const RubricAssignmentContainer = ({
               {I18n.t('Preview Rubric')}
             </Button>
             {canManageRubrics && (
+              <Tooltip renderTip={I18n.t('Edit Rubric')}>
+                <IconButton
+                  margin="0 0 0 small"
+                  screenReaderLabel={I18n.t('Edit Rubric')}
+                  data-testid="edit-assignment-rubric-button"
+                  onClick={handleEditClick}
+                >
+                  <IconEditLine />
+                </IconButton>
+              </Tooltip>
+            )}
+
+            <Tooltip renderTip={I18n.t('Delete Rubric')}>
               <IconButton
                 margin="0 0 0 small"
-                screenReaderLabel={I18n.t('Edit Rubric')}
-                data-testid="edit-assignment-rubric-button"
-                onClick={handleEditClick}
+                data-testid="remove-assignment-rubric-button"
+                screenReaderLabel={I18n.t('Delete Rubric')}
+                onClick={() => setIsDeleteConfirmModalOpen(true)}
               >
-                <IconEditLine />
+                <IconTrashLine />
               </IconButton>
-            )}
-            <IconButton
-              margin="0 0 0 small"
-              data-testid="remove-assignment-rubric-button"
-              screenReaderLabel={I18n.t('Remove Rubric')}
-              onClick={() => handleRemoveRubric()}
-            >
-              <IconTrashLine />
-            </IconButton>
+            </Tooltip>
+
+            <Tooltip renderTip={I18n.t('Replace Rubric')}>
+              <IconButton
+                margin="0 0 0 small"
+                screenReaderLabel={I18n.t('Replace Rubric')}
+                data-testid="find-assignment-rubric-icon-button"
+                onClick={() => setIsSearchTrayOpen(true)}
+              >
+                <IconSearchLine />
+              </IconButton>
+            </Tooltip>
+
             {rubricSelfAssessmentFFEnabled && (
               <>
                 <View as="hr" />
-                <RubricSelfAssessmentSettings
-                  assignmentId={assignmentId}
-                  canUpdateSelfAssessment={canUpdateSelfAssessment}
-                  rubricSelfAssessmentEnabled={rubricSelfAssessmentEnabled}
-                />
+                <RubricSelfAssessmentSettings assignmentId={assignmentId} rubricId={rubric.id} />
               </>
             )}
           </View>
         ) : (
           <View>
             {canManageRubrics && (
-              <Button
-                margin="0"
-                renderIcon={IconAddLine}
-                data-testid="create-assignment-rubric-button"
-                onClick={() => setRubricCreateModalOpen(true)}
-              >
-                {I18n.t('Create Rubric')}
-              </Button>
+              <>
+                <Button
+                  margin="0"
+                  // @ts-expect-error
+                  renderIcon={IconAddLine}
+                  data-testid="create-assignment-rubric-button"
+                  onClick={() => {
+                    setCriteriaViaLlm(false)
+                    setRubricCreateModalOpen(true)
+                  }}
+                >
+                  {I18n.t('Create Rubric')}
+                </Button>
+              </>
             )}
             <Button
               margin="0 0 0 small"
               data-testid="find-assignment-rubric-button"
+              // @ts-expect-error
               renderIcon={IconSearchLine}
               onClick={() => setIsSearchTrayOpen(true)}
             >
@@ -199,16 +225,27 @@ export const RubricAssignmentContainer = ({
         isOpen={copyEditConfirmModalOpen}
         onConfirm={() => {
           setCopyEditConfirmModalOpen(false)
+          setCriteriaViaLlm(false)
           setRubricCreateModalOpen(true)
         }}
         onDismiss={() => setCopyEditConfirmModalOpen(false)}
         rubric={rubric}
       />
+      <DeleteConfirmModal
+        associationCount={rubric?.association_count ?? 0}
+        isOpen={isDeleteConfirmModalOpen}
+        onConfirm={() => handleRemoveRubric()}
+        onDismiss={() => setIsDeleteConfirmModalOpen(false)}
+      />
       <RubricCreateModal
         isOpen={rubricCreateModalOpen}
         rubric={rubric}
         rubricAssociation={rubricAssociation}
-        onDismiss={() => setRubricCreateModalOpen(false)}
+        aiRubricsEnabled={aiRubricsEnabled}
+        onDismiss={() => {
+          setCriteriaViaLlm(false)
+          setRubricCreateModalOpen(false)
+        }}
         onSaveRubric={handleSaveRubric}
       />
       <RubricAssessmentTray
@@ -234,6 +271,6 @@ export const RubricAssignmentContainer = ({
         }}
         onAddRubric={handleAddRubric}
       />
-    </QueryProvider>
+    </QueryClientProvider>
   )
 }

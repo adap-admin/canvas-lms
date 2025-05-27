@@ -26,14 +26,15 @@ import {testSupportedQuestion} from './testQuestions'
 describe('KnowledgeCheckSection', () => {
   const renderSection = (
     props: Partial<KnowledgeCheckSectionProps> = {},
-    enabled: boolean = true
+    enabled: boolean = true,
   ) => {
     return render(
       <Editor enabled={enabled} resolver={{KnowledgeCheckSection}}>
         <Frame>
+          {/* @ts-expect-error */}
           <KnowledgeCheckSection {...props} />
         </Frame>
-      </Editor>
+      </Editor>,
     )
   }
 

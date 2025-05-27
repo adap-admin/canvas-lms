@@ -24,6 +24,8 @@
     :COURSE_ID => @context.id,
     :PUBLISH_MENU_PROGRESS_ID => @progress&.id,
     :NO_MODULE_PROGRESSIONS => @context.large_roster,
+    :FEATURE_MODULES_PERF => module_performance_improvement_is_enabled?(@context, @current_user),
+    :EXPANDED_MODULES => module_performance_improvement_is_enabled?(@context, @current_user) && @expanded_modules ? @expanded_modules : [],
   })
 %>
 <% js_bundle :module_student_view_peer_reviews %>
@@ -50,7 +52,7 @@ context_modules_header_props = {
     courseId: @context.id,
     runningProgressId: @progress&.id,
     disabled: @modules.empty?,
-    visible: @context.grants_any_right?(@current_user, session, :manage_content, :manage_course_content_edit),
+    visible: @context.grants_right?(@current_user, session, :manage_course_content_edit),
   },
   expandCollapseAll: {
     label: t('Collapse All'),
@@ -111,7 +113,7 @@ context_modules_header_props = {
           </button>
         <% end %>
       <% end %>
-      <% if @context.grants_any_right?(@current_user, session, :manage_content, :manage_course_content_edit) %>
+      <% if @context.grants_right?(@current_user, session, :manage_course_content_edit) %>
         <div id="context-modules-publish-menu" data-course-id="<%= @context.id %>" data-progress-id="<%= @progress&.id %>" style="display: inline-block;" data-disabled="<%= @modules.empty? %>"></div>
       <% end %>
       <% if @can_add %>
@@ -121,9 +123,9 @@ context_modules_header_props = {
           <%= t('Module') %>
         </button>
       <% end %>
-      <% if @context.grants_any_right?(@current_user, session, :manage_content, :manage_course_content_add) && (@menu_tools[:module_index_menu].present? || @menu_tools[:module_index_menu_modal].present?) %>
+      <% if @context.grants_right?(@current_user, session, :manage_course_content_add) && (@menu_tools[:module_index_menu].present? || @menu_tools[:module_index_menu_modal].present?) %>
         <div class="inline-block module_index_tools">
-          <a class="al-trigger btn" role="button" aria-haspopup="true" aria-owns="toolbar-1" href="#">
+          <a class="al-trigger btn" role="button" aria-haspopup="true" aria-owns="toolbar-1" href="#" data-popup-collision="flip">
             <i class="icon-more" aria-hidden="true"></i>
             <span class="screenreader-only"><%= t("Modules Settings") %></span>
           </a>
@@ -152,7 +154,7 @@ context_modules_header_props = {
 <div id="differentiated-modules-mount-point"></div>
 <div class="item-group-container" id="context_modules_sortable_container">
   <div class="module-selector-container">
-    <% unless @is_student %>
+    <% if @can_edit %>
       <% if @feature_teacher_module_selection %>
         <div class="module-selector" id="teacher_module_view_selection">
           <% selected_module = @context.show_teacher_only_module_id&.to_i %>
@@ -210,7 +212,8 @@ context_modules_header_props = {
     aria-label="<%= t('headings.course_modules', %{Course Modules}) %>"
     class="ig-list <%= 'editable' if @can_add || @can_edit %>"
   >
-    <% cache(@modules_cache_key) do %>
+    <% cache_if_no_module_perf_enabled(@modules_cache_key, @context, @current_user) do %>
+      <%# This part of code is copied to module_html.html.erb as a temporary solution %>
       <% modules_to_show = @module_show_setting ?  @modules.select { |m| m.id == @module_show_setting } : @modules %>
       <% preload_modules_content(modules_to_show) %>
       <% modules_to_show.each do |m| %>
@@ -225,20 +228,6 @@ context_modules_header_props = {
 <%= render :partial => 'context_modules/module_item_next', :object => nil, :as => :module_item %>
 
 <% if @can_add || @can_edit %>
-  <%= render :partial => "context_modules/add_context_module_form" %>
-
-  <div id="add_module_prerequisite_dialog" style="display: none;">
-    <span class="context_module_id" style="display: none;">&nbsp;</span>
-    <div>
-      <%= t 'add_prerequisite', "Add prerequisite to *%{module}*", :wrapper => '<span class="module_name">\1</span>', :module => 'module' %>
-    </div>
-    <div style="text-align: center;" class="prerequisite_module_select">
-    </div>
-    <div class="button-container">
-      <button type="button" class="btn submit_button"><%= t('buttons.add_prerequisite', %{Add Prerequisite}) %></button>
-      <button type="button" class="btn button-secondary cancel_button"><%= t('#buttons.cancel', %{Cancel}) %></button>
-    </div>
-  </div>
 
   <%= render :partial => "shared/select_content_dialog", :locals => {:for_modules => true, lti_app_placements: [Lti::ResourcePlacement::LINK_SELECTION, Lti::ResourcePlacement::RESOURCE_SELECTION] }  %>
   <div id="edit_item_dialog" style="display: none;">
@@ -253,6 +242,7 @@ context_modules_header_props = {
           <td><%= f.blabel :url, :en => "URL" %></td>
           <td><%= f.text_field :url, :style => "width: 200px;" %></td>
         </tr>
+        <% unless @context.horizon_course? %>
         <tr>
           <td><label for="content_tag_indent_select"><%= before_label('indent', %{Indent}) %></label></td>
           <td>
@@ -263,6 +253,33 @@ context_modules_header_props = {
             </select>
           </td>
         </tr>
+        <% end %>
+        <% if @context.horizon_course? %>
+        <tr id="estimated_duration_edit">
+          <td colspan="2">
+            <%= f.blabel :estimated_duration, :en => "Time to Complete" %>
+            <span>
+              <%= f.number_field :estimated_duration_minutes, min: 0, :style => "width: 40px;", id: "estimated_minutes" %>
+              <%= t(:estimated_duration_minutes, "Minutes") %>
+              <button
+                class="Button Button--icon-action-danger"
+                onClick="resetMinutes(event)"
+                title="<%= t(:remove_button_text, "Reset duration minutes") %>"
+                aria-label="<%= t(:remove_button_text, "Reset duration minutes") %>"
+                type="button">
+                <i class="icon-trouble"></i>
+              </button>
+            </span>
+            <script>
+              function resetMinutes(event) {
+                if (event != null) {
+                  event.preventDefault()
+                }
+                document.getElementById('estimated_minutes').value = 0
+              }
+            </script></td>
+        </tr>
+        <% end %>
         <tr class="external">
           <td colspan="2">
             <%= f.check_box :new_tab %>
@@ -337,7 +354,7 @@ context_modules_header_props = {
       <label class="screenreader-only" for="criterion_min_score"><%= t('Minimum Score') %></label>
       <input id="criterion_min_score" type="text" class="min_score" style="width: 30px; margin-<%= direction('right') %>: 5px;"/>
       <span class="points_possible_parent"><%= t 'assignment_points_possible', '/ %{points_possible}', :points_possible => '<span class="points_possible">&nbsp;</span>'.html_safe %></span>
-    </pan>
+    </span>
   </div>
   <%= image_tag "flagged_question_dim.png", :id => "criterion_image_min_score", :class => "image not_blank", :alt => t('images.alt.min_score', "minimum score"), :title => t('images.title.min_score', "Students must get at least a %{min_score} on this item before the module is considered complete", :min_score => "{{ min_score }}") %>
   <%= image_tag "preview_dim.png", :id => "criterion_image_must_view", :class => "image not_blank", :alt => t('images.alt.must_view', "must view"), :title => t('images.title.must_view', "Students must view this item before the module is considered complete") %>

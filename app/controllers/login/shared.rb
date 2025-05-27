@@ -18,6 +18,42 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 module Login::Shared
+  class << self
+    def set_return_to_from_provider(request, session, pseudonym, domain_root_account, url)
+      return if url.blank?
+
+      begin
+        uri = URI.parse(url)
+      rescue URI::InvalidURIError
+        return
+      end
+
+      if uri&.path && !uri.path.starts_with?("/login") &&
+         (!uri.scheme || request.scheme == uri.scheme || uri.scheme == "https")
+        if uri.host
+          # allow redirects to other (trusted) domains, by tacking on a session token
+          target_account = Account.find_by_domain(uri.host)
+          if uri.host == request.host_with_port
+            # full URLs on the same domain are okay
+            session[:return_to] = url
+          elsif (target_account == domain_root_account) ||
+                (target_account && target_account != domain_root_account &&
+                pseudonym.works_for_account?(target_account, true))
+            token = SessionToken.new(pseudonym.global_id,
+                                     current_user_id: pseudonym.global_user_id).to_s
+            uri.query&.concat("&")
+            uri.query ||= ""
+            uri.query.concat("session_token=#{token}")
+            session[:return_to] = uri.to_s
+          end
+        elsif uri.path[0] == "/"
+          # otherwise, absolute paths on the same domain are okay
+          session[:return_to] = url
+        end
+      end
+    end
+  end
+
   def reset_session_for_login
     reset_session_saving_keys(:return_to,
                               :oauth,
@@ -29,15 +65,23 @@ module Login::Shared
                               :oauth2_nonce)
   end
 
+  def redirect_to_unknown_user_url(message)
+    unknown_user_url = @domain_root_account.unknown_user_url.presence
+    if unknown_user_url
+      unknown_user_url += (URI.parse(unknown_user_url).query ? "&" : "?")
+      unknown_user_url << "message=#{URI::DEFAULT_PARSER.escape(message)}"
+    else
+      flash[:delegated_message] = message
+    end
+    redirect_to unknown_user_url || login_url
+  end
+
   def successful_login(user, pseudonym, otp_passed = false)
     reset_authenticity_token!
     Auditors::Authentication.record(pseudonym, "login")
 
     auth_provider = pseudonym&.authentication_provider
-    auth_type = auth_provider&.auth_type
-    tags = { auth_type:, domain: request.host }
-
-    InstStatsd::Statsd.increment("login.count", tags:) if auth_type
+    increment_statsd(:success, authentication_provider: pseudonym&.authentication_provider)
 
     # Since the user just logged in, we'll reset the context to include their info.
     setup_live_events_context
@@ -92,13 +136,12 @@ module Login::Shared
       if (oauth = session[:oauth2])
         # redirect to external OAuth provider
         provider = Canvas::OAuth::Provider.new(oauth[:client_id], oauth[:redirect_uri], oauth[:scopes], oauth[:purpose])
-        return redirect_to Canvas::OAuth::Provider.confirmation_redirect(self, provider, user)
+        redirect_target = Canvas::OAuth::Provider.confirmation_redirect(self, provider, user)
 
       elsif session[:course_uuid] && user && (course = Course.where(uuid: session[:course_uuid], workflow_state: "created").first)
         # redirect to course if session includes valid course UUID
         claim_session_course(course, user)
         redirect_target = course_url(course, login_success: "1")
-        format.html { redirect_to redirect_target }
 
       elsif session[:confirm]
         # redirect to registration confirmation
@@ -106,7 +149,6 @@ module Login::Shared
                                                          enrollment: session.delete(:enrollment),
                                                          login_success: 1,
                                                          confirm: ((user.id == session.delete(:expected_user_id)) ? 1 : nil))
-        format.html { redirect_to redirect_target }
 
       else
         # the URL to redirect back to is stored in the session, so it's
@@ -114,11 +156,34 @@ module Login::Shared
         # they must have cookies enabled and we don't need to worry about
         # adding the :login_success param to it.
         redirect_target = delegated_auth_redirect_uri(redirect_back_or_default(dashboard_url(login_success: "1")))
-        format.html { redirect_to redirect_target }
       end
 
+      format.html { redirect_to redirect_target }
       format.json { render json: pseudonym.as_json(methods: :user_code).merge(location: redirect_target), status: :ok }
     end
+  end
+
+  # This method may be overridden, and any caller needs to check `performed?`
+  # and immediately return if so.
+  # @return [String, nil] the URL to redirect to after logging out the current user
+  def logout_current_user_for_idp
+    if @domain_root_account == Account.site_admin && cookies["canvas_sa_delegated"]
+      cookies.delete("canvas_sa_delegated",
+                     domain: remember_me_cookie_domain,
+                     httponly: true,
+                     secure: CanvasRails::Application.config.session_options[:secure])
+    end
+
+    if session[:login_aac]
+      # The AAC could have been deleted since the user logged in
+      @aac = AuthenticationProvider.where(id: session[:login_aac]).first
+      redirect = @aac.try(:user_logout_redirect, self, @current_user)
+      increment_statsd(:attempts, action: :slo) if @aac.try(:slo?)
+    end
+
+    flash[:logged_out] = true if redirect.nil?
+    logout_current_user
+    redirect
   end
 
   def logout_current_user
@@ -163,13 +228,21 @@ module Login::Shared
     false
   end
 
-  protected
+  private
 
-  def statsd_timeout_error
-    "auth.timeout_error"
-  end
+  def increment_statsd(counter, tags: {}, action: nil, reason: nil, authentication_provider: nil)
+    action ||= params[:action]
+    authentication_provider ||= @aac
+    target_provider = try(:target_auth_provider)
+    auth_type = authentication_provider&.auth_type || self.auth_type
 
-  def statsd_timeout_cutoff
-    "auth.timeout_cutoff"
+    tags ||= {}
+    tags = tags.reverse_merge({ auth_type:, domain: request.host })
+
+    tags[:target_auth_type] = target_provider.auth_type if target_provider
+    tags[:auth_provider_id] = authentication_provider.global_id if authentication_provider
+    tags[:reason] = reason if reason
+
+    InstStatsd::Statsd.distributed_increment("auth.#{action}.#{counter}.v2", tags:)
   end
 end

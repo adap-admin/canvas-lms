@@ -26,9 +26,9 @@ import {View} from '@instructure/ui-view'
 import {IconResize} from '../../../../assets/internal-icons'
 import {getAspectRatio} from '../../../../utils'
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 
-const I18n = useI18nScope('block-editor/image-block')
+const I18n = createI18nScope('block-editor')
 
 type ImageSizePopupProps = {
   width: number
@@ -68,7 +68,7 @@ const IconSizePopup = ({width, height, maintainAspectRatio, onChange}: ImageSize
         setHeightValue(h)
       }
     },
-    [aspectRatio, maintainAspectRatio]
+    [aspectRatio, maintainAspectRatio],
   )
 
   const handleChangeHeight = useCallback(
@@ -80,7 +80,7 @@ const IconSizePopup = ({width, height, maintainAspectRatio, onChange}: ImageSize
         setWidthValue(w)
       }
     },
-    [aspectRatio, maintainAspectRatio]
+    [aspectRatio, maintainAspectRatio],
   )
 
   const setImageSize = useCallback(() => {
@@ -96,6 +96,7 @@ const IconSizePopup = ({width, height, maintainAspectRatio, onChange}: ImageSize
           withBackground={false}
           withBorder={false}
           screenReaderLabel={I18n.t('Image Size')}
+          title={I18n.t('Image Size')}
         >
           <IconResize size="x-small" />
         </IconButton>
@@ -104,7 +105,7 @@ const IconSizePopup = ({width, height, maintainAspectRatio, onChange}: ImageSize
       onShowContent={handleShowContent}
       onHideContent={handleHideContent}
       on="click"
-      screenReaderLabel={I18n.t('Popover Dialog Example')}
+      screenReaderLabel={I18n.t('Image Size')}
       shouldContainFocus={true}
       shouldReturnFocus={true}
       shouldCloseOnDocumentClick={true}

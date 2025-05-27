@@ -1,4 +1,3 @@
-// @ts-nocheck
 /*
  * Copyright (C) 2018 - present Instructure, Inc.
  *
@@ -35,8 +34,9 @@ export default function processEditorContentItems(
   },
   env: ExternalToolsEnv,
   dialog: {
+    // @ts-expect-error
     close()
-  } | null
+  } | null,
 ) {
   try {
     const ltiEndpoint = event.data?.ltiEndpoint
@@ -64,7 +64,7 @@ export default function processEditorContentItems(
         showFlashAlert({
           message: formatMessage(
             'Could not insert content: "{itemType}" items are not currently supported in Canvas.',
-            {itemType: inputItem.type ?? 'unknown'}
+            {itemType: inputItem.type ?? 'unknown'},
           ),
           type: 'warning',
           err: null,
@@ -80,9 +80,12 @@ export default function processEditorContentItems(
     }
 
     if (event.data?.msg !== undefined) {
+      // @ts-expect-error
       showFlashAlert({message: event.data.msg.toString()})
     }
+    // @ts-expect-error
     if (event.data?.errormsg !== undefined) {
+      // @ts-expect-error
       showFlashAlert({message: event.data.errormsg.toString(), type: 'error'})
     }
   } catch (e) {

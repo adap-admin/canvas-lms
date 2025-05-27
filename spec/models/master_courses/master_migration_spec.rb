@@ -1455,27 +1455,6 @@ describe MasterCourses::MasterMigration do
       expect(@att1_to.folder).to_not be_deleted
     end
 
-    context "media_links_use_attachment_id feature flag off" do
-      before do
-        Account.site_admin.disable_feature!(:media_links_use_attachment_id)
-      end
-
-      it "does not copy media tracks" do
-        @copy_to = course_factory
-        @template.add_child_course!(@copy_to)
-
-        media_id = "m-you_know_what_you_did"
-        media_object = @copy_from.media_objects.create!(title: "video.mp4", media_id:)
-        media_object.media_tracks.create!(kind: "subtitles", locale: "en", content: "en subs")
-
-        run_master_migration
-
-        att_to = @copy_to.attachments.where(migration_id: mig_id(media_object.attachment)).first
-        expect(att_to.media_entry_id).to eq media_id
-        expect(att_to.media_tracks).to be_empty
-      end
-    end
-
     it "copies media tracks" do
       @copy_to = course_factory
       @template.add_child_course!(@copy_to)
@@ -2948,7 +2927,7 @@ describe MasterCourses::MasterMigration do
       expect(qg_to.question_points).to eq 2.0
       qg_to.question_points = 3.0
       expect(qg_to.save).to be false
-      expect(qg_to.errors.first.second).to eq "cannot change column(s): question_points - locked by Master Course"
+      expect(qg_to.errors.full_messages).to include "cannot change column(s): question_points - locked by Master Course"
     end
 
     it "copies tab configurations for account-level external tools" do

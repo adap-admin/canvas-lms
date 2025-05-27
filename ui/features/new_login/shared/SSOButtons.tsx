@@ -16,16 +16,14 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React from 'react'
-import type {AuthProvider} from '../types'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {Button} from '@instructure/ui-buttons'
 import {Flex} from '@instructure/ui-flex'
 import {Img} from '@instructure/ui-img'
-import {Responsive} from '@instructure/ui-responsive'
-import {View, type ViewOwnProps} from '@instructure/ui-view'
-import {canvas} from '@instructure/ui-theme-tokens'
-import {useNewLogin} from '../context/NewLoginContext'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {type ViewOwnProps} from '@instructure/ui-view'
+import React from 'react'
+import {useNewLogin, useNewLoginData} from '../context'
+import type {AuthProvider} from '../types'
 
 import iconApple from '../assets/images/apple.svg'
 import iconClasslink from '../assets/images/classlink.svg'
@@ -35,9 +33,8 @@ import iconGithub from '../assets/images/github.svg'
 import iconGoogle from '../assets/images/google.svg'
 import iconLinkedin from '../assets/images/linkedin.svg'
 import iconMicrosoft from '../assets/images/microsoft.svg'
-import iconX from '../assets/images/x.svg'
 
-const I18n = useI18nScope('new_login')
+const I18n = createI18nScope('new_login')
 
 const providerIcons: Record<string, string> = {
   apple: iconApple,
@@ -48,20 +45,22 @@ const providerIcons: Record<string, string> = {
   google: iconGoogle,
   linkedin: iconLinkedin,
   microsoft: iconMicrosoft,
-  twitter: iconX,
 }
 
 const SSOButtons = () => {
-  const {isUiActionPending, isPreviewMode, authProviders} = useNewLogin()
+  const {isUiActionPending} = useNewLogin()
+  const {isPreviewMode, authProviders} = useNewLoginData()
+
+  const isDisabled = isPreviewMode || isUiActionPending
 
   if (!authProviders || authProviders.length === 0) {
     return null
   }
 
   const handleClick = (
-    event: React.KeyboardEvent<ViewOwnProps> | React.MouseEvent<ViewOwnProps>
+    event: React.KeyboardEvent<ViewOwnProps> | React.MouseEvent<ViewOwnProps>,
   ) => {
-    if (isPreviewMode || isUiActionPending) {
+    if (isDisabled) {
       event.preventDefault()
     }
   }
@@ -81,7 +80,7 @@ const SSOButtons = () => {
         overflowX="visible"
         overflowY="visible"
         shouldGrow={true}
-        size={`calc(50% - ${canvas.spacing.small})`}
+        size="100%"
       >
         <Button
           href={link}
@@ -89,25 +88,12 @@ const SSOButtons = () => {
           disabled={isUiActionPending}
           onClick={handleClick}
           width="100%"
+          renderIcon={
+            iconSrc ? (
+              <Img display="block" height="1.125rem" src={iconSrc} width="1.125rem" />
+            ) : null
+          }
         >
-          {iconSrc && (
-            <View
-              position="absolute"
-              insetInlineStart="0.625rem"
-              insetBlockStart="50%"
-              style={{
-                transform: 'translateY(-50%)',
-              }}
-            >
-              <Img
-                src={iconSrc}
-                alt={displayName}
-                width="1.125rem"
-                height="1.125rem"
-                display="block"
-              />
-            </View>
-          )}
           {I18n.t('Log in with %{displayName}', {displayName})}
         </Button>
       </Flex.Item>
@@ -115,28 +101,9 @@ const SSOButtons = () => {
   }
 
   return (
-    <Responsive
-      match="media"
-      query={{
-        desktop: {minWidth: canvas.breakpoints.desktop}, // 1024px
-      }}
-    >
-      {(_props, matches) => {
-        const isDesktopOrLarger = matches?.includes('desktop')
-
-        return (
-          <Flex
-            direction={isDesktopOrLarger ? 'row' : 'column'}
-            wrap={isDesktopOrLarger ? 'wrap' : 'no-wrap'}
-            gap="small"
-            justifyItems={isDesktopOrLarger ? 'start' : 'center'}
-            alignItems="stretch"
-          >
-            {authProviders.map(renderProviderButton)}
-          </Flex>
-        )
-      }}
-    </Responsive>
+    <Flex direction="column" wrap="no-wrap" gap="small" justifyItems="center" alignItems="stretch">
+      {authProviders.map(renderProviderButton)}
+    </Flex>
   )
 }
 

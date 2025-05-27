@@ -19,9 +19,10 @@
 import React, {useCallback} from 'react'
 import {bool, func, oneOf, string, arrayOf, shape} from 'prop-types'
 import moment from 'moment-timezone'
+import {View} from '@instructure/ui-view'
 import {DateTime} from '@instructure/ui-i18n'
 import {ScreenReaderContent} from '@instructure/ui-a11y-content'
-import CanvasDateInput from '@canvas/datetime/react/components/DateInput'
+import CanvasDateInput2 from '@canvas/datetime/react/components/DateInput2'
 import useDateTimeFormat from '@canvas/use-date-time-format-hook'
 
 BulkDateInput.propTypes = {
@@ -68,7 +69,7 @@ function BulkDateInput({
 
   const setDate = useCallback(
     newDate => updateAssignmentDate({newDate, dateKey, assignmentId, overrideId}),
-    [updateAssignmentDate, dateKey, assignmentId, overrideId]
+    [updateAssignmentDate, dateKey, assignmentId, overrideId],
   )
 
   const handleSelectedDateChange = useCallback(
@@ -109,23 +110,25 @@ function BulkDateInput({
         setDate(newMoment.toDate())
       }
     },
-    [fancyMidnight, defaultTime, selectedDateString, setDate, timezone]
+    [fancyMidnight, defaultTime, selectedDateString, setDate, timezone],
   )
 
   const renderLabel = useCallback(() => <ScreenReaderContent>{label}</ScreenReaderContent>, [label])
 
   return (
-    <CanvasDateInput
-      renderLabel={renderLabel}
-      selectedDate={selectedDateString}
-      formatDate={formatDate}
-      onSelectedDateChange={handleSelectedDateChange}
-      timezone={timezone}
-      interaction={interaction}
-      messages={messages}
-      width={width}
-      withRunningValue={true}
-    />
+    <View as="div" minWidth={width} margin="x-small 0">
+      <CanvasDateInput2
+        renderLabel={renderLabel}
+        selectedDate={selectedDateString}
+        formatDate={formatDate}
+        onSelectedDateChange={handleSelectedDateChange}
+        timezone={timezone}
+        interaction={interaction}
+        messages={messages}
+        width={width}
+        withRunningValue={true}
+      />
+    </View>
   )
 }
 

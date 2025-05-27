@@ -21,19 +21,6 @@
 describe Account do
   include_examples "outcome import context examples"
 
-  describe "relationships" do
-    it { is_expected.to have_many(:feature_flags) }
-    it { is_expected.to have_one(:outcome_proficiency).dependent(:destroy) }
-    it { is_expected.to have_many(:lti_resource_links).class_name("Lti::ResourceLink") }
-    it { is_expected.to have_many(:lti_registrations).class_name("Lti::Registration").dependent(:destroy) }
-    it { is_expected.to have_many(:lti_registration_account_bindings).class_name("Lti::RegistrationAccountBinding").dependent(:destroy) }
-    it { is_expected.to have_many(:block_editor_templates).class_name("BlockEditorTemplate") }
-  end
-
-  describe "validations" do
-    it { is_expected.to validate_inclusion_of(:account_calendar_subscription_type).in_array(Account::CALENDAR_SUBSCRIPTION_TYPES) }
-  end
-
   context "domain_method" do
     it "retrieves correct account domain" do
       root_account = Account.create!
@@ -317,7 +304,6 @@ describe Account do
 
     it "is able to specify a list of enabled services" do
       @a.allowed_services = "fakeService"
-      # expect(@a.service_enabled?(:twitter)).to be_truthy
       expect(@a.service_enabled?(:diigo)).to be_falsey
       expect(@a.service_enabled?(:avatars)).to be_falsey
     end
@@ -601,7 +587,6 @@ describe Account do
     full_access = RoleOverride.permissions.keys +
                   limited_access - disabled_by_default - conditional_access +
                   [:create_courses]
-    full_access << :create_tool_manually unless root_account.feature_enabled?(:granular_permissions_manage_lti)
 
     full_root_access = full_access - RoleOverride.permissions.select { |_k, v| v[:account_only] == :site_admin }.map(&:first)
     full_sub_access = full_root_access - RoleOverride.permissions.select { |_k, v| v[:account_only] == :root }.map(&:first)
@@ -1120,8 +1105,8 @@ describe Account do
       expect(@account.tabs_available(nil)).to include(mock_tab)
     end
 
-    it "uses :manage_assignments to determine question bank tab visibility" do
-      account_admin_user_with_role_changes(account: @account, role_changes: { manage_assignments: true, manage_grades: false })
+    it "uses :manage_assignments_edit to determine question bank tab visibility" do
+      account_admin_user_with_role_changes(account: @account, role_changes: { manage_assignments_edit: true, manage_grades: false })
       tabs = @account.tabs_available(@admin)
       expect(tabs.pluck(:id)).to include(Account::TAB_QUESTION_BANKS)
     end
@@ -1595,6 +1580,32 @@ describe Account do
       Account.update_all_update_account_associations
       @account.reload
       expect(@account.associated_courses.sort_by(&:id)).to eq [@c1, @c2]
+    end
+  end
+
+  describe "#update_lti_context_controls" do
+    let(:account) { account_model(parent_account:) }
+    let(:parent_account) { account_model }
+    let(:new_parent_account) { account_model }
+
+    before do
+      allow(Lti::ContextControl).to receive(:update_paths_for_reparent)
+    end
+
+    describe "when account parent changes" do
+      it "updates paths for Controls" do
+        account.update!(parent_account: new_parent_account)
+        expect(Lti::ContextControl).to have_received(:update_paths_for_reparent).with(account, parent_account.id, new_parent_account.id)
+      end
+    end
+
+    describe "with new account" do
+      let(:new_account) { account_model }
+
+      it "does not update paths" do
+        new_account
+        expect(Lti::ContextControl).not_to have_received(:update_paths_for_reparent)
+      end
     end
   end
 
@@ -2194,6 +2205,56 @@ describe Account do
         end
       end
     end
+
+    describe "account_chain_ids_for_multiple_accounts" do
+      let(:account1) { Account.default.sub_accounts.create! }
+      let(:account2) { Account.default.sub_accounts.create! }
+      let(:account3) { account1.sub_accounts.create! }
+
+      before do
+        account1
+        account2
+      end
+
+      it "is correct" do
+        expect(Account.account_chain_ids_for_multiple_accounts([account1.id, account2.id, account3.id])).to eq(
+          {
+            account1.id => [account1.id, Account.default.id],
+            account2.id => [account2.id, Account.default.id],
+            account3.id => [account3.id, account1.id, Account.default.id],
+          }
+        )
+      end
+
+      it "can handle account chain changes" do
+        account3.update_attribute(:parent_account, account2)
+        expect(Account.account_chain_ids_for_multiple_accounts([account1.id, account2.id, account3.id])).to eq(
+          {
+            account1.id => [account1.id, Account.default.id],
+            account2.id => [account2.id, Account.default.id],
+            account3.id => [account3.id, account2.id, Account.default.id],
+          }
+        )
+      end
+
+      it "can handle root accounts" do
+        expect(Account.account_chain_ids_for_multiple_accounts([Account.default.id, account1.id])).to eq(
+          {
+            Account.default.id => [Account.default.id],
+            account1.id => [account1.id, Account.default.id],
+          }
+        )
+      end
+
+      it "can handle lots of accounts" do
+        accounts = Array.new(100) { Account.default.sub_accounts.create! }
+        expect(Account.account_chain_ids_for_multiple_accounts(accounts.map(&:id))).to eq(
+          accounts.each_with_object({}) do |account, hash|
+            hash[account.id] = [account.id, Account.default.id]
+          end
+        )
+      end
+    end
   end
 
   describe "#destroy on sub accounts" do
@@ -2546,7 +2607,7 @@ describe Account do
       c = a2.courses.create!(template: true)
       a.course_template = c
       expect(a).not_to be_valid
-      expect(a.errors.to_h.keys).to eq [:course_template_id]
+      expect(a.errors.attribute_names).to eq [:course_template_id]
     end
 
     it "requires the course template to actually be a template" do
@@ -2554,7 +2615,7 @@ describe Account do
       c = a.courses.create!
       a.course_template = c
       expect(a).not_to be_valid
-      expect(a.errors.to_h.keys).to eq [:course_template_id]
+      expect(a.errors.attribute_names).to eq [:course_template_id]
     end
 
     it "allows a valid course template" do
@@ -2590,7 +2651,7 @@ describe Account do
       account_model
       @account.enable_feature!(:restrict_quantitative_data)
 
-      allow(InstStatsd::Statsd).to receive(:increment)
+      allow(InstStatsd::Statsd).to receive(:distributed_increment)
     end
 
     it "restrict_quantitative_data? helper returns false by default" do
@@ -2602,7 +2663,7 @@ describe Account do
       @account.save!
       expect(@account.restrict_quantitative_data?).to be true
 
-      expect(InstStatsd::Statsd).to have_received(:increment).with("account.settings.restrict_quantitative_data.enabled").once
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("account.settings.restrict_quantitative_data.enabled").once
     end
 
     it "increments disabled log when setting is turned off" do
@@ -2613,8 +2674,8 @@ describe Account do
       @account.save!
       expect(@account.restrict_quantitative_data?).to be false
 
-      expect(InstStatsd::Statsd).to have_received(:increment).with("account.settings.restrict_quantitative_data.enabled").once.ordered
-      expect(InstStatsd::Statsd).to have_received(:increment).with("account.settings.restrict_quantitative_data.disabled").once.ordered
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("account.settings.restrict_quantitative_data.enabled").once.ordered
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("account.settings.restrict_quantitative_data.disabled").once.ordered
     end
 
     it "doesn't increment either log when settings update but RQD setting is unchanged" do
@@ -2623,8 +2684,8 @@ describe Account do
       @account.save!
       expect(@account.restrict_student_future_view[:value]).to be true
 
-      expect(InstStatsd::Statsd).not_to have_received(:increment).with("account.settings.restrict_quantitative_data.enabled")
-      expect(InstStatsd::Statsd).not_to have_received(:increment).with("account.settings.restrict_quantitative_data.disabled")
+      expect(InstStatsd::Statsd).not_to have_received(:distributed_increment).with("account.settings.restrict_quantitative_data.enabled")
+      expect(InstStatsd::Statsd).not_to have_received(:distributed_increment).with("account.settings.restrict_quantitative_data.disabled")
     end
 
     it "doesn't increment either counter when parent account setting is changed" do
@@ -2633,14 +2694,14 @@ describe Account do
       @sub_account.save!
 
       expect(@sub_account.restrict_quantitative_data?).to be true
-      expect(InstStatsd::Statsd).to have_received(:increment).with("account.settings.restrict_quantitative_data.enabled").once
+      expect(InstStatsd::Statsd).to have_received(:distributed_increment).with("account.settings.restrict_quantitative_data.enabled").once
 
       @account.settings[:restrict_quantitative_data] = { locked: true, value: false }
       @account.save!
       # Ignores changes completely
       expect(@sub_account.restrict_quantitative_data?).to be true
 
-      expect(InstStatsd::Statsd).not_to have_received(:increment).with("account.settings.restrict_quantitative_data.disabled")
+      expect(InstStatsd::Statsd).not_to have_received(:distributed_increment).with("account.settings.restrict_quantitative_data.disabled")
     end
   end
 
@@ -2846,6 +2907,234 @@ describe Account do
         expect(Account.default.available_ip_filters(@course2.uuid).size).to eq(2)
         expect(Account.default.available_ip_filters(@course1.uuid).size).to eq(1)
       end
+    end
+  end
+
+  describe "#recompute_assignments_using_account_default" do
+    let_once(:data1) { [["A", 0.94], ["F", 0]] }
+    let_once(:data2) { [["A", 0.5], ["F", 0]] }
+
+    before do
+      Account.site_admin.enable_feature!(:archived_grading_schemes)
+      Account.site_admin.enable_feature!(:default_account_grading_scheme)
+      @root_account = Account.default
+      sub_account = @root_account.sub_accounts.create!
+      sub_sub_account = sub_account.sub_accounts.create!
+      admin = account_admin_user(account: @root_account)
+      user_session(admin)
+      grading_standard = GradingStandard.create!(context: @root_account, workflow_state: "active", data: data1, title: "current grading scheme")
+      @new_grading_standard = GradingStandard.create!(context: @root_account, workflow_state: "active", data: data2, title: "new grading scheme")
+      @root_account.update!(grading_standard_id: grading_standard.id)
+      course_inheriting_from_root = course_factory(account: @root_account)
+      course_not_inheriting_from_root = course_factory(account: @root_account)
+      course_not_inheriting_from_root.update!(grading_standard_id: grading_standard.id)
+      course_inheriting_from_sub = course_factory(account: sub_account)
+      course_inheriting_from_sub_sub = course_factory(account: sub_sub_account)
+      student1 = course_inheriting_from_root.enroll_user(user_factory(active_user: true), "StudentEnrollment", enrollment_state: "active").user
+      student2 = course_not_inheriting_from_root.enroll_user(user_factory(active_user: true), "StudentEnrollment", enrollment_state: "active").user
+      student3 = course_inheriting_from_sub.enroll_user(user_factory(active_user: true), "StudentEnrollment", enrollment_state: "active").user
+      student4 = course_inheriting_from_sub_sub.enroll_user(user_factory(active_user: true), "StudentEnrollment", enrollment_state: "active").user
+      assignment_root = course_inheriting_from_root.assignments.create!(title: "hi", grading_standard_id: nil, points_possible: 10, grading_type: "letter_grade")
+      assignment_not_inheriting = course_not_inheriting_from_root.assignments.create!(title: "hello", grading_standard_id: nil, points_possible: 10, grading_type: "letter_grade")
+      assignment_sub = course_inheriting_from_sub.assignments.create!(title: "hi2", grading_standard_id: nil, points_possible: 10, grading_type: "letter_grade")
+      assignment_sub_sub = course_inheriting_from_sub_sub.assignments.create!(title: "hi3", grading_standard_id: nil, points_possible: 10, grading_type: "letter_grade")
+      @submission_root = assignment_root.grade_student(student1, score: 6, grader: admin).first
+      @submission_not_inheriting = assignment_not_inheriting.grade_student(student2, score: 6, grader: admin).first
+      @submission_sub = assignment_sub.grade_student(student3, score: 6, grader: admin).first
+      @submission_sub_sub = assignment_sub_sub.grade_student(student4, score: 6, grader: admin).first
+    end
+
+    it "updates submission grades in account inheriting courses/assignments and all sub account courses/assignments" do
+      @root_account.recompute_assignments_using_account_default(@new_grading_standard)
+
+      expect(@submission_root.reload.grade).to eq "A"
+      expect(@submission_not_inheriting.reload.grade).to eq "F"
+      expect(@submission_sub.reload.grade).to eq "A"
+      expect(@submission_sub_sub.reload.grade).to eq "A"
+    end
+
+    it "updates the most recent submission version in all inheriting account and sub account courses" do
+      @root_account.recompute_assignments_using_account_default(@new_grading_standard)
+
+      expect(@submission_root.reload.versions.first.model.grade).to eq "A"
+      expect(@submission_not_inheriting.reload.versions.first.model.grade).to eq "F"
+      expect(@submission_sub.reload.versions.first.model.grade).to eq "A"
+      expect(@submission_sub_sub.reload.versions.first.model.grade).to eq "A"
+    end
+  end
+
+  describe "#recaptcha_key" do
+    let(:root_account) { Account.create! }
+
+    before do
+      allow(root_account).to receive_messages(root_account?: true, self_registration_captcha?: true)
+    end
+
+    it "returns the recaptcha_client_key when root_account? and self_registration_captcha? are true" do
+      allow(DynamicSettings).to receive(:find).with(tree: "private").and_return(
+        instance_double(DynamicSettings::PrefixProxy, :[] => "test_key")
+      )
+      expect(root_account.recaptcha_key).to eq("test_key")
+    end
+
+    it "returns nil if not a root account" do
+      allow(root_account).to receive(:root_account?).and_return(false)
+      expect(root_account.recaptcha_key).to be_nil
+    end
+
+    it "returns nil if self_registration_captcha? is false" do
+      allow(root_account).to receive(:self_registration_captcha?).and_return(false)
+      expect(root_account.recaptcha_key).to be_nil
+    end
+
+    it "returns nil if recaptcha_client_key is not present in DynamicSettings" do
+      allow(DynamicSettings).to receive(:find).with(tree: "private").and_return(
+        instance_double(DynamicSettings::PrefixProxy, :[] => nil)
+      )
+      expect(root_account.recaptcha_key).to be_nil
+    end
+
+    it "returns nil if not a root account even if self_registration_captcha? is true" do
+      allow(root_account).to receive_messages(root_account?: false, self_registration_captcha?: true)
+      expect(root_account.recaptcha_key).to be_nil
+    end
+
+    it "returns nil if both root_account? and self_registration_captcha? are false" do
+      allow(root_account).to receive_messages(root_account?: false, self_registration_captcha?: false)
+      expect(root_account.recaptcha_key).to be_nil
+    end
+  end
+
+  describe "#get_role_by_name" do
+    let(:account) { Account.default }
+    let(:role_name) { "Course Admin" }
+    let!(:active_role) do
+      account.roles.create(name: role_name, base_role_type: "TeacherEnrollment", workflow_state: "active")
+    end
+    let!(:inactive_role) do
+      account.roles.create(name: role_name, base_role_type: "TaEnrollment", workflow_state: "inactive")
+    end
+
+    it "returns the active role if both active and inactive roles are present" do
+      result = account.get_role_by_name(role_name)
+      expect(result).to eq(active_role)
+    end
+
+    it "returns the inactive role if no active role is present" do
+      active_role.destroy
+      result = account.get_role_by_name(role_name)
+      expect(result).to eq(inactive_role)
+    end
+
+    it "returns nil if no roles are present" do
+      active_role.destroy
+      inactive_role.destroy
+      result = account.get_role_by_name(role_name)
+      expect(result).to be_nil
+    end
+  end
+
+  describe "horizon account" do
+    before(:once) do
+      @account = Account.default
+    end
+
+    describe "#horizon_account" do
+      it "returns false by default" do
+        expect(@account.horizon_account[:value]).to be false
+      end
+
+      it "returns the enabled inherited value if set on parent account" do
+        root_account = Account.create!
+        root_account.settings[:horizon_account] = { value: true }
+        root_account.save!
+        subaccount = root_account.sub_accounts.create!
+        expect(subaccount.horizon_account[:value]).to be true
+        expect(subaccount.horizon_account[:inherited]).to be true
+      end
+
+      it "returns the disabled inherited value if set on parent account" do
+        root_account = Account.create!
+        root_account.settings[:horizon_account] = { value: false }
+        root_account.save!
+        subaccount = root_account.sub_accounts.create!
+        expect(subaccount.horizon_account[:value]).to be false
+        expect(subaccount.horizon_account[:inherited]).to be true
+      end
+    end
+  end
+
+  describe "horizon_url" do
+    before :once do
+      @account = Account.default
+      @account.settings[:horizon_domain] = "test.canvasforcareer.com"
+      @account.save!
+    end
+
+    it "returns the url with the specified path" do
+      expect(@account.horizon_url("api/v1/test").to_s).to eq("https://test.canvasforcareer.com/api/v1/test")
+    end
+
+    it "returns nil if horizon_domain is not set" do
+      @account.settings[:horizon_domain] = nil
+      @account.save!
+      expect(@account.horizon_url("api/v1/test")).to be_nil
+    end
+
+    it "uses http protocol for localhost domains" do
+      @account.settings[:horizon_domain] = "localhost:3002"
+      @account.save!
+      expect(@account.horizon_url("api/v1/test").to_s).to eq("http://localhost:3002/api/v1/test")
+    end
+  end
+
+  describe "horizon_redirect_url" do
+    before :once do
+      @account = Account.default
+      @account.settings[:horizon_domain] = "test.canvasforcareer.com"
+      @account.save!
+    end
+
+    it "returns the redirect url with canvas path" do
+      expect(@account.horizon_redirect_url("/courses")).to eq("https://test.canvasforcareer.com/redirect?canvas_url=%2Fcourses&preview=false&reauthenticate=false")
+    end
+
+    it "returns the redirect url with reauthenticate param" do
+      expect(@account.horizon_redirect_url("/", reauthenticate: true)).to eq("https://test.canvasforcareer.com/redirect?canvas_url=%2F&preview=false&reauthenticate=true")
+    end
+
+    it "returns the redirect url with preview param" do
+      expect(@account.horizon_redirect_url("/", preview: true)).to eq("https://test.canvasforcareer.com/redirect?canvas_url=%2F&preview=true&reauthenticate=false")
+    end
+
+    it "returns nil if horizon_domain is not set" do
+      @account.settings[:horizon_domain] = nil
+      @account.save!
+      expect(@account.horizon_redirect_url("/courses")).to be_nil
+    end
+
+    it "returns redirect url on localhost with port" do
+      @account.settings[:horizon_domain] = "localhost:3002"
+      @account.save!
+      expect(@account.horizon_redirect_url("/courses")).to eq("http://localhost:3002/redirect?canvas_url=%2Fcourses&preview=false&reauthenticate=false")
+    end
+  end
+
+  describe "allow_assign_to_differentiation_tags?" do
+    before :once do
+      @account = Account.default
+      Account.site_admin.enable_feature!(:assign_to_differentiation_tags)
+      @account.settings[:allow_assign_to_differentiation_tags] = { value: true }
+      @account.save!
+    end
+
+    it "returns true if the setting is enabled and the observer_appointment_groups flag is enabled" do
+      expect(@account.allow_assign_to_differentiation_tags?).to be true
+    end
+
+    it "returns false if the observer_appointment_groups flag is disabled" do
+      Account.site_admin.disable_feature!(:assign_to_differentiation_tags)
+      expect(@account.allow_assign_to_differentiation_tags?).to be false
     end
   end
 end

@@ -41,14 +41,6 @@ describe Submission do
     }
   end
 
-  it { is_expected.to validate_numericality_of(:points_deducted).is_greater_than_or_equal_to(0).allow_nil }
-  it { is_expected.to validate_numericality_of(:seconds_late_override).is_greater_than_or_equal_to(0).allow_nil }
-  it { is_expected.to validate_inclusion_of(:late_policy_status).in_array(%w[none missing late extended]).allow_nil }
-  it { is_expected.to validate_inclusion_of(:cached_tardiness).in_array(["missing", "late"]).allow_nil }
-
-  it { is_expected.to delegate_method(:auditable?).to(:assignment).with_prefix(true) }
-  it { is_expected.to delegate_method(:can_be_moderated_grader?).to(:assignment).with_prefix(true) }
-
   describe "inferred values" do
     subject do
       submission.infer_values
@@ -540,7 +532,7 @@ describe Submission do
     end
 
     it "does not truncate seconds off of cached due dates" do
-      time = DateTime.parse("2018-12-24 23:59:59")
+      time = Time.zone.parse("2018-12-24 23:59:59")
       @assignment.update_attribute(:due_at, time)
       submission = @assignment.submissions.find_by!(user: @user)
       expect(submission.cached_due_date.to_i).to eq time.to_i
@@ -2070,7 +2062,7 @@ describe Submission do
 
     it "moves mastery path along on force audit if appropriate" do
       expect(ConditionalRelease::Rule).to receive(:is_trigger_assignment?).with(submission.assignment).once
-      submission.update! score: 1, workflow_state: :graded, posted_at: Time.now
+      submission.update! score: 1, workflow_state: :graded, posted_at: Time.zone.now
       submission.grade_change_audit(force_audit: true)
     end
   end
@@ -2186,7 +2178,7 @@ describe Submission do
 
       it "sends the correct message when an assignment is turned in late" do
         @assignment.workflow_state = "published"
-        @assignment.update(due_at: Time.now - 1000)
+        @assignment.update(due_at: Time.zone.now - 1000)
 
         submission_spec_model(user: @student, submit_homework: true)
         expect(@submission.messages_sent.keys).to eq ["Assignment Submitted Late"]
@@ -2194,7 +2186,7 @@ describe Submission do
 
       it "sends the correct message when an assignment is resubmitted on-time" do
         @assignment.submission_types = ["online_text_entry"]
-        @assignment.due_at = Time.now + 1000
+        @assignment.due_at = Time.zone.now + 1000
         @assignment.save!
 
         @assignment.submit_homework(@student, body: "lol")
@@ -2204,7 +2196,7 @@ describe Submission do
 
       it "sends the correct message when an assignment is resubmitted late" do
         @assignment.submission_types = ["online_text_entry"]
-        @assignment.due_at = Time.now - 1000
+        @assignment.due_at = Time.zone.now - 1000
         @assignment.save!
 
         @assignment.submit_homework(@student, body: "lol")
@@ -2213,7 +2205,7 @@ describe Submission do
       end
 
       it "sends the correct message when a group assignment is submitted late" do
-        @a = assignment_model(course: @context, group_category: "Study Groups", due_at: Time.now - 1000, submission_types: ["online_text_entry"])
+        @a = assignment_model(course: @context, group_category: "Study Groups", due_at: Time.zone.now - 1000, submission_types: ["online_text_entry"])
         @group1 = @a.context.groups.create!(name: "Study Group 1", group_category: @a.group_category)
         @group1.add_user(@student)
         submission = @a.submit_homework @student, submission_type: "online_text_entry", body: "blah"
@@ -2490,7 +2482,7 @@ describe Submission do
 
       it "does not create a grade changed message when theres a quiz attached" do
         Notification.create(name: "Submission Grade Changed")
-        allow(@assignment).to receive_messages(score_to_grade: "10.0", due_at: Time.now - 100)
+        allow(@assignment).to receive_messages(score_to_grade: "10.0", due_at: Time.zone.now - 100)
         submission_spec_model
 
         @quiz = Quizzes::Quiz.create!(context: @course)
@@ -3950,12 +3942,12 @@ describe Submission do
     usec = submission.submitted_at.usec
     timestamp = "#{time_to_i}.#{usec}".to_f
 
-    quiz_submission.finished_at = Time.at(timestamp)
+    quiz_submission.finished_at = Time.zone.at(timestamp)
     quiz_submission.save
 
     # get the data in a strange state where the quiz_submission.finished_at is
     # microseconds older than the submission (caused the bug in #6048)
-    quiz_submission.finished_at = Time.at(timestamp + 0.00001)
+    quiz_submission.finished_at = Time.zone.at(timestamp + 0.00001)
     quiz_submission.save
 
     # verify the data is weird, to_i says they are equal, but the usecs are off
@@ -4150,7 +4142,7 @@ describe Submission do
     it "is read if other submission fields change" do
       @submission = @assignment.submit_homework(@user)
       @submission.workflow_state = "graded"
-      @submission.graded_at = Time.now
+      @submission.graded_at = Time.zone.now
       @submission.save!
       expect(@submission.read?(@user)).to be_truthy
     end
@@ -4158,7 +4150,7 @@ describe Submission do
     it "mark read/unread" do
       @submission = @assignment.submit_homework(@user)
       @submission.workflow_state = "graded"
-      @submission.graded_at = Time.now
+      @submission.graded_at = Time.zone.now
       @submission.save!
       expect(@submission.read?(@user)).to be_truthy
       @submission.mark_unread(@user)
@@ -4265,7 +4257,7 @@ describe Submission do
     before do
       submission.published_score = 100
       submission.published_grade = "A"
-      submission.graded_at = Time.now
+      submission.graded_at = Time.zone.now
       submission.grade = "B"
       submission.score = 90
       submission.mute
@@ -5893,6 +5885,29 @@ describe Submission do
         end
       end
     end
+
+    context "with the cache" do
+      specs_require_cache(:redis_cache_store)
+
+      it "updates submissions with an assignment override shortly after updating the override" do
+        assignment = @course.assignments.create!(points_possible: 10, only_visible_to_overrides: true)
+        # Force the course wide cache to be set. In the normal course of process_bulk_update, the front end would get
+        # called to queue the delayed job update. In that flow, the cache gets set for the course, and assignment
+        # without specific users. This next line is to mimic that behavior for testing.
+        AssignmentVisibility::AssignmentVisibilityService.assignments_visible_to_students(course_ids: @course, assignment_ids: assignment)
+        assignment.assignment_overrides.create!(set_type: "CourseSection", set: @course.course_sections.first)
+
+        Submission.process_bulk_update(@progress, @course, nil, @teacher, {
+                                         assignment.id.to_s => {
+                                           @u1.id => { posted_grade: 5 },
+                                           @u2.id => { posted_grade: 10 }
+                                         }
+                                       })
+
+        expect(assignment.submission_for_student(@u1).grade).to eql "5"
+        expect(assignment.submission_for_student(@u2).grade).to eql "10"
+      end
+    end
   end
 
   describe "find_or_create_provisional_grade!" do
@@ -6789,6 +6804,38 @@ describe Submission do
         expect(@submission.visible_rubric_assessments_for(@reviewing_student)[0].assessor).to eql(@reviewing_student)
       end
     end
+
+    context "self assessments" do
+      before(:once) do
+        course = Course.create!
+        @student = course.enroll_student(User.create!, workflow_state: "active").user
+
+        assignment = course.assignments.create!(peer_reviews: true, anonymous_peer_reviews: true)
+        rubric_association = rubric_association_model(context: course, association_object: assignment, purpose: "grading")
+
+        @submission = assignment.submission_for_student(@student)
+        rubric_association.rubric_assessments.create!({
+                                                        artifact: @submission,
+                                                        assessment_type: "self_assessment",
+                                                        assessor: @student,
+                                                        rubric: rubric_association.rubric,
+                                                        user: @student
+                                                      })
+      end
+
+      it "includes self assessments" do
+        assessments = @submission.visible_rubric_assessments_for(@student)
+        expect(assessments.count).to eq 1
+        expect(assessments.first.assessment_type).to eq "self_assessment"
+      end
+
+      it "includes self assessments no matter the attempt" do
+        @submission.update!(attempt: 2)
+        assessments = @submission.visible_rubric_assessments_for(@student, attempt: 2)
+        expect(assessments.count).to eq 1
+        expect(assessments.first.assessment_type).to eq "self_assessment"
+      end
+    end
   end
 
   describe "#rubric_assessment" do
@@ -7271,6 +7318,24 @@ describe Submission do
 
       sub = Submission.find(Submission.connection.create(create_sql))
       expect(sub.submission_history).to eq([sub])
+    end
+
+    it "optionally returns the version along with the model" do
+      aggregate_failures do
+        history = submission.submission_history(include_version: true)
+        expect(history.size).to be 1
+        entry = history.first
+        expect(entry[:version].id).to eql submission.versions.first.id
+        expect(entry[:model].id).to eql submission.id
+      end
+    end
+
+    it "considers the include_version arg in memoization" do
+      aggregate_failures do
+        submission.submission_history(include_version: true)
+        history = submission.submission_history(include_version: false)
+        expect(history.first).to be_a Submission
+      end
     end
   end
 
@@ -8091,6 +8156,41 @@ describe Submission do
     end
   end
 
+  describe "#checkpoints_needs_grading?" do
+    before(:once) do
+      @course = course_model
+      @course.root_account.enable_feature!(:discussion_checkpoints)
+      @student = student_in_course(course: @course, active_all: true).user
+      @topic = DiscussionTopic.create_graded_topic!(course: @course, title: "graded topic")
+      @topic.create_checkpoints(reply_to_topic_points: 3, reply_to_entry_points: 7)
+    end
+
+    it "returns true if one sub_assigment(REPLY_TO_ENTRY) needs grading" do
+      @topic.reply_to_topic_checkpoint.submit_homework(@student, submission_type: "discussion_topic")
+      @topic.assignment.grade_student(@student, grader: @teacher, score: 7, sub_assignment_tag: CheckpointLabels::REPLY_TO_ENTRY)
+
+      expect(Submission.where(user_id: @student.id, assignment_id: @topic.assignment_id).first.checkpoints_needs_grading?).to be true
+    end
+
+    it "returns true if one sub_assigment(REPLY_TO_TOPIC) needs grading" do
+      @topic.assignment.grade_student(@student, grader: @teacher, score: 3, sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC)
+      @topic.reply_to_entry_checkpoint.submit_homework(@student, submission_type: "discussion_topic")
+
+      expect(Submission.where(user_id: @student.id, assignment_id: @topic.assignment_id).first.checkpoints_needs_grading?).to be true
+    end
+
+    it "returns false if one sub_assigments has been graded(other is unsubmitted)" do
+      @topic.assignment.grade_student(@student, grader: @teacher, score: 3, sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC)
+      expect(Submission.where(user_id: @student.id, assignment_id: @topic.assignment_id).first.checkpoints_needs_grading?).to be false
+    end
+
+    it "returns false if both sub_assigments have been graded" do
+      @topic.assignment.grade_student(@student, grader: @teacher, score: 3, sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC)
+      @topic.assignment.grade_student(@student, grader: @teacher, score: 7, sub_assignment_tag: CheckpointLabels::REPLY_TO_ENTRY)
+      expect(Submission.where(user_id: @student.id, assignment_id: @topic.assignment_id).first.checkpoints_needs_grading?).to be false
+    end
+  end
+
   describe "#plagiarism_service_to_use" do
     it "returns nil when no service is configured" do
       submission = @assignment.submit_homework(@student,
@@ -8538,7 +8638,7 @@ describe Submission do
   end
 
   describe "#filter_attributes_for_user" do
-    let(:user) { instance_double("User", id: 1) }
+    let(:user) { instance_double(User, id: 1) }
     let(:session) { {} }
     let(:submission) { @assignment.submissions.build(user_id: 2) }
 
@@ -8819,8 +8919,6 @@ describe Submission do
   end
 
   describe "extra_attempts validations" do
-    it { is_expected.to validate_numericality_of(:extra_attempts).is_greater_than_or_equal_to(0).allow_nil }
-
     describe "#extra_attempts_can_only_be_set_on_online_uploads" do
       it "does not allow extra_attempts to be set for non online upload submission types" do
         submission = @assignment.submissions.first
@@ -9256,40 +9354,8 @@ describe Submission do
   end
 
   describe "word_count" do
-    it "returns the word count" do
-      submission.update(body: "test submission")
-      expect(submission.word_count).to eq 2
-    end
-
-    it "returns the word count if body is split up by <br> tags" do
-      submission.update(body: "test<br>submission")
-      expect(submission.word_count).to eq 2
-    end
-
-    it "returns nil if there is no body" do
-      expect(submission.body).to be_nil
-      expect(submission.word_count).to be_nil
-    end
-
-    it "returns nil if it's a quiz submission" do
-      submission.update(submission_type: "online_quiz", body: "test submission")
-      expect(submission.submission_type).to eq "online_quiz"
-      expect(submission.body).not_to be_nil
-      expect(submission.word_count).to be_nil
-    end
-
-    it "returns 0 if the body is empty" do
-      submission.update(body: "")
-      expect(submission.word_count).to eq 0
-    end
-
-    it "ignores HTML tags" do
-      submission.update(body: "<span>test <div></div>submission</span> <p></p>")
-      expect(submission.word_count).to eq 2
-      submission.instance_variable_set :@word_count, nil
-      submission.update(body: '<p>This is my submission, which has&nbsp;<strong>some bold&nbsp;<em>italic text</em> in</strong> it.</p>
-        <p>A couple paragraphs, and maybe super<sup>script</sup>.&nbsp;</p>')
-      expect(submission.word_count).to eq 18
+    before do
+      @submission = @assignment.submissions.find_by(user: @student)
     end
 
     it "sums word counts of attachments if there are any" do
@@ -9299,7 +9365,106 @@ describe Submission do
       attachment2 = attachment_model(uploaded_data: stub_file_data("submission.txt", submission_text, "text/plain"), context: @student)
       sub = @assignment.submit_homework(@student, attachments: [attachment1, attachment2])
       run_jobs
-      expect(sub.word_count).to eq 12
+      expect(sub.reload.word_count).to eq 12
+    end
+
+    context "when calculating word count on-the-fly" do
+      before { Account.site_admin.disable_feature!(:use_body_word_count) }
+
+      it "returns the word count" do
+        @submission.update(body: "test submission")
+        expect(@submission.word_count).to eq 2
+      end
+
+      it "returns the word count if body is split up by <br> tags" do
+        @submission.update(body: "test<br>submission")
+        expect(@submission.word_count).to eq 2
+      end
+
+      it "returns nil if there is no body" do
+        expect(@submission.body).to be_nil
+        expect(@submission.word_count).to be_nil
+      end
+
+      it "returns nil if it's a quiz submission" do
+        @submission.update(submission_type: "online_quiz", body: "test submission")
+        expect(@submission.submission_type).to eq "online_quiz"
+        expect(@submission.body).not_to be_nil
+        expect(@submission.word_count).to be_nil
+      end
+
+      it "returns 0 if the body is empty" do
+        @submission.update(body: "")
+        expect(@submission.word_count).to eq 0
+      end
+
+      it "ignores HTML tags" do
+        @submission.update(body: "<span>test <div></div>submission</span> <p></p>")
+        expect(@submission.word_count).to eq 2
+        @submission.instance_variable_set :@word_count, nil
+        @submission.update(body: '<p>This is my submission, which has&nbsp;<strong>some bold&nbsp;<em>italic text</em> in</strong> it.</p>
+          <p>A couple paragraphs, and maybe super<sup>script</sup>.&nbsp;</p>')
+        expect(@submission.reload.word_count).to eq 18
+      end
+    end
+
+    context "when the use_body_word_count feature is enabled" do
+      let(:word_count) do
+        run_jobs
+        @submission.reload.word_count
+      end
+
+      it "falls back to calculating on-the-fly if body_word_count is nil" do
+        @submission.update_columns(body: "two words")
+        run_jobs
+        @submission.reload
+        expect(@submission.body_word_count).to be_nil
+        expect(@submission.word_count).to eq 2
+      end
+
+      it "sets the word_count to 0 if an exception is thrown when trying to calculate the count" do
+        # stubbing this way (instead of expect(submission)...) because the method is called on an object in a delayed job.
+        expect_any_instance_of(Submission).to receive(:calc_body_word_count).and_raise("Kaboom")
+        @submission.update(body: "submission body that can't be parsed for some reason (usually because it's too big)")
+        expect(word_count).to eq 0
+      end
+
+      it "returns the word count" do
+        @submission.update(body: "test submission")
+        expect(word_count).to eq 2
+      end
+
+      it "returns the word count if body is split up by <br> tags" do
+        @submission.update(body: "test<br>submission")
+        expect(word_count).to eq 2
+      end
+
+      it "returns nil if there is no body" do
+        expect(@submission.body).to be_nil
+        expect(word_count).to be_nil
+      end
+
+      it "returns nil if it's a quiz submission" do
+        @submission.update(submission_type: "online_quiz", body: "test submission")
+        expect(@submission.submission_type).to eq "online_quiz"
+        expect(@submission.body).not_to be_nil
+        expect(word_count).to be_nil
+      end
+
+      it "returns 0 if the body is empty" do
+        @submission.update(body: "")
+        expect(word_count).to eq 0
+      end
+
+      it "ignores HTML tags" do
+        @submission.update(body: "<span>test <div></div>submission</span> <p></p>")
+        expect(word_count).to eq 2
+        @submission.instance_variable_set :@word_count, nil
+        @submission.update(body: '<p>This is my submission, which has&nbsp;<strong>some bold&nbsp;<em>italic text</em> in</strong> it.</p>
+          <p>A couple paragraphs, and maybe super<sup>script</sup>.&nbsp;</p>')
+        run_jobs
+        expect(@submission.reload.word_count).to eq 18
+      end
     end
   end
 
@@ -9448,7 +9613,7 @@ describe Submission do
     it "calls Statsd when a classic quiz is manually graded" do
       expect(InstStatsd::Statsd).to receive(:gauge).once.with("submission.manually_graded.grading_time", 600.0, 1.0, tags: { quiz_type: "classic_quiz" })
 
-      now = Time.now
+      now = Time.zone.now
       Timecop.freeze(now) do
         quiz_with_graded_submission([{ question_data: { :name => "question 1", :points_possible => 10, "question_type" => "essay_question" } }])
       end
@@ -9462,7 +9627,7 @@ describe Submission do
     it "calls Statsd when a new quiz is manually graded" do
       expect(InstStatsd::Statsd).to receive(:gauge).once.with("submission.manually_graded.grading_time", 300.0, 1.0, tags: { quiz_type: "new_quiz" })
 
-      now = Time.now
+      now = Time.zone.now
       Timecop.freeze(now) do
         quiz_with_graded_submission([{ question_data: { :name => "question 1", :points_possible => 10, "question_type" => "essay_question" } }])
       end
@@ -9483,7 +9648,7 @@ describe Submission do
     it "does not call Statsd when a submission is updated" do
       expect(InstStatsd::Statsd).not_to receive(:gauge)
 
-      now = Time.now
+      now = Time.zone.now
       Timecop.freeze(now) do
         quiz_with_graded_submission([{ question_data: { :name => "question 1", :points_possible => 10, "question_type" => "essay_question" } }])
       end
@@ -9498,7 +9663,7 @@ describe Submission do
     it "does not call Statsd when the time between submission and grading is less than 30 seconds" do
       expect(InstStatsd::Statsd).not_to receive(:gauge)
 
-      now = Time.now
+      now = Time.zone.now
       Timecop.freeze(now) do
         quiz_with_graded_submission([{ question_data: { :name => "question 1", :points_possible => 10, "question_type" => "essay_question" } }])
       end
@@ -9532,6 +9697,37 @@ describe Submission do
     it "does not update the parent submission when the checkpoints flag is disabled" do
       @checkpoint_submission.root_account.disable_feature!(:discussion_checkpoints)
       expect { @checkpoint_submission.update!(score: 3) }.not_to change { @parent_submission.reload.score }
+    end
+  end
+
+  describe "lti_attempt_id is set automatically" do
+    before do
+      course_with_teacher
+      @assignment = @course.assignments.create!(title: "some assignment")
+      @submission = @assignment.submissions.create!(user: @teacher)
+    end
+
+    it "for new submissions" do
+      expect(@submission.lti_attempt_id.length).to be > 30
+    end
+
+    it "for existing submissions on save" do
+      @submission.update_column(:lti_id, nil)
+      @submission.save!
+      expect(@submission.lti_attempt_id.length).to be > 30
+    end
+
+    it "does not change already existing lti_id, but lit_attempt_id is different" do
+      old_lti_attempt_id = @submission.lti_attempt_id
+      @submission.update(attempt: 2)
+      expect(@submission.reload.lti_attempt_id.split(":").first).to eq old_lti_attempt_id.split(":").first
+      expect(@submission.lti_attempt_id).not_to eq old_lti_attempt_id
+    end
+
+    it "cannot change already existing lti_id" do
+      @submission.lti_id = "new_id"
+      expect(@submission.save).to be_falsey
+      expect(@submission.errors[:lti_id]).to include("Cannot change lti_id!")
     end
   end
 end

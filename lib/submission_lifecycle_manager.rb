@@ -97,7 +97,7 @@ class SubmissionLifecycleManager
     SQL_FRAGMENT
   end
 
-  def self.recompute(assignment, update_grades: false, executing_user: nil, create_sub_assignment_submissions: false)
+  def self.recompute(assignment, update_grades: false, executing_user: nil, create_sub_assignment_submissions: true)
     current_caller = caller(1..1).first
     Rails.logger.debug "DDC.recompute(#{assignment&.id}) - #{current_caller}"
     return unless assignment.persisted? && assignment.active?
@@ -120,7 +120,7 @@ class SubmissionLifecycleManager
     recompute_course(assignment.context, **opts)
   end
 
-  def self.recompute_course(course, assignments: nil, inst_jobs_opts: {}, run_immediately: false, update_grades: false, original_caller: caller(1..1).first, executing_user: nil, skip_late_policy_applicator: false, create_sub_assignment_submissions: false)
+  def self.recompute_course(course, assignments: nil, inst_jobs_opts: {}, run_immediately: false, update_grades: false, original_caller: caller(1..1).first, executing_user: nil, skip_late_policy_applicator: false, create_sub_assignment_submissions: true)
     Rails.logger.debug "DDC.recompute_course(#{course.inspect}, #{assignments.inspect}, #{inst_jobs_opts.inspect}) - #{original_caller}"
     course = Course.find(course) unless course.is_a?(Course)
     inst_jobs_opts[:max_attempts] ||= 10
@@ -215,6 +215,8 @@ class SubmissionLifecycleManager
     # in a transaction on the correct shard:
     @course.shard.activate do
       values = []
+      # values must be unique by assignment_id and student_id
+      processed_pairs = Set.new
 
       assignments_by_id = AbstractAssignment.find(@assignment_ids).index_by(&:id)
 
@@ -226,6 +228,9 @@ class SubmissionLifecycleManager
         quiz_lti = quiz_lti_assignments.include?(assignment_id)
 
         student_due_dates.each_key do |student_id|
+          key = [assignment_id, student_id]
+          next unless processed_pairs.add?(key)
+
           submission_info = student_due_dates[student_id]
           due_date = submission_info[:due_at] ? "'#{ActiveRecord::Base.connection.quoted_date(submission_info[:due_at].change(usec: 0))}'::timestamptz" : "NULL"
           grading_period_id = submission_info[:grading_period_id] || "NULL"
@@ -238,11 +243,15 @@ class SubmissionLifecycleManager
 
           if @create_sub_assignment_submissions && assignment.checkpoints_parent? && assignment.sub_assignment_submissions.find_by(user_id: student_id).nil?
             assignment.sub_assignments.each do |sub_assignment|
+              sub_assignment_key = [sub_assignment.id, student_id]
+              next unless processed_pairs.add?(sub_assignment_key)
+
               values << [sub_assignment.id, student_id, "NULL", grading_period_id, sql_ready_anonymous_id, quiz_lti, @course.root_account_id]
             end
-          else
-            values << [assignment_id, student_id, due_date, grading_period_id, sql_ready_anonymous_id, quiz_lti, @course.root_account_id]
           end
+
+          # checkpoints or not, we always want to create submissions for the Assignment
+          values << [assignment_id, student_id, due_date, grading_period_id, sql_ready_anonymous_id, quiz_lti, @course.root_account_id]
         end
       end
 
@@ -332,6 +341,7 @@ class SubmissionLifecycleManager
   private
 
   EnrollmentCounts = Struct.new(:accepted_student_ids, :prior_student_ids, :deleted_student_ids)
+  private_constant :EnrollmentCounts
   def enrollment_counts
     @enrollment_counts ||= begin
       counts = EnrollmentCounts.new([], [], [])

@@ -39,8 +39,8 @@ describe AuthenticationProvider::Google do
   end
 
   it "has valid recognized_params" do
-    expect(AuthenticationProvider::Google.recognized_params).to match_array(
-      %i[client_id client_secret mfa_required skip_internal_mfa otp_via_sms login_attribute jit_provisioning hosted_domain]
+    expect(AuthenticationProvider::Google.recognized_params).to include(
+      *%i[client_id client_secret mfa_required skip_internal_mfa otp_via_sms login_attribute jit_provisioning hosted_domain]
     )
   end
 
@@ -84,7 +84,6 @@ describe AuthenticationProvider::Google do
     ap.hosted_domain = "*"
     expect(CanvasSecurity).to receive(:decode_jwt).once.and_return(id_token("hd" => "instructure.com", "sub" => "123"))
     token = double("token", params: { "id_token" => "dummy" }, options: {})
-    expect(token).to receive(:get).and_return(double(parsed: {}))
 
     expect(ap.unique_id(token)).to eq "123"
   end
@@ -114,7 +113,7 @@ describe AuthenticationProvider::Google do
       keypair = OpenSSL::PKey::RSA.new(2048)
       jwk = JSON::JWK.new(keypair.public_key)
 
-      allow(CanvasHttp).to receive(:get).with("http://jwks").and_return(instance_double("Net::HTTPOK", body: [jwk].to_json))
+      allow(CanvasHttp).to receive(:get).with("http://jwks").and_return(instance_double(Net::HTTPOK, body: [jwk].to_json))
 
       subject.save!
       expect(subject.jwks[jwk[:kid]]).to eq jwk.as_json

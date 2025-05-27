@@ -17,14 +17,14 @@
  */
 
 import React from 'react'
-import {MockedProvider} from '@apollo/react-testing'
-import {QueryProvider} from '@canvas/query'
+import {MockedProvider} from '@apollo/client/testing'
+import {queryClient} from '@canvas/query'
 import {QueryClientProvider} from '@tanstack/react-query'
 
 export function MockedQueryProvider({children}) {
   return (
     <MockedProvider>
-      <QueryProvider>{children}</QueryProvider>
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     </MockedProvider>
   )
 }
@@ -32,9 +32,7 @@ export function MockedQueryProvider({children}) {
 export function MockedQueryClientProvider({children, client}) {
   return (
     <MockedProvider>
-      <QueryClientProvider client={client}>
-        {children}
-      </QueryClientProvider>
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
     </MockedProvider>
   )
 }

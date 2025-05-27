@@ -20,17 +20,18 @@ import React, {useState} from 'react'
 import errorShipUrl from '@canvas/images/ErrorShip.svg'
 import {Spinner} from '@instructure/ui-spinner'
 import {AccountNavigation} from './AccountNavigation'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {View} from '@instructure/ui-view'
 import getAccounts from '@canvas/api/accounts/getAccounts'
-import {useQuery} from '@canvas/query'
 import {IconSettingsLine} from '@instructure/ui-icons'
 import GenericErrorPage from '@canvas/generic-error-page/react'
 import {Table} from '@instructure/ui-table'
 import {IconButton} from '@instructure/ui-buttons'
 import {Tooltip} from '@instructure/ui-tooltip'
+import {useQuery} from '@tanstack/react-query'
+import {sessionStoragePersister} from '@canvas/query'
 
-const I18n = useI18nScope('account_manage')
+const I18n = createI18nScope('account_manage')
 
 const ErrorPage = ({error}: {error?: unknown}) => {
   return (
@@ -49,9 +50,7 @@ export function AccountList() {
   const {data, error, isLoading, isError} = useQuery({
     queryKey: ['accounts', {pageIndex}],
     queryFn: getAccounts,
-    meta: {
-      fetchAtLeastOnce: true,
-    },
+    persister: sessionStoragePersister,
   })
 
   const last = parseInt(String(data?.link?.last?.page || ''), 10)

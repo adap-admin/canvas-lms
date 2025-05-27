@@ -24,6 +24,7 @@ import {QueryClient, QueryClientProvider} from '@tanstack/react-query'
 import type {Product} from '../../models/Product'
 
 describe('Promise resolution', () => {
+  const originalFetch = global.fetch
   let mockedData: Product
   beforeEach(() => {
     mockedData = {
@@ -35,30 +36,51 @@ describe('Promise resolution', () => {
       tagline: 'Product Tagline',
       description: 'Product Description',
       updated_at: '2021-01-01',
+      canvas_lti_configurations: [
+        {
+          id: 12,
+          integration_type: 'lti_13_dynamic_registration',
+          description: 'description',
+          lti_placements: ['dr'],
+          lti_services: ['gk'],
+          url: 'google.com',
+          unified_tool_id: '1234',
+        },
+      ],
       tool_integration_configurations: {
-        lti_13: [
-          {id: 1, integration_type: 'lti13', url: 'http://lti13.com', unified_tool_id: 'lti13'},
-        ],
+        lti_11: [],
+        lti_13: [],
       },
-      lti_configurations: {
-        lti_13: {services: ['service1'], placements: ['placement1']},
-      },
-      badges: [{name: 'badge1', image_url: 'http://badge1.com', link: 'http://badge1.com'}],
+      integration_badges: [
+        {
+          name: 'badge1',
+          image_url: 'http://badge1.com',
+          link: 'http://badge1.com',
+          description: 'badge1',
+        },
+      ],
       screenshots: ['http://screenshot1.com'],
       terms_of_service_url: 'http://tos.com',
       privacy_policy_url: 'http://privacy.com',
       accessibility_url: 'http://accessibility.com',
-      support_link: 'http://support.com',
+      support_url: 'http://support.com',
       tags: [{id: '4', name: 'tag1'}],
       integration_resources: {
         comments: null,
         resources: [],
       },
+      privacy_and_security_badges: [],
+      accessibility_badges: [],
     }
 
     global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
       json: jest.fn().mockResolvedValue(mockedData),
     })
+  })
+
+  afterEach(() => {
+    global.fetch = originalFetch
   })
 
   it('Promise resolves successfully when provided a product', async () => {

@@ -17,8 +17,7 @@
  */
 
 import React from 'react'
-import type {Lti1p3RegistrationOverlayStore} from '../Lti1p3RegistrationOverlayState'
-import {useOverlayStore} from '../hooks/useOverlayStore'
+import type {Lti1p3RegistrationOverlayStore} from '../../registration_overlay/Lti1p3RegistrationOverlayStore'
 import {PermissionConfirmation} from '../../registration_wizard_forms/PermissionConfirmation'
 import type {InternalLtiConfiguration} from '../../model/internal_lti_configuration/InternalLtiConfiguration'
 import {LtiScopes} from '@canvas/lti/model/LtiScope'
@@ -27,17 +26,21 @@ import {RegistrationModalBody} from '../../registration_wizard/RegistrationModal
 export type PermissionConfirmationWrapperProps = {
   internalConfig: InternalLtiConfiguration
   overlayStore: Lti1p3RegistrationOverlayStore
+  showAllSettings: boolean
 }
 
 export const PermissionConfirmationWrapper = ({
   overlayStore,
   internalConfig,
+  showAllSettings,
 }: PermissionConfirmationWrapperProps) => {
-  const [state, actions] = useOverlayStore(overlayStore)
+  const {state, ...actions} = overlayStore()
 
   return (
     <RegistrationModalBody>
       <PermissionConfirmation
+        showAllSettings={showAllSettings}
+        mode="new"
         appName={internalConfig.title}
         scopesSelected={state.permissions.scopes ?? []}
         scopesSupported={[...Object.values(LtiScopes)]}

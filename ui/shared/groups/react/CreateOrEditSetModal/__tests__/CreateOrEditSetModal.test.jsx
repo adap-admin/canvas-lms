@@ -17,7 +17,7 @@
  */
 
 import React from 'react'
-import {render, fireEvent} from '@testing-library/react'
+import {render, fireEvent, screen} from '@testing-library/react'
 import fetchMock from 'fetch-mock'
 import {CreateOrEditSetModal} from '../index'
 
@@ -28,7 +28,8 @@ describe('CreateOrEditSetModal', () => {
 
   it('should render the correct error message if the api call returns an errors object', async () => {
     const contextId = '1'
-    const errorMessage = 'fake response error message'
+    const errorMessage =
+      'An error occurred while creating the Group Set: doFetchApi received a bad response: 400 Bad Request'
     fetchMock.postOnce(`post:/api/v1/accounts/${contextId}/group_categories`, {
       body: {
         errors: {
@@ -38,7 +39,7 @@ describe('CreateOrEditSetModal', () => {
       status: 400,
     })
     const {getByText, getAllByText, getByPlaceholderText} = render(
-      <CreateOrEditSetModal allowSelfSignup={true} contextId={contextId} />
+      <CreateOrEditSetModal allowSelfSignup={true} contextId={contextId} />,
     )
     fireEvent.input(getByPlaceholderText('Enter Group Set Name'), {
       target: {value: 'name'},
@@ -57,7 +58,7 @@ describe('CreateOrEditSetModal', () => {
           media: query,
           onchange: null,
           addListener: jest.fn(),
-          removeListener: jest.fn()
+          removeListener: jest.fn(),
         }
       })
     })
@@ -87,7 +88,7 @@ describe('CreateOrEditSetModal', () => {
           media: query,
           onchange: null,
           addListener: jest.fn(),
-          removeListener: jest.fn()
+          removeListener: jest.fn(),
         }
       })
     })
@@ -107,5 +108,64 @@ describe('CreateOrEditSetModal', () => {
       const groupSelfSignUpStyle = getComputedStyle(groupSelfSignUp)
       expect(groupSelfSignUpStyle.flexDirection).toBe('row')
     })
+  })
+
+  it('should call the group_categories api when self signup on', async () => {
+    const contextId = '1'
+    fetchMock.postOnce(`post:/api/v1/accounts/${contextId}/group_categories`, {
+      body: {
+        id: 1,
+      },
+      status: 200,
+    })
+
+    fetchMock.postOnce(`post:/api/v1/group_categories/1/assign_unassigned_members`, {
+      body: {},
+      status: 200,
+    })
+    const {getByText, getByPlaceholderText, getByTestId} = render(
+      <CreateOrEditSetModal allowSelfSignup={true} contextId={contextId} />,
+    )
+    fireEvent.input(getByPlaceholderText('Enter Group Set Name'), {
+      target: {value: 'name'},
+    })
+    getByTestId('checkbox-allow-self-signup').click()
+    fireEvent.click(getByText('Save'))
+
+    await fetchMock.flush(true)
+    expect(fetchMock.called(`post:/api/v1/accounts/${contextId}/group_categories`)).toBe(true)
+    expect(fetchMock.called(`post:/api/v1/group_categories/1/assign_unassigned_members`)).toBe(
+      false,
+    )
+    expect(fetchMock.calls()).toHaveLength(1)
+  })
+
+  it('should call the group_categories and assign_unassigned_members api when self signup off', async () => {
+    const contextId = '1'
+    fetchMock.postOnce(`post:/api/v1/accounts/${contextId}/group_categories`, {
+      body: {
+        id: 1,
+      },
+      status: 200,
+    })
+
+    fetchMock.postOnce(`post:/api/v1/group_categories/1/assign_unassigned_members`, {
+      body: {},
+      status: 200,
+    })
+    const {getByText, getByPlaceholderText, getByTestId} = render(
+      <CreateOrEditSetModal allowSelfSignup={true} contextId={contextId} />,
+    )
+    fireEvent.input(getByPlaceholderText('Enter Group Set Name'), {
+      target: {value: 'name'},
+    })
+    getByTestId('group-structure-selector').click()
+    await screen.getByTestId('group-structure-num-groups').click()
+    fireEvent.click(getByText('Save'))
+
+    await fetchMock.flush(true)
+    expect(fetchMock.called(`post:/api/v1/accounts/${contextId}/group_categories`)).toBe(true)
+    expect(fetchMock.called(`post:/api/v1/group_categories/1/assign_unassigned_members`)).toBe(true)
+    expect(fetchMock.calls()).toHaveLength(2)
   })
 })

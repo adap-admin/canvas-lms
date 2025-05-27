@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import numberFormat from '@canvas/i18n/numberFormat'
 
 import {AssignmentAvailabilityContainer} from '../AssignmentAvailabilityContainer/AssignmentAvailabilityContainer'
@@ -29,11 +29,10 @@ import {Flex} from '@instructure/ui-flex'
 import {Responsive} from '@instructure/ui-responsive'
 import {DiscussionAvailabilityContainer} from '../DiscussionAvailabilityContainer/DiscussionAvailabilityContainer'
 
-const I18n = useI18nScope('discussion_posts')
+const I18n = createI18nScope('discussion_posts')
 
 export function DiscussionDetails({...props}) {
   const showAssignTo =
-    ENV.FEATURES?.selective_release_ui_api &&
     !props.discussionTopic.isAnnouncement &&
     props.discussionTopic.permissions.manageAssignTo &&
     props.discussionTopic.contextType === 'Course' &&
@@ -59,7 +58,7 @@ export function DiscussionDetails({...props}) {
             {
               count: pointsPossible,
               formattedPoints,
-            }
+            },
           ),
           textSize: 'x-small',
         },
@@ -72,7 +71,7 @@ export function DiscussionDetails({...props}) {
             {
               count: pointsPossible,
               formattedPoints,
-            }
+            },
           ),
           textSize: 'small',
         },
@@ -110,6 +109,7 @@ export function DiscussionDetails({...props}) {
                   delayedPostAt={props.discussionTopic.delayedPostAt}
                   anonymousState={props.discussionTopic.anonymousState}
                   groupSet={props.discussionTopic.groupSet}
+                  assignment={props.discussionTopic.assignment}
                 />
               </Flex.Item>
             </Flex>

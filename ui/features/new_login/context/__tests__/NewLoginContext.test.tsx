@@ -16,27 +16,10 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React, {useEffect} from 'react'
 import {act, render, screen} from '@testing-library/react'
+import React, {useEffect} from 'react'
 import '@testing-library/jest-dom'
-import {NewLoginProvider, useNewLogin} from '../NewLoginContext'
-import type {AuthProvider} from '../../types'
-
-jest.mock('../../hooks/useNewLoginData', () => ({
-  useNewLoginData: () => ({
-    enableCourseCatalog: true,
-    authProviders: [
-      {id: 1, auth_type: 'Google'},
-      {id: 2, auth_type: 'Microsoft'},
-    ] as AuthProvider[],
-    loginHandleName: 'exampleLoginHandle',
-    loginLogoUrl: 'login/canvas-logo.svg',
-    loginLogoText: 'Canvas by Instructure',
-    bodyBgColor: '#ffffff',
-    bodyBgImage: 'https://example.com/background.jpg',
-    isPreviewMode: true,
-  }),
-}))
+import {NewLoginProvider, useNewLogin} from '..'
 
 const TestComponent = () => {
   const context = useNewLogin()
@@ -49,55 +32,30 @@ const TestComponent = () => {
       <span data-testid="otpCommunicationChannelId">
         {context.otpCommunicationChannelId || 'null'}
       </span>
-      <span data-testid="enableCourseCatalog">{context.enableCourseCatalog?.toString()}</span>
-      <span data-testid="authProviders">
-        {context.authProviders?.map(provider => provider.auth_type).join(', ')}
-      </span>
-      <span data-testid="loginHandleName">{context.loginHandleName}</span>
-      <span data-testid="loginLogoUrl">{context.loginLogoUrl}</span>
-      <span data-testid="loginLogoText">{context.loginLogoText}</span>
-      <span data-testid="bodyBgColor">{context.bodyBgColor}</span>
-      <span data-testid="bodyBgImage">{context.bodyBgImage}</span>
-      <span data-testid="isPreviewMode">{context.isPreviewMode?.toString()}</span>
     </div>
   )
 }
 
 describe('NewLoginContext', () => {
-  afterEach(() => {
-    jest.clearAllMocks()
-  })
-
   it('renders without crashing', () => {
     render(
       <NewLoginProvider>
         <TestComponent />
-      </NewLoginProvider>
+      </NewLoginProvider>,
     )
   })
 
-  it('provides initial context values and integrates useNewLoginData hook values correctly', () => {
+  it('provides initial context values', () => {
     render(
       <NewLoginProvider>
         <TestComponent />
-      </NewLoginProvider>
+      </NewLoginProvider>,
     )
     expect(screen.getByTestId('rememberMe')).toHaveTextContent('false')
     expect(screen.getByTestId('isUiActionPending')).toHaveTextContent('false')
     expect(screen.getByTestId('otpRequired')).toHaveTextContent('false')
     expect(screen.getByTestId('showForgotPassword')).toHaveTextContent('false')
     expect(screen.getByTestId('otpCommunicationChannelId')).toHaveTextContent('null')
-    // values from useNewLoginData hook
-    expect(screen.getByTestId('enableCourseCatalog')).toHaveTextContent('true')
-    expect(screen.getByTestId('authProviders')).toHaveTextContent('Google, Microsoft')
-    expect(screen.getByTestId('loginHandleName')).toHaveTextContent('exampleLoginHandle')
-    expect(screen.getByTestId('loginLogoUrl')).toHaveTextContent('login/canvas-logo.svg')
-    expect(screen.getByTestId('loginLogoText')).toHaveTextContent('Canvas by Instructure')
-    expect(screen.getByTestId('bodyBgColor')).toHaveTextContent('#ffffff')
-    expect(screen.getByTestId('bodyBgImage')).toHaveTextContent(
-      'https://example.com/background.jpg'
-    )
-    expect(screen.getByTestId('isPreviewMode')).toHaveTextContent('true')
   })
 
   it('allows context values to be updated correctly', () => {
@@ -129,7 +87,7 @@ describe('NewLoginContext', () => {
     render(
       <NewLoginProvider>
         <ConsumerComponent />
-      </NewLoginProvider>
+      </NewLoginProvider>,
     )
     expect(screen.getByTestId('rememberMe')).toHaveTextContent('true')
     expect(screen.getByTestId('isUiActionPending')).toHaveTextContent('true')
@@ -138,29 +96,26 @@ describe('NewLoginContext', () => {
     expect(screen.getByTestId('otpCommunicationChannelId')).toHaveTextContent('12345')
   })
 
-  it('handles optional values being undefined', () => {
-    jest.spyOn(require('../../hooks/useNewLoginData'), 'useNewLoginData').mockReturnValue({
-      enableCourseCatalog: undefined,
-      authProviders: undefined,
-      loginHandleName: undefined,
-      loginLogoUrl: undefined,
-      loginLogoText: undefined,
-      bodyBgColor: undefined,
-      bodyBgImage: undefined,
-      isPreviewMode: undefined,
-    })
+  it('handles default values correctly when no updates are made', () => {
     render(
       <NewLoginProvider>
         <TestComponent />
-      </NewLoginProvider>
+      </NewLoginProvider>,
     )
-    expect(screen.getByTestId('enableCourseCatalog')).toBeEmptyDOMElement()
-    expect(screen.getByTestId('authProviders')).toBeEmptyDOMElement()
-    expect(screen.getByTestId('loginHandleName')).toBeEmptyDOMElement()
-    expect(screen.getByTestId('loginLogoUrl')).toBeEmptyDOMElement()
-    expect(screen.getByTestId('loginLogoText')).toBeEmptyDOMElement()
-    expect(screen.getByTestId('bodyBgColor')).toBeEmptyDOMElement()
-    expect(screen.getByTestId('bodyBgImage')).toBeEmptyDOMElement()
-    expect(screen.getByTestId('isPreviewMode')).toBeEmptyDOMElement()
+    expect(screen.getByTestId('rememberMe')).toHaveTextContent('false')
+    expect(screen.getByTestId('isUiActionPending')).toHaveTextContent('false')
+    expect(screen.getByTestId('otpRequired')).toHaveTextContent('false')
+    expect(screen.getByTestId('showForgotPassword')).toHaveTextContent('false')
+    expect(screen.getByTestId('otpCommunicationChannelId')).toHaveTextContent('null')
+  })
+
+  it('throws an error if useNewLogin is used outside NewLoginProvider', () => {
+    const OriginalConsoleError = console.error
+    console.error = jest.fn()
+    const renderOutsideProvider = () => {
+      render(<TestComponent />)
+    }
+    expect(renderOutsideProvider).toThrow('useNewLogin must be used within a NewLoginProvider')
+    console.error = OriginalConsoleError
   })
 })

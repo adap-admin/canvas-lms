@@ -23,8 +23,8 @@ class CanvadocSessionsController < ApplicationController
   include CoursesHelper
   include HmacHelper
 
-  def services_jwt_auth_allowed
-    params[:action] == "show" && Account.site_admin.feature_enabled?(:rce_linked_file_urls)
+  def token_auth_allowed?
+    params[:action] == "show"
   end
 
   def create
@@ -67,8 +67,8 @@ class CanvadocSessionsController < ApplicationController
         @current_user,
         annotation_context,
         submission,
-        true,
-        enable_annotations
+        disable_annotation_notifications: true,
+        enable_annotations:
       )
     }
   end

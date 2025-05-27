@@ -31,6 +31,7 @@ ready(async () => {
     return
   }
 
+  // @ts-expect-error
   const graphqlModuleItemsNodes = await getAssignments(ENV.course_id.toString())
 
   if (!graphqlModuleItemsNodes || graphqlModuleItemsNodes.length === 0) return
@@ -42,7 +43,7 @@ ready(async () => {
       if (value.container) {
         const root = ReactDOM.createRoot(value.container)
         root.render(
-          <StudentViewPeerReviews assignment={value.assignment as AssignmentPeerReview} />
+          <StudentViewPeerReviews assignment={value.assignment as AssignmentPeerReview} />,
         )
       }
     })

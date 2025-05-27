@@ -16,13 +16,15 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React from 'react'
-import CommonMigratorControls from './common_migrator_controls'
+import React, {useRef} from 'react'
+import {CommonMigratorControls, noFileSelectedFormMessage} from '@canvas/content-migrations'
 import type {onSubmitMigrationFormCallback} from '../types'
 import MigrationFileInput from './file_input'
-import {noFileSelectedFormMessage} from './error_form_message'
 import {parseDateToISOString} from '../utils'
 import {useSubmitHandler} from '../../hooks/form_handler_hooks'
+import {ImportLabel} from './import_label'
+import {ImportInProgressLabel} from './import_in_progress_label'
+import {ImportClearLabel} from './import_clear_label'
 
 type CanvasCartridgeImporterProps = {
   onSubmit: onSubmitMigrationFormCallback
@@ -37,7 +39,8 @@ const CanvasCartridgeImporter = ({
   fileUploadProgress,
   isSubmitting,
 }: CanvasCartridgeImporterProps) => {
-  const {setFile, fileError, handleSubmit} = useSubmitHandler(onSubmit)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const {setFile, fileError, handleSubmit} = useSubmitHandler(onSubmit, fileInputRef)
 
   return (
     <>
@@ -47,6 +50,7 @@ const CanvasCartridgeImporter = ({
         isSubmitting={isSubmitting}
         externalFormMessage={fileError ? noFileSelectedFormMessage : undefined}
         isRequired={true}
+        inputRef={ref => (fileInputRef.current = ref)}
       />
       <CommonMigratorControls
         fileUploadProgress={fileUploadProgress}
@@ -58,8 +62,9 @@ const CanvasCartridgeImporter = ({
         onCancel={onCancel}
         newStartDate={parseDateToISOString(ENV.OLD_START_DATE)}
         newEndDate={parseDateToISOString(ENV.OLD_END_DATE)}
-        oldStartDate={null}
-        oldEndDate={null}
+        SubmitLabel={ImportLabel}
+        SubmittingLabel={ImportInProgressLabel}
+        CancelLabel={ImportClearLabel}
       />
     </>
   )

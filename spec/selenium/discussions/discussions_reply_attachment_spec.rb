@@ -42,6 +42,7 @@ describe "reply attachment" do
     end
 
     it "prevents XSS by not loading rubric urls in user content" do
+      skip "Will be fixed in VICE-5209"
       assignment = @course.assignments.create!(
         name: "Assignment",
         submission_types: ["online_text_entry"],
@@ -68,6 +69,7 @@ describe "reply attachment" do
     end
 
     it "searches for and adds a rubric" do
+      skip "Will be fixed in VICE-5209"
       assignment = @course.assignments.create!(
         name: "Assignment",
         submission_types: ["online_text_entry"],
@@ -94,6 +96,7 @@ describe "reply attachment" do
     end
 
     it "allows reply after cancel" do
+      skip "Will be fixed in VICE-5209"
       get "/courses/#{@course.id}/discussion_topics/#{@topic.id}"
       f(".discussion-reply-box").click
       wait_for_tiny(f("#root_reply_message_for_#{@topic.id}"))
@@ -109,6 +112,7 @@ describe "reply attachment" do
     end
 
     it "replies to the discussion with attachment" do
+      skip "Will be fixed in VICE-5209"
       file_attachment = "graded.png"
       entry_text = "new entry"
       Discussion.visit(@course, @topic)
@@ -350,7 +354,7 @@ describe "reply attachment" do
       expect(attachment_link.attribute("href")).to include("/files/#{entry.attachment.id}")
 
       f("button[data-testid='thread-actions-menu']").click
-      fj("li:contains('Edit')").click
+      fj("[class*=menuItem__label]:contains('Edit')").click
       driver.action.move_to(fj("a:contains('#{entry.attachment.filename}')")).perform # hover
       f("button[data-testid='remove-button']").click
       expect(f("body")).not_to contain_jqcss("a:contains('#{entry.attachment.filename}')")

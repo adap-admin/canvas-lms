@@ -22,11 +22,11 @@ import {useClassNames} from '../../../../utils'
 import {type RCETextBlockProps} from './types'
 import {RCETextBlockPopup} from './RCETextBlockPopup'
 import {RCETextBlockToolbar} from './RCETextBlockToolbar'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 
-const I18n = useI18nScope('block-editor/rce-block')
+const I18n = createI18nScope('block-editor')
 
-export const RCETextBlock = ({text, width, height, sizeVariant = 'percent'}: RCETextBlockProps) => {
+export const RCETextBlock = ({text, width, height, sizeVariant = 'auto'}: RCETextBlockProps) => {
   const {enabled} = useEditor(state => ({
     enabled: state.options.enabled,
   }))
@@ -46,6 +46,14 @@ export const RCETextBlock = ({text, width, height, sizeVariant = 'percent'}: RCE
 
   const setSize = useCallback(() => {
     if (!blockRef) return
+
+    if (sizeVariant === 'auto') {
+      setStyl({
+        width: 'auto',
+        height: 'auto',
+      })
+      return
+    }
 
     const sty: any = {}
     const unit = sizeVariant === 'percent' ? '%' : 'px'
@@ -73,7 +81,7 @@ export const RCETextBlock = ({text, width, height, sizeVariant = 'percent'}: RCE
         prps.text = content
       })
     },
-    [setProp]
+    [setProp],
   )
 
   const handleKey = useCallback(
@@ -91,7 +99,7 @@ export const RCETextBlock = ({text, width, height, sizeVariant = 'percent'}: RCE
         setEditable(true)
       }
     },
-    [editable]
+    [editable],
   )
 
   const renderContent = () => {
@@ -113,9 +121,10 @@ export const RCETextBlock = ({text, width, height, sizeVariant = 'percent'}: RCE
   if (enabled) {
     return (
       <div
-        data-placeholder={I18n.t('Click to edit rich text')}
+        data-placeholder={I18n.t('type <Enter> to edit rich text')}
         role="treeitem"
         aria-label={RCETextBlock.craft.displayName}
+        aria-selected={node.events.selected}
         tabIndex={-1}
         ref={el => {
           el && connect(drag(el))
@@ -123,10 +132,6 @@ export const RCETextBlock = ({text, width, height, sizeVariant = 'percent'}: RCE
         }}
         className={clazz}
         style={styl}
-        onClick={e => {
-          e.preventDefault()
-          setEditable(true)
-        }}
         onKeyDown={handleKey}
       >
         {renderContent()}
@@ -151,7 +156,7 @@ RCETextBlock.craft = {
   displayName: I18n.t('Text'),
   defaultProps: {
     text: '',
-    sizeVariant: 'percent',
+    sizeVariant: 'auto',
   },
   related: {
     toolbar: RCETextBlockToolbar,

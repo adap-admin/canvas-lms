@@ -17,11 +17,12 @@
  */
 
 import React, {useCallback, useEffect, useState, type FormEventHandler, type ReactNode} from 'react'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {Heading} from '@instructure/ui-heading'
 import {Modal} from '@instructure/ui-modal'
 import {Button, CloseButton} from '@instructure/ui-buttons'
 import {Text} from '@instructure/ui-text'
+import {Tooltip} from '@instructure/ui-tooltip'
 import {raw} from '@instructure/html-escape'
 import {Flex} from '@instructure/ui-flex'
 import {datetimeString} from '@canvas/datetime/date-functions'
@@ -31,14 +32,14 @@ import {showFlashError} from '@canvas/alerts/react/FlashAlert'
 import {Spinner} from '@instructure/ui-spinner'
 import type {Token} from './types'
 
-const I18n = useI18nScope('profile')
+const I18n = createI18nScope('profile')
 
 type NetworkState = 'loaded' | 'loading' | 'error' | 'submitting'
 
 export interface AccessTokenDetailsProps {
   url: string
   loadedToken?: Token
-  isEligibleForTokenRegeneration: boolean
+  userCanUpdateTokens: boolean
   onTokenLoad?: (token: Token) => void
   onClose: () => void
 }
@@ -46,13 +47,13 @@ export interface AccessTokenDetailsProps {
 const AccessTokenDetails = ({
   url,
   loadedToken,
-  isEligibleForTokenRegeneration,
+  userCanUpdateTokens,
   onTokenLoad,
   onClose,
 }: AccessTokenDetailsProps) => {
   const [token, setToken] = useState(loadedToken)
   const [networkState, setNetworkState] = useState<NetworkState>(token ? 'loaded' : 'loading')
-  const shouldShowTokenWarning = (token?.visible_token.length ?? 0) > 10
+  const shouldShowTokenWarning = (token?.visible_token?.length ?? 0) > 10
   const title = I18n.t('Access Token Details')
   const buttonText =
     networkState === 'submitting' ? I18n.t('Regenerating token...') : I18n.t('Regenerate Token')
@@ -81,17 +82,16 @@ const AccessTokenDetails = ({
         handleError()
       }
     },
-    [onTokenLoad, url]
+    [onTokenLoad, url],
   )
 
   const handleSubmit: FormEventHandler = async event => {
     event.preventDefault()
 
-    // eslint-disable-next-line no-alert
     const isConfirmed = window.confirm(
       I18n.t(
-        'Are you sure you want to regenerate this token?  Anything using this token will have to be updated.'
-      )
+        'Are you sure you want to regenerate this token?  Anything using this token will have to be updated.',
+      ),
     )
     if (!isConfirmed) {
       return
@@ -140,8 +140,8 @@ const AccessTokenDetails = ({
                   __html: raw(
                     I18n.t(
                       "*Copy this token down now*. Once you leave this page you won't be able to retrieve the full token anymore, you'll have to regenerate it to get a new value.",
-                      {wrapper: '<b>$1</b>'}
-                    )
+                      {wrapper: '<b>$1</b>'},
+                    ),
                   ),
                 }}
               />
@@ -201,24 +201,29 @@ const AccessTokenDetails = ({
                   {
                     wrapper:
                       '<a href="https://canvas.instructure.com/doc/api/index.html" class="external" target="_blank" rel="noreferrer noopener">$1</a>',
-                  }
-                )
+                  },
+                ),
               ),
             }}
           />
           {details}
         </Flex>
       </Modal.Body>
-      {isEligibleForTokenRegeneration && (
+      {userCanUpdateTokens && (
         <Modal.Footer>
-          <Button
-            type="submit"
-            color="primary"
-            aria-label={buttonText}
-            disabled={networkState === 'submitting'}
+          <Tooltip
+            renderTip={I18n.t('An expired token cannot be regenerated')}
+            on={token && !token.can_manually_regenerate ? ['hover', 'focus'] : []}
           >
-            {buttonText}
-          </Button>
+            <Button
+              type="submit"
+              color="primary"
+              aria-label={buttonText}
+              disabled={networkState === 'submitting' || !token?.can_manually_regenerate}
+            >
+              {buttonText}
+            </Button>
+          </Tooltip>
         </Modal.Footer>
       )}
     </Modal>

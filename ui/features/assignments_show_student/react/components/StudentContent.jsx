@@ -25,7 +25,7 @@ import SubmissionSticker from '@canvas/submission-sticker'
 import StudentViewContext from './Context'
 import ContentTabs from './ContentTabs'
 import Header from './Header'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import MarkAsDoneButton from './MarkAsDoneButton'
 import LoadingIndicator from '@canvas/loading-indicator'
 import MissingPrereqs from './MissingPrereqs'
@@ -40,36 +40,42 @@ import {View} from '@instructure/ui-view'
 import UnpublishedModule from '../UnpublishedModule'
 import UnavailablePeerReview from '../UnavailablePeerReview'
 import VisualOnFocusMessage from './VisualOnFocusMessage'
-import ToolLaunchIframe from '@canvas/external-tools/react/components/ToolLaunchIframe'
-import iframeAllowances from '@canvas/external-apps/iframeAllowances'
 import {Flex} from '@instructure/ui-flex'
 import {arrayOf, func, bool} from 'prop-types'
+import {QueryClient, QueryClientProvider} from '@tanstack/react-query'
+import {LtiToolIframe} from './LtiToolIframe'
 
-const I18n = useI18nScope('assignments_2_student_content')
+const I18n = createI18nScope('assignments_2_student_content')
 
-const LoggedOutTabs = lazy(() =>
-  import(
-    /* webpackChunkName: "LoggedOutTabs" */
-    /* webpackPrefetch: true */
-    './LoggedOutTabs'
-  )
+const LoggedOutTabs = lazy(
+  () =>
+    import(
+      /* webpackChunkName: "LoggedOutTabs" */
+      /* webpackPrefetch: true */
+      './LoggedOutTabs'
+    ),
 )
 
-const RubricsQuery = lazy(() =>
-  import(
-    /* webpackChunkName: "RubricsQuery" */
-    /* webpackPrefetch: true */
-    './RubricsQuery'
-  )
+const RubricsQuery = lazy(
+  () =>
+    import(
+      /* webpackChunkName: "RubricsQuery" */
+      /* webpackPrefetch: true */
+      './RubricsQuery'
+    ),
 )
 
-function EnrollmentConcludedNotice() {
+function EnrollmentConcludedNotice({hasActiveEnrollment}) {
   return (
     <View as="div" textAlign="center" margin="auto" padding="small">
       <Text fontStyle="italic" size="large">
-        {I18n.t(
-          'You are unable to submit to this assignment as your enrollment in this course has been concluded.'
-        )}
+        {hasActiveEnrollment
+          ? I18n.t(
+              'You are unable to submit to this assignment as your enrollment in this section has been concluded.',
+            )
+          : I18n.t(
+              'You are unable to submit to this assignment as your enrollment in this course has been concluded.',
+            )}
       </Text>
     </View>
   )
@@ -114,7 +120,7 @@ function renderAttemptsAndAvailability(assignment) {
                   one: '1 Attempt Allowed',
                   other: '%{count} Attempts Allowed',
                 },
-                {count: totalAllowedAttempts(assignment, context.latestSubmission) || 0}
+                {count: totalAllowedAttempts(assignment, context.latestSubmission) || 0},
               )}
             </Text>
           )}
@@ -130,7 +136,7 @@ function renderAttemptsAndAvailability(assignment) {
 function renderContentBaseOnAvailability(
   {assignment, submission, reviewerSubmission, rubricExpanded, toggleRubricExpanded},
   alertContext,
-  onSuccessfulPeerReview
+  onSuccessfulPeerReview,
 ) {
   if (assignment.env.modulePrereq) {
     return <MissingPrereqs moduleUrl={assignment.env.moduleUrl} />
@@ -160,7 +166,7 @@ function renderContentBaseOnAvailability(
     const onMarkAsDoneError = () =>
       alertContext.setOnFailure(I18n.t('Error updating status of module item'))
 
-    const launchURL = `/courses/${ENV.COURSE_ID}/assignments/${ENV.ASSIGNMENT_ID}/tool_launch`
+    const queryClient = new QueryClient()
 
     return (
       <>
@@ -173,7 +179,7 @@ function renderContentBaseOnAvailability(
             {assignment.submissionTypes.includes('student_annotation') && (
               <VisualOnFocusMessage
                 message={I18n.t(
-                  'Warning: For improved accessibility with Annotated Assignments, please use File Upload or Text Entry to leave comments.'
+                  'Warning: For improved accessibility with Annotated Assignments, please use File Upload or Text Entry to leave comments.',
                 )}
               />
             )}
@@ -182,12 +188,14 @@ function renderContentBaseOnAvailability(
 
             {assignment.rubric && (
               <Suspense fallback={<LoadingIndicator />}>
-                <RubricsQuery
-                  assignment={assignment}
-                  submission={submission}
-                  rubricExpanded={rubricExpanded}
-                  toggleRubricExpanded={toggleRubricExpanded}
-                />
+                <QueryClientProvider client={queryClient}>
+                  <RubricsQuery
+                    assignment={assignment}
+                    submission={submission}
+                    rubricExpanded={rubricExpanded}
+                    toggleRubricExpanded={toggleRubricExpanded}
+                  />
+                </QueryClientProvider>
               </Suspense>
             )}
           </div>
@@ -212,15 +220,10 @@ function renderContentBaseOnAvailability(
         ) : (
           <SubmissionlessFooter onMarkAsDoneError={onMarkAsDoneError} />
         )}
-        {ENV.LTI_TOOL === 'true' && (
-          <ToolLaunchIframe
-            allow={iframeAllowances()}
-            src={launchURL}
-            data-testid="lti-external-tool"
-            title={I18n.t('Tool content')}
-          />
+        <LtiToolIframe assignment={assignment} submission={submission} />
+        {(ENV.enrollment_state === 'completed' || !ENV.can_submit_assignment_from_section) && (
+          <EnrollmentConcludedNotice hasActiveEnrollment={ENV.enrollment_state === 'active'} />
         )}
-        {ENV.enrollment_state === 'completed' && <EnrollmentConcludedNotice />}
       </>
     )
   }
@@ -259,7 +262,7 @@ function StudentContent(props) {
           })
         })
         .catch(e => {
-          console.log('Error loading immersive readers.', e) // eslint-disable-line no-console
+          console.log('Error loading immersive readers.', e)
         })
     }
 

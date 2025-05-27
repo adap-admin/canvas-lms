@@ -16,11 +16,12 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import gql from 'graphql-tag'
+import {gql} from '@apollo/client'
 import qs from 'qs'
 import {executeQuery} from '@canvas/query/graphql'
-import type {RubricFormProps} from '../types/RubricForm'
-import type {Rubric, RubricAssociation} from '@canvas/rubrics/react/types/rubric'
+import type {RubricFormProps, GenerateCriteriaFormProps} from '../types/RubricForm'
+import type {CanvasProgress} from '@canvas/progress/ProgressHelpers'
+import type {Rubric, RubricAssociation, RubricCriterion} from '@canvas/rubrics/react/types/rubric'
 import {
   mapRubricAssociationUnderscoredKeysToCamelCase,
   mapRubricUnderscoredKeysToCamelCase,
@@ -114,12 +115,12 @@ export const fetchRubric = async ({
 }
 
 export type SaveRubricResponse = {
-  rubric: Rubric
+  rubric: Rubric & {canUpdate?: boolean; association_count?: number}
   rubricAssociation: RubricAssociation
 }
 export const saveRubric = async (
   rubric: RubricFormProps,
-  assignmentId?: string
+  assignmentId?: string,
 ): Promise<SaveRubricResponse> => {
   const {
     id,
@@ -211,7 +212,48 @@ export const saveRubric = async (
   }
 
   return {
-    rubric: mapRubricUnderscoredKeysToCamelCase(savedRubric),
+    rubric: {
+      ...mapRubricUnderscoredKeysToCamelCase(savedRubric),
+      canUpdate: savedRubric.permissions?.update,
+      association_count: savedRubric.association_count,
+    },
     rubricAssociation: mapRubricAssociationUnderscoredKeysToCamelCase(rubric_association),
   }
+}
+
+export const generateCriteria = async (
+  courseId: string,
+  assignmentId: string,
+  generateCriteriaProps: GenerateCriteriaFormProps,
+): Promise<CanvasProgress> => {
+  const url = `/courses/${courseId}/rubrics/llm_criteria`
+  const method = 'POST'
+
+  const response = await fetch(url, {
+    method,
+    headers: {
+      'X-CSRF-Token': getCookie('_csrf_token'),
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+    },
+    body: qs.stringify({
+      _method: method,
+      rubric_association: {
+        association_id: assignmentId,
+        association_type: 'Assignment',
+      },
+      generate_options: {
+        criteria_count: generateCriteriaProps.criteriaCount,
+        rating_count: generateCriteriaProps.ratingCount,
+        points_per_criterion: generateCriteriaProps.pointsPerCriterion,
+        use_range: generateCriteriaProps.useRange,
+      },
+    }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Failed to generate criteria: ${response.statusText}`)
+  }
+
+  const progress: CanvasProgress = await response.json()
+  return progress
 }

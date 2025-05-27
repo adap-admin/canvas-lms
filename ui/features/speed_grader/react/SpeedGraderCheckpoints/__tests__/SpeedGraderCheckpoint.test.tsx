@@ -23,14 +23,14 @@ import type {
   SubmissionStatusParams,
 } from '../SpeedGraderCheckpointsContainer'
 import type {GradeStatusUnderscore} from '@canvas/grading/accountGradingStatus'
-import {fireEvent, render} from '@testing-library/react'
+import {fireEvent, render, screen} from '@testing-library/react'
 import React from 'react'
 import {SpeedGraderCheckpoint} from '../SpeedGraderCheckpoint'
 
 const generateAssignment = (
   id: string,
   points_possible = 3,
-  grading_type = 'points'
+  grading_type = 'points',
 ): Assignment => ({
   id,
   course_id: '1',
@@ -51,18 +51,23 @@ const generateAssignment = (
 const generateSubAssignmentSubmission = (
   sub_assignment_tag: 'reply_to_topic' | 'reply_to_entry' | null,
   user_id: string,
-  grade_matches_current_submission: boolean = true
+  grade_matches_current_submission: boolean = true,
+  missing: boolean = false,
+  late: boolean = false,
+  secondsLate: number = 0,
 ): SubAssignmentSubmission => ({
   sub_assignment_tag,
   score: 0,
   excused: false,
   late_policy_status: 'none',
-  seconds_late: 0,
+  seconds_late: secondsLate,
   custom_grade_status_id: null,
   grade: '0',
   user_id,
   grade_matches_current_submission,
   entered_grade: '1',
+  missing,
+  late,
 })
 
 const getCustomGradeStatus = (id: string, name: string) => ({
@@ -75,20 +80,27 @@ const getDefaultProps = (
   subAssignmentTag: 'reply_to_topic' | 'reply_to_entry' = 'reply_to_topic',
   pointsPossible: number = 3,
   gradingType: string = 'points',
-  grade_matches_current_submission: boolean = true
+  grade_matches_current_submission: boolean = true,
+  missing: boolean = false,
+  late: boolean = false,
+  secondsLate: number = 0,
+  lateSubmissionInterval: string = 'day',
 ) => ({
   assignment: generateAssignment('1', pointsPossible, gradingType),
   subAssignmentSubmission: generateSubAssignmentSubmission(
     subAssignmentTag,
     '1',
-    grade_matches_current_submission
+    grade_matches_current_submission,
+    missing,
+    late,
+    secondsLate,
   ),
   customGradeStatusesEnabled: true,
   customGradeStatuses: [
     getCustomGradeStatus('1', 'Custom Grade Status 1'),
     getCustomGradeStatus('2', 'Custom Grade Status 2'),
   ],
-  lateSubmissionInterval: 'day',
+  lateSubmissionInterval: lateSubmissionInterval,
   updateSubmissionGrade: jest.fn(),
   updateSubmissionStatus: jest.fn(),
   setLastSubmission: jest.fn(),
@@ -285,6 +297,48 @@ describe('SpeedGraderCheckpoint', () => {
       studentId: '1',
       grade: 'complete',
     })
+  })
+
+  it('renders the None status if there is no status', () => {
+    const props = getDefaultProps('reply_to_topic', 3, 'points')
+    const {queryByTestId, getByTestId} = setup(props)
+
+    const statusSelector = getByTestId('reply_to_topic-checkpoint-status-select')
+    expect(statusSelector).toHaveValue('None')
+    expect(queryByTestId('reply_to_topic-checkpoint-time-late-input')).toBeFalsy()
+  })
+
+  it('renders the Missing status if the submission is missing', () => {
+    const props = getDefaultProps('reply_to_topic', 3, 'points', true, true, false)
+    const {getByTestId} = setup(props)
+
+    const statusSelector = getByTestId('reply_to_topic-checkpoint-status-select')
+    expect(statusSelector).toHaveValue('Missing')
+  })
+
+  it('renders the Late status if the submission is late', () => {
+    const props = getDefaultProps('reply_to_topic', 3, 'points', true, false, true)
+    const {queryByTestId, getByTestId} = setup(props)
+
+    const statusSelector = getByTestId('reply_to_topic-checkpoint-status-select')
+    expect(statusSelector).toHaveValue('Late')
+    expect(queryByTestId('reply_to_topic-checkpoint-time-late-input')).toBeTruthy()
+  })
+
+  it('renders the Late days rounded up if the submission is late', () => {
+    const SECONDS_IN_A_DAY = 24 * 3600
+    const props = getDefaultProps('reply_to_topic', 3, 'points', true, false, true, SECONDS_IN_A_DAY * 6 + 1)
+    setup(props)
+    const relyToTopicLateInput = screen.getByLabelText('Days Late')
+    expect(relyToTopicLateInput).toHaveValue("7")
+  })
+
+  it('renders the Late hours rounded up if the submission is late', () => {
+    const SECONDS_IN_AN_HOUR = 3600
+    const props = getDefaultProps('reply_to_topic', 3, 'points', true, false, true, SECONDS_IN_AN_HOUR * 6 + 1, 'hour')
+    setup(props)
+    const relyToTopicLateInput = screen.getByLabelText('Hours Late')
+    expect(relyToTopicLateInput).toHaveValue("7")
   })
 
   describe('UseSameGrade', () => {

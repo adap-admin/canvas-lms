@@ -73,7 +73,7 @@ describe "accounts/settings" do
     it "shows by default" do
       render
       expect(response).to have_tag("input#account_settings_open_registration")
-      expect(response).not_to have_tag("div#open_registration_delegated_warning_dialog")
+      expect(response).not_to have_tag("button.open_registration_delegated_warning_btn")
     end
 
     it "shows warning dialog when a delegated auth config is around" do
@@ -81,7 +81,7 @@ describe "accounts/settings" do
       @account.authentication_providers.first.move_to_bottom
       render
       expect(response).to have_tag("input#account_settings_open_registration")
-      expect(response).to have_tag("div#open_registration_delegated_warning_dialog")
+      expect(response).to have_tag("button.open_registration_delegated_warning_btn")
     end
   end
 
@@ -232,6 +232,117 @@ describe "accounts/settings" do
         render
 
         expect(response).to_not have_tag("input#account_settings_allow_gradebook_show_first_last_names_value")
+      end
+    end
+  end
+
+  context "differentiation tags" do
+    describe "account" do
+      let_once(:account) { Account.default }
+      let_once(:admin) { account_admin_user(account:) }
+
+      before do
+        view_context(account, admin)
+        assign(:account, account)
+        assign(:context, account)
+        assign(:root_account, account)
+        assign(:current_user, admin)
+        assign(:announcements, AccountNotification.none.paginate)
+      end
+
+      it "shows differentiation tags section when differentiation tags and assign to different tags FF are enabled" do
+        account.settings[:allow_assign_to_differentiation_tags] = { value: true }
+        account.save!
+        account.reload
+        account.enable_feature!(:assign_to_differentiation_tags)
+        render
+        expect(response.body).to have_tag("input[name='account[settings][allow_assign_to_differentiation_tags][value]']")
+      end
+
+      it "hides differentiation tags section when assign to differentiation tags FF is disabled" do
+        account.settings[:allow_assign_to_differentiation_tags] = { value: true }
+        account.save!
+        account.reload
+        account.disable_feature!(:assign_to_differentiation_tags)
+        render
+        expect(response.body).not_to have_tag("input[name='account[settings][allow_assign_to_differentiation_tags][value]']")
+      end
+    end
+
+    describe "sub-account" do
+      let_once(:account) { Account.default }
+      let_once(:sub_account) { account.sub_accounts.create!(name: "sub-account") }
+      let_once(:sub_account_admin) { account_admin_user(account: sub_account) }
+      before do
+        view_context(sub_account, sub_account_admin)
+        assign(:account, sub_account)
+        assign(:context, sub_account)
+        assign(:root_account, sub_account)
+        assign(:current_user, sub_account_admin)
+        assign(:announcements, AccountNotification.none.paginate)
+      end
+
+      it "shows differentiation tags section when differentiation tags and assign to different tags FF are enabled" do
+        sub_account.settings[:allow_assign_to_differentiation_tags] = { value: true }
+        sub_account.save!
+        sub_account.reload
+        sub_account.enable_feature!(:assign_to_differentiation_tags)
+        render
+        expect(response.body).to have_tag("input[name='account[settings][allow_assign_to_differentiation_tags][value]']")
+        expect(response.body).to include("Lock this setting for sub-accounts and courses")
+      end
+
+      it "shows differentiation tags as locked when inherited in a lock" do
+        sub_account.settings[:allow_assign_to_differentiation_tags] = { value: true }
+        sub_account.save!
+        sub_account.reload
+        sub_account.enable_feature!(:assign_to_differentiation_tags)
+        allow(sub_account).to receive(:allow_assign_to_differentiation_tags).and_return({
+                                                                                          value: true,
+                                                                                          locked: true,
+                                                                                          inherited: true
+                                                                                        })
+        render
+        expect(response.body).to have_tag("input[name='account[settings][allow_assign_to_differentiation_tags][value]'][disabled]")
+      end
+
+      it "hides differentiation tags section when assign to differentiation tags FF is disabled" do
+        sub_account.settings[:allow_assign_to_differentiation_tags] = { value: true }
+        sub_account.save!
+        sub_account.reload
+        sub_account.disable_feature!(:assign_to_differentiation_tags)
+        render
+        expect(response.body).not_to have_tag("input[name='account[settings][allow_assign_to_differentiation_tags][value]']")
+      end
+    end
+
+    describe "site-admin" do
+      let_once(:site_admin_account) { Account.site_admin }
+      let_once(:site_admin) { account_admin_user(account: site_admin_account) }
+
+      before do
+        view_context(site_admin_account, site_admin)
+        assign(:account, site_admin_account)
+        assign(:context, site_admin_account)
+        assign(:root_account, site_admin_account)
+        assign(:current_user, site_admin)
+        assign(:announcements, AccountNotification.none.paginate)
+      end
+
+      it "hides differentiation tags section by default" do
+        render
+        expect(response.body).not_to have_tag("input[name='account[settings][allow_assign_to_differentiation_tags][value]']")
+        expect(response.body).not_to include("Lock this setting for sub-accounts and courses")
+      end
+
+      it "hides differentiation tags section when differentiation tags and assign to different tags are enabled" do
+        site_admin_account.settings[:allow_assign_to_differentiation_tags] = { value: true }
+        site_admin_account.save!
+        site_admin_account.reload
+        site_admin_account.enable_feature!(:assign_to_differentiation_tags)
+        render
+        expect(response.body).not_to have_tag("input[name='account[settings][allow_assign_to_differentiation_tags][value]']")
+        expect(response.body).not_to include("Lock this setting for sub-accounts and courses")
       end
     end
   end
@@ -424,8 +535,7 @@ describe "accounts/settings" do
         render
         expect(@controller.js_env).to include :ACCOUNT
         expect(@controller.js_env[:ACCOUNT]).to include "default_storage_quota_mb"
-        expect(response).to have_tag "#tab-quotas-link"
-        expect(response).to have_tag "#tab-quotas"
+        expect(response).to have_tag "#tab-quotas-mount"
       end
     end
 
@@ -440,8 +550,8 @@ describe "accounts/settings" do
         render
         expect(@controller.js_env).to include :ACCOUNT
         expect(@controller.js_env[:ACCOUNT]).not_to include "default_storage_quota_mb"
-        expect(response).not_to have_tag "#tab-quotas-link"
-        expect(response).not_to have_tag "#tab-quotas"
+        expect(response).not_to have_tag "#tab-quotas-selected"
+        expect(response).not_to have_tag "#tab-quotas-mount"
       end
     end
   end
@@ -457,22 +567,22 @@ describe "accounts/settings" do
     end
 
     context "with :read_reports" do
-      it "shows reports tab link" do
+      it "shows reports tab content" do
         admin = account_admin_user
         view_context(@account, admin)
         assign(:current_user, admin)
         render
-        expect(response).to have_tag "#tab-reports-link"
+        expect(response).to have_tag "#tab-reports-mount"
       end
     end
 
     context "without :read_reports" do
-      it "does not show reports tab link" do
+      it "does not show reports tab content" do
         admin = account_admin_user_with_role_changes(account: @account, role_changes: { "read_reports" => false })
         view_context(@account, admin)
         assign(:current_user, admin)
         render
-        expect(response).not_to have_tag "#tab-reports-link"
+        expect(response).not_to have_tag "#tab-reports-mount"
       end
     end
   end
@@ -702,7 +812,7 @@ describe "accounts/settings" do
 
       it "does not render" do
         render
-        expect(response).not_to have_tag "#tab-internal-settings"
+        expect(response).not_to have_tag "#tab-internal-settings-mount"
       end
     end
 
@@ -716,7 +826,7 @@ describe "accounts/settings" do
 
       it "renders" do
         render
-        expect(response).to have_tag "#tab-internal-settings"
+        expect(response).to have_tag "#tab-internal-settings-mount"
       end
     end
   end

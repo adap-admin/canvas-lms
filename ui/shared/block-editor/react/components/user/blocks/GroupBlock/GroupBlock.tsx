@@ -24,6 +24,7 @@ import {Container} from '../Container/Container'
 import {
   useClassNames,
   isNthChild,
+  isTransparent,
   getContrastingColor,
   getEffectiveBackgroundColor,
 } from '../../../../utils'
@@ -31,9 +32,9 @@ import {type GroupBlockProps, defaultAlignment} from './types'
 import {GroupBlockToolbar} from './GroupBlockToolbar'
 import {BlockResizer} from '../../../editor/BlockResizer'
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 
-const I18n = useI18nScope('block-editor')
+const I18n = createI18nScope('block-editor')
 
 export const GroupBlock = (props: GroupBlockProps) => {
   const {
@@ -76,7 +77,7 @@ export const GroupBlock = (props: GroupBlockProps) => {
 
   useEffect(() => {
     if (resizable !== node.data.custom.isResizable) {
-      actions.setCustom((custom: Object) => {
+      actions.setCustom((custom: object) => {
         // @ts-expect-error
         custom.isResizable = resizable
       })
@@ -90,7 +91,7 @@ export const GroupBlock = (props: GroupBlockProps) => {
   if (height) {
     styl.height = `${height}px`
   }
-  if (background) {
+  if (background && !isTransparent(background)) {
     styl.backgroundColor = background
     styl.color = getContrastingColor(background)
   } else if (containerRef) {
@@ -126,7 +127,7 @@ GroupBlock.craft = {
     canMoveIn: (incomingNodes: Node[]) => {
       return !incomingNodes.some(
         (incomingNode: Node) =>
-          incomingNode.data.custom.isSection || incomingNode.data.name === 'GroupBlock'
+          incomingNode.data.custom.isSection || incomingNode.data.name === 'GroupBlock',
       )
     },
   },

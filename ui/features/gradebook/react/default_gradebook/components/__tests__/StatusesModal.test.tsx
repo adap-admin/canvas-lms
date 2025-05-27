@@ -28,12 +28,18 @@ import '@testing-library/jest-dom/extend-expect'
 const originalState = store.getState()
 
 describe('Statuses Modal', () => {
+  let oldEnv: typeof ENV.FEATURES
   beforeEach(() => {
     fetchMock.mock('*', 200)
+    oldEnv = ENV.FEATURES
+    ENV.FEATURES = {
+      extended_submission_state: true,
+    }
   })
   afterEach(() => {
     store.setState(originalState, true)
     fetchMock.restore()
+    ENV.FEATURES = oldEnv
   })
 
   it('renders heading', () => {
@@ -45,7 +51,7 @@ describe('Statuses Modal', () => {
         onClose={onClose}
         colors={statusColors({})}
         afterUpdateStatusColors={afterUpdateStatusColors}
-      />
+      />,
     )
 
     const {getByRole} = within(document.body)
@@ -61,11 +67,11 @@ describe('Statuses Modal', () => {
         onClose={onClose}
         colors={statusColors({})}
         afterUpdateStatusColors={afterUpdateStatusColors}
-      />
+      />,
     )
 
     const {getAllByRole} = within(document.body)
-    expect(getAllByRole('listitem').length).toBe(6)
+    expect(getAllByRole('listitem')).toHaveLength(6)
   })
 
   it('onClose is called when closed', async () => {
@@ -77,7 +83,7 @@ describe('Statuses Modal', () => {
         onClose={onClose}
         colors={statusColors({})}
         afterUpdateStatusColors={afterUpdateStatusColors}
-      />
+      />,
     )
 
     const {getByRole} = within(document.body)

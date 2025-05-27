@@ -90,7 +90,7 @@ class AssetUserAccess < ActiveRecord::Base
   end
 
   def context_code
-    "#{context_type.underscore}_#{context_id}" rescue nil
+    "#{context_type.underscore}_#{context_id}" if context_type
   end
 
   def readable_name(include_group_name: true)
@@ -328,6 +328,16 @@ class AssetUserAccess < ActiveRecord::Base
 
   def readable_category
     ICON_MAP[asset_category.to_sym]&.[](1) || ""
+  end
+
+  # This is a temporary measure to filter out bad access records
+  # until we figure out how to clear up them from the DB
+  #
+  # For more info, see: FOO-5161
+  def bad_discussion_context?
+    return false unless asset_code.match?(/^discussion_topic_(\d+)$/)
+
+    asset.nil?
   end
 
   def self.expiration_date

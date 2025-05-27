@@ -24,14 +24,14 @@ import {
   mockDeleteAssignmentFailure,
 } from './test-utils'
 import OptionsMenu from '../OptionsMenu'
-import {MockedProvider} from '@apollo/react-testing'
+import {MockedProvider} from '@apollo/client/testing'
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query'
 
 const setUp = (
   propOverrides = {},
   assignmentOverrides = {},
   breakpoints = {},
-  mockDeleteSuccess = true
+  mockDeleteSuccess = true,
 ) => {
   const assignment = mockAssignment({...assignmentOverrides})
   const props = {
@@ -46,7 +46,7 @@ const setUp = (
       <MockedProvider mocks={mocks} addTypename={false}>
         <OptionsMenu {...props} />
       </MockedProvider>
-    </QueryClientProvider>
+    </QueryClientProvider>,
   )
 }
 
@@ -90,7 +90,7 @@ describe('Options Menu', () => {
         {
           hasSubmittedSubmissions: true,
           submissionsDownloads: 1,
-        }
+        },
       )
       getByTestId('assignment-options-button').click()
       expect(getByTestId('reupload-submissions-option')).toBeInTheDocument()

@@ -21,18 +21,14 @@ require_relative "page_objects/assignments_index_page"
 require_relative "page_objects/assignment_page"
 require_relative "../helpers/items_assign_to_tray"
 require_relative "../helpers/context_modules_common"
-require_relative "../../helpers/selective_release_common"
 
 describe "assignments show page assign to" do
   include_context "in-process server selenium tests"
   include AssignmentsIndexPage
   include ItemsAssignToTray
   include ContextModulesCommon
-  include SelectiveReleaseCommon
 
   before :once do
-    differentiated_modules_on
-
     course_with_teacher(active_all: true)
     @assignment1 = @course.assignments.create(name: "test assignment", points_possible: 25)
 
@@ -57,7 +53,23 @@ describe "assignments show page assign to" do
     expect(item_type_text.text).to include("25 pts")
   end
 
-  it "assigns student and saves assignment" do
+  it "closes the assign to tray on dismiss" do
+    get "/courses/#{@course.id}/assignments/#{@assignment1.id}"
+
+    AssignmentPage.click_assign_to_button
+
+    wait_for_assign_to_tray_spinner
+    keep_trying_until { expect(item_tray_exists?).to be_truthy }
+
+    expect(tray_header.text).to eq("test assignment")
+    expect(icon_type_exists?("Assignment")).to be true
+    expect(item_type_text.text).to include("25 pts")
+
+    click_cancel_button
+    keep_trying_until { expect(element_exists?(module_item_edit_tray_selector)).to be_falsey }
+  end
+
+  it "assigns student and saves assignment", :ignore_js_errors do
     get "/courses/#{@course.id}/assignments/#{@assignment1.id}"
 
     AssignmentPage.click_assign_to_button
@@ -120,7 +132,7 @@ describe "assignments show page assign to" do
     expect(module_item_assign_to_card.length).to be(1)
   end
 
-  it "saves and shows override updates when tray reaccessed" do
+  it "saves and shows override updates when tray reaccessed", :ignore_js_errors do
     get "/courses/#{@course.id}/assignments/#{@assignment1.id}"
 
     AssignmentPage.click_assign_to_button
@@ -204,9 +216,9 @@ describe "assignments show page assign to" do
   end
 
   context "overrides table" do
-    let(:due_at) { Time.parse("2024-04-15") }
-    let(:unlock_at) { Time.parse("2024-04-10") }
-    let(:lock_at) { Time.parse("2024-04-20") }
+    let(:due_at) { Time.zone.parse("2024-04-15") }
+    let(:unlock_at) { Time.zone.parse("2024-04-10") }
+    let(:lock_at) { Time.zone.parse("2024-04-20") }
 
     before do
       @assignment = @course.assignments.create(name: "test assignment", points_possible: 25)
@@ -266,7 +278,7 @@ describe "assignments show page assign to" do
 
       expect(@assignment.visible_to_everyone).to be_truthy
       validate_all_overrides([
-                               { due_at: "Apr 15 at 12am", due_for: "Everyone", unlock_at: "Apr 10 at 12am", lock_at: "Apr 20 at 12am" }
+                               { due_at: "Apr 15, 2024 at 12am", due_for: "Everyone", unlock_at: "Apr 10, 2024 at 12am", lock_at: "Apr 20, 2024 at 12am" }
                              ])
     end
 
@@ -297,10 +309,10 @@ describe "assignments show page assign to" do
       expect(@assignment.visible_to_everyone).to be_truthy
 
       validate_all_overrides([
-                               { due_at: "Apr 15 at 12am", due_for: "Everyone else", unlock_at: "Apr 10 at 12am", lock_at: "Apr 20 at 12am" },
-                               { due_at: "Apr 16", due_for: "2 Students", unlock_at: "Apr 10 at 12am", lock_at: "Apr 20 at 11:59pm" },
-                               { due_at: "Apr 17", due_for: "2 Sections", unlock_at: "Apr 10 at 12am", lock_at: "Apr 20 at 11:59pm" },
-                               { due_at: "Apr 18", due_for: "2 Groups", unlock_at: "Apr 10 at 12am", lock_at: "Apr 20 at 11:59pm" }
+                               { due_at: "Apr 15, 2024 at 12am", due_for: "Everyone else", unlock_at: "Apr 10, 2024 at 12am", lock_at: "Apr 20, 2024 at 12am" },
+                               { due_at: "Apr 16, 2024", due_for: "2 Students", unlock_at: "Apr 10, 2024 at 12am", lock_at: "Apr 20, 2024 at 11:59pm" },
+                               { due_at: "Apr 17, 2024", due_for: "2 Sections", unlock_at: "Apr 10, 2024 at 12am", lock_at: "Apr 20, 2024 at 11:59pm" },
+                               { due_at: "Apr 18, 2024", due_for: "2 Groups", unlock_at: "Apr 10, 2024 at 12am", lock_at: "Apr 20, 2024 at 11:59pm" }
                              ])
     end
 
@@ -344,9 +356,9 @@ describe "assignments show page assign to" do
 
       expect(@assignment.visible_to_everyone).to be_falsey
       validate_all_overrides([
-                               { due_at: "Apr 15", due_for: "2 Students", unlock_at: "Apr 10 at 12am", lock_at: "Apr 20 at 11:59pm" },
-                               { due_at: "Apr 16", due_for: "2 Sections", unlock_at: "Apr 10 at 12am", lock_at: "Apr 20 at 11:59pm" },
-                               { due_at: "Apr 17", due_for: "2 Groups", unlock_at: "Apr 10 at 12am", lock_at: "Apr 20 at 11:59pm" }
+                               { due_at: "Apr 15, 2024", due_for: "2 Students", unlock_at: "Apr 10, 2024 at 12am", lock_at: "Apr 20, 2024 at 11:59pm" },
+                               { due_at: "Apr 16, 2024", due_for: "2 Sections", unlock_at: "Apr 10, 2024 at 12am", lock_at: "Apr 20, 2024 at 11:59pm" },
+                               { due_at: "Apr 17, 2024", due_for: "2 Groups", unlock_at: "Apr 10, 2024 at 12am", lock_at: "Apr 20, 2024 at 11:59pm" }
                              ])
     end
 
@@ -357,7 +369,7 @@ describe "assignments show page assign to" do
 
       expect(@assignment.visible_to_everyone).to be_truthy
       validate_all_overrides([
-                               { due_at: "Apr 15", due_for: "Everyone", unlock_at: "Apr 10 at 12am", lock_at: "Apr 20 at 11:59pm" }
+                               { due_at: "Apr 15, 2024", due_for: "Everyone", unlock_at: "Apr 10, 2024 at 12am", lock_at: "Apr 20, 2024 at 11:59pm" }
                              ])
     end
 
@@ -384,7 +396,7 @@ describe "assignments show page assign to" do
 
       expect(@assignment.visible_to_everyone).to be_falsey
       validate_all_overrides([
-                               { due_at: "Apr 15", due_for: "1 Section", unlock_at: "Apr 10 at 12am", lock_at: "Apr 20 at 11:59pm" }
+                               { due_at: "Apr 15, 2024", due_for: "1 Section", unlock_at: "Apr 10, 2024 at 12am", lock_at: "Apr 20, 2024 at 11:59pm" }
                              ])
     end
 
@@ -411,7 +423,7 @@ describe "assignments show page assign to" do
 
       expect(@assignment.visible_to_everyone).to be_truthy
       validate_all_overrides([
-                               { due_at: "Apr 15 at 12am", due_for: "Everyone", unlock_at: "Apr 10 at 12am", lock_at: "Apr 20 at 12am" }
+                               { due_at: "Apr 15, 2024 at 12am", due_for: "Everyone", unlock_at: "Apr 10, 2024 at 12am", lock_at: "Apr 20, 2024 at 12am" }
                              ])
     end
 
@@ -438,7 +450,7 @@ describe "assignments show page assign to" do
 
       expect(@assignment.visible_to_everyone).to be_truthy
       validate_all_overrides([
-                               { due_at: "Apr 15 at 12am", due_for: "Everyone", unlock_at: "Apr 10 at 12am", lock_at: "Apr 20 at 12am" }
+                               { due_at: "Apr 15, 2024 at 12am", due_for: "Everyone", unlock_at: "Apr 10, 2024 at 12am", lock_at: "Apr 20, 2024 at 12am" }
                              ])
     end
 
@@ -489,7 +501,7 @@ describe "assignments show page assign to" do
 
         # Doesn't show 'Everyone' when there are module overrides even if only_visible_to_overrides is false
         validate_all_overrides([
-                                 { due_at: "Apr 15", due_for: "2 Sections, 2 Groups, 2 Students", unlock_at: "Apr 10 at 12am", lock_at: "Apr 20 at 11:59pm" }
+                                 { due_at: "Apr 15, 2024", due_for: "2 Sections, 2 Groups, 2 Students", unlock_at: "Apr 10, 2024 at 12am", lock_at: "Apr 20, 2024 at 11:59pm" }
                                ])
       end
 
@@ -532,10 +544,89 @@ describe "assignments show page assign to" do
 
         # Doesn't show 'Everyone' when there are module overrides even if only_visible_to_overrides is false
         validate_all_overrides([
-                                 { due_at: "Apr 15", due_for: "2 Groups, 2 Students", unlock_at: "Apr 10 at 12am", lock_at: "Apr 20 at 11:59pm" },
+                                 { due_at: "Apr 15, 2024", due_for: "2 Groups, 2 Students", unlock_at: "Apr 10, 2024 at 12am", lock_at: "Apr 20, 2024 at 11:59pm" },
                                  { due_at: "-", due_for: "2 Sections", unlock_at: "-", lock_at: "-" }
                                ])
       end
+    end
+  end
+
+  context "teacher/observer permissions" do
+    before :once do
+      @teacher = teacher_in_course(active_all: true).user
+      @course.enroll_user(@teacher, "ObserverEnrollment", { allow_multiple_enrollments: true, associated_user_id: @student1 })
+      @course.enroll_user(@teacher, "ObserverEnrollment", { allow_multiple_enrollments: true, associated_user_id: @student2 })
+    end
+
+    before do
+      @assignment1.due_at = 1.week.from_now
+      @assignment1.save!
+      @assignment1.assignment_overrides.create!(set_type: "ADHOC")
+      @assignment1.assignment_overrides.first.assignment_override_students.create!(user: @student)
+      user_session(@teacher)
+    end
+
+    it "shows assignment page for teachers when they are also observers in the course" do
+      get "/courses/#{@course.id}/assignments/#{@assignment1.id}"
+      expect(element_exists?(AssignmentPage.assign_to_button_selector)).to be_truthy
+    end
+
+    it "shows all overrides for teachers when they are also observers in the course" do
+      @assignment1.update!(only_visible_to_overrides: true)
+      @student3 = student_in_course(course: @course, active_all: true, name: "Student 3").user
+      @assignment1.assignment_overrides.create!(set_type: "ADHOC", due_at: Time.zone.parse("2024-04-12"))
+      @assignment1.assignment_overrides.last.assignment_override_students.create!(user: @student3)
+
+      get "/courses/#{@course.id}/assignments/#{@assignment1.id}"
+
+      expect(AssignmentPage.retrieve_overrides_count).to eq(2)
+      overrides = AssignmentPage.retrieve_all_overrides_formatted
+      expect(overrides[0][:due_at]).to eq("Apr 12, 2024")
+      expect(overrides[0][:due_for]).to eq("1 Student")
+      expect(overrides[1][:due_at]).to eq("-")
+      expect(overrides[1][:due_for]).to eq("1 Student")
+    end
+  end
+
+  context "with course paces and mastery paths on" do
+    before(:once) do
+      @course.root_account.enable_feature!(:course_pace_pacing_with_mastery_paths)
+      @course.update(
+        enable_course_paces: true,
+        conditional_release: true
+      )
+    end
+
+    it "sets an assignment override for mastery paths when mastery path toggle is turned on" do
+      get "/courses/#{@course.id}/assignments/#{@assignment1.id}"
+
+      AssignmentPage.click_assign_to_button
+
+      wait_for_assign_to_tray_spinner
+      keep_trying_until { expect(item_tray_exists?).to be_truthy }
+
+      AssignmentPage.mastery_path_toggle.click
+      click_save_button
+      keep_trying_until { expect(element_exists?(module_item_edit_tray_selector)).to be_falsey }
+
+      expect(@assignment1.assignment_overrides.active.find_by(set_id: AssignmentOverride::NOOP_MASTERY_PATHS, set_type: AssignmentOverride::SET_TYPE_NOOP)).to be_present
+    end
+
+    it "removes assignment override for mastery paths when mastery path toggle is turned off" do
+      @assignment1.assignment_overrides.create(set_id: AssignmentOverride::NOOP_MASTERY_PATHS, set_type: AssignmentOverride::SET_TYPE_NOOP)
+
+      get "/courses/#{@course.id}/assignments/#{@assignment1.id}"
+
+      AssignmentPage.click_assign_to_button
+
+      wait_for_assign_to_tray_spinner
+      keep_trying_until { expect(item_tray_exists?).to be_truthy }
+
+      AssignmentPage.mastery_path_toggle.click
+      click_save_button
+      keep_trying_until { expect(element_exists?(module_item_edit_tray_selector)).to be_falsey }
+
+      expect(@assignment1.assignment_overrides.active.find_by(set_id: AssignmentOverride::NOOP_MASTERY_PATHS, set_type: AssignmentOverride::SET_TYPE_NOOP)).not_to be_present
     end
   end
 end

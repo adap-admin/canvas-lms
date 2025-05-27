@@ -541,7 +541,7 @@ returns the root account's sis source id for the current context.
 ## Canvas.externalTool.global_id
 returns the global ID for the external tool that was launched. Only available for LTI 1.
 
-**Availability**: *always and when in an LTI 1*  
+**Availability**: *when in an LTI 1*  
 
 
 ```
@@ -559,7 +559,7 @@ returns the URL for the external tool that was launched. Only available for LTI 
 ## com.instructure.brandConfigJSON.url
 returns the URL to retrieve the brand config JSON for the launching context.
 
-**Availability**: *always*  
+**Availability**: *when a tool is launched (excludes background messages like PNS notices)*  
 
 
 ```
@@ -568,7 +568,7 @@ returns the URL to retrieve the brand config JSON for the launching context.
 ## com.instructure.brandConfigJSON
 returns the brand config JSON itself for the launching context.
 
-**Availability**: *always*  
+**Availability**: *when a tool is launched (excludes background messages like PNS notices)*  
 
 
 ```
@@ -580,7 +580,7 @@ This URL should be used as the src attribute for a script tag on the external to
 provider's web page. It is configured to be used with the [instructure-ui node module](https://github.com/instructure/instructure-ui).
 More information on on how to use instructure ui react components can be found [here](http://instructure.github.io/instructure-ui/).
 
-**Availability**: *always*  
+**Availability**: *when a tool is launched (excludes background messages like PNS notices)*  
 
 
 ```
@@ -589,7 +589,7 @@ More information on on how to use instructure ui react components can be found [
 ## Canvas.css.common
 returns the URL for the common css file.
 
-**Availability**: *always*  
+**Availability**: *when a tool is launched (excludes background messages like PNS notices)*  
 
 
 ```
@@ -1165,7 +1165,7 @@ Returns the logout service url for the user.
 This is the pseudonym the user is actually logged in as.
 It may not hold all the sis info needed in other launch substitutions.
 
-**Availability**: *always*  
+**Availability**: *when a tool is launched (excludes background messages like PNS notices)*  
 
 
 ```
@@ -1319,6 +1319,8 @@ Returns the title of the assignment that was launched.
 ```
 ## Canvas.assignment.pointsPossible
 Returns the points possible of the assignment that was launched.
+
+This is an alias of `LineItem.resultValue.max`.
 
 **Availability**: *when launched as an assignment*  
 
@@ -1475,7 +1477,7 @@ Returns the number of submission attempts which the student did.
 Returns the endpoint url for accessing link-level tool settings
 Only available for LTI 2.0.
 
-**Availability**: *always*  
+**Availability**: *when a tool is launched (excludes background messages like PNS notices)*  
 
 
 ```
@@ -1485,7 +1487,7 @@ Only available for LTI 2.0.
 Returns the endpoint url for accessing context-level tool settings
 Only available for LTI 2.0.
 
-**Availability**: *always*  
+**Availability**: *when a tool is launched (excludes background messages like PNS notices)*  
 
 
 ```
@@ -1505,7 +1507,7 @@ Only available for LTI 2.0.
 Returns the [Tool Consumer Profile](https://www.imsglobal.org/specs/ltiv2p0/implementation-guide#toc-46) url for the tool.
 Only available for LTI 2.0.
 
-**Availability**: *always*  
+**Availability**: *when a tool is launched (excludes background messages like PNS notices)*  
 
 
 ```
@@ -1603,7 +1605,7 @@ Value is a comma-separated array of one or more values of: ["assignment", "assig
 Only functional when `com_instructure_course_accept_canvas_resource_types` is included as a query param
 in Canvas-side GET request that triggers the LTI launch.
 
-**Availability**: *always*  
+**Availability**: *when a tool is launched (excludes background messages like PNS notices)*  
 
 
 ```
@@ -1622,7 +1624,7 @@ Value is the largest logical unit of the page. Possible values are: ["assignment
 Only functional when `com_instructure_course_canvas_resource_type` is included as a query param
 in Canvas-side GET request that triggers the LTI launch.
 
-**Availability**: *always*  
+**Availability**: *when a tool is launched (excludes background messages like PNS notices)*  
 
 
 ```
@@ -1633,7 +1635,7 @@ Returns the target resource id for the current page, forwarded from the request.
 `com_instructure_course_canvas_resource_type` is included as a query param. Currently, this is not
 supported generally, and is only implemented for specific use cases.
 
-**Availability**: *always*  
+**Availability**: *when a tool is launched (excludes background messages like PNS notices)*  
 
 
 ```
@@ -1646,7 +1648,7 @@ True for Modules page and Assignment Groups page. False for other content index 
 Only functional when `com_instructure_course_allow_canvas_resource_selection` is included as a query param
 in Canvas-side GET request that triggers the LTI launch.
 
-**Availability**: *always*  
+**Availability**: *when a tool is launched (excludes background messages like PNS notices)*  
 
 
 ```
@@ -1660,7 +1662,7 @@ Empty value if com.instructure.Course.allow_canvas_resource_selection is false.
 Only functional when `com_instructure_course_available_canvas_resources` is included as a query param
 in Canvas-side GET request that triggers the LTI launch.
 
-**Availability**: *always*  
+**Availability**: *when a tool is launched (excludes background messages like PNS notices)*  
 
 
 ```
@@ -1683,4 +1685,16 @@ This variable helps tools handle the merged user's history.
 
 ```
 123,456,789
+```
+## LineItem.resultValue.max
+Returns the points possible of the assignment that was launched.
+For other LineItem properties, use the LTI 1.3 <a href="file.assignment_tools.html">Assignments and Grade Services</a>
+
+This is an alias of `Canvas.assignment.pointsPossible`.
+
+**Availability**: *when launched as an assignment*  
+
+
+```
+100
 ```

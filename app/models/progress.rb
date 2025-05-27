@@ -26,11 +26,13 @@ class Progress < ActiveRecord::Base
     :group_category,
     :content_export,
     :assignment,
+    :submission,
     :attachment,
     :epub_export,
     :sis_batch,
     :course_pace,
     :context_external_tool,
+    :course_report,
     { context_user: "User", quiz_statistics: "Quizzes::QuizStatistics" },
   ] + (defined?(DsrRequest) ? [:dsr_request] : [])
 

@@ -20,6 +20,7 @@
 class Mutations::UpdateSubmissionGradeStatus < Mutations::BaseMutation
   graphql_name "UpdateSubmissionsGradeStatus"
 
+  argument :checkpoint_tag, String, required: false
   argument :custom_grade_status_id, ID, required: false
   argument :late_policy_status, String, required: false
   argument :submission_id, ID, required: true
@@ -27,6 +28,9 @@ class Mutations::UpdateSubmissionGradeStatus < Mutations::BaseMutation
   field :submission, Types::SubmissionType, null: true
   def resolve(input:)
     submission = Submission.find(input[:submission_id])
+    if input[:checkpoint_tag].present? && submission.course.discussion_checkpoints_enabled?
+      submission = submission.effective_checkpoint_submission(input[:checkpoint_tag])
+    end
 
     return { errors: { submission.id => "Not authorized to set submission status" } } unless submission.grants_right?(current_user, :grade)
 
@@ -39,7 +43,7 @@ class Mutations::UpdateSubmissionGradeStatus < Mutations::BaseMutation
         submission.update(late_policy_status: input[:late_policy_status])
       end
     elsif (input[:custom_grade_status_id].nil? && input[:late_policy_status].nil?) || input[:late_policy_status] == "none"
-      submission.update(custom_grade_status_id: nil, late_policy_status: nil, excused: false)
+      submission.update(custom_grade_status_id: nil, late_policy_status: input[:late_policy_status], excused: false)
     end
 
     { submission: }

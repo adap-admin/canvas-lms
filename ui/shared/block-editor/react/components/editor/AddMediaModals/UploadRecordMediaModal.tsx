@@ -23,11 +23,11 @@ import {
   MediaCaptureStrings,
   SelectStrings,
 } from '@canvas/upload-media-translations'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {showFlashError} from '@canvas/alerts/react/FlashAlert'
 import {type GlobalEnv} from '@canvas/global/env/GlobalEnv'
 
-const I18n = useI18nScope('block-editor/add-media-modal')
+const I18n = createI18nScope('block-editor')
 
 declare const ENV: GlobalEnv
 
@@ -54,8 +54,8 @@ export function UploadRecordMediaModal({
         }}
         onDismiss={onDismiss}
         rcsConfig={{
-          contextId: ENV.current_user?.id,
-          contextType: 'user',
+          contextId: ENV.current_context?.id,
+          contextType: ENV.current_context?.type,
         }}
         open={open}
         tabs={{record: true, upload: true}}

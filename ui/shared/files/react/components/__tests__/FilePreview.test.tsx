@@ -46,7 +46,7 @@ describe('File Preview Rendering', () => {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       },
-      {preflightUrl: ''}
+      {preflightUrl: ''},
     )
     file2 = new File(
       {
@@ -58,7 +58,7 @@ describe('File Preview Rendering', () => {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       },
-      {preflightUrl: ''}
+      {preflightUrl: ''},
     )
     file3 = new File(
       {
@@ -71,7 +71,7 @@ describe('File Preview Rendering', () => {
         updated_at: new Date().toISOString(),
         url: 'test/test/test.png',
       },
-      {preflightUrl: ''}
+      {preflightUrl: ''},
     )
     file4 = new File(
       {
@@ -84,7 +84,7 @@ describe('File Preview Rendering', () => {
         updated_at: new Date().toISOString(),
         preview_url: 'http://example.com',
       },
-      {preflightUrl: ''}
+      {preflightUrl: ''},
     )
     file5 = new File(
       {
@@ -97,7 +97,7 @@ describe('File Preview Rendering', () => {
         updated_at: new Date().toISOString(),
         preview_url: 'http://example.com',
       },
-      {preflightUrl: ''}
+      {preflightUrl: ''},
     )
     filesCollection.add(file1)
     filesCollection.add(file2)
@@ -116,7 +116,7 @@ describe('File Preview Rendering', () => {
           preview: '1',
         }}
         currentFolder={currentFolder}
-      />
+      />,
     )
     const infoButton = $('.ef-file-preview-header-info')
     expect(infoButton.attr('aria-expanded')).toBe('false')
@@ -125,7 +125,7 @@ describe('File Preview Rendering', () => {
     expect(infoButton.attr('aria-expanded')).toBe('true')
     // click it again to hide it
     infoButton.click()
-    expect($('tr:contains("Name")').length).toBe(0)
+    expect($('tr:contains("Name")')).toHaveLength(0)
     expect(infoButton.attr('aria-expanded')).toBe('false')
   })
 
@@ -137,10 +137,10 @@ describe('File Preview Rendering', () => {
           preview: '2',
         }}
         currentFolder={currentFolder}
-      />
+      />,
     )
     const arrows = $('.ef-file-preview-container-arrow-link')
-    expect(arrows.length).toBe(2)
+    expect(arrows).toHaveLength(2)
     expect((arrows[0] as HTMLAnchorElement).href).toContain('preview=1')
     expect((arrows[1] as HTMLAnchorElement).href).toContain('preview=3')
   })
@@ -153,7 +153,7 @@ describe('File Preview Rendering', () => {
           preview: '3',
         }}
         currentFolder={currentFolder}
-      />
+      />,
     )
     const downloadBtn = $('.ef-file-preview-header-download')[0]
     expect(downloadBtn).toBeInTheDocument()
@@ -178,7 +178,7 @@ describe('File Preview Rendering', () => {
           expect(url).toContain('sort=size')
           expect(url).toContain('order=desc')
         }}
-      />
+      />,
     )
 
     const closeButton = $('.ef-file-preview-header-close')[0]
@@ -187,33 +187,79 @@ describe('File Preview Rendering', () => {
     expect(closePreviewCalled).toBe(true)
   })
 
-  test('the file preview should include sandbox attributes if there is a preview_url', () => {
-    render(
-      <FilePreview
-        isOpen={true}
-        query={{
-          preview: '4',
-        }}
-        currentFolder={currentFolder}
-      />
-    )
-    const iframe = $('.ef-file-preview-frame')[0]
-    expect(iframe).toBeInTheDocument()
-    expect(iframe.getAttribute('sandbox')).toBe('allow-scripts allow-same-origin')
+  describe('when disable_iframe_sandbox_file_show is false', () => {
+    beforeEach(() => {
+      ENV.FEATURES.disable_iframe_sandbox_file_show = false
+    })
+
+    test('the file preview should include sandbox attributes if there is a preview_url', () => {
+      render(
+        <FilePreview
+          isOpen={true}
+          query={{
+            preview: '4',
+          }}
+          currentFolder={currentFolder}
+        />,
+      )
+      const iframe = $('.ef-file-preview-frame')[0]
+      expect(iframe).toBeInTheDocument()
+      expect(iframe.getAttribute('sandbox')).toMatch(/allow-scripts/)
+      expect(iframe.getAttribute('sandbox')).toMatch(/allow-same-origin/)
+      expect(iframe.getAttribute('sandbox')).toMatch(/allow-downloads/)
+    })
+
+    test('the file preview should not include allow-scripts in sandbox attributes for html files', () => {
+      render(
+        <FilePreview
+          isOpen={true}
+          query={{
+            preview: '5',
+          }}
+          currentFolder={currentFolder}
+        />,
+      )
+      const iframe = $('.ef-file-preview-frame')[0]
+      expect(iframe).toBeInTheDocument()
+      expect(iframe.getAttribute('sandbox')).not.toMatch(/allow-scripts/)
+      expect(iframe.getAttribute('sandbox')).toMatch(/allow-same-origin/)
+      expect(iframe.getAttribute('sandbox')).toMatch(/allow-downloads/)
+    })
   })
 
-  test('the file preview should not include allow-scripts in sandbox attributes for html files', () => {
-    render(
-      <FilePreview
-        isOpen={true}
-        query={{
-          preview: '5',
-        }}
-        currentFolder={currentFolder}
-      />
-    )
-    const iframe = $('.ef-file-preview-frame')[0]
-    expect(iframe).toBeInTheDocument()
-    expect(iframe.getAttribute('sandbox')).toBe('allow-same-origin')
+  describe('when disable_iframe_sandbox_file_show is true', () => {
+    beforeEach(() => {
+      ENV.FEATURES.disable_iframe_sandbox_file_show = true
+    })
+
+    test('the file preview should not include sandbox if there is a preview_url', () => {
+      render(
+        <FilePreview
+          isOpen={true}
+          query={{
+            preview: '4',
+          }}
+          currentFolder={currentFolder}
+        />,
+      )
+      const iframe = $('.ef-file-preview-frame')[0]
+      expect(iframe).toBeInTheDocument()
+      expect(iframe.getAttribute('sandbox')).toBeNull()
+    })
+
+    test('the file preview should not include sandbox for html files', () => {
+      render(
+        <FilePreview
+          isOpen={true}
+          query={{
+            preview: '5',
+          }}
+          currentFolder={currentFolder}
+        />,
+      )
+      const iframe = $('.ef-file-preview-frame')[0]
+      expect(iframe).toBeInTheDocument()
+      expect(iframe.getAttribute('sandbox')).toBeNull()
+    })
   })
 })

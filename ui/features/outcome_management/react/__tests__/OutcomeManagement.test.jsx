@@ -18,7 +18,7 @@
 
 import React from 'react'
 import {render, fireEvent, act, within} from '@testing-library/react'
-import {MockedProvider} from '@apollo/react-testing'
+import {MockedProvider} from '@apollo/client/testing'
 import {
   OutcomePanel,
   OutcomeManagementWithoutGraphql as OutcomeManagement,
@@ -28,16 +28,27 @@ import {
   masteryScalesGraphqlMocks,
   outcomeGroupsMocks,
 } from '@canvas/outcomes/mocks/Outcomes'
-import {createCache} from '@canvas/apollo'
+import {createCache} from '@canvas/apollo-v3'
 import {
   showOutcomesImporter,
   showOutcomesImporterIfInProgress,
 } from '@canvas/outcomes/react/OutcomesImporter'
 import {courseMocks, groupDetailMocks, groupMocks} from '@canvas/outcomes/mocks/Management'
+import {windowConfirm} from '@canvas/util/globalUtils'
+import {useAllPages} from '@canvas/query'
+
+jest.mock('@canvas/query', () => ({
+  useAllPages: jest.fn(),
+}))
 
 jest.mock('@canvas/outcomes/react/OutcomesImporter', () => ({
   showOutcomesImporter: jest.fn(() => jest.fn(() => {})),
   showOutcomesImporterIfInProgress: jest.fn(() => jest.fn(() => {})),
+}))
+
+jest.mock('@canvas/util/globalUtils', () => ({
+  ...jest.requireActual('@canvas/util/globalUtils'),
+  windowConfirm: jest.fn(() => true),
 }))
 
 describe('OutcomeManagement', () => {
@@ -107,7 +118,7 @@ describe('OutcomeManagement', () => {
     const {findByText, findByTestId, getByTestId} = render(
       <MockedProvider cache={cache} mocks={mocks}>
         <OutcomeManagement breakpoints={{tablet: true}} />
-      </MockedProvider>
+      </MockedProvider>,
     )
     await act(async () => jest.runAllTimers())
 
@@ -152,7 +163,7 @@ describe('OutcomeManagement', () => {
       const {getByText, getByTestId} = render(
         <MockedProvider cache={cache} mocks={[...outcomeGroupsMocks]}>
           <OutcomeManagement />
-        </MockedProvider>
+        </MockedProvider>,
       )
       expect(getByText(/^Loading$/)).toBeInTheDocument() // spinner
       await act(async () => jest.runAllTimers())
@@ -166,7 +177,7 @@ describe('OutcomeManagement', () => {
       const {getByText, getByLabelText} = render(
         <MockedProvider cache={cache} mocks={[...outcomeGroupsMocks]}>
           <OutcomeManagement />
-        </MockedProvider>
+        </MockedProvider>,
       )
       expect(getByText(/^Loading$/)).toBeInTheDocument() // spinner
       await act(async () => jest.runAllTimers())
@@ -185,7 +196,7 @@ describe('OutcomeManagement', () => {
       const {getByText, getByTestId} = render(
         <MockedProvider cache={cache} mocks={[...outcomeGroupsMocks, ...outcomeGroupsMocks]}>
           <OutcomeManagement />
-        </MockedProvider>
+        </MockedProvider>,
       )
       expect(getByText(/^Loading$/)).toBeInTheDocument() // spinner
       await act(async () => jest.runAllTimers())
@@ -199,7 +210,7 @@ describe('OutcomeManagement', () => {
           learningOutcomeGroupId: null,
           onSuccessfulCreateOutcome: expect.any(Function),
         },
-        '1'
+        '1',
       )
       fireEvent.click(getByText('Calculation'))
       fireEvent.click(getByText('Manage'))
@@ -218,7 +229,7 @@ describe('OutcomeManagement', () => {
       const {getByText} = render(
         <MockedProvider cache={cache} mocks={[...outcomeGroupsMocks]}>
           <OutcomeManagement />
-        </MockedProvider>
+        </MockedProvider>,
       )
       await act(async () => jest.runAllTimers())
       expect(getByText('Manage')).toBeInTheDocument()
@@ -231,7 +242,7 @@ describe('OutcomeManagement', () => {
       const {getByText, queryByText} = render(
         <MockedProvider cache={cache} mocks={[...outcomeGroupsMocks]}>
           <OutcomeManagement />
-        </MockedProvider>
+        </MockedProvider>,
       )
       await act(async () => jest.runAllTimers())
       expect(getByText('Manage')).toBeInTheDocument()
@@ -240,12 +251,10 @@ describe('OutcomeManagement', () => {
     })
 
     describe('Changes confirmation', () => {
-      let originalConfirm, originalAddEventListener, unloadEventListener
+      let originalAddEventListener, unloadEventListener
 
       beforeAll(() => {
-        originalConfirm = window.confirm
         originalAddEventListener = window.addEventListener
-        window.confirm = jest.fn(() => true)
         window.addEventListener = (eventName, callback) => {
           if (eventName === 'beforeunload') {
             unloadEventListener = callback
@@ -253,36 +262,49 @@ describe('OutcomeManagement', () => {
         }
       })
 
+      beforeEach(() => {
+        jest.clearAllMocks()
+      })
+
       afterAll(() => {
-        window.confirm = originalConfirm
         window.addEventListener = originalAddEventListener
         unloadEventListener = null
       })
 
       it("Doesn't ask to confirm tab change when there is not change", () => {
+        useAllPages.mockReturnValue({
+          data: {pages: [masteryScalesGraphqlMocks[0].result.data]},
+          isError: false,
+          isLoading: false,
+        })
         const {getByText} = render(
           <MockedProvider
             cache={cache}
             mocks={[...masteryCalculationGraphqlMocks, ...masteryScalesGraphqlMocks]}
           >
             <OutcomeManagement />
-          </MockedProvider>
+          </MockedProvider>,
         )
 
         fireEvent.click(getByText('Mastery'))
         fireEvent.click(getByText('Calculation'))
 
-        expect(window.confirm).not.toHaveBeenCalled()
+        expect(windowConfirm).not.toHaveBeenCalled()
       })
 
       it('Asks to confirm tab change when there is changes', async () => {
+        useAllPages.mockReturnValue({
+          data: {pages: [masteryScalesGraphqlMocks[0].result.data]},
+          isError: false,
+          isLoading: false,
+        })
         const {getByText, getByLabelText, getByTestId} = render(
           <MockedProvider
             cache={cache}
             mocks={[...masteryCalculationGraphqlMocks, ...masteryScalesGraphqlMocks]}
           >
             <OutcomeManagement />
-          </MockedProvider>
+          </MockedProvider>,
         )
 
         fireEvent.click(getByText('Calculation'))
@@ -290,13 +312,15 @@ describe('OutcomeManagement', () => {
         fireEvent.input(getByLabelText('Parameter'), {target: {value: ''}})
         fireEvent.click(getByText('Mastery'))
         await act(async () => jest.runAllTimers())
-        expect(window.confirm).toHaveBeenCalled()
+        expect(windowConfirm).toHaveBeenCalledWith(
+          'Are you sure you want to proceed? Changes you made will not be saved.',
+        )
         expect(getByTestId('masteryScales')).toBeInTheDocument()
       })
 
       it("Doesn't change tabs when doesn't confirm", async () => {
         // mock decline from user
-        window.confirm = () => false
+        windowConfirm.mockImplementationOnce(() => false)
 
         const {getByText, getByLabelText, queryByTestId} = render(
           <MockedProvider
@@ -304,7 +328,7 @@ describe('OutcomeManagement', () => {
             mocks={[...masteryCalculationGraphqlMocks, ...masteryScalesGraphqlMocks]}
           >
             <OutcomeManagement />
-          </MockedProvider>
+          </MockedProvider>,
         )
 
         fireEvent.click(getByText('Calculation'))
@@ -321,7 +345,7 @@ describe('OutcomeManagement', () => {
             mocks={[...masteryCalculationGraphqlMocks, ...masteryScalesGraphqlMocks]}
           >
             <OutcomeManagement />
-          </MockedProvider>
+          </MockedProvider>,
         )
 
         const calculationButton = getByText('Calculation')
@@ -342,7 +366,7 @@ describe('OutcomeManagement', () => {
             mocks={[...masteryCalculationGraphqlMocks, ...masteryScalesGraphqlMocks]}
           >
             <OutcomeManagement />
-          </MockedProvider>
+          </MockedProvider>,
         )
 
         const calculationButton = getByText('Calculation')
@@ -373,7 +397,7 @@ describe('OutcomeManagement', () => {
           const {getByText} = render(
             <MockedProvider cache={cache} mocks={[...outcomeGroupsMocks]}>
               <OutcomeManagement />
-            </MockedProvider>
+            </MockedProvider>,
           )
           await act(async () => jest.runAllTimers())
           expect(getByText('Alignments')).toBeInTheDocument()
@@ -384,7 +408,7 @@ describe('OutcomeManagement', () => {
           const {queryByText} = render(
             <MockedProvider cache={cache} mocks={[...outcomeGroupsMocks]}>
               <OutcomeManagement />
-            </MockedProvider>
+            </MockedProvider>,
           )
           await act(async () => jest.runAllTimers())
           expect(queryByText('Alignments')).not.toBeInTheDocument()
@@ -395,7 +419,7 @@ describe('OutcomeManagement', () => {
           const {queryByText} = render(
             <MockedProvider cache={cache} mocks={[...outcomeGroupsMocks]}>
               <OutcomeManagement />
-            </MockedProvider>
+            </MockedProvider>,
           )
           await act(async () => jest.runAllTimers())
           expect(queryByText('Alignments')).not.toBeInTheDocument()
@@ -408,7 +432,7 @@ describe('OutcomeManagement', () => {
           const {queryByText} = render(
             <MockedProvider cache={cache} mocks={[...outcomeGroupsMocks]}>
               <OutcomeManagement />
-            </MockedProvider>
+            </MockedProvider>,
           )
           await act(async () => jest.runAllTimers())
           expect(queryByText('Alignments')).not.toBeInTheDocument()
@@ -425,7 +449,7 @@ describe('OutcomeManagement', () => {
         const {queryByText} = render(
           <MockedProvider cache={cache} mocks={[...outcomeGroupsMocks]}>
             <OutcomeManagement />
-          </MockedProvider>
+          </MockedProvider>,
         )
         await act(async () => jest.runAllTimers())
         expect(queryByText('Alignments')).not.toBeInTheDocument()

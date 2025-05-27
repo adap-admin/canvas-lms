@@ -17,14 +17,14 @@
  */
 import React from 'react'
 import {bool, func, oneOf, string} from 'prop-types'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import {Flex} from '@instructure/ui-flex'
 import {FormFieldGroup} from '@instructure/ui-form-field'
 import {ScreenReaderContent} from '@instructure/ui-a11y-content'
 
 import AssignmentDate from '../Editables/AssignmentDate'
 
-const I18n = useI18nScope('assignments_2')
+const I18n = createI18nScope('assignments_2')
 
 export default class OverrideDates extends React.Component {
   static propTypes = {
@@ -128,7 +128,7 @@ export default class OverrideDates extends React.Component {
               this.onChangeDue,
               this.onChangeDueMode,
               this.onValidateDue,
-              this.invalidMessageDue
+              this.invalidMessageDue,
             )}
           </Flex.Item>
           <Flex.Item margin="0 x-small 0 0" as="div" shouldGrow={true} width="30%">
@@ -140,7 +140,7 @@ export default class OverrideDates extends React.Component {
               this.onChangeUnlock,
               this.onChangeUnlockMode,
               this.onValidateUnlock,
-              this.invalidMessageUnlock
+              this.invalidMessageUnlock,
             )}
           </Flex.Item>
           <Flex.Item margin="0 0 0 0" as="div" shouldGrow={true} width="30%">
@@ -152,7 +152,7 @@ export default class OverrideDates extends React.Component {
               this.onChangeLock,
               this.onChangeLockMode,
               this.onValidateLock,
-              this.invalidMessageLock
+              this.invalidMessageLock,
             )}
           </Flex.Item>
         </Flex>

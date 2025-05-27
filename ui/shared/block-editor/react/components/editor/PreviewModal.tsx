@@ -27,9 +27,9 @@ import BlockEditorView from '../../BlockEditorView'
 import {LATEST_BLOCK_DATA_VERSION} from '../../utils/transformations'
 import {IconDesktop, IconTablet, IconMobile} from '../../assets/internal-icons'
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 
-const I18n = useI18nScope('block-editor')
+const I18n = createI18nScope('block-editor')
 
 type ViewSize = 'desktop' | 'tablet' | 'mobile'
 
@@ -265,7 +265,7 @@ const PreviewModal = ({open, onDismiss}: PreviewModalProps) => {
         onDismiss()
       }
     },
-    [onDismiss, open]
+    [onDismiss, open],
   )
 
   const handleRendered = useCallback(() => {
@@ -274,7 +274,7 @@ const PreviewModal = ({open, onDismiss}: PreviewModalProps) => {
 
   useEffect(() => {
     if (viewRef && rendered) {
-      // @ts-expect-error enhandeUserContent is not typed
+      // @ts-expect-error
       enhanceUserContent(viewRef, {canvasOrigin: window.location.origin})
     }
   }, [viewRef, rendered])
@@ -326,12 +326,15 @@ const PreviewModal = ({open, onDismiss}: PreviewModalProps) => {
         <Flex justifyItems="space-between">
           <Heading level="h2">{I18n.t('Preview')}</Heading>
           <Flex gap="large" direction="row-reverse">
-            <CloseButton offset="small" onClick={onDismiss} screenReaderLabel={I18n.t('Close')} />
+            <CloseButton data-testid="preview-modal-close-button"
+                         offset="small" onClick={onDismiss} screenReaderLabel={I18n.t('Close')} />
             <Flex as="div" gap="small">
               <IconButton
+                data-testid="preview-modal-icon-button-desktop"
                 size="small"
                 onClick={handleDesktopSize}
                 screenReaderLabel={I18n.t('Desktop')}
+                title={I18n.t('Desktop')}
                 withBackground={viewSize === 'desktop'}
                 withBorder={viewSize === 'desktop'}
                 aria-current={viewSize === 'desktop' ? 'true' : undefined}
@@ -340,9 +343,11 @@ const PreviewModal = ({open, onDismiss}: PreviewModalProps) => {
                 <IconDesktop size="x-small" />
               </IconButton>
               <IconButton
+                data-testid="preview-modal-icon-button-tablet"
                 size="small"
                 onClick={handleTabletSize}
                 screenReaderLabel={I18n.t('Tablet')}
+                title={I18n.t('Tablet')}
                 withBackground={viewSize === 'tablet'}
                 withBorder={viewSize === 'tablet'}
                 aria-current={viewSize === 'tablet' ? 'true' : undefined}
@@ -351,9 +356,11 @@ const PreviewModal = ({open, onDismiss}: PreviewModalProps) => {
                 <IconTablet size="x-small" />
               </IconButton>
               <IconButton
+                data-testid="preview-modal-icon-button-mobile"
                 size="small"
                 onClick={handleMobileSize}
                 screenReaderLabel={I18n.t('Mobile')}
+                title={I18n.t('Mobile')}
                 withBackground={viewSize === 'mobile'}
                 withBorder={viewSize === 'mobile'}
                 aria-current={viewSize === 'mobile' ? 'true' : undefined}

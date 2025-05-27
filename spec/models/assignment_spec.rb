@@ -25,25 +25,10 @@ require_relative "../lti2_spec_helper"
 describe Assignment do
   include_context "lti2_spec_helper"
 
-  describe "relationships" do
-    it { is_expected.to have_one(:score_statistic).dependent(:destroy) }
-    it { is_expected.to have_one(:post_policy).dependent(:destroy).inverse_of(:assignment) }
-
-    it { is_expected.to have_many(:moderation_graders) }
-    it { is_expected.to have_many(:moderation_grader_users) }
-    it { is_expected.to have_many(:lti_resource_links).class_name("Lti::ResourceLink") }
-  end
-
   before :once do
     course_with_teacher(active_all: true)
     @initial_student = student_in_course(active_all: true, user_name: "a student").user
   end
-
-  # workaround for our version of shoulda-matchers not having the 'optional' method
-  it { is_expected.to belong_to(:grader_section).class_name("CourseSection") }
-  it { is_expected.not_to validate_presence_of(:grader_section) }
-  it { is_expected.to belong_to(:final_grader).class_name("User") }
-  it { is_expected.not_to validate_presence_of(:final_grader) }
 
   it "creates a new instance given valid attributes" do
     assignment = @course.assignments.create!(assignment_valid_attributes)
@@ -106,6 +91,15 @@ describe Assignment do
 
     expect(@assignment).not_to be_valid
     expect(@assignment.errors[:grading_type]).not_to be_nil
+  end
+
+  describe "#question_count" do
+    let(:assignment) { Assignment.new }
+
+    it "sets and gets the question_count correctly" do
+      assignment.question_count = 10
+      expect(assignment.question_count).to eq(10)
+    end
   end
 
   describe "default values" do
@@ -1481,21 +1475,35 @@ describe Assignment do
   end
 
   describe "#tool_settings_tool=" do
+    subject(:assign_tool) { assignment.update!(tool_settings_tool: new_value) }
+
+    let(:assignment) { setup_assignment_with_homework }
+    let(:tool) {  @course.context_external_tools.create!(name: "a", url: "http://www.google.com", consumer_key: "12345", shared_secret: "secret") }
+
+    context "when a tool settings tool is currently set" do
+      before { assignment.update!(tool_settings_tool: tool) }
+
+      context "and the tool settings tool is re-assigned to `nil`" do
+        let(:new_value) { nil }
+
+        it "deletes the assignment configuration tool lookups" do
+          expect { assign_tool }.to change { assignment.assignment_configuration_tool_lookups.count }.from(1).to(0)
+        end
+
+        it "does not destroy the tool" do
+          expect(tool).to be_active
+
+          expect { assign_tool }.not_to change { tool.reload.workflow_state }
+        end
+      end
+    end
+
     it "allows ContextExternalTools through polymorphic association" do
       setup_assignment_with_homework
       tool = @course.context_external_tools.create!(name: "a", url: "http://www.google.com", consumer_key: "12345", shared_secret: "secret")
       @assignment.tool_settings_tool = tool
       @assignment.save
       expect(@assignment.tool_settings_tool).to eq(tool)
-    end
-
-    it "destroys tool unless tool is 'ContextExternalTool'" do
-      setup_assignment_with_homework
-      tool = @course.context_external_tools.create!(name: "a", url: "http://www.google.com", consumer_key: "12345", shared_secret: "secret")
-      @assignment.tool_settings_tool = tool
-      @assignment.save!
-      @assignment.tool_settings_tool = nil
-      @assignment.save!
     end
 
     context "when the tool proxy is account-level" do
@@ -1562,6 +1570,51 @@ describe Assignment do
       # "Copy"
       new_assignment3 = new_assignment.duplicate
       expect(new_assignment3.title).to eq "Wiki Assignment Copy 3"
+    end
+
+    describe "estimated_duration" do
+      subject { assignment_with_estimated_duration.duplicate }
+
+      let(:estimated_duration) { EstimatedDuration.new({ duration: 30 }) }
+      let(:assignment_with_estimated_duration) do
+        assignment = @course.assignments.new
+        assignment.estimated_duration = estimated_duration
+        assignment.save!
+        assignment
+      end
+
+      context "when course is a horizon_course" do
+        before do
+          assignment_with_estimated_duration.course.account.enable_feature!(:horizon_course_setting)
+          assignment_with_estimated_duration.course.update!(horizon_course: true)
+        end
+
+        it "should set estimated_duration duration on duplication" do
+          expect(subject.estimated_duration.duration.iso8601).to eq("PT30S")
+        end
+
+        it "should not save the estimated_duration to db" do
+          expect(subject.estimated_duration.id).to be_nil
+        end
+
+        context "when estimated_duration not provided" do
+          it "should set estimated_duration on duplication" do
+            assignment_with_estimated_duration.estimated_duration = nil
+            expect(subject.estimated_duration).to be_nil
+          end
+        end
+      end
+
+      context "when course is not a horizon_course" do
+        before do
+          assignment_with_estimated_duration.course.account.disable_feature!(:horizon_course_setting)
+          assignment_with_estimated_duration.course.update!(horizon_course: false)
+        end
+
+        it "should set estimated_duration on duplication" do
+          expect(subject.estimated_duration).to be_nil
+        end
+      end
     end
 
     it "does not duplicate the sis_source_id" do
@@ -1762,21 +1815,78 @@ describe Assignment do
 
   describe ".clean_up_duplicating_assignments" do
     before do
-      duplicating_for_too_long_result = double
-      @in_batches_result = double
-      allow(described_class).to receive(:duplicating_for_too_long).and_return(duplicating_for_too_long_result)
-      allow(duplicating_for_too_long_result).to receive(:in_batches).and_return(@in_batches_result)
+      @scope = double
+      allow(Sentry).to receive(:with_scope).and_yield(@scope)
+      allow(@scope).to receive(:set_context)
+      allow(Sentry).to receive(:capture_message)
     end
 
-    it "marks all assignments that have been duplicating for too long as failed_to_duplicate" do
-      now = double("now")
-      expect(Time.zone).to receive(:now).and_return(now)
-      expect(@in_batches_result).to receive(:update_all).with(
-        duplication_started_at: nil,
-        workflow_state: "failed_to_duplicate",
-        updated_at: now
-      )
-      described_class.clean_up_duplicating_assignments
+    context "new_quizzes_report_failed_duplicates is enabled" do
+      let!(:old_duplicating_assignment_1) do
+        @course.assignments.create!(
+          workflow_state: "duplicating",
+          duplication_started_at: 20.minutes.ago,
+          **assignment_valid_attributes
+        )
+      end
+
+      let!(:old_duplicating_assignment_2) do
+        @course.assignments.create!(
+          workflow_state: "duplicating",
+          duplication_started_at: 20.minutes.ago,
+          **assignment_valid_attributes
+        )
+      end
+
+      before do
+        allow(Account.site_admin)
+          .to receive(:feature_enabled?)
+          .with(:new_quizzes_report_failed_duplicates)
+          .and_return(true)
+      end
+
+      it "marks all assignments that have been duplicating for too long as failed_to_duplicate" do
+        described_class.clean_up_duplicating_assignments
+        expect(@course.assignments).to all(have_attributes(workflow_state: "failed_to_duplicate"))
+      end
+
+      it "reports to sentry" do
+        described_class.clean_up_duplicating_assignments
+        expect(@scope).to have_received(:set_context).with(
+          "context",
+          {
+            @course.root_account_id => 2
+          }
+        )
+        expect(Sentry).to have_received(:capture_message).with("Failed to duplicate assignments")
+      end
+    end
+
+    context "new_quizzes_report_failed_duplicates is disabled" do
+      let!(:old_duplicating_assignment) do
+        @course.assignments.create!(
+          workflow_state: "duplicating",
+          duplication_started_at: 20.minutes.ago,
+          **assignment_valid_attributes
+        )
+      end
+
+      before do
+        allow(Account.site_admin)
+          .to receive(:feature_enabled?)
+          .with(:new_quizzes_report_failed_duplicates)
+          .and_return(false)
+      end
+
+      it "marks all assignments that have been duplicating for too long as failed_to_duplicate" do
+        described_class.clean_up_duplicating_assignments
+        expect(@course.assignments).to all(have_attributes(workflow_state: "failed_to_duplicate"))
+      end
+
+      it "does not report to sentry" do
+        described_class.clean_up_duplicating_assignments
+        expect(Sentry).not_to have_received(:capture_message)
+      end
     end
   end
 
@@ -2341,7 +2451,7 @@ describe Assignment do
   describe "#has_student_submissions_for_sub_assignments?" do
     context "checkpointed assignment" do
       before do
-        @course.root_account.enable_feature!(:discussion_checkpoints)
+        @course.account.enable_feature!(:discussion_checkpoints)
         @reply_to_topic, @reply_to_entry = graded_discussion_topic_with_checkpoints(context: @course, reply_to_entry_required_count: 2)
       end
 
@@ -2364,7 +2474,7 @@ describe Assignment do
   describe "#can_unpublish?" do
     context "checkpointed assignment" do
       before do
-        @course.root_account.enable_feature!(:discussion_checkpoints)
+        @course.account.enable_feature!(:discussion_checkpoints)
         @reply_to_topic, = graded_discussion_topic_with_checkpoints(context: @course)
       end
 
@@ -2378,7 +2488,7 @@ describe Assignment do
   describe "#assignment_ids_with_sub_assignment_submissions" do
     context "checkpointed assignment" do
       before do
-        @course.root_account.enable_feature!(:discussion_checkpoints)
+        @course.account.enable_feature!(:discussion_checkpoints)
         @reply_to_topic, = graded_discussion_topic_with_checkpoints(context: @course)
         @other_assignment = @course.assignments.create(title: "other assignment", points_possible: 10)
       end
@@ -2431,6 +2541,21 @@ describe Assignment do
       @assignment.reload
       decoded = Canvas::Security.decode_jwt(@assignment.secure_params)
       expect(decoded[:description]).to be_nil
+    end
+  end
+
+  describe "show_in_search_for_user?" do
+    let(:user) { User.create }
+    let(:assignment) { Assignment.create }
+
+    it "returns true if the user can see the description" do
+      expect(assignment).to receive(:include_description?).with(user).and_return(true)
+      expect(assignment.show_in_search_for_user?(user)).to be true
+    end
+
+    it "returns false if the user cannot see the description" do
+      expect(assignment).to receive(:include_description?).with(user).and_return(false)
+      expect(assignment.show_in_search_for_user?(user)).to be false
     end
   end
 
@@ -2502,8 +2627,8 @@ describe Assignment do
     end
 
     describe "grade_posting_in_progress" do
-      let(:submission) { instance_double("Submission") }
-      let(:result) { instance_double("Lti::Result") }
+      let(:submission) { instance_double(Submission) }
+      let(:result) { instance_double(Lti::Result) }
 
       before do
         allow(assignment).to receive(:find_or_create_submissions)
@@ -2623,7 +2748,7 @@ describe Assignment do
           # Force an update to make the submission infer its values. Basically,
           # we're trying to emulate a request from the lti/scores_controller here.
           result
-          submission.update!(updated_at: Time.now)
+          submission.update!(updated_at: Time.zone.now)
         end
 
         it "marks the submission and result as fully graded" do
@@ -4775,6 +4900,30 @@ describe Assignment do
         end
       end
 
+      it "links RubricAssociation to AssessmentRequest when done at the same time" do
+        # This test simulates a race condition between associating a rubric and
+        # assigning peer reviews where previously the AssessmentRequests being created
+        # wheren't all linked to the RubricAssociation. This test ensures that is no
+        # longer happening.
+        rubric = Rubric.create!(user: @teacher, context: @course)
+        @a.peer_review_count = 1
+        call_count = 0
+        ra_result = nil
+        original_method = @submissions.first.method(:assign_assessor)
+
+        allow_any_instance_of(Submission).to receive(:assign_assessor) do |_instance, arg|
+          call_count += 1
+          if call_count == 5
+            ra_result = rubric.associate_with(@a, @course, purpose: "grading")
+          end
+
+          original_method.call(arg)
+        end
+
+        @a.assign_peer_reviews
+        expect(ra_result.assessment_requests.count).to eq(10)
+      end
+
       it "does not assign peer reviews to fake students" do
         fake_student = @course.student_view_student
         fake_sub = @a.submit_homework(fake_student, submission_type: "online_url", url: "http://www.google.com")
@@ -5747,7 +5896,7 @@ describe Assignment do
       Time.zone = "UTC"
       assignment_model(due_at: "Sep 3 2008 11:55am", course: @course)
       # force known value so we can check serialization
-      @assignment.updated_at = Time.at(1_220_443_500) # 3 Sep 2008 12:05pm (UTC)
+      @assignment.updated_at = Time.zone.at(1_220_443_500) # 3 Sep 2008 12:05pm (UTC)
       res = @assignment.to_ics
       expect(res).not_to be_nil
       expect(res.include?("DTEND:20080903T115500Z")).not_to be_nil
@@ -5759,7 +5908,7 @@ describe Assignment do
       Time.zone = "UTC"
       assignment_model(due_at: "Sep 3 2008 11:55am", course: @course, time_zone_edited: "EST")
       # force known value so we can check serialization
-      @assignment.updated_at = Time.at(1_220_443_500) # 3 Sep 2008 12:05pm (UTC)
+      @assignment.updated_at = Time.zone.at(1_220_443_500) # 3 Sep 2008 12:05pm (UTC)
       res = @assignment.to_ics
       expect(res).not_to be_nil
       expect(res.include?("DTEND:20080903T115500Z")).not_to be_nil
@@ -5771,7 +5920,7 @@ describe Assignment do
       Time.zone = "UTC"
       assignment_model(due_at: "Sep 3 2008 11:59pm", course: @course, time_zone_edited: "EST")
       # force known value so we can check serialization
-      @assignment.updated_at = Time.at(1_220_443_500) # 3 Sep 2008 12:05pm (UTC)
+      @assignment.updated_at = Time.zone.at(1_220_443_500) # 3 Sep 2008 12:05pm (UTC)
       Time.zone = "HST"
       res = @assignment.to_ics
       expect(res).not_to be_nil
@@ -5784,7 +5933,7 @@ describe Assignment do
       Time.zone = "Alaska" # -0800
       assignment_model(due_at: "Sep 3 2008 11:55am", course: @course)
       # force known value so we can check serialization
-      @assignment.updated_at = Time.at(1_220_472_300) # 3 Sep 2008 12:05pm (AKDT)
+      @assignment.updated_at = Time.zone.at(1_220_472_300) # 3 Sep 2008 12:05pm (AKDT)
       res = @assignment.to_ics
       expect(res).not_to be_nil
       expect(res.include?("DTEND:20080903T195500Z")).not_to be_nil
@@ -5796,7 +5945,7 @@ describe Assignment do
       Time.zone = "UTC"
       assignment_model(due_at: "Sep 3 2008 11:55am", course: @course)
       # force known value so we can check serialization
-      @assignment.updated_at = Time.at(1_220_443_500) # 3 Sep 2008 12:05pm (UTC)
+      @assignment.updated_at = Time.zone.at(1_220_443_500) # 3 Sep 2008 12:05pm (UTC)
       res = @assignment.to_ics(in_own_calendar: false)
       expect(res).not_to be_nil
       expect(res.dtstart.tz_utc).to be true
@@ -5811,7 +5960,7 @@ describe Assignment do
       Time.zone = "Alaska" # -0800
       assignment_model(due_at: "Sep 3 2008 11:55am", course: @course)
       # force known value so we can check serialization
-      @assignment.updated_at = Time.at(1_220_472_300) # 3 Sep 2008 12:05pm (AKDT)
+      @assignment.updated_at = Time.zone.at(1_220_472_300) # 3 Sep 2008 12:05pm (AKDT)
       res = @assignment.to_ics(in_own_calendar: false)
       expect(res).not_to be_nil
       expect(res.dtstart.tz_utc).to be true
@@ -5880,7 +6029,7 @@ describe Assignment do
       expect(@a.submission_types).to eql("online_quiz")
       expect(@a.quiz).not_to be_nil
       expect(@a.quiz.assignment_id).to eql(@a.id)
-      @a.due_at = Time.now
+      @a.due_at = Time.zone.now
       @a.save
       @a.reload
       expect(@a.quiz).not_to be_nil
@@ -6404,7 +6553,7 @@ describe Assignment do
       end
 
       it "creates a message when an assignment changes after it's been published" do
-        @a.created_at = Time.parse("Jan 2 2000")
+        @a.created_at = Time.zone.parse("Jan 2 2000")
         @a.description = "something different"
         @a.notify_of_update = true
         @a.save
@@ -6462,8 +6611,8 @@ describe Assignment do
         @course.enroll_user(@ta2, "TaEnrollment", section: @section2, enrollment_state: "active", limit_privileges_to_course_section: true)
 
         Time.zone = "Alaska"
-        default_due = DateTime.parse("01 Jan 2011 14:00 AKST")
-        section_2_due = DateTime.parse("02 Jan 2011 14:00 AKST")
+        default_due = Time.zone.parse("01 Jan 2011 14:00 AKST")
+        section_2_due = Time.zone.parse("02 Jan 2011 14:00 AKST")
         @assignment = @course.assignments.build(title: "some assignment", due_at: default_due, submission_types: ["online_text_entry"])
         @assignment.save_without_broadcasting!
         override = @assignment.assignment_overrides.build
@@ -6532,7 +6681,7 @@ describe Assignment do
         it "notifies appropriate parties when the default due date changes" do
           @assignment.update_attribute(:created_at, 1.day.ago)
 
-          @assignment.due_at = DateTime.parse("09 Jan 2011 14:00 AKST")
+          @assignment.due_at = Time.zone.parse("09 Jan 2011 14:00 AKST")
           @assignment.save!
 
           messages_sent = @assignment.messages_sent["Assignment Due Date Changed"]
@@ -6547,7 +6696,7 @@ describe Assignment do
           @assignment.update_attribute(:created_at, 1.day.ago)
 
           override = @assignment.assignment_overrides.first.reload
-          override.override_due_at(DateTime.parse("11 Jan 2011 11:11 AKST"))
+          override.override_due_at(Time.zone.parse("11 Jan 2011 11:11 AKST"))
           override.save!
 
           messages_sent = override.messages_sent["Assignment Due Date Changed"]
@@ -6568,7 +6717,7 @@ describe Assignment do
         end
 
         it "sends a late submission notification iff the submit date is late for the submitter" do
-          fake_submission_time = Time.parse "Jan 01 17:00:00 -0900 2011"
+          fake_submission_time = Time.zone.parse "Jan 01 17:00:00 -0900 2011"
           allow(Time).to receive(:now).and_return(fake_submission_time)
           subA = @assignment.submit_homework @studentA, submission_type: "online_text_entry", body: "ooga"
           subB = @assignment.submit_homework @studentB, submission_type: "online_text_entry", body: "booga"
@@ -6584,16 +6733,16 @@ describe Assignment do
         end
 
         it "sends a late submission notification iff the submit date is late for the group" do
-          @a = assignment_model(course: @course, group_category: "Study Groups", due_at: Time.parse("Jan 01 17:00:00 -0900 2011"), submission_types: ["online_text_entry"])
+          @a = assignment_model(course: @course, group_category: "Study Groups", due_at: Time.zone.parse("Jan 01 17:00:00 -0900 2011"), submission_types: ["online_text_entry"])
           @group1 = @a.context.groups.create!(name: "Study Group 1", group_category: @a.group_category)
           @group1.add_user(@studentA)
           @group2 = @a.context.groups.create!(name: "Study Group 2", group_category: @a.group_category)
           @group2.add_user(@studentB)
           override = @a.assignment_overrides.new
           override.set = @group2
-          override.override_due_at(Time.parse("Jan 03 17:00:00 -0900 2011"))
+          override.override_due_at(Time.zone.parse("Jan 03 17:00:00 -0900 2011"))
           override.save!
-          fake_submission_time = Time.parse("Jan 02 17:00:00 -0900 2011")
+          fake_submission_time = Time.zone.parse("Jan 02 17:00:00 -0900 2011")
           allow(Time).to receive(:now).and_return(fake_submission_time)
           subA = @assignment.submit_homework @studentA, submission_type: "online_text_entry", body: "eenie"
           subB = @assignment.submit_homework @studentB, submission_type: "online_text_entry", body: "meenie"
@@ -7239,7 +7388,7 @@ describe Assignment do
     before :once do
       course_factory
       @s2 = @course.course_sections.create! name: "other section"
-      @dates = (0..7).map { |x| DateTime.new(2020, 1, 10 + x, 12, 0, 0) }
+      @dates = (0..7).map { |x| Time.zone.local(2020, 1, 10 + x, 12, 0, 0) }
       @a1 = @course.assignments.create!(title: "no due date")
       @a2 = @course.assignments.create!(title: "no overrides", due_at: @dates[0])
       @a3 = @course.assignments.create!(title: "latest is override", due_at: @dates[1])
@@ -7269,11 +7418,11 @@ describe Assignment do
 
   context "due_between_with_overrides" do
     before :once do
-      @assignment = @course.assignments.create!(title: "assignment", due_at: Time.now)
-      @overridden_assignment = @course.assignments.create!(title: "overridden_assignment", due_at: Time.now)
+      @assignment = @course.assignments.create!(title: "assignment", due_at: Time.zone.now)
+      @overridden_assignment = @course.assignments.create!(title: "overridden_assignment", due_at: Time.zone.now)
 
       override = @assignment.assignment_overrides.build
-      override.due_at = Time.now
+      override.due_at = Time.zone.now
       override.title = "override"
       override.save!
     end
@@ -7829,6 +7978,7 @@ describe Assignment do
       )
 
       # invoke the job that was created by the previous step
+      expect_any_instance_of(ZipExtractor).to receive(:remove_extracted_files!)
       job = Delayed::Job.where(tag: "Assignment#generate_comments_from_files").order(:id).last
       job.invoke_job
     end
@@ -8349,48 +8499,129 @@ describe Assignment do
     end
   end
 
+  describe "#enrollment_active_for_assignment?" do
+    before do
+      @assignment = @course.assignments.create!
+      @sec1 = @course.course_sections.create!(name: "section 1")
+      @sec2 = @course.course_sections.create!(name: "section 2")
+      @sec3 = @course.course_sections.create!(name: "section 3")
+
+      @student = student_in_course(course: @course, active_all: true, user_name: "student").user
+      @course.enroll_student(@student, enrollment_state: "active", section: @sec1, allow_multiple_enrollments: true)
+      concluded_enrollment = @course.enroll_student(@student, enrollment_state: "active", section: @sec2, allow_multiple_enrollments: true)
+      deleted_enrollment = @course.enroll_student(@student, enrollment_state: "active", section: @sec3, allow_multiple_enrollments: true)
+
+      concluded_enrollment.conclude
+      deleted_enrollment.destroy
+    end
+
+    it "returns true if there are no module or assignment overrides" do
+      expect(@assignment.enrollment_active_for_assignment?(@student)).to be_truthy
+    end
+
+    it "returns false if the student has no active enrollments" do
+      student2 = student_in_course(course: @course, active_all: true, user_name: "student 2").user
+      deleted_enrollment = @course.enroll_student(student2, enrollment_state: "active", section: @sec2)
+      deleted_enrollment.destroy
+
+      expect(@assignment.enrollment_active_for_assignment?(student2)).to be_falsey
+    end
+
+    it "returns true if the assignment has a Course override" do
+      create_course_override_for_assignment(@assignment)
+      expect(@assignment.enrollment_active_for_assignment?(@student)).to be_truthy
+    end
+
+    it "returns true if the assignment has an ADHOC override that applies to the student" do
+      create_adhoc_override_for_assignment(@assignment, @student)
+      @assignment.update!(only_visible_to_overrides: true)
+      expect(@assignment.enrollment_active_for_assignment?(@student)).to be_truthy
+    end
+
+    it "returns true if the assignment has a Group override that applies to the student" do
+      group_category(context: @course, name: "group category 1")
+      group_assignment = @course.assignments.create!(group_category: @group_category)
+      group = @group_category.groups.create!(context: @course)
+      group.add_user(@student, "accepted")
+      create_group_override_for_assignment(group_assignment, { user: @student, group: })
+      @assignment.update!(only_visible_to_overrides: true)
+      expect(@assignment.enrollment_active_for_assignment?(@student)).to be_truthy
+    end
+
+    it "returns true if the assignment has a CourseSection override for a section the student has an active enrollment in" do
+      create_section_override_for_assignment(@assignment, course_section: @sec1)
+      create_section_override_for_assignment(@assignment, course_section: @sec2)
+      @assignment.update!(only_visible_to_overrides: true)
+      expect(@assignment.enrollment_active_for_assignment?(@student)).to be_truthy
+    end
+
+    it "returns false if the assignment is assigned to a CourseSection the student is concluded in" do
+      create_section_override_for_assignment(@assignment, course_section: @sec2)
+      @assignment.update!(only_visible_to_overrides: true)
+      expect(@assignment.enrollment_active_for_assignment?(@student)).to be_falsey
+    end
+
+    it "does not evaluate deleted overrides" do
+      student1 = @student
+      student2 = student_in_course(course: @course, active_all: true, user_name: "student 2").user
+      override = create_adhoc_override_for_assignment(@assignment, student2)
+      @assignment.update!(only_visible_to_overrides: true)
+      # Assignment is not assigned to student1 because of active ADHOC override for student2
+      expect(@assignment.enrollment_active_for_assignment?(student1)).to be_falsey
+      override.destroy!
+      # Assignment is assigned to student1 because the override was deleted
+      expect(@assignment.enrollment_active_for_assignment?(student1)).to be_truthy
+    end
+
+    it "returns true if there is an ADHOC and Everyone Else assignment override" do
+      student1 = @student
+      student2 = student_in_course(course: @course, active_all: true, user_name: "student 2").user
+      create_adhoc_override_for_assignment(@assignment, student2)
+      # Include everyone else
+      @assignment.update!(only_visible_to_overrides: false)
+      expect(@assignment.enrollment_active_for_assignment?(student1)).to be_truthy
+    end
+  end
+
   describe "basic validation" do
-    # rubocop:disable Performance/InefficientHashSearch
-    # ActiveModel::BetterErrors::Errors does not respond to #key?
     describe "possible points" do
       it "does not allow a negative value" do
         assignment = Assignment.new(points_possible: -1)
         assignment.valid?
-        expect(assignment.errors.keys.include?(:points_possible)).to be_truthy
+        expect(assignment.errors.include?(:points_possible)).to be_truthy
       end
 
       it "does not allow a 1000000000 value" do
         assignment = Assignment.new(points_possible: 1_000_000_000)
         expect(assignment).not_to be_valid
-        expect(assignment.errors.keys.include?(:points_possible)).to be_truthy
+        expect(assignment.errors.include?(:points_possible)).to be_truthy
       end
 
       it "allows a nil value" do
         assignment = Assignment.new(points_possible: nil)
         assignment.valid?
-        expect(assignment.errors.keys.include?(:points_possible)).to be_falsey
+        expect(assignment.errors.include?(:points_possible)).to be_falsey
       end
 
       it "allows a 0 value" do
         assignment = Assignment.new(points_possible: 0)
         assignment.valid?
-        expect(assignment.errors.keys.include?(:points_possible)).to be_falsey
+        expect(assignment.errors.include?(:points_possible)).to be_falsey
       end
 
       it "allows a positive value" do
         assignment = Assignment.new(points_possible: 13)
         assignment.valid?
-        expect(assignment.errors.keys.include?(:points_possible)).to be_falsey
+        expect(assignment.errors.include?(:points_possible)).to be_falsey
       end
 
       it "does not attempt validation unless points_possible has changed" do
         assignment = Assignment.new(points_possible: -13)
         allow(assignment).to receive(:points_possible_changed?).and_return(false)
         assignment.valid?
-        expect(assignment.errors.keys.include?(:points_possible)).to be_falsey
+        expect(assignment.errors.include?(:points_possible)).to be_falsey
       end
     end
-    # rubocop:enable Performance/InefficientHashSearch
   end
 
   describe "#ensure_points_possible!" do
@@ -10008,37 +10239,75 @@ describe Assignment do
         let(:student2) { @course.enroll_user(User.create!, "StudentEnrollment", enrollment_state: "active").user }
         let(:tag) { context_module.add_item({ id: assignment.id, type: "assignment" }) }
 
-        before do
-          context_module.update!(completion_requirements: { tag.id => { type: "min_score", min_score: 90 } })
-          # Have a manual post policy to stop the evaluation of the requirement
-          # until post_submissions is called.
-          assignment.ensure_post_policy(post_manually: true)
+        context "min_score requirement" do
+          before do
+            context_module.update!(completion_requirements: { tag.id => { type: "min_score", min_score: 90 } })
+            # Have a manual post policy to stop the evaluation of the requirement
+            # until post_submissions is called.
+            assignment.ensure_post_policy(post_manually: true)
+          end
+
+          it "updates the met requirements" do
+            assignment.grade_student(student1, grader: teacher, score: 100)
+            assignment.post_submissions
+            progression = context_module.context_module_progressions.find_by(user: student1)
+            requirement = { id: tag.id, type: "min_score", min_score: 90.0 }
+            expect(progression.requirements_met).to include requirement
+          end
+
+          it "does not update the met requirements for students that did not meet requirement" do
+            assignment.grade_student(student1, grader: teacher, score: 20)
+            assignment.post_submissions
+            progression = context_module.context_module_progressions.find_by(user: student1)
+            requirement = { id: tag.id, type: "min_score", min_score: 90.0, score: 20.0 }
+            expect(progression.incomplete_requirements).to include requirement
+          end
+
+          it "does not update the met requirements for students not included" do
+            assignment.grade_student(student1, grader: teacher, score: 100)
+            assignment.grade_student(student2, grader: teacher, score: 100)
+            student1_sub = assignment.submissions.find_by(user: student1)
+            assignment.post_submissions(submission_ids: [student1_sub])
+            progression = context_module.context_module_progressions.find_by(user: student2)
+            requirement = { id: tag.id, type: "min_score", min_score: 90.0, score: nil }
+            expect(progression.incomplete_requirements).to include requirement
+          end
         end
 
-        it "updates the met requirements" do
-          assignment.grade_student(student1, grader: teacher, score: 100)
-          assignment.post_submissions
-          progression = context_module.context_module_progressions.find_by(user: student1)
-          requirement = { id: tag.id, type: "min_score", min_score: 90.0 }
-          expect(progression.requirements_met).to include requirement
-        end
+        context "min_percentage requirement" do
+          before do
+            assignment.update points_possible: 150
+            context_module.update!(completion_requirements: { tag.id => { type: "min_percentage", min_percentage: 60 } })
+            # Have a manual post policy to stop the evaluation of the requirement
+            # until post_submissions is called.
+            assignment.ensure_post_policy(post_manually: true)
+          end
 
-        it "does not update the met requirements for students that did not meet requirement" do
-          assignment.grade_student(student1, grader: teacher, score: 20)
-          assignment.post_submissions
-          progression = context_module.context_module_progressions.find_by(user: student1)
-          requirement = { id: tag.id, type: "min_score", min_score: 90.0, score: 20.0 }
-          expect(progression.incomplete_requirements).to include requirement
-        end
+          it "updates the met requirements" do
+            assignment.grade_student(student1, grader: teacher, score: 110)
+            assignment.post_submissions
+            progression = context_module.context_module_progressions.find_by(user: student1)
+            requirement = { id: tag.id, type: "min_percentage", min_percentage: 60 }
+            expect(progression.requirements_met).to include requirement
+          end
 
-        it "does not update the met requirements for students not included" do
-          assignment.grade_student(student1, grader: teacher, score: 100)
-          assignment.grade_student(student2, grader: teacher, score: 100)
-          student1_sub = assignment.submissions.find_by(user: student1)
-          assignment.post_submissions(submission_ids: [student1_sub])
-          progression = context_module.context_module_progressions.find_by(user: student2)
-          requirement = { id: tag.id, type: "min_score", min_score: 90.0, score: nil }
-          expect(progression.incomplete_requirements).to include requirement
+          it "does not update the met requirements for students that did not meet requirement" do
+            assignment.grade_student(student1, grader: teacher, score: 20)
+            assignment.post_submissions
+            progression = context_module.context_module_progressions.find_by(user: student1)
+            requirement = { id: tag.id, type: "min_percentage", min_percentage: 60, score: 20.0 }
+            expect(progression.incomplete_requirements).to include requirement
+          end
+
+          it "does not update the met requirements for students not included" do
+            assignment.grade_student(student1, grader: teacher, score: 100)
+            assignment.grade_student(student2, grader: teacher, score: 100)
+            student1_sub = assignment.submissions.find_by(user: student1)
+            assignment.post_submissions(submission_ids: [student1_sub])
+            progression = context_module.context_module_progressions.find_by(user: student2)
+            requirement = { id: tag.id, type: "min_percentage", min_percentage: 60, score: nil }
+            expect(progression.incomplete_requirements).to include requirement
+          end
         end
       end
     end
@@ -10125,9 +10394,6 @@ describe Assignment do
       context "when moderated_grading is not enabled" do
         subject(:assignment) { @course.assignments.build }
 
-        it { is_expected.to validate_absence_of(:grader_section) }
-        it { is_expected.to validate_absence_of(:final_grader) }
-
         it "before validation, sets final_grader_id to nil if it is present" do
           teacher = User.create!
           @course.enroll_teacher(teacher, active_all: true)
@@ -10164,7 +10430,6 @@ describe Assignment do
           subject { @course.assignments.create(moderated_grading: true, grader_count: 1, final_grader: @section1_ta) }
 
           it { is_expected.to be_muted }
-          it { is_expected.to validate_numericality_of(:grader_count).is_greater_than(0) }
         end
 
         describe "grader_section validation" do
@@ -10301,8 +10566,6 @@ describe Assignment do
     before(:once) do
       assignment_model(course: @course)
     end
-
-    it { is_expected.to validate_numericality_of(:allowed_attempts).allow_nil }
 
     it "allows -1" do
       @assignment.allowed_attempts = -1
@@ -11450,7 +11713,7 @@ describe Assignment do
         end
 
         it "inherits setting to sub account" do
-          expect(@sub_account.restrict_quantitative_data?).to be true
+          expect(@sub_account.reload.restrict_quantitative_data?).to be true
         end
 
         it "does not inherit setting to course" do
@@ -11554,8 +11817,8 @@ describe Assignment do
 
   describe "checkpointed assignments" do
     before do
-      @course.root_account.enable_feature!(:discussion_checkpoints)
-      @parent = @course.assignments.create!(has_sub_assignments: true, workflow_state: "published")
+      @course.account.enable_feature!(:discussion_checkpoints)
+      @parent = @course.assignments.create!(has_sub_assignments: true, workflow_state: "published", grading_type: "points")
       @first_checkpoint = @parent.sub_assignments.create!(context: @course, sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC)
       @second_checkpoint = @parent.sub_assignments.create!(context: @course, sub_assignment_tag: CheckpointLabels::REPLY_TO_ENTRY)
     end
@@ -11592,6 +11855,14 @@ describe Assignment do
       @parent.update!(workflow_state: "unpublished")
       expect(@first_checkpoint.reload.workflow_state).to eq "unpublished"
       expect(@second_checkpoint.reload.workflow_state).to eq "unpublished"
+    end
+
+    it "will update the sub_assignment grading_type when parent updates" do
+      expect(@first_checkpoint.reload.grading_type).to eq "points"
+      expect(@second_checkpoint.reload.grading_type).to eq "points"
+      @parent.update!(grading_type: "pass_fail")
+      expect(@first_checkpoint.reload.grading_type).to eq "pass_fail"
+      expect(@second_checkpoint.reload.grading_type).to eq "pass_fail"
     end
 
     it "will update the sub_assignment lock_at and unlock_at when parent updates" do
@@ -11653,6 +11924,47 @@ describe Assignment do
         expect(@parent.reload.unlock_at).to eq new_unlock_at
         expect(@second_checkpoint.reload.unlock_at).to eq new_unlock_at
       end
+
+      describe "has_sub_assignments" do
+        def create_extra_checkpoint
+          @parent.sub_assignments.create!(
+            context: @course,
+            sub_assignment_tag: CheckpointLabels::REPLY_TO_TOPIC,
+            title: SecureRandom.hex(4)
+          )
+        end
+
+        it "sets has_sub_assignments to true once the first sub assignment is added" do
+          expect(@parent.reload.has_sub_assignments).to be true
+        end
+
+        it "keeps has_sub_assignments true while at least one active checkpoint exists" do
+          # destroy one of two checkpoints – flag should stay true
+          @first_checkpoint.destroy
+          expect(@parent.reload.has_sub_assignments).to be true
+
+          # add another active checkpoint – still true
+          create_extra_checkpoint
+          expect(@parent.reload.has_sub_assignments).to be true
+        end
+
+        it "sets has_sub_assignments false when all checkpoints are hard deleted" do
+          @first_checkpoint.destroy_permanently!
+          @second_checkpoint.destroy_permanently!
+          expect(@parent.reload.has_sub_assignments).to be false
+        end
+
+        it "updates flag on soft delete and soft undelete transitions" do
+          # soft‑delete both checkpoints
+          @first_checkpoint.destroy
+          @second_checkpoint.destroy
+          expect(@parent.reload.has_sub_assignments).to be false
+
+          # soft‑undelete one checkpoint – flag should toggle back to true
+          @first_checkpoint.update!(workflow_state: "published")
+          expect(@parent.reload.has_sub_assignments).to be true
+        end
+      end
     end
   end
 
@@ -11660,7 +11972,7 @@ describe Assignment do
     let(:url) { "http://www.example.com" }
     let(:account) { account_model }
     let(:course) { course_model(account:) }
-    let(:developer_key) { dev_key_model_1_3(account:) }
+    let(:developer_key) { lti_developer_key_model(account:) }
     let(:old_tool) { external_tool_model(context: course, opts: { url: }) }
     let(:new_tool) { external_tool_1_3_model(context: course, developer_key:, opts: { url:, name: "1.3 tool" }) }
     let(:direct_assignment) do
@@ -12022,6 +12334,66 @@ describe Assignment do
         expect(subject.ready_to_migrate_to_quiz_next?).to be_falsey
         expect(subject.settings).to eq({ "another" => 123 })
       end
+    end
+  end
+
+  describe "Horizon course assignment" do
+    before :once do
+      @course.account.enable_feature!(:horizon_course_setting)
+      @course.horizon_course = true
+      @course.save!
+    end
+
+    it "skips group assignments" do
+      @assignment = assignment_model(course: @course)
+      group_category = @course.group_categories.create!(name: "Test Group Set")
+      @assignment.group_category = group_category
+      @assignment.save!
+      expect(@assignment.group_category).to be_nil
+    end
+
+    it "converts invalid submission types" do
+      @assignment = assignment_model(submission_types: "online_url", course: @course)
+      expect(@assignment.submission_types).to eql("online_text_entry")
+    end
+
+    it "does not convert valid submission types" do
+      @assignment = assignment_model(submission_types: "online_text_entry,online_upload", course: @course)
+      expect(@assignment.submission_types).to eql("online_text_entry,online_upload")
+    end
+
+    it "converts mixed submission types" do
+      @assignment = assignment_model(submission_types: "online_text_entry,online_upload,on_paper", course: @course)
+      expect(@assignment.submission_types).to eql("online_text_entry")
+    end
+
+    it "skips assignment peer reviews" do
+      @assignment = assignment_model(peer_reviews: true, course: @course)
+      expect(@assignment.peer_reviews).to be false
+      expect(@assignment.peer_review_count).to eq 0
+      expect(@assignment.automatic_peer_reviews).to be false
+    end
+  end
+
+  describe "rubric_self_assessment_enabled?" do
+    before do
+      group_category = course.group_categories.create!(name: "Group Category")
+      @group = group_category.groups.create!(name: "Group", context: course)
+      group_membership_model(group: @group, user: student)
+    end
+
+    it "returns rubric_self_assessment_enabled as true when true and not group assignemnt" do
+      assignment_model(course: @course)
+      @assignment.update!(rubric_self_assessment_enabled: true)
+
+      expect(@assignment.rubric_self_assessment_enabled?).to be_truthy
+    end
+
+    it "returns rubric_self_assessment_enabled as false when true and group assignment" do
+      assignment_model(course: @course)
+      @assignment.update!(rubric_self_assessment_enabled: true, group_category:)
+
+      expect(@assignment.rubric_self_assessment_enabled?).to be_falsey
     end
   end
 end

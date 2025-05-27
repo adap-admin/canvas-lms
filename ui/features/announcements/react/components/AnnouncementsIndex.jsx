@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import React, {Component} from 'react'
 import {func, bool, number} from 'prop-types'
 import {connect} from 'react-redux'
@@ -42,7 +42,7 @@ import propTypes from '../propTypes'
 import {ConnectedIndexHeader} from './IndexHeader'
 import TopNavPortalWithDefaults from '@canvas/top-navigation/react/TopNavPortalWithDefaults'
 
-const I18n = useI18nScope('announcements_v2')
+const I18n = createI18nScope('announcements_v2')
 
 export default class AnnouncementsIndex extends Component {
   static propTypes = {
@@ -161,7 +161,7 @@ export default class AnnouncementsIndex extends Component {
 
   renderPagination() {
     const pages = Array.from(Array(this.props.announcementsLastPage)).map((_, i) =>
-      this.renderPageButton(i + 1)
+      this.renderPageButton(i + 1),
     )
     if (pages.length > 1 && !this.props.isLoadingAnnouncements) {
       return (
@@ -218,7 +218,7 @@ const connectActions = dispatch =>
       'deleteAnnouncements',
       'toggleAnnouncementsLock',
     ]),
-    dispatch
+    dispatch,
   )
 
 export const ConnectedAnnouncementsIndex = connect(connectState, connectActions)(AnnouncementsIndex)

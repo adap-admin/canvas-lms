@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import React, {Component} from 'react'
 import {func, bool, string, shape, arrayOf, oneOf} from 'prop-types'
 import {connect} from 'react-redux'
@@ -58,7 +58,7 @@ import {CONTENT_SHARE_TYPES} from '@canvas/content-sharing/react/proptypes/conte
 import WithBreakpoints, {breakpointsShape} from '@canvas/with-breakpoints'
 import TopNavPortalWithDefaults from '@canvas/top-navigation/react/TopNavPortalWithDefaults'
 
-const I18n = useI18nScope('discussions_v2')
+const I18n = createI18nScope('discussions_v2')
 
 export default class DiscussionsIndex extends Component {
   static propTypes = {
@@ -324,8 +324,7 @@ export default class DiscussionsIndex extends Component {
             onDismiss={() => this.props.setSendToOpen(false)}
           />
         )}{' '}
-        {ENV?.FEATURES?.selective_release_ui_api &&
-          this.state.showAssignToTray &&
+        { this.state.showAssignToTray &&
           this.props.contextType === 'course' && (
             <ItemAssignToManager
               open={this.state.showAssignToTray}
@@ -350,10 +349,7 @@ export default class DiscussionsIndex extends Component {
   render() {
     return (
       <>
-        <TopNavPortalWithDefaults
-          currentPageName={I18n.t('Discussions')}
-          useStudentView={true}
-        />
+        <TopNavPortalWithDefaults currentPageName={I18n.t('Discussions')} useStudentView={true} />
         <div className="discussions-v2__wrapper">
           <ScreenReaderContent>
             <Heading level="h1">{I18n.t('Discussions')}</Heading>
@@ -363,8 +359,8 @@ export default class DiscussionsIndex extends Component {
           {this.props.isLoadingDiscussions
             ? this.renderSpinner(I18n.t('Loading Discussions'))
             : this.props.permissions.moderate || this.props.DIRECT_SHARE_ENABLED
-            ? this.renderTeacherView()
-            : this.renderStudentView()}
+              ? this.renderTeacherView()
+              : this.renderStudentView()}
         </div>
       </>
     )
@@ -406,8 +402,8 @@ const connectActions = dispatch =>
       'setCopyToOpen',
       'setSendToOpen',
     ]),
-    dispatch
+    dispatch,
   )
 export const ConnectedDiscussionsIndex = DragDropContext(HTML5Backend)(
-  WithBreakpoints(connect(connectState, connectActions)(DiscussionsIndex))
+  WithBreakpoints(connect(connectState, connectActions)(DiscussionsIndex)),
 )

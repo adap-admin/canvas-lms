@@ -23,11 +23,11 @@ import {Text} from '@instructure/ui-text'
 import {Checkbox} from '@instructure/ui-checkbox'
 import {SimpleSelect} from '@instructure/ui-simple-select'
 import {TextArea} from '@instructure/ui-text-area'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 
 import {assessmentShape} from './types'
 
-const I18n = useI18nScope('edit_rubricComments')
+const I18n = createI18nScope('edit_rubricComments')
 
 const ellipsis = () => I18n.t('…')
 
@@ -83,7 +83,7 @@ const FreeFormComments = props => {
   const label = I18n.t('Comments')
   const toScreenReader = el => <ScreenReaderContent>{el}</ScreenReaderContent>
 
-  const commentClass = `edit-freeform-comments-${large ? 'large' : 'small'}`
+  const commentClass = `rubric-comment edit-freeform-comments-${large ? 'large' : 'small'}`
   return (
     <div className={commentClass}>
       {options.length > 0 ? selector : null}
@@ -160,7 +160,7 @@ const Comments = props => {
         <CommentText
           assessment={assessment}
           placeholder={I18n.t(
-            'This area will be used by the assessor to leave comments related to this criterion.'
+            'This area will be used by the assessor to leave comments related to this criterion.',
           )}
           weight="normal"
         />

@@ -23,17 +23,17 @@ import {CondensedButton} from '@instructure/ui-buttons'
 import {Flex} from '@instructure/ui-flex'
 import {Text} from '@instructure/ui-text'
 import WithBreakpoints from '@canvas/with-breakpoints'
-import {useScope as useI18nScope} from '@canvas/i18n'
+import {useScope as createI18nScope} from '@canvas/i18n'
 import type {Breakpoints} from '@canvas/with-breakpoints'
 import type {FormMessage} from '@instructure/ui-form-field'
 
-const I18n = useI18nScope('differentiated_modules')
+const I18n = createI18nScope('differentiated_modules')
 
 function useElementResize(
-  onResize: (element: Element) => void
+  onResize: (element: Element) => void,
 ): [(element: Element | null) => void] {
   const observer = useRef(
-    new ResizeObserver(entries => entries.forEach(entry => onResize(entry.target)))
+    new ResizeObserver(entries => entries.forEach(entry => onResize(entry.target))),
   )
 
   const listenElement = (element: Element | null) => {
@@ -90,6 +90,7 @@ function ClearableDateTimeInput({
   const elementRefCallback = (element: Element | null) => {
     elementRef.current = element
     if (elementRef?.current) {
+      // @ts-expect-error
       setHeight(elementRef.current.offsetHeight)
     }
   }
